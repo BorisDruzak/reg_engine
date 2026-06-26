@@ -132,13 +132,12 @@ git status --short --branch
 ## Code Transfer Rules
 
 - GitHub is the source of truth for code transfer.
+- Prefer the project scripts for routine checks, pushes, and deploys.
 - Local development flow:
 
 ```powershell
-git status --short --branch
-git add <files>
-git commit -m "<message>"
-git push -u origin main
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"
 ```
 
 - Server update flow:
@@ -151,6 +150,12 @@ git remote -v
 git fetch origin
 git checkout main
 git pull --ff-only origin main
+```
+
+- Preferred scripted server update flow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
 ```
 
 - Do not copy code manually with ad hoc file moves unless GitHub is unavailable.
@@ -166,6 +171,16 @@ git pull --ff-only origin main
 - Use a dedicated non-root service user for long-running application processes when the app service is created.
 - Keep application logs under `/var/log/reg_engine` or another documented server path.
 - Keep application environment files outside the repository, for example `/etc/reg_engine/reg_engine.env`.
+
+## Development Scripts
+
+- `scripts/check.ps1` runs local Git, GitHub SSH, server SSH, and Python syntax checks.
+- `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, and database access.
+- `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
+- `scripts/deploy.ps1` updates `/opt/reg_engine` from `origin/main` and runs server checks.
+- `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop: check, push, deploy, server-check.
+- Shared PowerShell helpers live in `scripts/lib/RegEngine.ps1`.
+- Scripts must not contain secrets. Use local environment variables or `/etc/reg_engine/reg_engine.env` for runtime passwords.
 
 ## PostgreSQL Rules
 
