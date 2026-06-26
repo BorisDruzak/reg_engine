@@ -23,7 +23,8 @@ Phase 0: подготовка репозитория, среды и правил
 - [x] AGENTS.md exists.
 - [x] .gitignore exists.
 - [x] Operational scripts are documented in README/AGENTS.
-- [ ] .env.example exists.
+- [x] .env.example exists.
+- [x] Codex Phase 1A prompt exists: `docs/CODEX_PHASE_1A_PROMPT.md`.
 - [ ] Phase 1A backend foundation implemented.
 
 ---
