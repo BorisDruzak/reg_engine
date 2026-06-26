@@ -21,7 +21,7 @@ Write-RegEngineStep "Inspect local changes"
 $status = Invoke-RegEngineCapture -FilePath "git" -Arguments @("status", "--porcelain") -WorkingDirectory $config.RepoRoot
 if ([string]::IsNullOrWhiteSpace($status.Text)) {
     Write-Host "No local changes to commit."
-    exit 0
+    return
 }
 $status.Output | ForEach-Object { Write-Host $_ }
 
