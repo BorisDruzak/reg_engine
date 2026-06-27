@@ -13,6 +13,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B.2 organization scope and access foundation service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.3 registry schema and reference list service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.4 card command/query and dynamic value service logic is implemented locally on `codex/core-schema-v1`.
+- Phase 1B.5 public link service logic is implemented locally on `codex/core-schema-v1`.
 - Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
@@ -244,11 +245,25 @@ Remaining limitation: 1B.4 is implemented as service logic over repository proto
 
 ### 1B.5 Public Links
 
-- [ ] Implement 7-day public link creation.
-- [ ] Store `token_hash`, not raw token.
-- [ ] Enforce link status, expiry, usage, `card.public_edit_enabled`, block public flags, and field public flags.
-- [ ] Implement direct public value update.
-- [ ] Write public-link audit events.
+- [x] Implement 7-day public link creation.
+- [x] Store `token_hash`, not raw token.
+- [x] Enforce link status, expiry, usage, `card.public_edit_enabled`, block public flags, and field public flags.
+- [x] Implement direct public value update using the same typed value mapper as authenticated card edits.
+- [x] Write public-link audit events through the repository boundary.
+- [x] Add service tests for token hashing, default expiry, scope denial, disabled/expired/overused links, public edit flags, direct field update, usage count, and audit recording.
+
+Verification completed locally:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_public_link_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: 1B.5 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and the concrete centralized `AuditService` implementation are still open work.
 
 ### 1B.6 Transfer, Archive, And Audit
 

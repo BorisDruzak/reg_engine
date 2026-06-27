@@ -80,6 +80,96 @@ class CardRepository(Protocol):
         """Replace multi-select rows for a field value."""
 
 
+def build_typed_field_values(
+    field_type: str,
+    value: object,
+) -> tuple[dict[str, object], tuple[UUID, ...] | None]:
+    values = _empty_typed_values()
+    multi_select_items: tuple[UUID, ...] | None = None
+
+    if field_type in {"text", "textarea"}:
+        if not isinstance(value, str):
+            raise InvalidCardOperationError("Text fields require a string value.")
+        values["value_text"] = value
+    elif field_type == "integer":
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise InvalidCardOperationError("Integer fields require an integer value.")
+        values["value_number"] = Decimal(value)
+    elif field_type == "decimal":
+        values["value_number"] = _to_decimal(value)
+    elif field_type == "date":
+        if not isinstance(value, date) or isinstance(value, datetime):
+            raise InvalidCardOperationError("Date fields require a date value.")
+        values["value_date"] = value
+    elif field_type == "datetime":
+        if not isinstance(value, datetime):
+            raise InvalidCardOperationError("Datetime fields require a datetime value.")
+        values["value_datetime"] = value
+    elif field_type == "boolean":
+        if not isinstance(value, bool):
+            raise InvalidCardOperationError("Boolean fields require a bool value.")
+        values["value_bool"] = value
+    elif field_type == "select":
+        values["value_reference_item_id"] = _require_uuid(value, "Select fields")
+    elif field_type == "multi_select":
+        multi_select_items = _require_uuid_sequence(value, "Multi-select fields")
+    elif field_type == "organization_ref":
+        values["value_organization_id"] = _require_uuid(value, "Organization fields")
+    elif field_type == "org_unit_ref":
+        values["value_org_unit_id"] = _require_uuid(value, "Org unit fields")
+    elif field_type == "user_ref":
+        values["value_user_id"] = _require_uuid(value, "User fields")
+    elif field_type == "card_ref":
+        values["value_card_id"] = _require_uuid(value, "Card reference fields")
+    elif field_type == "registry_ref":
+        values["value_registry_id"] = _require_uuid(value, "Registry fields")
+    else:
+        raise InvalidCardOperationError(f"Unsupported field type: {field_type}")
+
+    return values, multi_select_items
+
+
+def _empty_typed_values() -> dict[str, object]:
+    return {
+        "value_text": None,
+        "value_number": None,
+        "value_date": None,
+        "value_datetime": None,
+        "value_bool": None,
+        "value_json": None,
+        "value_reference_item_id": None,
+        "value_card_id": None,
+        "value_user_id": None,
+        "value_organization_id": None,
+        "value_org_unit_id": None,
+        "value_registry_id": None,
+    }
+
+
+def _to_decimal(value: object) -> Decimal:
+    if isinstance(value, bool):
+        raise InvalidCardOperationError("Decimal fields require a numeric value.")
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise InvalidCardOperationError("Decimal fields require a numeric value.") from exc
+
+
+def _require_uuid(value: object, field_label: str) -> UUID:
+    if not isinstance(value, UUID):
+        raise InvalidCardOperationError(f"{field_label} require a UUID value.")
+    return value
+
+
+def _require_uuid_sequence(value: object, field_label: str) -> tuple[UUID, ...]:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise InvalidCardOperationError(f"{field_label} require UUID values.")
+    values = tuple(value)
+    if not all(isinstance(item, UUID) for item in values):
+        raise InvalidCardOperationError(f"{field_label} require UUID values.")
+    return values
+
+
 class CardService:
     def __init__(
         self,
@@ -135,7 +225,7 @@ class CardService:
         if field_type not in FIELD_TYPES:
             raise InvalidCardOperationError(f"Unsupported field type: {field_type}")
 
-        typed_values, multi_select_items = self._build_typed_values(field_type, data.value)
+        typed_values, multi_select_items = build_typed_field_values(field_type, data.value)
         field_value_id = self.repository.upsert_field_value(
             card_id=data.card_id,
             block_instance_id=data.block_instance_id,
@@ -153,89 +243,3 @@ class CardService:
     def _require_card_access(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):
             raise AccessDeniedError("Actor cannot manage cards outside organization scope.")
-
-    def _build_typed_values(
-        self,
-        field_type: str,
-        value: object,
-    ) -> tuple[dict[str, object], tuple[UUID, ...] | None]:
-        values = self._empty_typed_values()
-        multi_select_items: tuple[UUID, ...] | None = None
-
-        if field_type in {"text", "textarea"}:
-            if not isinstance(value, str):
-                raise InvalidCardOperationError("Text fields require a string value.")
-            values["value_text"] = value
-        elif field_type == "integer":
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise InvalidCardOperationError("Integer fields require an integer value.")
-            values["value_number"] = Decimal(value)
-        elif field_type == "decimal":
-            values["value_number"] = self._to_decimal(value)
-        elif field_type == "date":
-            if not isinstance(value, date) or isinstance(value, datetime):
-                raise InvalidCardOperationError("Date fields require a date value.")
-            values["value_date"] = value
-        elif field_type == "datetime":
-            if not isinstance(value, datetime):
-                raise InvalidCardOperationError("Datetime fields require a datetime value.")
-            values["value_datetime"] = value
-        elif field_type == "boolean":
-            if not isinstance(value, bool):
-                raise InvalidCardOperationError("Boolean fields require a bool value.")
-            values["value_bool"] = value
-        elif field_type == "select":
-            values["value_reference_item_id"] = self._require_uuid(value, "Select fields")
-        elif field_type == "multi_select":
-            multi_select_items = self._require_uuid_sequence(value, "Multi-select fields")
-        elif field_type == "organization_ref":
-            values["value_organization_id"] = self._require_uuid(value, "Organization fields")
-        elif field_type == "org_unit_ref":
-            values["value_org_unit_id"] = self._require_uuid(value, "Org unit fields")
-        elif field_type == "user_ref":
-            values["value_user_id"] = self._require_uuid(value, "User fields")
-        elif field_type == "card_ref":
-            values["value_card_id"] = self._require_uuid(value, "Card reference fields")
-        elif field_type == "registry_ref":
-            values["value_registry_id"] = self._require_uuid(value, "Registry fields")
-        else:
-            raise InvalidCardOperationError(f"Unsupported field type: {field_type}")
-
-        return values, multi_select_items
-
-    def _empty_typed_values(self) -> dict[str, object]:
-        return {
-            "value_text": None,
-            "value_number": None,
-            "value_date": None,
-            "value_datetime": None,
-            "value_bool": None,
-            "value_json": None,
-            "value_reference_item_id": None,
-            "value_card_id": None,
-            "value_user_id": None,
-            "value_organization_id": None,
-            "value_org_unit_id": None,
-            "value_registry_id": None,
-        }
-
-    def _to_decimal(self, value: object) -> Decimal:
-        if isinstance(value, bool):
-            raise InvalidCardOperationError("Decimal fields require a numeric value.")
-        try:
-            return Decimal(str(value))
-        except (InvalidOperation, ValueError) as exc:
-            raise InvalidCardOperationError("Decimal fields require a numeric value.") from exc
-
-    def _require_uuid(self, value: object, field_label: str) -> UUID:
-        if not isinstance(value, UUID):
-            raise InvalidCardOperationError(f"{field_label} require a UUID value.")
-        return value
-
-    def _require_uuid_sequence(self, value: object, field_label: str) -> tuple[UUID, ...]:
-        if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-            raise InvalidCardOperationError(f"{field_label} require UUID values.")
-        values = tuple(value)
-        if not all(isinstance(item, UUID) for item in values):
-            raise InvalidCardOperationError(f"{field_label} require UUID values.")
-        return values
