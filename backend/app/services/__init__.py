@@ -1,1 +1,1 @@
-"""Service package reserved for future business workflows."""
+"""Service layer package for Registry Engine business workflows."""

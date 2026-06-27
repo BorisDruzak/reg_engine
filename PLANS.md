@@ -10,7 +10,8 @@ The system must keep card structure in registry metadata and dynamic typed value
 
 - Phase 1A foundation tooling is complete: FastAPI backend skeleton, React/Vite frontend skeleton, PowerShell scripts, CI workflow, GitHub/SSH/server connectivity, and healthcheck tests.
 - Phase 1B.1 models and migration are implemented locally on `codex/core-schema-v1`.
-- Backend still does not contain Core Schema v1 services, business endpoints, frontend UI, or production schema deployment.
+- Phase 1B.2 organization scope and access foundation service logic is implemented locally on `codex/core-schema-v1`.
+- Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
 
@@ -174,10 +175,24 @@ Remaining limitation: online `python -m alembic upgrade head` against PostgreSQL
 
 ### 1B.2 Organization Scope And Access Foundation
 
-- [ ] Implement organization tree creation and `organization_closure` maintenance.
-- [ ] Implement org unit create/list/archive behavior.
-- [ ] Implement access grants and permission checks.
-- [ ] Enforce descendant access and block parent/sibling access.
+- [x] Implement organization tree creation and `organization_closure` maintenance.
+- [x] Implement org unit create/list/archive behavior.
+- [x] Implement access grants and permission checks.
+- [x] Enforce descendant access and block parent/sibling access.
+- [x] Add service tests for root organization creation, child organization creation, sibling denial, descendant-only visibility, org unit list/archive behavior, and permission scope rules.
+
+Verification completed locally:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_organization_service.py tests\test_org_unit_service.py tests\test_permission_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: 1B.2 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters and API endpoints are still open work.
 
 ### 1B.3 Registry Schema And Reference Lists
 

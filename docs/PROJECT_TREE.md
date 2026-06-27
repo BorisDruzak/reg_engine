@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 16:43:18 +05:00
+- Generated: 2026-06-27 16:49:52 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -52,6 +52,9 @@
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/services/__init__.py`
+- `backend/app/services/org_units.py`
+- `backend/app/services/organizations.py`
+- `backend/app/services/permissions.py`
 - `backend/migrations/env.py`
 - `backend/migrations/script.py.mako`
 - `backend/migrations/versions/0001_core_schema_v1.py`
@@ -61,6 +64,9 @@
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
+- `backend/tests/test_org_unit_service.py`
+- `backend/tests/test_organization_service.py`
+- `backend/tests/test_permission_service.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ARCHITECTURE.md`
