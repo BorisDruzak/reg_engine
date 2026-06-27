@@ -92,6 +92,27 @@ ruff format --check .
 mypy app
 ```
 
+## Database Migration Commands
+
+Core Schema v1 uses Alembic under `backend/migrations`.
+
+Render migration SQL without changing a database:
+
+```powershell
+cd backend
+python -m alembic upgrade head --sql
+```
+
+Apply migrations to the configured PostgreSQL database:
+
+```powershell
+cd backend
+$env:DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/<database>"
+python -m alembic upgrade head
+```
+
+Do not commit real database passwords. Server schema migration is a separate explicit approval step.
+
 ## Direct Frontend Commands
 
 ```powershell
@@ -130,4 +151,3 @@ The server can also keep the same value outside the repo in `/etc/reg_engine/reg
 - No document generation.
 - No MCP.
 - No MDB migration.
-

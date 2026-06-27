@@ -1,7 +1,7 @@
 # Project Tree
 
-- Generated: 2026-06-27 15:13:57 +05:00
-- Branch: main
+- Generated: 2026-06-27 16:43:18 +05:00
+- Branch: codex/core-schema-v1
 
 ## Entrypoints
 
@@ -26,6 +26,7 @@
 - `.gitignore`
 - `.pre-commit-config.yaml`
 - `AGENTS.md`
+- `backend/alembic.ini`
 - `backend/app/__init__.py`
 - `backend/app/api/__init__.py`
 - `backend/app/api/v1/__init__.py`
@@ -36,17 +37,34 @@
 - `backend/app/core/config.py`
 - `backend/app/core/database.py`
 - `backend/app/core/logging.py`
+- `backend/app/domain/__init__.py`
+- `backend/app/domain/constants.py`
 - `backend/app/main.py`
 - `backend/app/models/__init__.py`
+- `backend/app/models/audit.py`
+- `backend/app/models/base.py`
+- `backend/app/models/card.py`
+- `backend/app/models/identity.py`
+- `backend/app/models/organization.py`
+- `backend/app/models/public_link.py`
+- `backend/app/models/reference.py`
+- `backend/app/models/registry_schema.py`
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/services/__init__.py`
+- `backend/migrations/env.py`
+- `backend/migrations/script.py.mako`
+- `backend/migrations/versions/0001_core_schema_v1.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
 - `backend/tests/test_healthcheck.py`
+- `backend/tests/test_migrations.py`
+- `backend/tests/test_models_smoke.py`
+- `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ARCHITECTURE.md`
+- `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
 - `docs/CODEX_PROJECT_FOUNDATION_PROMPT.md`
 - `docs/CODEX_WORKFLOW.md`
