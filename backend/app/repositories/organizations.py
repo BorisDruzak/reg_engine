@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
@@ -38,8 +39,14 @@ class OrganizationSessionLike(Protocol):
 
 
 class SQLAlchemyOrganizationRepository:
-    def __init__(self, session: OrganizationSessionLike) -> None:
+    def __init__(
+        self,
+        session: OrganizationSessionLike,
+        *,
+        now_provider: Callable[[], datetime] | None = None,
+    ) -> None:
         self.session = session
+        self.now_provider = now_provider or (lambda: datetime.now(UTC))
 
     def create_organization(
         self,
@@ -101,3 +108,54 @@ class SQLAlchemyOrganizationRepository:
         )
         values = result.scalars().all()
         return {cast(UUID, value) for value in values}
+
+    def get_organization(self, organization_id: UUID) -> dict[str, object]:
+        organization = self.session.get(Organization, organization_id)
+        if organization is None:
+            raise LookupError(f"Organization not found: {organization_id}")
+        return self._organization_to_dict(cast(Organization, organization))
+
+    def list_organizations(self, organization_ids: set[UUID] | None) -> list[dict[str, object]]:
+        statement = select(Organization).order_by(Organization.name, Organization.code)
+        if organization_ids is not None:
+            statement = statement.where(Organization.id.in_(organization_ids))
+        result = self.session.execute(statement)
+        return [
+            self._organization_to_dict(cast(Organization, organization))
+            for organization in result.scalars().all()
+        ]
+
+    def update_organization(
+        self,
+        *,
+        organization_id: UUID,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        organization = self._get_organization_model(organization_id)
+        if code is not None:
+            organization.code = code
+        if name is not None:
+            organization.name = name
+        self.session.flush()
+
+    def archive_organization(self, organization_id: UUID) -> None:
+        organization = self._get_organization_model(organization_id)
+        organization.is_active = False
+        organization.archived_at = self.now_provider()
+        self.session.flush()
+
+    def _get_organization_model(self, organization_id: UUID) -> Organization:
+        organization = self.session.get(Organization, organization_id)
+        if organization is None:
+            raise LookupError(f"Organization not found: {organization_id}")
+        return cast(Organization, organization)
+
+    def _organization_to_dict(self, organization: Organization) -> dict[str, object]:
+        return {
+            "id": organization.id,
+            "code": organization.code,
+            "name": organization.name,
+            "parent_id": organization.parent_id,
+            "archived": organization.archived_at is not None or not organization.is_active,
+        }

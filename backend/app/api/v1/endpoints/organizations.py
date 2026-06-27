@@ -1,12 +1,18 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_actor, get_db_session, get_organization_service
-from app.schemas.organizations import OrganizationCreateRequest, OrganizationResponse
-from app.services.organizations import OrganizationCreate, OrganizationService
+from app.schemas.organizations import (
+    OrganizationCreateRequest,
+    OrganizationReadResponse,
+    OrganizationResponse,
+    OrganizationTreeNodeResponse,
+    OrganizationUpdateRequest,
+)
+from app.services.organizations import OrganizationCreate, OrganizationService, OrganizationUpdate
 from app.services.permissions import ActorContext
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -50,3 +56,51 @@ def create_child_organization(
     )
     session.commit()
     return OrganizationResponse(id=organization_id)
+
+
+@router.get("/tree", response_model=tuple[OrganizationTreeNodeResponse, ...])
+def get_organization_tree(
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[OrganizationService, Depends(get_organization_service)],
+    root_id: Annotated[UUID | None, Query()] = None,
+) -> tuple[OrganizationTreeNodeResponse, ...]:
+    nodes = service.get_tree(actor, root_id=root_id)
+    return tuple(OrganizationTreeNodeResponse.model_validate(node) for node in nodes)
+
+
+@router.get("/{organization_id}", response_model=OrganizationReadResponse)
+def get_organization(
+    organization_id: UUID,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[OrganizationService, Depends(get_organization_service)],
+) -> OrganizationReadResponse:
+    return OrganizationReadResponse.model_validate(service.get_organization(actor, organization_id))
+
+
+@router.patch("/{organization_id}", response_model=OrganizationReadResponse)
+def update_organization(
+    organization_id: UUID,
+    payload: OrganizationUpdateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[OrganizationService, Depends(get_organization_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> OrganizationReadResponse:
+    organization = service.update_organization(
+        actor,
+        organization_id=organization_id,
+        data=OrganizationUpdate(code=payload.code, name=payload.name),
+    )
+    session.commit()
+    return OrganizationReadResponse.model_validate(organization)
+
+
+@router.post("/{organization_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+def archive_organization(
+    organization_id: UUID,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[OrganizationService, Depends(get_organization_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> Response:
+    service.archive_organization(actor, organization_id)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

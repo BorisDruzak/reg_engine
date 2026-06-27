@@ -51,7 +51,8 @@ class FakeSession:
 
 def test_sqlalchemy_organization_repository_creates_organization_and_closure_rows() -> None:
     session = FakeSession()
-    repository = SQLAlchemyOrganizationRepository(session)
+    archived_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+    repository = SQLAlchemyOrganizationRepository(session, now_provider=lambda: archived_at)
     created_by = uuid4()
     parent_id = uuid4()
 
@@ -82,6 +83,35 @@ def test_sqlalchemy_organization_repository_creates_organization_and_closure_row
         (parent_id, organization_id, 1),
     ]
     assert all(isinstance(row, OrganizationClosure) for row in closure_rows)
+
+    session.get_results[(Organization, organization_id)] = organization
+    session.execute_results = [FakeResult([organization])]
+    assert repository.get_organization(organization_id) == {
+        "id": organization_id,
+        "code": "child",
+        "name": "Child",
+        "parent_id": parent_id,
+        "archived": False,
+    }
+    assert repository.list_organizations({organization_id}) == [
+        {
+            "id": organization_id,
+            "code": "child",
+            "name": "Child",
+            "parent_id": parent_id,
+            "archived": False,
+        }
+    ]
+    repository.update_organization(
+        organization_id=organization_id,
+        code="updated",
+        name="Updated",
+    )
+    assert organization.code == "updated"
+    assert organization.name == "Updated"
+    repository.archive_organization(organization_id)
+    assert organization.is_active is False
+    assert organization.archived_at == archived_at
 
 
 def test_sqlalchemy_organization_repository_reads_closure_scope() -> None:

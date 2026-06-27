@@ -20,8 +20,8 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B organization closure and org unit SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Phase 1B runtime dependency composition and business endpoints are started locally on `codex/core-schema-v1` for organization root/child creation, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
-- Backend still does not contain the complete Core Schema v1 endpoint set, frontend UI, full runtime dependency composition for every Core Schema service, or production schema deployment.
+- Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
+- Backend still does not contain frontend UI or production schema deployment. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ## Phase 1B: Core Schema v1
 
@@ -373,7 +373,8 @@ Remaining limitation: SQLAlchemy repository adapters exist for all Phase 1B serv
 - [x] Add audit global list, card audit, and organization audit endpoints.
 - [x] Add API dependency composition for audit service.
 - [x] Add API tests proving audit endpoints call the audit service with object filters.
-- [ ] Add organization tree/get/update/archive endpoints.
+- [x] Add organization tree/get/update/archive endpoints.
+- [x] Add API tests proving organization tree/get/update/archive endpoints call services and commit the injected session for writes.
 
 Verification completed locally for completed organization API slice:
 
@@ -386,13 +387,14 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m pytest tests\test_card_api.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_public_link_api.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_audit_api.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_organization_api.py -q
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: organization root/child, org unit create/list/archive, registry schema create/archive, reference list/item create/archive, card create/list/get/value/block/archive/transfer, public-link create/list/disable/public-get/public-value-update, and audit global/card/organization list endpoints are wired. Organization tree/get/update/archive endpoints remain open. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: Phase 1B.9 route groups are wired for the current service boundaries. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ## Phase 1B Acceptance Criteria
 
