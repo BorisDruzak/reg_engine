@@ -22,7 +22,9 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
 - Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
+- Phase 1B backend implementation is complete locally for the planned Core Schema v1 service, repository, API, and test scope.
 - Backend still does not contain frontend UI or production schema deployment. Auth is still a placeholder system actor until a dedicated auth phase.
+- Production PostgreSQL migration and server deployment remain explicit approval steps.
 
 ## Phase 1B: Core Schema v1
 
@@ -562,4 +564,4 @@ ssh root@registoryengine "cd /opt/reg_engine/backend && python -m alembic upgrad
 
 ## Implementation Guardrail
 
-Phase 1B implementation is approved and in progress. Continue in TDD slices from the next unchecked item. Do not run server PostgreSQL schema migration or deploy schema-changing code to `/opt/reg_engine` without a separate explicit approval step.
+Phase 1B local backend implementation is complete for the current plan. Do not run server PostgreSQL schema migration or deploy schema-changing code to `/opt/reg_engine` without a separate explicit approval step.
