@@ -84,11 +84,10 @@ pnpm -C frontend exec playwright install chromium
 | Frontend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-frontend.ps1` |
 | Project map | `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1` |
 | Server check | `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` |
-| Push current branch | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
-| Deploy current branch | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
-| Deploy specific branch | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Branch <branch>` |
+| Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
+| Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
 
-After a verified implementation checkpoint, commit the scoped local changes, push the current branch to GitHub, update `/opt/reg_engine` from the same branch, and run non-mutating server checks. Production PostgreSQL schema migrations require separate explicit approval.
+This project uses one long-lived branch: `main`. After a verified implementation checkpoint, commit the scoped local changes, push `main` to GitHub, update `/opt/reg_engine` from `origin/main`, and run non-mutating server checks. Production PostgreSQL schema migrations require separate explicit approval.
 
 ## Direct Backend Commands
 

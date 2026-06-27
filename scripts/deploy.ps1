@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Branch = "",
+    [string]$Branch = "main",
     [switch]$HardReset,
     [switch]$SkipServerCheck
 )
@@ -8,10 +8,11 @@ param(
 . "$PSScriptRoot\lib\RegEngine.ps1"
 
 $config = Get-RegEngineConfig
-if ([string]::IsNullOrWhiteSpace($Branch)) {
-    $Branch = $config.Branch
-}
 Assert-RegEngineCleanCommandPrerequisites
+Assert-RegEngineMainBranch
+if ($Branch -ne $config.Branch) {
+    throw "Single-branch policy: deploy is allowed only from '$($config.Branch)'."
+}
 
 $mode = if ($HardReset) { "hard-reset" } else { "fast-forward" }
 

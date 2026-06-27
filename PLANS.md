@@ -19,7 +19,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
 - Phase 1B.3 Model Smoke Tests for all Core Schema v1 models are partially covered by metadata, constraint, index, and Alembic SQL-render tests; broader insert smoke tests remain next.
 - Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
-- Synchronization checkpoint is completed for the verified Phase 1B.1/1B.2 branch head: local branch, GitHub `origin/codex/core-schema-v1`, and server checkout `/opt/reg_engine` are aligned.
+- Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
+- Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration was not run in this synchronization checkpoint; `alembic upgrade head` against production `reg_engine` still requires separate explicit approval.
 
 ## Core Architecture Decisions
@@ -346,4 +347,5 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 - Phase 1B.2 added schema models and migration only.
 - Future service/API work must be implemented in the phase order above.
 - Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` require a separate explicit approval step.
-- After each verified implementation checkpoint, synchronize the scoped commit to GitHub and update the server checkout from the same branch before continuing to the next phase, unless the user explicitly requests local-only work.
+- After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
+- Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.

@@ -12,6 +12,7 @@ Assert-RegEngineCleanCommandPrerequisites
 Write-RegEngineStep "Repository status"
 Write-Host "repo_root=$($config.RepoRoot)"
 Invoke-RegEngineCommand -FilePath "git" -Arguments @("status", "--short", "--branch") -WorkingDirectory $config.RepoRoot
+Assert-RegEngineMainBranch
 
 Write-RegEngineStep "Repository remote"
 Assert-RegEngineRemote

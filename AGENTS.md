@@ -246,6 +246,14 @@ ssh root@registoryengine "cd /opt/reg_engine && git fetch origin"
 
 GitHub is the source of truth for code transfer.
 
+This project uses a single-branch workflow:
+
+- `main` is the only long-lived local, GitHub, and server branch.
+- Do not create feature branches unless the user explicitly requests a temporary exception.
+- If a temporary branch is used, merge or fast-forward its work into `main`, then delete the temporary branch locally and on GitHub.
+- Routine checks, pushes, and deploys must run from `main`.
+- Server checkout `/opt/reg_engine` must track `origin/main`.
+
 Prefer project scripts for routine checks, pushes, and deploys.
 
 Local development flow:
@@ -258,8 +266,8 @@ powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message
 After a verified implementation checkpoint, synchronize in this order unless the user explicitly requests local-only work:
 
 1. Commit the scoped local changes.
-2. Push the current branch to GitHub.
-3. Update the server checkout in `/opt/reg_engine` from the same GitHub branch.
+2. Push `main` to GitHub.
+3. Update the server checkout in `/opt/reg_engine` from `origin/main`.
 4. Run server checks that do not mutate production data.
 
 Do not run production PostgreSQL migrations automatically. Any schema-changing `alembic upgrade head` against the production `reg_engine` database requires a separate explicit approval.
@@ -278,14 +286,14 @@ mkdir -p /opt/reg_engine
 cd /opt/reg_engine
 git remote -v
 git fetch origin
-git checkout <branch>
-git pull --ff-only origin <branch>
+git checkout main
+git pull --ff-only origin main
 ```
 
 Preferred scripted server update flow:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Branch <branch>
+powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
 ```
 
 Do not copy code manually with ad hoc file moves unless GitHub is unavailable.
@@ -307,10 +315,9 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - `scripts/dev-backend.ps1` starts the FastAPI dev server.
 - `scripts/dev-frontend.ps1` starts the Vite dev server.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, and database access.
-- `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to the current Git branch.
-- `scripts/deploy.ps1` updates `/opt/reg_engine` from the current Git branch and runs server checks.
-- `scripts/deploy.ps1 -Branch <branch>` updates `/opt/reg_engine` from a specific GitHub branch.
-- `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop against the current Git branch: check, push, deploy, server-check.
+- `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
+- `scripts/deploy.ps1` updates `/opt/reg_engine` from `origin/main` and runs server checks.
+- `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop on `main`: check, push, deploy, server-check.
 - Shared PowerShell helpers live in `scripts/lib/RegEngine.ps1`.
 - Scripts must not contain secrets. Use local environment variables or `/etc/reg_engine/reg_engine.env` for runtime passwords.
 - Backend runtime settings load direct environment variables first, then `backend/.env` by default.

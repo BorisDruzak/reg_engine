@@ -1,7 +1,7 @@
 # Project Tree
 
-- Generated: 2026-06-27 23:45:37 +05:00
-- Branch: codex/core-schema-v1
+- Generated: 2026-06-28 00:05:10 +05:00
+- Branch: main
 
 ## Entrypoints
 

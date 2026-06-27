@@ -9,6 +9,7 @@ param(
 
 $config = Get-RegEngineConfig
 Assert-RegEngineCleanCommandPrerequisites
+Assert-RegEngineMainBranch
 
 if (-not $SkipCheck) {
     & "$PSScriptRoot\check.ps1"

@@ -3,25 +3,12 @@ $ErrorActionPreference = "Stop"
 
 function Get-RegEngineConfig {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-    $currentBranch = "main"
-    if (Get-Command git -ErrorAction SilentlyContinue) {
-        Push-Location $repoRoot.Path
-        try {
-            $branchOutput = & git branch --show-current 2>$null | Select-Object -First 1
-            if (-not [string]::IsNullOrWhiteSpace($branchOutput)) {
-                $currentBranch = $branchOutput.Trim()
-            }
-        }
-        finally {
-            Pop-Location
-        }
-    }
 
     [pscustomobject]@{
         RepoRoot     = $repoRoot.Path
         BackendRoot  = Join-Path $repoRoot.Path "backend"
         FrontendRoot = Join-Path $repoRoot.Path "frontend"
-        Branch       = $currentBranch
+        Branch       = "main"
         Remote       = "origin"
         RepoUrl      = "git@github.com:BorisDruzak/reg_engine.git"
         ServerHost   = "registoryengine"
@@ -126,6 +113,14 @@ function Assert-RegEngineRemote {
         throw "Expected remote '$($config.Remote)' to be '$($config.RepoUrl)', got '$actual'"
     }
     Write-Host "remote $($config.Remote) = $actual"
+}
+
+function Assert-RegEngineMainBranch {
+    $config = Get-RegEngineConfig
+    $current = (Invoke-RegEngineCapture -FilePath "git" -Arguments @("branch", "--show-current") -WorkingDirectory $config.RepoRoot).Text.Trim()
+    if ($current -ne $config.Branch) {
+        throw "Single-branch policy: expected '$($config.Branch)', got '$current'. Checkout '$($config.Branch)' before running this command."
+    }
 }
 
 function Get-RegEnginePythonFiles {
