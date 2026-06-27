@@ -201,7 +201,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.2 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters and API endpoints are still open work.
+Remaining limitation: 1B.2 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
 
 ### 1B.3 Registry Schema And Reference Lists
 
@@ -225,7 +225,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.3 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, registry/block/field update operations, and reference list/item update operations are still open work.
+Remaining limitation: 1B.3 service logic and SQLAlchemy repository adapters are implemented. API endpoints, registry/block/field update operations, and reference list/item update operations are still open work.
 
 ### 1B.4 Cards And Dynamic Values
 
@@ -247,7 +247,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.4 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and value validation against concrete reference-list membership are still open work.
+Remaining limitation: 1B.4 service logic and SQLAlchemy repository adapters are implemented. API endpoints, runtime dependency composition, and value validation against concrete reference-list membership are still open work.
 
 ### 1B.5 Public Links
 
@@ -269,7 +269,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.5 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters and API endpoints are still open work.
+Remaining limitation: 1B.5 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
 
 ### 1B.6 Transfer, Archive, And Audit
 
@@ -290,7 +290,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.6 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and persisted audit repository implementation are still open work.
+Remaining limitation: 1B.6 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
 
 ### 1B.7 Service-Layer Audit Wiring Follow-Up
 
