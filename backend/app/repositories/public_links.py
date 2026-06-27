@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 
 from app.models.card import Card, CardBlockInstance, FieldValue, FieldValueItem
 from app.models.public_link import CardPublicLink
+from app.models.reference import ReferenceItem
 from app.models.registry_schema import FormBlock, FormField
 
 
@@ -141,6 +142,8 @@ class SQLAlchemyPublicLinkRepository:
         typed_block = cast(FormBlock, block)
         return {
             "field_type": typed_field.field_type,
+            "options_source_type": typed_field.options_source_type,
+            "options_source_id": typed_field.options_source_id,
             "block_public_editable": typed_block.public_editable,
             "field_public_editable": typed_field.public_editable,
         }
@@ -206,6 +209,22 @@ class SQLAlchemyPublicLinkRepository:
             ]
         )
         self.session.flush()
+
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        item = self.session.get(ReferenceItem, reference_item_id)
+        if item is None:
+            return False
+        typed_item = cast(ReferenceItem, item)
+        return (
+            typed_item.list_id == reference_list_id
+            and typed_item.archived_at is None
+            and typed_item.is_active
+        )
 
     def increment_public_link_usage(self, link_id: UUID) -> None:
         link = self._get_public_link_model(link_id)

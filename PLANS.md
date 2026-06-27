@@ -22,9 +22,10 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
 - Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
+- Phase 1B value hardening validates `select` and `multi_select` values against the configured `reference_list` membership for authenticated card edits and public-link edits.
 - Phase 1B backend implementation is complete for the planned Core Schema v1 service, repository, API, and test scope.
 - Backend still does not contain production frontend UI. Auth is still a placeholder system actor until a dedicated auth phase.
-- Server `/opt/reg_engine` is deployed on `codex/core-schema-v1` at `c159481`.
+- Server `/opt/reg_engine` is deployed on `codex/core-schema-v1`; verify the exact deployed commit with `git log --oneline -1` on the server checkout.
 - Production PostgreSQL is migrated to `0001_core_schema_v1` after backup `/var/backups/reg_engine/reg_engine_before_core_schema_v1_20260627_143452.dump`.
 
 ## Phase 1B: Core Schema v1
@@ -267,7 +268,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.4 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented. Value validation against concrete reference-list membership remains a later hardening task.
+Remaining limitation: 1B.4 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ### 1B.5 Public Links
 
@@ -504,6 +505,7 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 - Reference item can be created.
 - Select values store `reference_items.id`, not copied text.
 - Multi-select values store rows in `field_value_items`.
+- Select and multi-select values must belong to the field's configured reference list.
 - Descendant organization can use an inherited reference list.
 - Descendant admin cannot edit a locked inherited reference list.
 
@@ -518,6 +520,7 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 - Boolean value saves to `value_bool`.
 - Select value saves to `value_reference_item_id`.
 - Multi-select saves to `field_value_items`.
+- Select and multi-select writes reject items outside the configured reference list.
 - Archived card leaves existing values intact.
 
 ### Public Link Tests

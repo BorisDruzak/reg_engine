@@ -11,6 +11,7 @@ from app.services.cards import (
     CardSystemUpdate,
     CardTransfer,
     FieldValueWrite,
+    InvalidCardOperationError,
 )
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
@@ -31,11 +32,25 @@ class InMemoryCardRepository:
         self.field_values: dict[UUID, dict[str, object]] = {}
         self.field_value_items: dict[UUID, list[UUID]] = {}
         self.relations: dict[UUID, dict[str, object]] = {}
+        self.reference_items: dict[UUID, dict[str, object]] = {}
 
-    def add_field(self, field_type: str) -> UUID:
+    def add_field(self, field_type: str, *, options_source_id: UUID | None = None) -> UUID:
         field_id = uuid4()
-        self.fields[field_id] = {"id": field_id, "field_type": field_type}
+        self.fields[field_id] = {
+            "id": field_id,
+            "field_type": field_type,
+            "options_source_id": options_source_id,
+        }
         return field_id
+
+    def add_reference_item(self, list_id: UUID, *, active: bool = True) -> UUID:
+        item_id = uuid4()
+        self.reference_items[item_id] = {
+            "id": item_id,
+            "list_id": list_id,
+            "archived": not active,
+        }
+        return item_id
 
     def create_card(
         self,
@@ -149,6 +164,15 @@ class InMemoryCardRepository:
         reference_item_ids: tuple[UUID, ...],
     ) -> None:
         self.field_value_items[field_value_id] = list(reference_item_ids)
+
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        item = self.reference_items.get(reference_item_id)
+        return item is not None and item["list_id"] == reference_list_id and not item["archived"]
 
     def update_card_system_fields(
         self,
@@ -309,10 +333,13 @@ def test_typed_field_values_are_written_to_expected_columns() -> None:
     text_field_id = repository.add_field("text")
     date_field_id = repository.add_field("date")
     bool_field_id = repository.add_field("boolean")
-    select_field_id = repository.add_field("select")
-    multi_select_field_id = repository.add_field("multi_select")
-    reference_item_id = uuid4()
-    another_reference_item_id = uuid4()
+    reference_list_id = uuid4()
+    select_field_id = repository.add_field("select", options_source_id=reference_list_id)
+    multi_select_field_id = repository.add_field(
+        "multi_select", options_source_id=reference_list_id
+    )
+    reference_item_id = repository.add_reference_item(reference_list_id)
+    another_reference_item_id = repository.add_reference_item(reference_list_id)
 
     text_value_id = service.write_field_value(
         actor,
@@ -369,6 +396,76 @@ def test_typed_field_values_are_written_to_expected_columns() -> None:
         reference_item_id,
         another_reference_item_id,
     ]
+
+
+def test_select_value_must_belong_to_configured_reference_list() -> None:
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(InMemoryPermissionRepository(set()))
+    service = CardService(repository, permission_service)
+    organization_id = uuid4()
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=organization_id)
+    card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=organization_id,
+            org_unit_id=None,
+            display_name="Select validation",
+        ),
+    )
+    block_instance_id = service.create_block_instance(actor, card_id=card_id, block_id=uuid4())
+    allowed_list_id = uuid4()
+    other_list_id = uuid4()
+    field_id = repository.add_field("select", options_source_id=allowed_list_id)
+    wrong_item_id = repository.add_reference_item(other_list_id)
+
+    with pytest.raises(InvalidCardOperationError, match="reference list"):
+        service.write_field_value(
+            actor,
+            FieldValueWrite(
+                card_id=card_id,
+                block_instance_id=block_instance_id,
+                field_id=field_id,
+                value=wrong_item_id,
+            ),
+        )
+
+    assert repository.field_values == {}
+
+
+def test_multi_select_values_must_belong_to_configured_reference_list() -> None:
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(InMemoryPermissionRepository(set()))
+    service = CardService(repository, permission_service)
+    organization_id = uuid4()
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=organization_id)
+    card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=organization_id,
+            org_unit_id=None,
+            display_name="Multi select validation",
+        ),
+    )
+    block_instance_id = service.create_block_instance(actor, card_id=card_id, block_id=uuid4())
+    list_id = uuid4()
+    field_id = repository.add_field("multi_select", options_source_id=list_id)
+    active_item_id = repository.add_reference_item(list_id)
+    archived_item_id = repository.add_reference_item(list_id, active=False)
+
+    with pytest.raises(InvalidCardOperationError, match="reference list"):
+        service.write_field_value(
+            actor,
+            FieldValueWrite(
+                card_id=card_id,
+                block_instance_id=block_instance_id,
+                field_id=field_id,
+                value=(active_item_id, archived_item_id),
+            ),
+        )
+
+    assert repository.field_values == {}
 
 
 def test_datetime_and_decimal_values_are_normalized() -> None:

@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from app.models.card import Card, CardBlockInstance, CardRelation, FieldValue, FieldValueItem
 from app.models.public_link import CardPublicLink
+from app.models.reference import ReferenceItem
 from app.models.registry_schema import FormBlock, FormField
 from app.repositories.cards import SQLAlchemyCardRepository
 from app.repositories.public_links import SQLAlchemyPublicLinkRepository
@@ -161,7 +162,9 @@ def test_card_query_repository_returns_dict_contracts() -> None:
         public_edit_enabled=True,
         public_view_enabled=False,
     )
+    reference_list_id = uuid4()
     field = FormField(id=uuid4(), block_id=uuid4(), code="name", label="Name", field_type="text")
+    field.options_source_id = reference_list_id
     block = FormBlock(id=uuid4(), registry_id=card.registry_id, code="main", title="Main")
     value = FieldValue(
         id=uuid4(),
@@ -182,12 +185,26 @@ def test_card_query_repository_returns_dict_contracts() -> None:
     ]
 
     assert repository.get_card(card.id)["display_name"] == "Card"
-    assert repository.get_field_schema(field.id)["field_type"] == "text"
+    field_schema = repository.get_field_schema(field.id)
+    assert field_schema["field_type"] == "text"
+    assert field_schema["options_source_id"] == reference_list_id
     assert repository.list_schema_blocks(card.registry_id)[0]["code"] == "main"
     assert repository.list_schema_fields(block.id)[0]["code"] == "name"
     assert repository.list_field_values(card.id)[0]["value_text"] == "Card"
     assert repository.list_field_value_items(value.id) == [item_id]
     assert repository.list_cards(filters=object())[0]["id"] == card.id
+
+    reference_item = ReferenceItem(id=uuid4(), list_id=reference_list_id, code="ok", label="OK")
+    reference_item.is_active = True
+    session.get_results[(ReferenceItem, reference_item.id)] = reference_item
+    assert repository.reference_item_belongs_to_list(
+        reference_item_id=reference_item.id,
+        reference_list_id=reference_list_id,
+    )
+    assert not repository.reference_item_belongs_to_list(
+        reference_item_id=reference_item.id,
+        reference_list_id=uuid4(),
+    )
 
 
 def test_public_link_repository_creates_disables_and_updates_public_values() -> None:
@@ -226,8 +243,10 @@ def test_public_link_repository_creates_disables_and_updates_public_values() -> 
     block = FormBlock(id=uuid4(), registry_id=uuid4(), code="main", title="Main")
     block.public_editable = True
     block_instance = CardBlockInstance(id=uuid4(), card_id=card_id, block_id=block.id, ordinal=0)
+    reference_list_id = uuid4()
     field = FormField(id=uuid4(), block_id=block.id, code="name", label="Name", field_type="text")
     field.public_editable = True
+    field.options_source_id = reference_list_id
     session.get_results[(CardBlockInstance, block_instance.id)] = block_instance
     session.get_results[(FormBlock, block.id)] = block
     session.get_results[(FormField, field.id)] = field
@@ -236,6 +255,20 @@ def test_public_link_repository_creates_disables_and_updates_public_values() -> 
         field_id=field.id,
     ) == {
         "field_type": "text",
+        "options_source_type": None,
+        "options_source_id": reference_list_id,
         "block_public_editable": True,
         "field_public_editable": True,
     }
+
+    reference_item = ReferenceItem(id=uuid4(), list_id=reference_list_id, code="ok", label="OK")
+    reference_item.is_active = True
+    session.get_results[(ReferenceItem, reference_item.id)] = reference_item
+    assert repository.reference_item_belongs_to_list(
+        reference_item_id=reference_item.id,
+        reference_list_id=reference_list_id,
+    )
+    assert not repository.reference_item_belongs_to_list(
+        reference_item_id=reference_item.id,
+        reference_list_id=uuid4(),
+    )

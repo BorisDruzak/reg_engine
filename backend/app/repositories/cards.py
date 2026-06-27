@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import delete, or_, select
 
 from app.models.card import Card, CardBlockInstance, CardRelation, FieldValue, FieldValueItem
+from app.models.reference import ReferenceItem
 from app.models.registry_schema import FormBlock, FormField
 
 
@@ -244,6 +245,22 @@ class SQLAlchemyCardRepository:
             for relation in result.scalars().all()
         ]
 
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        item = self.session.get(ReferenceItem, reference_item_id)
+        if item is None:
+            return False
+        typed_item = cast(ReferenceItem, item)
+        return (
+            typed_item.list_id == reference_list_id
+            and typed_item.archived_at is None
+            and typed_item.is_active
+        )
+
     def list_schema_blocks(self, registry_id: UUID) -> list[dict[str, object]]:
         result = self.session.execute(
             select(FormBlock)
@@ -337,6 +354,8 @@ class SQLAlchemyCardRepository:
             "code": field.code,
             "label": field.label,
             "field_type": field.field_type,
+            "options_source_type": field.options_source_type,
+            "options_source_id": field.options_source_id,
             "public_editable": field.public_editable,
         }
 

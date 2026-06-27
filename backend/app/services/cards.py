@@ -131,6 +131,14 @@ class CardRepository(Protocol):
     ) -> None:
         """Replace multi-select rows for a field value."""
 
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        """Return whether an active reference item belongs to the reference list."""
+
     def update_card_system_fields(
         self,
         *,
@@ -146,6 +154,16 @@ class CardRepository(Protocol):
 
     def list_card_relations(self, card_id: UUID) -> list[dict[str, object]]:
         """Return relations where the card is source or target."""
+
+
+class ReferenceItemMembershipRepository(Protocol):
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        """Return whether an active reference item belongs to the reference list."""
 
 
 def build_typed_field_values(
@@ -195,6 +213,27 @@ def build_typed_field_values(
         raise InvalidCardOperationError(f"Unsupported field type: {field_type}")
 
     return values, multi_select_items
+
+
+def validate_reference_item_membership(
+    *,
+    field: dict[str, object],
+    reference_item_ids: tuple[UUID, ...],
+    repository: ReferenceItemMembershipRepository,
+) -> None:
+    if not reference_item_ids:
+        return
+    reference_list_id = field.get("options_source_id")
+    if not isinstance(reference_list_id, UUID):
+        raise InvalidCardOperationError("Reference fields require a configured reference list.")
+    for reference_item_id in reference_item_ids:
+        if not repository.reference_item_belongs_to_list(
+            reference_item_id=reference_item_id,
+            reference_list_id=reference_list_id,
+        ):
+            raise InvalidCardOperationError(
+                "Reference item must belong to the configured reference list."
+            )
 
 
 def _empty_typed_values() -> dict[str, object]:
@@ -324,6 +363,18 @@ class CardService:
             raise InvalidCardOperationError(f"Unsupported field type: {field_type}")
 
         typed_values, multi_select_items = build_typed_field_values(field_type, data.value)
+        if field_type == "select":
+            validate_reference_item_membership(
+                field=field,
+                reference_item_ids=(cast(UUID, typed_values["value_reference_item_id"]),),
+                repository=self.repository,
+            )
+        if multi_select_items is not None:
+            validate_reference_item_membership(
+                field=field,
+                reference_item_ids=multi_select_items,
+                repository=self.repository,
+            )
         field_value_id = self.repository.upsert_field_value(
             card_id=data.card_id,
             block_instance_id=data.block_instance_id,

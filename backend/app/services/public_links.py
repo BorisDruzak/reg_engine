@@ -8,7 +8,11 @@ from uuid import UUID
 
 from app.domain.constants import FIELD_TYPES
 from app.services.audit import AuditEventCreate, AuditRecorder
-from app.services.cards import build_typed_field_values
+from app.services.cards import (
+    InvalidCardOperationError,
+    build_typed_field_values,
+    validate_reference_item_membership,
+)
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
 
@@ -115,6 +119,14 @@ class PublicLinkRepository(Protocol):
     ) -> None:
         """Replace multi-select item rows for a field value."""
 
+    def reference_item_belongs_to_list(
+        self,
+        *,
+        reference_item_id: UUID,
+        reference_list_id: UUID,
+    ) -> bool:
+        """Return whether an active reference item belongs to the reference list."""
+
     def increment_public_link_usage(self, link_id: UUID) -> None:
         """Increment public link usage count."""
 
@@ -207,7 +219,22 @@ class PublicLinkService:
         field_type = str(field_access["field_type"])
         if field_type not in FIELD_TYPES:
             raise PublicLinkAccessError(f"Unsupported public field type: {field_type}")
-        typed_values, multi_select_items = build_typed_field_values(field_type, data.value)
+        try:
+            typed_values, multi_select_items = build_typed_field_values(field_type, data.value)
+            if field_type == "select":
+                validate_reference_item_membership(
+                    field=field_access,
+                    reference_item_ids=(cast(UUID, typed_values["value_reference_item_id"]),),
+                    repository=self.repository,
+                )
+            if multi_select_items is not None:
+                validate_reference_item_membership(
+                    field=field_access,
+                    reference_item_ids=multi_select_items,
+                    repository=self.repository,
+                )
+        except InvalidCardOperationError as exc:
+            raise PublicLinkAccessError(str(exc)) from exc
         field_value_id = self.repository.upsert_field_value(
             card_id=card_id,
             block_instance_id=data.block_instance_id,
