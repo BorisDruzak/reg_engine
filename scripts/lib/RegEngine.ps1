@@ -6,6 +6,8 @@ function Get-RegEngineConfig {
 
     [pscustomobject]@{
         RepoRoot     = $repoRoot.Path
+        BackendRoot  = Join-Path $repoRoot.Path "backend"
+        FrontendRoot = Join-Path $repoRoot.Path "frontend"
         Branch       = "main"
         Remote       = "origin"
         RepoUrl      = "git@github.com:BorisDruzak/reg_engine.git"
@@ -130,4 +132,42 @@ function Assert-RegEngineCleanCommandPrerequisites {
             throw "Required command not found: $name"
         }
     }
+}
+
+function Test-RegEngineBackendExists {
+    $config = Get-RegEngineConfig
+    Test-Path -LiteralPath (Join-Path $config.BackendRoot "pyproject.toml")
+}
+
+function Test-RegEngineFrontendExists {
+    $config = Get-RegEngineConfig
+    Test-Path -LiteralPath (Join-Path $config.FrontendRoot "package.json")
+}
+
+function Get-RegEnginePython {
+    $config = Get-RegEngineConfig
+    $venvPython = Join-Path $config.BackendRoot ".venv\Scripts\python.exe"
+    if (Test-Path -LiteralPath $venvPython) {
+        return $venvPython
+    }
+    return "python"
+}
+
+function Invoke-RegEngineBackend {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $config = Get-RegEngineConfig
+    $python = Get-RegEnginePython
+    Invoke-RegEngineCommand -FilePath $python -Arguments $Arguments -WorkingDirectory $config.BackendRoot
+}
+
+function Invoke-RegEnginePnpm {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $config = Get-RegEngineConfig
+    Invoke-RegEngineCommand -FilePath "pnpm" -Arguments $Arguments -WorkingDirectory $config.RepoRoot
 }

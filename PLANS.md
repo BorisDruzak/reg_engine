@@ -2,86 +2,82 @@
 
 ## Project
 
-Registry Engine — расширяемый web-движок реестров.
+Registry Engine is an extensible web engine for schema-driven registries.
 
-Цель: создать независимую систему реестров с web-интерфейсом, серверной БД, API, RBAC/ABAC, audit log и будущей поддержкой MCP.
-
-Система не должна быть просто аналогом старого Access-реестра. Старый реестр используется только как предметный ориентир. Новая система должна быть движком, где структура карточек задаётся через блоки и поля.
-
----
+The system must not become a hardcoded employee registry. Old Access/MDB data can be used as domain reference later, but the new system must be a configurable engine where card structure is defined through blocks and fields.
 
 ## Current Phase
 
-Phase 0: подготовка репозитория, среды и правил разработки.
+Phase 1A: Project Foundation Tooling completed locally.
 
----
-
-## Phase 0 Checklist
+## Phase 0: Repository, Connectivity, And Server Preparation
 
 - [x] GitHub repository exists: `BorisDruzak/reg_engine`.
 - [x] README.md created/updated.
 - [x] AGENTS.md exists.
-- [x] .gitignore exists.
+- [x] `.gitignore` exists.
 - [x] Operational scripts are documented in README/AGENTS.
-- [x] .env.example exists.
+- [x] `.env.example` exists.
 - [x] Codex Phase 1A prompt exists: `docs/CODEX_PHASE_1A_PROMPT.md`.
-- [ ] Phase 1A backend foundation implemented.
+- [x] Server SSH access works for `root@registoryengine`.
+- [x] Server checkout exists at `/opt/reg_engine`.
+- [x] PostgreSQL 16 is active on `registoryengine`.
 
----
-
-## Phase 1A — Backend Foundation
-
-### Goal
-
-Create the backend foundation without business models beyond a healthcheck.
-
-### Scope
-
-Implement:
-
-- backend skeleton;
-- FastAPI app;
-- config module;
-- database module placeholder/config;
-- healthcheck endpoint;
-- pytest + httpx test for healthcheck;
-- ruff config;
-- project scripts updated if needed;
-- README commands updated if needed.
-
-### Non-goals
-
-Do not implement yet:
-
-- frontend;
-- auth;
-- users;
-- organizations;
-- registries;
-- cards;
-- RBAC;
-- audit log;
-- import/export;
-- documents;
-- MCP.
-
-### Definition of Done
-
-- Healthcheck endpoint works.
-- Tests pass.
-- Lint/syntax checks pass.
-- README contains run/test commands.
-- PLANS.md updated with actual result.
-
----
-
-## Phase 1B — Core Models and Migrations
+## Phase 1A: Project Foundation Tooling
 
 ### Goal
 
-Add the schema foundation for dynamic registries.
+Create the technical foundation without registry business logic.
 
-### Models
+### Completed
+
+- [x] Backend skeleton under `backend/`.
+- [x] FastAPI app factory and application entrypoint.
+- [x] Settings module with optional `DATABASE_URL`.
+- [x] Database placeholder helper.
+- [x] Logging helper.
+- [x] `GET /health`.
+- [x] `GET /api/v1/health`.
+- [x] Backend pytest healthcheck tests.
+- [x] Backend ruff configuration.
+- [x] Backend mypy configuration.
+- [x] Frontend React + TypeScript + Vite skeleton under `frontend/`.
+- [x] Frontend app provider and router shell.
+- [x] Frontend unit smoke test.
+- [x] Frontend Playwright e2e smoke test.
+- [x] Root pnpm workspace and root command orchestrator.
+- [x] PowerShell scripts for check, test, lint, format, typecheck, dev servers, project tree, server check, push, deploy, and dev cycle.
+- [x] Project navigation docs.
+- [x] ADR 0001 for project foundation.
+- [x] GitHub Actions CI workflow.
+- [x] `.env.example`, `.editorconfig`, and pre-commit config.
+
+### Non-goals Kept
+
+- [x] No auth implementation.
+- [x] No RBAC implementation.
+- [x] No users/organizations/registries/cards business models.
+- [x] No business CRUD.
+- [x] No import/export.
+- [x] No document generation.
+- [x] No MCP.
+- [x] No MDB migration.
+
+## Known Limitations
+
+- Healthcheck intentionally does not depend on PostgreSQL.
+- Backend tests currently cover only healthcheck foundation behavior.
+- Frontend is a placeholder shell only.
+- Playwright e2e requires local browser install with `pnpm -C frontend exec playwright install chromium`.
+- Server `/opt/reg_engine` may need deployment after this branch is pushed.
+
+## Phase 1B: Core Schema Design Before Models
+
+### Goal
+
+Design the schema-driven registry data model before implementing migrations.
+
+### Future Models
 
 - users
 - organizations
@@ -99,176 +95,28 @@ Add the schema foundation for dynamic registries.
 
 ### Required Rules
 
-1. Do not create a hardcoded employee table with fixed кадровые fields.
+1. Do not create a hardcoded employee table with fixed HR fields.
 2. Use schema-driven cards.
 3. Use typed field values.
-4. Use soft delete/archive for cards, blocks, fields, organizations.
+4. Use soft delete/archive for cards, blocks, fields, and organizations.
 5. Keep all database changes under Alembic migrations.
 
----
+## Later Phases
 
-## Phase 1C — Registry Schema API
-
-### Goal
-
-Allow an administrator to manage registries, blocks and fields through API.
-
-### Endpoints
-
-- `GET /api/v1/registries`
-- `POST /api/v1/registries`
-- `GET /api/v1/registries/{registry_id}`
-- `PATCH /api/v1/registries/{registry_id}`
-- `GET /api/v1/registries/{registry_id}/schema`
-- `POST /api/v1/registries/{registry_id}/blocks`
-- `PATCH /api/v1/blocks/{block_id}`
-- `POST /api/v1/blocks/{block_id}/fields`
-- `PATCH /api/v1/fields/{field_id}`
-
----
-
-## Phase 1D — Cards and Dynamic Values
-
-### Goal
-
-Create and edit cards using registry schema.
-
-### Endpoints
-
-- `GET /api/v1/cards`
-- `POST /api/v1/cards`
-- `GET /api/v1/cards/{card_id}`
-- `PATCH /api/v1/cards/{card_id}`
-- `POST /api/v1/cards/{card_id}/archive`
-- `PATCH /api/v1/cards/{card_id}/values`
-
-### Critical Test
-
-Adding a new field to an existing registry must not break old cards. Old cards must show the new field as empty.
-
----
-
-## Phase 1E — Permissions and Audit
-
-### Goal
-
-Add backend-enforced access control and audit logging.
-
-### Permission Rules
-
-1. `is_superuser` can do everything.
-2. Regular users see cards only through `access_grants`.
-3. Parent organization access does not include child organizations by default.
-4. Child organizations are visible only when `include_descendants=true`.
-5. Backend checks every action.
-6. API never returns cards or fields the user has no right to see.
-
-### Audit Events
-
-Write audit for:
-
-- registry create/update;
-- block create/update/archive;
-- field create/update/archive;
-- card create/update/archive;
-- field value update;
-- organization create/update/archive;
-- access grant create/update/delete.
-
----
-
-## Phase 1F — Minimal Frontend
-
-### Goal
-
-Create a minimal web interface proving schema-driven cards.
-
-### Pages
-
-- login page;
-- organizations page;
-- registries page;
-- registry schema editor;
-- card list page;
-- card create page;
-- card edit/view page;
-- audit page.
-
-### Frontend Rule
-
-Do not hardcode fields such as ФИО, дата рождения, образование, стаж. Frontend must request schema from API and render fields dynamically.
-
-Components:
-
-- `DynamicCardForm`
-- `DynamicBlock`
-- `DynamicFieldRenderer`
-
----
-
-## Future Phases
-
-### Phase 2 — Documents
-
-- file upload;
-- attachment metadata;
-- file permissions;
-- file access audit;
-- antivirus scan hook;
-- storage abstraction.
-
-### Phase 3 — Import/Export
-
-- XLSX/CSV import;
-- column mapping;
-- preview and validation;
-- background import jobs;
-- XLSX/CSV/JSON/PDF export;
-- export permissions.
-
-### Phase 4 — Reports
-
-- report templates;
-- employee/card PDF;
-- registry reports;
-- period reports;
-- DOCX/PDF generation.
-
-### Phase 5 — MCP
-
-- read-only MCP tools first;
-- tools over API only;
-- no direct DB access;
-- audit source `mcp`;
-- write-tools only after RBAC/audit are mature.
-
----
-
-## Required Backend Tests
-
-- `test_healthcheck`
-- `test_create_registry`
-- `test_create_block`
-- `test_create_field`
-- `test_create_card`
-- `test_update_card_values`
-- `test_add_field_after_card_created`
-- `test_old_card_has_empty_new_field`
-- `test_user_without_access_cannot_see_card`
-- `test_user_with_org_access_can_see_card`
-- `test_parent_org_without_descendants_does_not_see_child_cards`
-- `test_parent_org_with_descendants_sees_child_cards`
-- `test_user_without_field_edit_cannot_update_value`
-- `test_audit_written_on_card_create`
-- `test_audit_written_on_value_update`
-
----
+- Phase 1C: Registry schema API.
+- Phase 1D: Cards and dynamic values.
+- Phase 1E: Permissions and audit.
+- Phase 1F: Minimal schema-driven frontend.
+- Phase 2: Documents.
+- Phase 3: Import/export.
+- Phase 4: Reports.
+- Phase 5: MCP over API only.
 
 ## Global Non-goals Until Explicitly Requested
 
 - Do not migrate MDB data.
 - Do not integrate with the helpdesk repository.
-- Do not implement production deployment.
 - Do not add real personal data.
 - Do not store secrets in Git.
 - Do not bypass API with MCP or scripts.
+

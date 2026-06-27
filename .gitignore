@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
+*.egg-info/
 
 # Local environment and secrets
 .env
@@ -54,3 +55,19 @@ Thumbs.db
 .vscode/
 .worktrees/
 worktrees/
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+coverage/
+frontend/coverage/
+htmlcov/
+.venv/
+backend/.venv/
+uploads/
+storage/
+*.mdb
+*.accdb
+playwright-report/
+test-results/

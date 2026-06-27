@@ -1,134 +1,105 @@
 # Registry Engine
 
-Registry Engine — расширяемый web-движок реестров с динамическими карточками, организационной моделью доступа, audit log, REST API и будущей поддержкой MCP.
+Registry Engine is an extensible web engine for schema-driven registries.
 
-Это не жёстко заданный кадровый реестр. Базовый принцип проекта: администратор создаёт реестр, настраивает структуру карточки через блоки и поля, а пользователи работают с карточками только в рамках своих прав доступа.
+This is not a hardcoded employee registry. The core rule is that an administrator creates registries and configures card structure through blocks and fields. Future users work with cards only through backend-enforced access rules.
 
 ## Product Direction
 
-Целевая система:
+Target system:
 
-- web-панель;
-- серверная PostgreSQL БД;
+- web panel;
+- PostgreSQL server database;
 - REST API;
-- MCP layer в будущем;
-- пользователи и роли;
-- доступы по организациям;
-- динамические карточки;
-- настраиваемые блоки и поля;
+- future MCP layer;
+- users and roles;
+- organization-based access;
+- dynamic cards;
+- configurable blocks and fields;
 - audit log;
-- импорт/экспорт на следующих этапах;
-- документы и вложения на следующих этапах.
-
-## MVP-1 Goal
-
-Создать архитектурное ядро:
-
-- users;
-- organizations;
-- registries;
-- form_blocks;
-- form_fields;
-- cards;
-- card_block_instances;
-- field_values;
-- roles;
-- permissions;
-- access_grants;
-- audit_events;
-- минимальный REST API;
-- минимальный frontend для проверки schema-driven карточек.
-
-## Non-goals for MVP-1
-
-На первом этапе не делать:
-
-- миграцию старой MDB-базы;
-- интеграцию с service desk;
-- импорт/экспорт;
-- документы и файловое хранилище;
-- сложные отчёты;
-- MCP write-tools;
-- production UI polish.
+- import/export in later phases;
+- documents and attachments in later phases.
 
 ## Critical Architecture Rules
 
-1. Не создавать жёсткую таблицу `employees` с фиксированными кадровыми полями.
-2. Структура карточки задаётся через `registries`, `form_blocks`, `form_fields`.
-3. Значения полей хранятся типизированно: `value_text`, `value_number`, `value_date`, `value_bool`, `value_json`.
-4. Добавление нового поля не должно требовать миграции БД.
-5. Старые карточки не должны ломаться после изменения схемы.
-6. Права доступа проверяются на backend.
-7. Frontend может скрывать элементы интерфейса, но не является уровнем безопасности.
-8. Все create/update/archive действия пишутся в audit log.
-9. Доступ к родительской организации не даёт доступ к дочерним без `include_descendants=true`.
-10. Будущий MCP должен работать через API, а не напрямую через БД.
+1. Do not create a hardcoded `employees` table with fixed HR fields.
+2. Card structure is defined through `registries`, `form_blocks`, and `form_fields`.
+3. Future field values should be typed, for example `value_text`, `value_number`, `value_date`, `value_bool`, and `value_json`.
+4. Adding a field must not require a database migration.
+5. Old cards must not break after schema changes.
+6. Access is checked on the backend.
+7. Frontend may hide controls, but it is not the security boundary.
+8. Future create/update/archive actions must write audit events.
+9. Parent organization access does not imply child organization access without `include_descendants=true`.
+10. Future MCP must call the API, not the database directly.
 
-## Planned Stack
+## Current Foundation
 
-Backend:
+- Backend: FastAPI in `backend/`.
+- Frontend: React + TypeScript + Vite in `frontend/`.
+- Automation: PowerShell-first scripts in `scripts/` for the Codex Windows app.
+- CI: GitHub Actions backend and frontend quality gates.
+- Server: `/opt/reg_engine` on `registoryengine`.
 
-- Python 3.12+
-- FastAPI
-- SQLAlchemy 2.x
-- Alembic
-- Pydantic v2
-- PostgreSQL
-- psycopg3
-- pytest
-- httpx
-- ruff
-
-Frontend:
-
-- React
-- TypeScript
-- Vite
-- schema-driven dynamic forms
-
-Infrastructure:
-
-- Docker Compose or documented server runtime
-- PostgreSQL 16+
-
-## Development Workspace
-
-Development starts from the Codex Windows workspace:
+## Local Setup
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine
 ```
 
-## Main Commands
-
-Run local checks:
+Backend:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+cd backend
+python -m pip install -e ".[dev]"
 ```
 
-Run server checks:
+Frontend:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1
+pnpm install
 ```
 
-Commit and push changes:
+Playwright browser install for e2e:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Describe the change"
+pnpm -C frontend exec playwright install chromium
 ```
 
-Deploy the latest `origin/main` to `/opt/reg_engine`:
+## Main Scripts
+
+| Purpose | Command |
+| --- | --- |
+| Full check | `powershell -ExecutionPolicy Bypass -File scripts/check.ps1` |
+| Tests | `powershell -ExecutionPolicy Bypass -File scripts/test.ps1` |
+| Tests with e2e | `powershell -ExecutionPolicy Bypass -File scripts/test.ps1 -E2E` |
+| Lint | `powershell -ExecutionPolicy Bypass -File scripts/lint.ps1` |
+| Format check | `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check` |
+| Typecheck | `powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1` |
+| Backend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-backend.ps1` |
+| Frontend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-frontend.ps1` |
+| Project map | `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1` |
+| Server check | `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` |
+| Deploy | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
+
+## Direct Backend Commands
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
+cd backend
+python -m pytest
+ruff check .
+ruff format --check .
+mypy app
 ```
 
-Run the full development cycle:
+## Direct Frontend Commands
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/dev-cycle.ps1 -Message "Describe the change"
+pnpm -C frontend lint
+pnpm -C frontend typecheck
+pnpm -C frontend test:run
+pnpm -C frontend build
+pnpm -C frontend e2e
 ```
 
 ## Database Check Password
@@ -149,8 +120,14 @@ The server can also keep the same value outside the repo in `/etc/reg_engine/reg
 - GitHub remote: `git@github.com:BorisDruzak/reg_engine.git`
 - PostgreSQL: `192.168.100.12:5432`, database `reg_engine`, role `reg_engine_admin`
 
-## Current Status
+## Known Non-Goals For The Foundation Phase
 
-Phase 0: repository and development rules are being prepared.
+- No auth.
+- No RBAC.
+- No registry/card/user business models.
+- No business CRUD.
+- No import/export.
+- No document generation.
+- No MCP.
+- No MDB migration.
 
-Next phase: Phase 1A — backend foundation.

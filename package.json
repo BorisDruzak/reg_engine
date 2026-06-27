@@ -1,0 +1,16 @@
+{
+  "name": "reg-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "frontend:dev": "pnpm -C frontend dev",
+    "frontend:build": "pnpm -C frontend build",
+    "frontend:test": "pnpm -C frontend test:run",
+    "frontend:lint": "pnpm -C frontend lint",
+    "frontend:typecheck": "pnpm -C frontend typecheck",
+    "frontend:e2e": "pnpm -C frontend e2e"
+  },
+  "packageManager": "pnpm@11.7.0"
+}
+

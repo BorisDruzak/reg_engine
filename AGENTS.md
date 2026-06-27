@@ -282,6 +282,14 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 ## Development Scripts
 
 - `scripts/check.ps1` runs local Git, GitHub SSH, server SSH, and Python syntax checks.
+- `scripts/test.ps1` runs backend pytest and frontend unit tests; pass `-E2E` for Playwright.
+- `scripts/lint.ps1` runs backend ruff and frontend eslint.
+- `scripts/format.ps1 -Check` verifies backend ruff format and frontend prettier.
+- `scripts/typecheck.ps1` runs backend mypy and frontend TypeScript checks.
+- `scripts/project-map.ps1` generates or checks `docs/PROJECT_TREE.md`.
+- `scripts/tree.ps1` prints a filtered project tree.
+- `scripts/dev-backend.ps1` starts the FastAPI dev server.
+- `scripts/dev-frontend.ps1` starts the Vite dev server.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, and database access.
 - `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
 - `scripts/deploy.ps1` updates `/opt/reg_engine` from `origin/main` and runs server checks.
@@ -352,3 +360,11 @@ After config changes:
 sudo systemctl restart postgresql
 sudo systemctl status postgresql --no-pager
 ```
+
+## Foundation Phase Guardrails
+
+- Do not add hardcoded employee models, tables, or UI pages.
+- Do not implement auth, RBAC, registry CRUD, import/export, documents, MCP, service desk integration, or MDB migration in the foundation phase.
+- Healthcheck endpoints must remain independent from PostgreSQL.
+- Backend business logic should not live inside API route functions.
+- Frontend business logic should not live inside visual components.
