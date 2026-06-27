@@ -6,6 +6,7 @@ from typing import Protocol, cast
 from uuid import UUID
 
 from app.domain.constants import FIELD_TYPES
+from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
 
@@ -202,19 +203,34 @@ class CardService:
         self,
         repository: CardRepository,
         permission_service: PermissionService,
+        audit_service: AuditRecorder | None = None,
     ) -> None:
         self.repository = repository
         self.permission_service = permission_service
+        self.audit_service = audit_service
 
     def create_card(self, actor: ActorContext, data: CardCreate) -> UUID:
         self._require_card_access(actor, data.organization_id)
-        return self.repository.create_card(
+        card_id = self.repository.create_card(
             registry_id=data.registry_id,
             organization_id=data.organization_id,
             org_unit_id=data.org_unit_id,
             display_name=data.display_name,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "card.create",
+            "card",
+            card_id,
+            {
+                "registry_id": data.registry_id,
+                "organization_id": data.organization_id,
+                "org_unit_id": data.org_unit_id,
+                "display_name": data.display_name,
+            },
+        )
+        return card_id
 
     def archive_card(
         self,
@@ -226,6 +242,13 @@ class CardService:
         card = self.repository.get_card(card_id)
         self._require_card_access(actor, cast(UUID, card["organization_id"]))
         self.repository.archive_card(card_id=card_id, archived_by=actor.user_id, reason=reason)
+        self._record_user_event(
+            actor,
+            "card.archive",
+            "card",
+            card_id,
+            {"reason": reason},
+        )
 
     def create_block_instance(
         self,
@@ -237,12 +260,20 @@ class CardService:
     ) -> UUID:
         card = self.repository.get_card(card_id)
         self._require_card_access(actor, cast(UUID, card["organization_id"]))
-        return self.repository.create_block_instance(
+        block_instance_id = self.repository.create_block_instance(
             card_id=card_id,
             block_id=block_id,
             ordinal=ordinal,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "card_block_instance.create",
+            "card_block_instance",
+            block_instance_id,
+            {"card_id": card_id, "block_id": block_id, "ordinal": ordinal},
+        )
+        return block_instance_id
 
     def write_field_value(self, actor: ActorContext, data: FieldValueWrite) -> UUID:
         card = self.repository.get_card(data.card_id)
@@ -265,6 +296,13 @@ class CardService:
                 field_value_id=field_value_id,
                 reference_item_ids=multi_select_items,
             )
+        self._record_user_event(
+            actor,
+            "field_value.update",
+            "field_value",
+            field_value_id,
+            {"card_id": data.card_id, "field_id": data.field_id},
+        )
         return field_value_id
 
     def transfer_card(self, actor: ActorContext, data: CardTransfer) -> CardTransferResult:
@@ -290,8 +328,39 @@ class CardService:
             relation_type="transferred_to",
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "card.transfer",
+            "card",
+            data.source_card_id,
+            {
+                "target_card_id": target_card_id,
+                "target_organization_id": data.target_organization_id,
+                "relation_id": relation_id,
+            },
+        )
         return CardTransferResult(target_card_id=target_card_id, relation_id=relation_id)
 
     def _require_card_access(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):
             raise AccessDeniedError("Actor cannot manage cards outside organization scope.")
+
+    def _record_user_event(
+        self,
+        actor: ActorContext,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        new_data: dict[str, object] | None,
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_user_event(
+            actor,
+            AuditEventCreate(
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )

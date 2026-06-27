@@ -12,6 +12,46 @@ from app.services.public_links import (
 )
 
 
+class FakeAuditService:
+    def __init__(self) -> None:
+        self.events: list[dict[str, object]] = []
+
+    def record_user_event(self, actor: ActorContext, event: object) -> UUID:
+        event_id = uuid4()
+        self.events.append(
+            {
+                "id": event_id,
+                "actor_type": "user",
+                "actor_user_id": actor.user_id,
+                "action": event.action,
+            }
+        )
+        return event_id
+
+    def record_public_link_event(self, public_link_id: UUID, event: object) -> UUID:
+        event_id = uuid4()
+        self.events.append(
+            {
+                "id": event_id,
+                "actor_type": "public_link",
+                "actor_public_link_id": public_link_id,
+                "action": event.action,
+            }
+        )
+        return event_id
+
+    def record_system_event(self, event: object) -> UUID:
+        event_id = uuid4()
+        self.events.append(
+            {
+                "id": event_id,
+                "actor_type": "system",
+                "action": event.action,
+            }
+        )
+        return event_id
+
+
 class InMemoryPermissionRepository:
     def __init__(self, closure: set[tuple[UUID, UUID]]) -> None:
         self.closure = closure
@@ -172,11 +212,13 @@ class InMemoryPublicLinkRepository:
 def test_admin_creates_public_link_with_raw_token_once_and_seven_day_expiry() -> None:
     now = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
     repository = InMemoryPublicLinkRepository()
+    audit = FakeAuditService()
     organization_id = uuid4()
     card_id = repository.add_card(organization_id=organization_id)
     service = PublicLinkService(
         repository,
         PermissionService(InMemoryPermissionRepository(set())),
+        audit,
         now_provider=lambda: now,
         token_factory=lambda: "raw-token",
     )
@@ -189,18 +231,20 @@ def test_admin_creates_public_link_with_raw_token_once_and_seven_day_expiry() ->
     assert stored["token_hash"] == service.hash_token("raw-token")
     assert stored["token_hash"] != created.raw_token
     assert stored["expires_at"] == now + timedelta(days=7)
-    assert repository.audit_events[0]["action"] == "public_link.create"
+    assert audit.events[0]["action"] == "public_link.create"
 
 
 def test_public_link_edits_public_field_and_writes_audit() -> None:
     now = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
     repository = InMemoryPublicLinkRepository()
+    audit = FakeAuditService()
     organization_id = uuid4()
     card_id = repository.add_card(organization_id=organization_id)
     block_instance_id, field_id = repository.add_field(field_type="text")
     service = PublicLinkService(
         repository,
         PermissionService(InMemoryPermissionRepository(set())),
+        audit,
         now_provider=lambda: now,
         token_factory=lambda: "raw-token",
     )
@@ -218,7 +262,7 @@ def test_public_link_edits_public_field_and_writes_audit() -> None:
 
     assert repository.field_values[value_id]["value_text"] == "public text"
     assert repository.links[created.link_id]["used_count"] == 1
-    assert repository.audit_events[-1]["action"] == "public_link.value_update"
+    assert audit.events[-1]["action"] == "public_link.value_update"
 
 
 def test_public_link_cannot_edit_when_card_public_edit_disabled() -> None:

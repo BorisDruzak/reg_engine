@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
 
@@ -36,9 +37,14 @@ class OrganizationRepository(Protocol):
 
 
 class OrganizationService:
-    def __init__(self, repository: OrganizationRepository) -> None:
+    def __init__(
+        self,
+        repository: OrganizationRepository,
+        audit_service: AuditRecorder | None = None,
+    ) -> None:
         self.repository = repository
         self.permissions = PermissionService(repository)
+        self.audit_service = audit_service
 
     def create_root(self, actor: ActorContext, data: OrganizationCreate) -> UUID:
         if not actor.is_superuser:
@@ -51,6 +57,12 @@ class OrganizationService:
             created_by=actor.user_id,
         )
         self.repository.add_closure_rows([(organization_id, organization_id, 0)])
+        self._record_user_event(
+            actor,
+            "organization.create",
+            organization_id,
+            {"code": data.code, "name": data.name, "parent_id": None},
+        )
         return organization_id
 
     def create_child(
@@ -75,6 +87,12 @@ class OrganizationService:
             for ancestor_id, depth in self.repository.ancestor_rows_for(parent_id)
         )
         self.repository.add_closure_rows(rows)
+        self._record_user_event(
+            actor,
+            "organization.create",
+            organization_id,
+            {"code": data.code, "name": data.name, "parent_id": parent_id},
+        )
         return organization_id
 
     def accessible_tree_ids(self, actor: ActorContext) -> set[UUID]:
@@ -90,3 +108,22 @@ class OrganizationService:
             else:
                 visible.add(grant.organization_id)
         return visible
+
+    def _record_user_event(
+        self,
+        actor: ActorContext,
+        action: str,
+        object_id: UUID,
+        new_data: dict[str, object],
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_user_event(
+            actor,
+            AuditEventCreate(
+                action=action,
+                object_type="organization",
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )

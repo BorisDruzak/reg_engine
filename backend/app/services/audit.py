@@ -32,6 +32,21 @@ class AuditRepository(Protocol):
         """Create an audit event and return its id."""
 
 
+class AuditRecorder(Protocol):
+    def record_user_event(self, actor: ActorContext, event: AuditEventCreate) -> UUID:
+        """Record an audit event for an authenticated user actor."""
+
+    def record_public_link_event(
+        self,
+        public_link_id: UUID,
+        event: AuditEventCreate,
+    ) -> UUID:
+        """Record an audit event for a public-link actor."""
+
+    def record_system_event(self, event: AuditEventCreate) -> UUID:
+        """Record an audit event for a system actor."""
+
+
 class AuditService:
     def __init__(self, repository: AuditRepository) -> None:
         self.repository = repository

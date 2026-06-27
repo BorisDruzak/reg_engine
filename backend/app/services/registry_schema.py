@@ -3,6 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
+from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.permissions import AccessDeniedError, ActorContext
 
 
@@ -58,16 +59,29 @@ class RegistrySchemaRepository(Protocol):
 
 
 class RegistrySchemaService:
-    def __init__(self, repository: RegistrySchemaRepository) -> None:
+    def __init__(
+        self,
+        repository: RegistrySchemaRepository,
+        audit_service: AuditRecorder | None = None,
+    ) -> None:
         self.repository = repository
+        self.audit_service = audit_service
 
     def create_registry(self, actor: ActorContext, data: RegistryCreate) -> UUID:
         self._require_schema_manager(actor)
-        return self.repository.create_registry(
+        registry_id = self.repository.create_registry(
             code=data.code,
             name=data.name,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "registry.create",
+            "registry",
+            registry_id,
+            {"code": data.code, "name": data.name},
+        )
+        return registry_id
 
     def create_block(
         self,
@@ -78,17 +92,25 @@ class RegistrySchemaService:
         title: str,
     ) -> UUID:
         self._require_schema_manager(actor)
-        return self.repository.create_block(
+        block_id = self.repository.create_block(
             registry_id=registry_id,
             code=code,
             title=title,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "form_block.create",
+            "form_block",
+            block_id,
+            {"registry_id": registry_id, "code": code, "title": title},
+        )
+        return block_id
 
     def create_field(self, actor: ActorContext, *, block_id: UUID, data: FieldCreate) -> UUID:
         self._require_schema_manager(actor)
         self._validate_field(data)
-        return self.repository.create_field(
+        field_id = self.repository.create_field(
             block_id=block_id,
             code=data.code,
             label=data.label,
@@ -96,14 +118,29 @@ class RegistrySchemaService:
             required_mode=data.required_mode,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "form_field.create",
+            "form_field",
+            field_id,
+            {
+                "block_id": block_id,
+                "code": data.code,
+                "field_type": data.field_type,
+                "required_mode": data.required_mode,
+            },
+        )
+        return field_id
 
     def archive_field(self, actor: ActorContext, field_id: UUID) -> None:
         self._require_schema_manager(actor)
         self.repository.archive_field(field_id)
+        self._record_user_event(actor, "form_field.archive", "form_field", field_id, None)
 
     def archive_block(self, actor: ActorContext, block_id: UUID) -> None:
         self._require_schema_manager(actor)
         self.repository.archive_block(block_id)
+        self._record_user_event(actor, "form_block.archive", "form_block", block_id, None)
 
     def _require_schema_manager(self, actor: ActorContext) -> None:
         if not actor.is_superuser:
@@ -114,3 +151,23 @@ class RegistrySchemaService:
             raise InvalidSchemaOperationError(f"Unsupported field type: {data.field_type}")
         if data.required_mode not in REQUIRED_MODES:
             raise InvalidSchemaOperationError(f"Unsupported required mode: {data.required_mode}")
+
+    def _record_user_event(
+        self,
+        actor: ActorContext,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        new_data: dict[str, object] | None,
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_user_event(
+            actor,
+            AuditEventCreate(
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )

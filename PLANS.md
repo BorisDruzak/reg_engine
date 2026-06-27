@@ -15,6 +15,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B.4 card command/query and dynamic value service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.5 public link service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.6 card transfer and audit service boundaries are implemented locally on `codex/core-schema-v1`.
+- Phase 1B service-layer audit wiring is implemented locally on `codex/core-schema-v1` for organization, org unit, registry schema, reference list, card, transfer, and public-link actions.
 - Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
@@ -242,7 +243,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.4 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, value validation against concrete reference-list membership, and audit writes are still open work.
+Remaining limitation: 1B.4 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and value validation against concrete reference-list membership are still open work.
 
 ### 1B.5 Public Links
 
@@ -264,7 +265,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.5 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and the concrete centralized `AuditService` implementation are still open work.
+Remaining limitation: 1B.5 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters and API endpoints are still open work.
 
 ### 1B.6 Transfer, Archive, And Audit
 
@@ -285,7 +286,30 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.6 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and wiring every service method to a concrete persisted `AuditService` are still open work.
+Remaining limitation: 1B.6 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and persisted audit repository implementation are still open work.
+
+### 1B.7 Service-Layer Audit Wiring Follow-Up
+
+- [x] Wire organization create actions to `AuditService`.
+- [x] Wire org unit create/archive actions to `AuditService`.
+- [x] Wire registry/block/field create/archive actions to `AuditService`.
+- [x] Wire reference list/item create/archive actions to `AuditService`.
+- [x] Wire card create/archive, block instance create, field value update, and transfer actions to `AuditService`.
+- [x] Wire public-link create/disable actions as user audit events and public value edits as public-link audit events.
+- [x] Add service tests proving audit event actions are emitted through the shared `AuditService` boundary.
+
+Verification completed locally:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_service_audit_wiring.py tests\test_public_link_service.py tests\test_card_service.py tests\test_organization_service.py tests\test_org_unit_service.py tests\test_registry_schema_service.py tests\test_reference_list_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: audit wiring is service-layer only until SQLAlchemy repository adapters persist `audit_events` in PostgreSQL.
 
 ## Phase 1B Acceptance Criteria
 

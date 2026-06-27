@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 17:11:07 +05:00
+- Generated: 2026-06-27 17:19:00 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -80,6 +80,7 @@
 - `backend/tests/test_reference_list_service.py`
 - `backend/tests/test_registry_schema_service.py`
 - `backend/tests/test_schema_constraints.py`
+- `backend/tests/test_service_audit_wiring.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`

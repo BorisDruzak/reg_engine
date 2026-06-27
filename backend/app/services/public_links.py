@@ -7,6 +7,7 @@ from typing import Protocol, cast
 from uuid import UUID
 
 from app.domain.constants import FIELD_TYPES
+from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.cards import build_typed_field_values
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
@@ -94,29 +95,20 @@ class PublicLinkRepository(Protocol):
     def increment_public_link_usage(self, link_id: UUID) -> None:
         """Increment public link usage count."""
 
-    def record_public_link_audit(
-        self,
-        *,
-        public_link_id: UUID,
-        action: str,
-        object_type: str,
-        object_id: UUID | None,
-        new_data: dict[str, object] | None,
-    ) -> None:
-        """Record an audit event for a public-link action."""
-
 
 class PublicLinkService:
     def __init__(
         self,
         repository: PublicLinkRepository,
         permission_service: PermissionService,
+        audit_service: AuditRecorder | None = None,
         *,
         now_provider: Callable[[], datetime] | None = None,
         token_factory: Callable[[], str] | None = None,
     ) -> None:
         self.repository = repository
         self.permission_service = permission_service
+        self.audit_service = audit_service
         self.now_provider = now_provider or (lambda: datetime.now(UTC))
         self.token_factory = token_factory or (lambda: secrets.token_urlsafe(32))
 
@@ -134,12 +126,12 @@ class PublicLinkService:
             max_uses=data.max_uses,
             created_by=actor.user_id,
         )
-        self.repository.record_public_link_audit(
-            public_link_id=link_id,
-            action="public_link.create",
-            object_type="card_public_link",
-            object_id=link_id,
-            new_data={"card_id": data.card_id},
+        self._record_user_event(
+            actor,
+            "public_link.create",
+            "card_public_link",
+            link_id,
+            {"card_id": data.card_id},
         )
         return PublicLinkCreated(link_id=link_id, raw_token=raw_token, expires_at=expires_at)
 
@@ -148,12 +140,12 @@ class PublicLinkService:
         card = self.repository.get_card(cast(UUID, link["card_id"]))
         self._require_card_management(actor, cast(UUID, card["organization_id"]))
         self.repository.disable_public_link(link_id=link_id, disabled_at=self.now_provider())
-        self.repository.record_public_link_audit(
-            public_link_id=link_id,
-            action="public_link.disable",
-            object_type="card_public_link",
-            object_id=link_id,
-            new_data=None,
+        self._record_user_event(
+            actor,
+            "public_link.disable",
+            "card_public_link",
+            link_id,
+            None,
         )
 
     def update_value(self, raw_token: str, data: PublicFieldValueWrite) -> UUID:
@@ -190,12 +182,12 @@ class PublicLinkService:
                 reference_item_ids=multi_select_items,
             )
         self.repository.increment_public_link_usage(link_id)
-        self.repository.record_public_link_audit(
-            public_link_id=link_id,
-            action="public_link.value_update",
-            object_type="field_value",
-            object_id=field_value_id,
-            new_data={"field_id": data.field_id},
+        self._record_public_link_event(
+            link_id,
+            "public_link.value_update",
+            "field_value",
+            field_value_id,
+            {"field_id": data.field_id},
         )
         return field_value_id
 
@@ -221,3 +213,43 @@ class PublicLinkService:
     def _require_card_management(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):
             raise AccessDeniedError("Actor cannot manage public links outside organization scope.")
+
+    def _record_user_event(
+        self,
+        actor: ActorContext,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        new_data: dict[str, object] | None,
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_user_event(
+            actor,
+            AuditEventCreate(
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )
+
+    def _record_public_link_event(
+        self,
+        public_link_id: UUID,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        new_data: dict[str, object] | None,
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_public_link_event(
+            public_link_id,
+            AuditEventCreate(
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )

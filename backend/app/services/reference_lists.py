@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 from uuid import UUID
 
+from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.permissions import AccessDeniedError, ActorContext
 
 
@@ -62,15 +63,20 @@ class ReferenceListRepository(Protocol):
 
 
 class ReferenceListService:
-    def __init__(self, repository: ReferenceListRepository) -> None:
+    def __init__(
+        self,
+        repository: ReferenceListRepository,
+        audit_service: AuditRecorder | None = None,
+    ) -> None:
         self.repository = repository
+        self.audit_service = audit_service
 
     def create_list(self, actor: ActorContext, data: ReferenceListCreate) -> UUID:
         if not actor.is_superuser and data.owner_organization_id is None:
             raise AccessDeniedError(
                 "Only a system administrator can create global reference lists."
             )
-        return self.repository.create_reference_list(
+        list_id = self.repository.create_reference_list(
             registry_id=data.registry_id,
             owner_organization_id=data.owner_organization_id,
             code=data.code,
@@ -79,6 +85,19 @@ class ReferenceListService:
             inherit_to_descendants=data.inherit_to_descendants,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "reference_list.create",
+            "reference_list",
+            list_id,
+            {
+                "registry_id": data.registry_id,
+                "owner_organization_id": data.owner_organization_id,
+                "code": data.code,
+                "name": data.name,
+            },
+        )
+        return list_id
 
     def create_item(
         self,
@@ -88,12 +107,20 @@ class ReferenceListService:
         data: ReferenceItemCreate,
     ) -> UUID:
         self._ensure_can_edit_list(actor, list_id)
-        return self.repository.create_reference_item(
+        item_id = self.repository.create_reference_item(
             list_id=list_id,
             code=data.code,
             label=data.label,
             created_by=actor.user_id,
         )
+        self._record_user_event(
+            actor,
+            "reference_item.create",
+            "reference_item",
+            item_id,
+            {"list_id": list_id, "code": data.code, "label": data.label},
+        )
+        return item_id
 
     def available_list_ids_for_organization(self, organization_id: UUID) -> set[UUID]:
         return self.repository.inherited_list_ids_for(organization_id)
@@ -101,12 +128,14 @@ class ReferenceListService:
     def archive_list(self, actor: ActorContext, list_id: UUID) -> None:
         self._ensure_can_edit_list(actor, list_id)
         self.repository.archive_reference_list(list_id)
+        self._record_user_event(actor, "reference_list.archive", "reference_list", list_id, None)
 
     def archive_item(self, actor: ActorContext, item_id: UUID) -> None:
         reference_item = self.repository.get_reference_item(item_id)
         list_id = cast(UUID, reference_item["list_id"])
         self._ensure_can_edit_list(actor, list_id)
         self.repository.archive_reference_item(item_id)
+        self._record_user_event(actor, "reference_item.archive", "reference_item", item_id, None)
 
     def _ensure_can_edit_list(self, actor: ActorContext, list_id: UUID) -> None:
         if actor.is_superuser:
@@ -125,3 +154,23 @@ class ReferenceListService:
             raise AccessDeniedError(
                 "Descendant admins cannot edit locked inherited reference lists."
             )
+
+    def _record_user_event(
+        self,
+        actor: ActorContext,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        new_data: dict[str, object] | None,
+    ) -> None:
+        if self.audit_service is None:
+            return
+        self.audit_service.record_user_event(
+            actor,
+            AuditEventCreate(
+                action=action,
+                object_type=object_type,
+                object_id=object_id,
+                new_data=new_data,
+            ),
+        )
