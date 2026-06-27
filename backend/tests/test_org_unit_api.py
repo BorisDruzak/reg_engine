@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_actor, get_db_session, get_org_unit_service
 from app.main import app
-from app.services.org_units import OrgUnitCreate
+from app.services.org_units import OrgUnitCreate, OrgUnitUpdate
 from app.services.permissions import ActorContext
 
 
@@ -22,6 +22,8 @@ class FakeOrgUnitService:
     def __init__(self) -> None:
         self.created: list[tuple[UUID, OrgUnitCreate, UUID | None, ActorContext | None]] = []
         self.archived: list[tuple[UUID, ActorContext | None]] = []
+        self.get_requests: list[UUID] = []
+        self.updated: list[tuple[UUID, OrgUnitUpdate, ActorContext | None]] = []
         self.units: list[dict[str, object]] = []
 
     def create(
@@ -48,6 +50,27 @@ class FakeOrgUnitService:
 
     def list_by_organization(self, organization_id: UUID) -> list[dict[str, object]]:
         return [unit for unit in self.units if unit["organization_id"] == organization_id]
+
+    def get(self, org_unit_id: UUID) -> dict[str, object]:
+        self.get_requests.append(org_unit_id)
+        return next(unit for unit in self.units if unit["id"] == org_unit_id)
+
+    def update(
+        self,
+        org_unit_id: UUID,
+        data: OrgUnitUpdate,
+        *,
+        actor: ActorContext | None = None,
+    ) -> dict[str, object]:
+        self.updated.append((org_unit_id, data, actor))
+        unit = self.get(org_unit_id)
+        if data.code is not None:
+            unit["code"] = data.code
+        if data.name is not None:
+            unit["name"] = data.name
+        if data.parent_id_set:
+            unit["parent_id"] = data.parent_id
+        return unit
 
     def archive(self, org_unit_id: UUID, *, actor: ActorContext | None = None) -> None:
         self.archived.append((org_unit_id, actor))
@@ -117,6 +140,52 @@ def test_list_org_units_endpoint_returns_units_for_organization(
             "archived": False,
         }
     ]
+
+
+def test_get_org_unit_endpoint_returns_unit(
+    api_client: tuple[TestClient, FakeOrgUnitService, FakeSession],
+) -> None:
+    client, service, _session = api_client
+    organization_id = uuid4()
+    unit_id = service.create(
+        organization_id=organization_id,
+        data=OrgUnitCreate(code="ops", name="Ops"),
+        created_by=uuid4(),
+    )
+
+    response = client.get(f"/api/v1/org-units/{unit_id}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(unit_id)
+    assert service.get_requests[0] == unit_id
+
+
+def test_update_org_unit_endpoint_uses_service_and_commits(
+    api_client: tuple[TestClient, FakeOrgUnitService, FakeSession],
+) -> None:
+    client, service, session = api_client
+    organization_id = uuid4()
+    parent_id = uuid4()
+    unit_id = service.create(
+        organization_id=organization_id,
+        data=OrgUnitCreate(code="ops", name="Ops"),
+        created_by=uuid4(),
+    )
+
+    response = client.patch(
+        f"/api/v1/org-units/{unit_id}",
+        json={"code": "ops-2", "name": "Operations", "parent_id": str(parent_id)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == "ops-2"
+    assert service.updated[0] == (
+        unit_id,
+        OrgUnitUpdate(code="ops-2", name="Operations", parent_id=parent_id, parent_id_set=True),
+        service.updated[0][2],
+    )
+    assert service.updated[0][2] is not None
+    assert session.committed is True
 
 
 def test_archive_org_unit_endpoint_uses_service_and_commits(

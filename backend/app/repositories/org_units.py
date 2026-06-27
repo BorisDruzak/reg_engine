@@ -76,14 +76,38 @@ class SQLAlchemyOrgUnitRepository:
         org_units = result.scalars().all()
         return [self._to_dict(cast(OrgUnit, org_unit)) for org_unit in org_units]
 
+    def get(self, org_unit_id: UUID) -> dict[str, object]:
+        return self._to_dict(self._get_model(org_unit_id))
+
+    def update(
+        self,
+        org_unit_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+        parent_id: UUID | None,
+        parent_id_set: bool,
+    ) -> None:
+        org_unit = self._get_model(org_unit_id)
+        if code is not None:
+            org_unit.code = code
+        if name is not None:
+            org_unit.name = name
+        if parent_id_set:
+            org_unit.parent_id = parent_id
+        self.session.flush()
+
     def archive(self, org_unit_id: UUID) -> None:
+        org_unit = self._get_model(org_unit_id)
+        org_unit.is_active = False
+        org_unit.archived_at = self.now_provider()
+        self.session.flush()
+
+    def _get_model(self, org_unit_id: UUID) -> OrgUnit:
         org_unit = self.session.get(OrgUnit, org_unit_id)
         if org_unit is None:
             raise LookupError(f"Org unit not found: {org_unit_id}")
-        typed_org_unit = cast(OrgUnit, org_unit)
-        typed_org_unit.is_active = False
-        typed_org_unit.archived_at = self.now_provider()
-        self.session.flush()
+        return cast(OrgUnit, org_unit)
 
     def _to_dict(self, org_unit: OrgUnit) -> dict[str, object]:
         return {

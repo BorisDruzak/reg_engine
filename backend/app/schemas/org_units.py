@@ -10,6 +10,12 @@ class OrgUnitCreateRequest(BaseModel):
     parent_id: UUID | None = None
 
 
+class OrgUnitUpdateRequest(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=120)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    parent_id: UUID | None = None
+
+
 class OrgUnitResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
