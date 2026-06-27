@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.repositories.audit import SQLAlchemyAuditRepository
+from app.repositories.cards import CardSessionLike, SQLAlchemyCardRepository
 from app.repositories.org_units import OrgUnitSessionLike, SQLAlchemyOrgUnitRepository
 from app.repositories.organizations import OrganizationSessionLike, SQLAlchemyOrganizationRepository
 from app.repositories.reference_lists import (
@@ -18,9 +19,11 @@ from app.repositories.registry_schema import (
     SQLAlchemyRegistrySchemaRepository,
 )
 from app.services.audit import AuditService
+from app.services.card_queries import CardQueryService
+from app.services.cards import CardService
 from app.services.org_units import OrgUnitService
 from app.services.organizations import OrganizationService
-from app.services.permissions import ActorContext
+from app.services.permissions import ActorContext, PermissionService
 from app.services.reference_lists import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
 
@@ -77,3 +80,27 @@ def get_reference_list_service(
         cast(ReferenceListSessionLike, session)
     )
     return ReferenceListService(reference_repository, audit_service)
+
+
+def get_card_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardService:
+    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_service = AuditService(audit_repository)
+    organization_repository = SQLAlchemyOrganizationRepository(
+        cast(OrganizationSessionLike, session)
+    )
+    permission_service = PermissionService(organization_repository)
+    card_repository = SQLAlchemyCardRepository(cast(CardSessionLike, session))
+    return CardService(card_repository, permission_service, audit_service)
+
+
+def get_card_query_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardQueryService:
+    organization_repository = SQLAlchemyOrganizationRepository(
+        cast(OrganizationSessionLike, session)
+    )
+    permission_service = PermissionService(organization_repository)
+    card_repository = SQLAlchemyCardRepository(cast(CardSessionLike, session))
+    return CardQueryService(card_repository, permission_service)

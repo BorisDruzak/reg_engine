@@ -20,7 +20,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B organization closure and org unit SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Phase 1B runtime dependency composition and business endpoints are started locally on `codex/core-schema-v1` for organization root/child creation, org unit create/list/archive, registry schema create/archive operations, and reference list/item create/archive operations.
+- Phase 1B runtime dependency composition and business endpoints are started locally on `codex/core-schema-v1` for organization root/child creation, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, and card create/list/get/value/block/archive/transfer operations.
 - Backend still does not contain the complete Core Schema v1 endpoint set, frontend UI, full runtime dependency composition for every Core Schema service, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
@@ -361,8 +361,11 @@ Remaining limitation: SQLAlchemy repository adapters exist for all Phase 1B serv
 - [x] Add reference list/item create endpoints.
 - [x] Add reference list/item archive endpoints.
 - [x] Add API tests proving reference list endpoints call services and commit the injected session for writes.
+- [x] Add card API schemas.
+- [x] Add card create, list, get, block instance, value write, archive, and transfer endpoints.
+- [x] Add API dependency composition for card command/query services.
+- [x] Add API tests proving card endpoints call services and commit the injected session for writes.
 - [ ] Add organization tree/get/update/archive endpoints.
-- [ ] Add card endpoints.
 - [ ] Add public link endpoints.
 - [ ] Add audit endpoints.
 
@@ -374,13 +377,14 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m pytest tests\test_org_unit_api.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_api.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_reference_list_api.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_card_api.py -q
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: organization root/child, org unit create/list/archive, registry schema create/archive, and reference list/item create/archive endpoints are wired. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: organization root/child, org unit create/list/archive, registry schema create/archive, reference list/item create/archive, and card create/list/get/value/block/archive/transfer endpoints are wired. Organization tree/get/update/archive, public link endpoints, and audit endpoints remain open. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ## Phase 1B Acceptance Criteria
 
