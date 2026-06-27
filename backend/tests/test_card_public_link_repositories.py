@@ -188,6 +188,9 @@ def test_public_link_repository_creates_disables_and_updates_public_values() -> 
     assert link.token_hash == "hash"
 
     session.get_results[(CardPublicLink, link_id)] = link
+    session.execute_results = [FakeResult([link])]
+    assert repository.list_public_links(card_id)[0]["id"] == link_id
+
     repository.disable_public_link(link_id=link_id, disabled_at=disabled_at)
     assert link.status == "disabled"
     assert link.disabled_at == disabled_at

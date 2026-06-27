@@ -33,6 +33,26 @@ class PublicLinkCreated:
 
 
 @dataclass(frozen=True)
+class PublicLinkRead:
+    id: UUID
+    card_id: UUID
+    status: str
+    can_view: bool
+    can_edit: bool
+    expires_at: datetime
+    max_uses: int | None
+    used_count: int
+
+
+@dataclass(frozen=True)
+class PublicLinkCardAccess:
+    card_id: UUID
+    can_view: bool
+    can_edit: bool
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
 class PublicFieldValueWrite:
     block_instance_id: UUID
     field_id: UUID
@@ -58,6 +78,9 @@ class PublicLinkRepository(Protocol):
 
     def get_public_link(self, link_id: UUID) -> dict[str, object]:
         """Return public link attributes by id."""
+
+    def list_public_links(self, card_id: UUID) -> list[dict[str, object]]:
+        """Return public links for a card without exposing raw tokens."""
 
     def get_public_link_by_token_hash(self, token_hash: str) -> dict[str, object] | None:
         """Return public link attributes by token hash."""
@@ -135,6 +158,13 @@ class PublicLinkService:
         )
         return PublicLinkCreated(link_id=link_id, raw_token=raw_token, expires_at=expires_at)
 
+    def list_links(self, actor: ActorContext, card_id: UUID) -> tuple[PublicLinkRead, ...]:
+        card = self.repository.get_card(card_id)
+        self._require_card_management(actor, cast(UUID, card["organization_id"]))
+        return tuple(
+            self._link_to_read(link) for link in self.repository.list_public_links(card_id)
+        )
+
     def disable_link(self, actor: ActorContext, link_id: UUID) -> None:
         link = self.repository.get_public_link(link_id)
         card = self.repository.get_card(cast(UUID, link["card_id"]))
@@ -148,8 +178,17 @@ class PublicLinkService:
             None,
         )
 
+    def get_public_card(self, raw_token: str) -> PublicLinkCardAccess:
+        link = self._active_link(raw_token, require_edit=False)
+        return PublicLinkCardAccess(
+            card_id=cast(UUID, link["card_id"]),
+            can_view=bool(link["can_view"]),
+            can_edit=bool(link["can_edit"]),
+            expires_at=cast(datetime, link["expires_at"]),
+        )
+
     def update_value(self, raw_token: str, data: PublicFieldValueWrite) -> UUID:
-        link = self._active_edit_link(raw_token)
+        link = self._active_link(raw_token, require_edit=True)
         link_id = cast(UUID, link["id"])
         card_id = cast(UUID, link["card_id"])
         card = self.repository.get_card(card_id)
@@ -194,13 +233,15 @@ class PublicLinkService:
     def hash_token(self, raw_token: str) -> str:
         return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
-    def _active_edit_link(self, raw_token: str) -> dict[str, object]:
+    def _active_link(self, raw_token: str, *, require_edit: bool) -> dict[str, object]:
         link = self.repository.get_public_link_by_token_hash(self.hash_token(raw_token))
         if link is None:
             raise PublicLinkAccessError("Public link is not found.")
         if link["status"] != "active":
             raise PublicLinkAccessError("Public link is not active.")
-        if not bool(link["can_edit"]):
+        if not bool(link["can_view"]):
+            raise PublicLinkAccessError("Public link does not allow view.")
+        if require_edit and not bool(link["can_edit"]):
             raise PublicLinkAccessError("Public link does not allow edits.")
         if cast(datetime, link["expires_at"]) <= self.now_provider():
             raise PublicLinkAccessError("Public link is expired.")
@@ -209,6 +250,18 @@ class PublicLinkService:
         if max_uses is not None and used_count >= max_uses:
             raise PublicLinkAccessError("Public link use limit is reached.")
         return link
+
+    def _link_to_read(self, link: dict[str, object]) -> PublicLinkRead:
+        return PublicLinkRead(
+            id=cast(UUID, link["id"]),
+            card_id=cast(UUID, link["card_id"]),
+            status=str(link["status"]),
+            can_view=bool(link["can_view"]),
+            can_edit=bool(link["can_edit"]),
+            expires_at=cast(datetime, link["expires_at"]),
+            max_uses=cast(int | None, link["max_uses"]),
+            used_count=cast(int, link["used_count"]),
+        )
 
     def _require_card_management(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):

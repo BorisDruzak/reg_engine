@@ -142,6 +142,9 @@ class InMemoryPublicLinkRepository:
     def get_public_link(self, link_id: UUID) -> dict[str, object]:
         return self.links[link_id]
 
+    def list_public_links(self, card_id: UUID) -> list[dict[str, object]]:
+        return [link for link in self.links.values() if link["card_id"] == card_id]
+
     def disable_public_link(self, *, link_id: UUID, disabled_at: datetime) -> None:
         self.links[link_id]["status"] = "disabled"
         self.links[link_id]["disabled_at"] = disabled_at
@@ -232,6 +235,30 @@ def test_admin_creates_public_link_with_raw_token_once_and_seven_day_expiry() ->
     assert stored["token_hash"] != created.raw_token
     assert stored["expires_at"] == now + timedelta(days=7)
     assert audit.events[0]["action"] == "public_link.create"
+
+
+def test_admin_lists_links_and_public_get_validates_view_access() -> None:
+    now = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+    repository = InMemoryPublicLinkRepository()
+    organization_id = uuid4()
+    card_id = repository.add_card(organization_id=organization_id)
+    service = PublicLinkService(
+        repository,
+        PermissionService(InMemoryPermissionRepository(set())),
+        now_provider=lambda: now,
+        token_factory=lambda: "raw-token",
+    )
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=organization_id)
+    created = service.create_link(actor, PublicLinkCreate(card_id=card_id))
+
+    links = service.list_links(actor, card_id)
+    public_card = service.get_public_card(created.raw_token)
+
+    assert links[0].id == created.link_id
+    assert links[0].card_id == card_id
+    assert public_card.card_id == card_id
+    assert public_card.can_view is True
+    assert public_card.can_edit is True
 
 
 def test_public_link_edits_public_field_and_writes_audit() -> None:
@@ -354,8 +381,17 @@ def test_public_link_rejects_disabled_expired_and_overused_links() -> None:
         PublicLinkCreate(card_id=card_id, expires_at=now - timedelta(seconds=1)),
     )
     overused = service.create_link(actor, PublicLinkCreate(card_id=card_id, max_uses=0))
+    view_denied = service.create_link(
+        actor,
+        PublicLinkCreate(card_id=card_id, can_view=False),
+    )
 
-    for raw_token in (disabled.raw_token, expired.raw_token, overused.raw_token):
+    for raw_token in (
+        disabled.raw_token,
+        expired.raw_token,
+        overused.raw_token,
+        view_denied.raw_token,
+    ):
         with pytest.raises(PublicLinkAccessError):
             service.update_value(
                 raw_token,

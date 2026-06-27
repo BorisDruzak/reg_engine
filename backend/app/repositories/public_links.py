@@ -58,6 +58,7 @@ class SQLAlchemyPublicLinkRepository:
         return {
             "id": typed_card.id,
             "organization_id": typed_card.organization_id,
+            "public_view_enabled": typed_card.public_view_enabled,
             "public_edit_enabled": typed_card.public_edit_enabled,
         }
 
@@ -94,6 +95,14 @@ class SQLAlchemyPublicLinkRepository:
         if link is None:
             raise LookupError(f"Public link not found: {link_id}")
         return self._link_to_dict(cast(CardPublicLink, link))
+
+    def list_public_links(self, card_id: UUID) -> list[dict[str, object]]:
+        result = self.session.execute(
+            select(CardPublicLink)
+            .where(CardPublicLink.card_id == card_id)
+            .order_by(CardPublicLink.created_at.desc())
+        )
+        return [self._link_to_dict(cast(CardPublicLink, link)) for link in result.scalars().all()]
 
     def get_public_link_by_token_hash(self, token_hash: str) -> dict[str, object] | None:
         link = (

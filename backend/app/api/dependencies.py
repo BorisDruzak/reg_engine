@@ -10,6 +10,7 @@ from app.repositories.audit import SQLAlchemyAuditRepository
 from app.repositories.cards import CardSessionLike, SQLAlchemyCardRepository
 from app.repositories.org_units import OrgUnitSessionLike, SQLAlchemyOrgUnitRepository
 from app.repositories.organizations import OrganizationSessionLike, SQLAlchemyOrganizationRepository
+from app.repositories.public_links import PublicLinkSessionLike, SQLAlchemyPublicLinkRepository
 from app.repositories.reference_lists import (
     ReferenceListSessionLike,
     SQLAlchemyReferenceListRepository,
@@ -24,6 +25,7 @@ from app.services.cards import CardService
 from app.services.org_units import OrgUnitService
 from app.services.organizations import OrganizationService
 from app.services.permissions import ActorContext, PermissionService
+from app.services.public_links import PublicLinkService
 from app.services.reference_lists import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
 
@@ -104,3 +106,16 @@ def get_card_query_service(
     permission_service = PermissionService(organization_repository)
     card_repository = SQLAlchemyCardRepository(cast(CardSessionLike, session))
     return CardQueryService(card_repository, permission_service)
+
+
+def get_public_link_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PublicLinkService:
+    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_service = AuditService(audit_repository)
+    organization_repository = SQLAlchemyOrganizationRepository(
+        cast(OrganizationSessionLike, session)
+    )
+    permission_service = PermissionService(organization_repository)
+    public_link_repository = SQLAlchemyPublicLinkRepository(cast(PublicLinkSessionLike, session))
+    return PublicLinkService(public_link_repository, permission_service, audit_service)
