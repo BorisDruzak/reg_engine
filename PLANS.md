@@ -9,8 +9,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1B.3 Model Smoke Tests completion.
-- Do not implement API CRUD, services, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
+- Current checkpoint scope is Phase 1C Organization Tree And RBAC Services completion.
+- Do not implement API CRUD, endpoints, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
 ## Current Phase Status
@@ -19,7 +19,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
 - Phase 1B.3 Model Smoke Tests are completed in this checkpoint.
 - Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
-- Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
+- Phase 1C Organization Tree And RBAC Services is completed locally in this checkpoint.
+- Phase 1D and Phase 1E remain planned future phases.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
@@ -254,25 +255,56 @@ Result: `3 passed` against disposable PostgreSQL `reg_engine_test`.
 
 Purpose: add backend service behavior for organization hierarchy and organization-scoped access.
 
+Status: completed locally in this checkpoint.
+
 Required work:
 
-- Add `OrganizationService`.
-- Add `PermissionService`.
-- Implement `access_grants` behavior.
-- Maintain and query `organization_closure`.
-- Enforce subtree visibility.
-- Prove `org_admin` sees descendants and cannot see parent/sibling branches.
-- Keep `org_units` as filters/reference data, not an RBAC boundary.
+- [x] Add `OrganizationService`.
+- [x] Add `PermissionService`.
+- [x] Implement `access_grants` behavior.
+- [x] Maintain and query `organization_closure`.
+- [x] Enforce subtree visibility.
+- [x] Prove `org_admin` sees descendants and cannot see parent/sibling branches.
+- [x] Keep `org_units` as filters/reference data, not an RBAC boundary.
 
 Required tests:
 
-- `system_admin` can create a root organization.
-- `org_admin` can create/manage child organizations inside own subtree.
-- `org_admin` cannot create or see sibling organizations.
-- `org_admin` cannot see parent organizations.
-- `org_admin` sees descendants.
-- Access grant without descendants only allows exact organization when that mode is used.
-- `org_units` can be listed/used by organization and do not grant access by themselves.
+- [x] `system_admin` can create a root organization.
+- [x] `org_admin` can create/manage child organizations inside own subtree.
+- [x] `org_admin` cannot create or see sibling organizations.
+- [x] `org_admin` cannot see parent organizations.
+- [x] `org_admin` sees descendants.
+- [x] Access grant without descendants only allows exact organization when that mode is used.
+- [x] `org_units` can be listed/used by organization and do not grant access by themselves.
+
+Expected files:
+
+- `backend/app/services/organizations.py`
+- `backend/app/services/permissions.py`
+- `backend/tests/test_organization_permission_services.py`
+
+Verification:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy app
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests\test_organization_permission_services.py -q
+```
+
+Known limitations:
+
+- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1C.
+- Role and permission seed data is not implemented; tests create minimal roles and permissions directly.
+- `org_units` remain filter/reference entities only and do not participate in RBAC decisions.
+- Services do not implement card visibility yet; card reads and registry behavior belong to Phase 1D.
+
+Next phase:
+
+- Phase 1D should add registry schema and dynamic card services on top of the organization scope service.
 
 ## Phase 1D: Registry Schema And Dynamic Cards
 
