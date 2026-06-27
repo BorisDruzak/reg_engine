@@ -93,6 +93,8 @@ class SQLAlchemyRegistrySchemaRepository:
         label: str,
         field_type: str,
         required_mode: str,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
         created_by: UUID | None,
     ) -> UUID:
         field_id = uuid4()
@@ -104,6 +106,8 @@ class SQLAlchemyRegistrySchemaRepository:
             field_type=field_type,
             position=0,
             required_mode=required_mode,
+            options_source_type=options_source_type,
+            options_source_id=options_source_id,
             is_system=False,
             is_locked=False,
             is_active=True,
@@ -202,6 +206,8 @@ class SQLAlchemyRegistrySchemaRepository:
         code: str | None,
         label: str | None,
         required_mode: str | None,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
     ) -> None:
         field = self._get_field_model(field_id)
         if code is not None:
@@ -210,6 +216,10 @@ class SQLAlchemyRegistrySchemaRepository:
             field.label = label
         if required_mode is not None:
             field.required_mode = required_mode
+        if options_source_type is not None:
+            field.options_source_type = options_source_type
+        if options_source_id is not None:
+            field.options_source_id = options_source_id
         self.session.flush()
 
     def _get_registry_model(self, registry_id: UUID) -> Registry:
@@ -255,5 +265,7 @@ class SQLAlchemyRegistrySchemaRepository:
             "label": field.label,
             "field_type": field.field_type,
             "required_mode": field.required_mode,
+            "options_source_type": field.options_source_type,
+            "options_source_id": field.options_source_id,
             "archived": field.archived_at is not None or not field.is_active,
         }

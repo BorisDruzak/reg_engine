@@ -35,6 +35,8 @@ class FieldCreate:
     label: str
     field_type: str
     required_mode: str = "not_required"
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,8 @@ class FieldUpdate:
     code: str | None = None
     label: str | None = None
     required_mode: str | None = None
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
 
 
 class RegistrySchemaRepository(Protocol):
@@ -66,6 +70,8 @@ class RegistrySchemaRepository(Protocol):
         label: str,
         field_type: str,
         required_mode: str,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
         created_by: UUID | None,
     ) -> UUID:
         """Create a form field and return its id."""
@@ -116,6 +122,8 @@ class RegistrySchemaRepository(Protocol):
         code: str | None,
         label: str | None,
         required_mode: str | None,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
     ) -> None:
         """Update mutable form field fields."""
 
@@ -178,6 +186,8 @@ class RegistrySchemaService:
             label=data.label,
             field_type=data.field_type,
             required_mode=data.required_mode,
+            options_source_type=data.options_source_type,
+            options_source_id=data.options_source_id,
             created_by=actor.user_id,
         )
         self._record_user_event(
@@ -255,12 +265,20 @@ class RegistrySchemaService:
         self._require_schema_manager(actor)
         if data.required_mode is not None and data.required_mode not in REQUIRED_MODES:
             raise InvalidSchemaOperationError(f"Unsupported required mode: {data.required_mode}")
+        if data.options_source_type is not None:
+            self._validate_options_source(
+                field_type=str(self._field_by_id(field_id)["field_type"]),
+                options_source_type=data.options_source_type,
+                options_source_id=data.options_source_id,
+            )
         before = self._field_by_id(field_id)
         self.repository.update_field(
             field_id,
             code=data.code,
             label=data.label,
             required_mode=data.required_mode,
+            options_source_type=data.options_source_type,
+            options_source_id=data.options_source_id,
         )
         after = self._field_by_id(field_id)
         self._record_user_event(
@@ -273,6 +291,8 @@ class RegistrySchemaService:
                     "code": before["code"],
                     "label": before["label"],
                     "required_mode": before["required_mode"],
+                    "options_source_type": before["options_source_type"],
+                    "options_source_id": before["options_source_id"],
                 },
                 "new": after,
             },
@@ -288,6 +308,29 @@ class RegistrySchemaService:
             raise InvalidSchemaOperationError(f"Unsupported field type: {data.field_type}")
         if data.required_mode not in REQUIRED_MODES:
             raise InvalidSchemaOperationError(f"Unsupported required mode: {data.required_mode}")
+        self._validate_options_source(
+            field_type=data.field_type,
+            options_source_type=data.options_source_type,
+            options_source_id=data.options_source_id,
+        )
+
+    def _validate_options_source(
+        self,
+        *,
+        field_type: str,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
+    ) -> None:
+        if field_type not in {"select", "multi_select"}:
+            if options_source_type is not None or options_source_id is not None:
+                raise InvalidSchemaOperationError(
+                    "Only select and multi_select fields can use option sources."
+                )
+            return
+        if options_source_type != "reference_list" or options_source_id is None:
+            raise InvalidSchemaOperationError(
+                "Select and multi_select fields require a reference_list option source."
+            )
 
     def _registry_schema(self, registry_id: UUID) -> dict[str, object]:
         registry = dict(self.repository.get_registry(registry_id))

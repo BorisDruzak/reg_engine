@@ -120,7 +120,13 @@ def test_registry_schema_and_reference_changes_write_audit_events() -> None:
     field_id = registry_service.create_field(
         actor,
         block_id=block_id,
-        data=FieldCreate(code="status", label="Status", field_type="select"),
+        data=FieldCreate(
+            code="status",
+            label="Status",
+            field_type="select",
+            options_source_type="reference_list",
+            options_source_id=uuid4(),
+        ),
     )
     registry_service.archive_field(actor, field_id)
 

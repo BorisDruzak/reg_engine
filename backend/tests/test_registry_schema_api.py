@@ -85,6 +85,8 @@ class FakeRegistrySchemaService:
                             "label": "Status",
                             "field_type": "text",
                             "required_mode": "not_required",
+                            "options_source_type": None,
+                            "options_source_id": None,
                             "archived": False,
                         }
                     ],
@@ -137,6 +139,8 @@ class FakeRegistrySchemaService:
             "label": data.label or "Status",
             "field_type": "text",
             "required_mode": data.required_mode or "not_required",
+            "options_source_type": data.options_source_type,
+            "options_source_id": data.options_source_id,
             "archived": False,
         }
 
@@ -199,6 +203,8 @@ def test_create_field_endpoint_uses_service_and_commits(
             "label": "Status",
             "field_type": "select",
             "required_mode": "not_required",
+            "options_source_type": "reference_list",
+            "options_source_id": str(reference_list_id := uuid4()),
         },
     )
 
@@ -210,6 +216,33 @@ def test_create_field_endpoint_uses_service_and_commits(
         label="Status",
         field_type="select",
         required_mode="not_required",
+        options_source_type="reference_list",
+        options_source_id=reference_list_id,
+    )
+    assert session.committed is True
+
+
+def test_update_field_endpoint_accepts_reference_list_source(
+    api_client: tuple[TestClient, FakeRegistrySchemaService, FakeSession],
+) -> None:
+    client, service, session = api_client
+    field_id = uuid4()
+    reference_list_id = uuid4()
+
+    response = client.patch(
+        f"/api/v1/registries/fields/{field_id}",
+        json={
+            "options_source_type": "reference_list",
+            "options_source_id": str(reference_list_id),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["options_source_type"] == "reference_list"
+    assert response.json()["options_source_id"] == str(reference_list_id)
+    assert service.updated_fields[0][1:] == (
+        field_id,
+        FieldUpdate(options_source_type="reference_list", options_source_id=reference_list_id),
     )
     assert session.committed is True
 

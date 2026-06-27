@@ -58,6 +58,8 @@ class InMemoryRegistrySchemaRepository:
         label: str,
         field_type: str,
         required_mode: str,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
         created_by: UUID | None,
     ) -> UUID:
         field_id = uuid4()
@@ -68,6 +70,8 @@ class InMemoryRegistrySchemaRepository:
             "label": label,
             "field_type": field_type,
             "required_mode": required_mode,
+            "options_source_type": options_source_type,
+            "options_source_id": options_source_id,
             "created_by": created_by,
             "archived": False,
         }
@@ -125,6 +129,8 @@ class InMemoryRegistrySchemaRepository:
         code: str | None,
         label: str | None,
         required_mode: str | None,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
     ) -> None:
         if code is not None:
             self.fields[field_id]["code"] = code
@@ -132,6 +138,10 @@ class InMemoryRegistrySchemaRepository:
             self.fields[field_id]["label"] = label
         if required_mode is not None:
             self.fields[field_id]["required_mode"] = required_mode
+        if options_source_type is not None:
+            self.fields[field_id]["options_source_type"] = options_source_type
+        if options_source_id is not None:
+            self.fields[field_id]["options_source_id"] = options_source_id
 
     def field_exists(self, field_id: UUID) -> bool:
         return field_id in self.fields
@@ -158,6 +168,36 @@ def test_system_admin_can_create_registry_block_and_field() -> None:
     assert repository.registries[registry_id]["code"] == "employees"
     assert repository.blocks[block_id]["registry_id"] == registry_id
     assert repository.fields[field_id]["field_type"] == "text"
+
+
+def test_select_field_can_be_configured_with_reference_list_source() -> None:
+    repository = InMemoryRegistrySchemaRepository()
+    service = RegistrySchemaService(repository)
+    actor = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    registry_id = service.create_registry(actor, RegistryCreate(code="reg", name="Registry"))
+    block_id = service.create_block(actor, registry_id=registry_id, code="main", title="Main")
+    reference_list_id = uuid4()
+
+    field_id = service.create_field(
+        actor,
+        block_id=block_id,
+        data=FieldCreate(
+            code="status",
+            label="Status",
+            field_type="select",
+            options_source_type="reference_list",
+            options_source_id=reference_list_id,
+        ),
+    )
+    updated = service.update_field(
+        actor,
+        field_id,
+        FieldUpdate(options_source_type="reference_list", options_source_id=uuid4()),
+    )
+
+    assert repository.fields[field_id]["options_source_type"] == "reference_list"
+    assert repository.fields[field_id]["options_source_id"] == updated["options_source_id"]
+    assert updated["options_source_type"] == "reference_list"
 
 
 def test_org_admin_cannot_manage_registry_schema() -> None:

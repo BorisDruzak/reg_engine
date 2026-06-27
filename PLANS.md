@@ -23,6 +23,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
 - Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
 - Phase 1B value hardening validates `select` and `multi_select` values against the configured `reference_list` membership for authenticated card edits and public-link edits.
+- Phase 1B registry schema API supports configuring `select` and `multi_select` field option sources through `options_source_type=reference_list` and `options_source_id`.
 - Phase 1B backend implementation is complete for the planned Core Schema v1 service, repository, API, and test scope.
 - Backend still does not contain production frontend UI. Auth is still a placeholder system actor until a dedicated auth phase.
 - Server `/opt/reg_engine` is deployed on `codex/core-schema-v1`; verify the exact deployed commit with `git log --oneline -1` on the server checkout.
@@ -231,6 +232,7 @@ Remaining limitation: 1B.2 service logic, SQLAlchemy repository adapters, and AP
 - [x] Implement form field creation/archive.
 - [x] Validate field types and required modes.
 - [x] Implement reference lists and reference items for select/multi_select.
+- [x] Configure select/multi_select fields with `reference_list` option sources through field create/update.
 - [x] Implement reference list and reference item archive behavior.
 - [x] Enforce locked inherited reference-list behavior.
 - [x] Add service tests for system admin registry/block/field creation, org admin schema denial, field type validation, block/field archive, inherited reference lists, locked descendant edit denial, and reference list/item archive.
@@ -506,6 +508,7 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 - Select values store `reference_items.id`, not copied text.
 - Multi-select values store rows in `field_value_items`.
 - Select and multi-select values must belong to the field's configured reference list.
+- Field create/update can configure `options_source_type=reference_list` and `options_source_id`.
 - Descendant organization can use an inherited reference list.
 - Descendant admin cannot edit a locked inherited reference list.
 

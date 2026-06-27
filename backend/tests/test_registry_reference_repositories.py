@@ -49,6 +49,7 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
     archived_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
     repository = SQLAlchemyRegistrySchemaRepository(session, now_provider=lambda: archived_at)
     created_by = uuid4()
+    reference_list_id = uuid4()
 
     registry_id = repository.create_registry(code="cards", name="Cards", created_by=created_by)
     block_id = repository.create_block(
@@ -63,6 +64,8 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
         label="Status",
         field_type="select",
         required_mode="not_required",
+        options_source_type="reference_list",
+        options_source_id=reference_list_id,
         created_by=created_by,
     )
 
@@ -78,6 +81,8 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
     assert field.id == field_id
     assert field.block_id == block_id
     assert field.field_type == "select"
+    assert field.options_source_type == "reference_list"
+    assert field.options_source_id == reference_list_id
 
     session.get_results[(Registry, registry_id)] = registry
     session.get_results[(FormBlock, block_id)] = block
@@ -85,17 +90,23 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
     session.execute_results = [FakeResult([block]), FakeResult([field])]
     assert repository.get_registry(registry_id)["code"] == "cards"
     assert repository.get_block(block_id)["title"] == "Main"
-    assert repository.get_field(field_id)["required_mode"] == "not_required"
+    field_read = repository.get_field(field_id)
+    assert field_read["required_mode"] == "not_required"
+    assert field_read["options_source_type"] == "reference_list"
+    assert field_read["options_source_id"] == reference_list_id
     assert repository.list_blocks(registry_id)[0]["id"] == block_id
     assert repository.list_fields(block_id)[0]["id"] == field_id
 
     repository.update_registry(registry_id, code="cards-2", name="Cards 2")
     repository.update_block(block_id, code="main-2", title="Main 2")
+    updated_reference_list_id = uuid4()
     repository.update_field(
         field_id,
         code="status-2",
         label="Status 2",
         required_mode="required_on_publish",
+        options_source_type="reference_list",
+        options_source_id=updated_reference_list_id,
     )
     assert registry.code == "cards-2"
     assert registry.name == "Cards 2"
@@ -104,6 +115,8 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
     assert field.code == "status-2"
     assert field.label == "Status 2"
     assert field.required_mode == "required_on_publish"
+    assert field.options_source_type == "reference_list"
+    assert field.options_source_id == updated_reference_list_id
 
     repository.archive_block(block_id)
     repository.archive_field(field_id)

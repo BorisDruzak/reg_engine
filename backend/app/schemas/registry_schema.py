@@ -28,12 +28,16 @@ class FormFieldCreateRequest(BaseModel):
     label: str = Field(min_length=1, max_length=255)
     field_type: str
     required_mode: str = "not_required"
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
 
 
 class FormFieldUpdateRequest(BaseModel):
     code: str | None = Field(default=None, min_length=1, max_length=120)
     label: str | None = Field(default=None, min_length=1, max_length=255)
     required_mode: str | None = None
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
 
 
 class CreatedIdResponse(BaseModel):
@@ -51,6 +55,8 @@ class FormFieldResponse(BaseModel):
     label: str
     field_type: str
     required_mode: str
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
     archived: bool = False
 
 

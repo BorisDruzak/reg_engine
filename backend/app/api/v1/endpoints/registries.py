@@ -130,6 +130,8 @@ def create_form_field(
             label=payload.label,
             field_type=payload.field_type,
             required_mode=payload.required_mode,
+            options_source_type=payload.options_source_type,
+            options_source_id=payload.options_source_id,
         ),
     )
     session.commit()
@@ -147,7 +149,13 @@ def update_form_field(
     field = service.update_field(
         actor,
         field_id,
-        FieldUpdate(code=payload.code, label=payload.label, required_mode=payload.required_mode),
+        FieldUpdate(
+            code=payload.code,
+            label=payload.label,
+            required_mode=payload.required_mode,
+            options_source_type=payload.options_source_type,
+            options_source_id=payload.options_source_id,
+        ),
     )
     session.commit()
     return FormFieldResponse.model_validate(field)
