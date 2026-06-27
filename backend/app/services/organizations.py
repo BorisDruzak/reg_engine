@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Organization, OrganizationClosure, OrgUnit
+from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 
@@ -80,6 +82,14 @@ class OrganizationService:
             )
         )
         self.session.flush()
+        if created_by is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=created_by,
+                action="create",
+                object_type="organization",
+                object_id=organization.id,
+                new_data_json={"code": code, "name": name, "parent_id": None},
+            )
         return organization
 
     def create_child(
@@ -125,6 +135,71 @@ class OrganizationService:
             )
         )
         self.session.flush()
+        if created_by is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=created_by,
+                action="create",
+                object_type="organization",
+                object_id=organization.id,
+                new_data_json={
+                    "code": code,
+                    "name": name,
+                    "parent_id": str(parent.id),
+                },
+            )
+        return organization
+
+    def update_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        name: str | None = None,
+        organization_type: str | None = None,
+    ) -> Organization:
+        organization = self._get_active_organization(organization_id)
+        permissions = PermissionService(self.session)
+        can_manage = permissions.can_manage_child_organization(actor_user_id, organization_id)
+        if not permissions.is_superuser(actor_user_id) and not can_manage:
+            raise PermissionDeniedError("Actor cannot update this organization.")
+
+        old_data = {"name": organization.name, "type": organization.type}
+        if name is not None:
+            organization.name = name
+        if organization_type is not None:
+            organization.type = organization_type
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="organization",
+            object_id=organization.id,
+            old_data_json=old_data,
+            new_data_json={"name": organization.name, "type": organization.type},
+        )
+        return organization
+
+    def archive_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+    ) -> Organization:
+        organization = self._get_active_organization(organization_id)
+        permissions = PermissionService(self.session)
+        can_manage = permissions.can_manage_child_organization(actor_user_id, organization_id)
+        if not permissions.is_superuser(actor_user_id) and not can_manage:
+            raise PermissionDeniedError("Actor cannot archive this organization.")
+
+        organization.archived_at = datetime.now(UTC)
+        organization.is_active = False
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="organization",
+            object_id=organization.id,
+        )
         return organization
 
     def get_descendant_ids(

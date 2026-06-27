@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES
 from app.models import FormBlock, FormField, Registry
+from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 
@@ -35,6 +36,13 @@ class RegistrySchemaService:
         )
         self.session.add(registry)
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="registry",
+            object_id=registry.id,
+            new_data_json={"code": code, "name": name},
+        )
         return registry
 
     def create_block_for_actor(
@@ -47,6 +55,8 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int = 0,
         is_repeatable: bool = False,
+        public_visible: bool = True,
+        public_editable: bool = False,
     ) -> FormBlock:
         self._require_schema_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
@@ -58,10 +68,19 @@ class RegistrySchemaService:
             description=description,
             position=position,
             is_repeatable=is_repeatable,
+            public_visible=public_visible,
+            public_editable=public_editable,
             created_by=actor_user_id,
         )
         self.session.add(block)
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="form_block",
+            object_id=block.id,
+            new_data_json={"registry_id": str(registry_id), "code": code},
+        )
         return block
 
     def update_block_for_actor(
@@ -75,6 +94,11 @@ class RegistrySchemaService:
     ) -> FormBlock:
         block = self._get_active_block(block_id)
         self._require_schema_permission(actor_user_id, block.registry_id)
+        old_data = {
+            "title": block.title,
+            "description": block.description,
+            "position": block.position,
+        }
 
         if title is not None:
             block.title = title
@@ -83,6 +107,18 @@ class RegistrySchemaService:
         if position is not None:
             block.position = position
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="form_block",
+            object_id=block.id,
+            old_data_json=old_data,
+            new_data_json={
+                "title": block.title,
+                "description": block.description,
+                "position": block.position,
+            },
+        )
         return block
 
     def archive_block_for_actor(
@@ -97,6 +133,12 @@ class RegistrySchemaService:
         block.archived_at = datetime.now(UTC)
         block.is_active = False
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="form_block",
+            object_id=block.id,
+        )
         return block
 
     def create_field_for_actor(
@@ -111,6 +153,8 @@ class RegistrySchemaService:
         position: int = 0,
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
+        public_visible: bool = True,
+        public_editable: bool = False,
     ) -> FormField:
         block = self._get_active_block(block_id)
         self._require_schema_permission(actor_user_id, block.registry_id)
@@ -125,10 +169,19 @@ class RegistrySchemaService:
             position=position,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
+            public_visible=public_visible,
+            public_editable=public_editable,
             created_by=actor_user_id,
         )
         self.session.add(field)
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="form_field",
+            object_id=field.id,
+            new_data_json={"block_id": str(block_id), "code": code, "field_type": field_type},
+        )
         return field
 
     def update_field_for_actor(
@@ -144,6 +197,12 @@ class RegistrySchemaService:
         field = self._get_active_field(field_id)
         block = self._get_active_block(field.block_id)
         self._require_schema_permission(actor_user_id, block.registry_id)
+        old_data = {
+            "label": field.label,
+            "description": field.description,
+            "position": field.position,
+            "is_active": field.is_active,
+        }
 
         if label is not None:
             field.label = label
@@ -154,6 +213,19 @@ class RegistrySchemaService:
         if is_active is not None:
             field.is_active = is_active
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="form_field",
+            object_id=field.id,
+            old_data_json=old_data,
+            new_data_json={
+                "label": field.label,
+                "description": field.description,
+                "position": field.position,
+                "is_active": field.is_active,
+            },
+        )
         return field
 
     def archive_field_for_actor(
@@ -169,6 +241,12 @@ class RegistrySchemaService:
         field.archived_at = datetime.now(UTC)
         field.is_active = False
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="form_field",
+            object_id=field.id,
+        )
         return field
 
     def _require_schema_permission(self, actor_user_id: UUID, registry_id: UUID) -> None:

@@ -1,0 +1,183 @@
+import hashlib
+import secrets
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Card, CardPublicLink, FormBlock, FormField
+from app.services.audit import AuditService
+from app.services.cards import CardService, CardServiceError
+from app.services.permissions import PermissionDeniedError, PermissionService
+
+DEFAULT_PUBLIC_LINK_TTL_DAYS = 7
+
+
+class PublicLinkError(ValueError):
+    """Raised when a public link cannot be used."""
+
+
+@dataclass(frozen=True)
+class PublicLinkToken:
+    raw_token: str
+    public_link: CardPublicLink
+
+
+def hash_public_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+class PublicLinkService:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create_public_link_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        expires_in_days: int = DEFAULT_PUBLIC_LINK_TTL_DAYS,
+    ) -> PublicLinkToken:
+        card = self._get_active_card(card_id)
+        self._require_card_permission(actor_user_id, card)
+
+        raw_token = secrets.token_urlsafe(32)
+        public_link = CardPublicLink(
+            card_id=card.id,
+            token_hash=hash_public_token(raw_token),
+            expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
+            created_by=actor_user_id,
+        )
+        self.session.add(public_link)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            new_data_json={
+                "card_id": str(card.id),
+                "expires_at": public_link.expires_at.isoformat(),
+            },
+        )
+        return PublicLinkToken(raw_token=raw_token, public_link=public_link)
+
+    def disable_public_link_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        public_link_id: UUID,
+    ) -> CardPublicLink:
+        public_link = self.session.get(CardPublicLink, public_link_id)
+        if public_link is None:
+            raise PublicLinkError("Public link was not found.")
+
+        card = self._get_active_card(public_link.card_id)
+        self._require_card_permission(actor_user_id, card)
+        public_link.status = "disabled"
+        public_link.disabled_at = datetime.now(UTC)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="disable",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            new_data_json={"card_id": str(card.id)},
+        )
+        return public_link
+
+    def edit_card_field_with_token(
+        self,
+        *,
+        raw_token: str,
+        field_id: UUID,
+        value: object,
+    ) -> object:
+        public_link = self._get_usable_public_link(raw_token)
+        card = self._get_active_card(public_link.card_id)
+        field = self._get_active_public_field(field_id)
+        block = self._get_public_block(field.block_id)
+
+        if block.registry_id != card.registry_id:
+            raise PermissionDeniedError("Public link cannot edit fields from another registry.")
+        if not public_link.can_edit or not card.public_edit_enabled:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+        if not block.public_editable or not field.public_editable:
+            raise PermissionDeniedError("Field is not public editable.")
+        if not self._public_link_allows(public_link.allowed_blocks_json, block.id):
+            raise PermissionDeniedError("Public link cannot edit this block.")
+        if not self._public_link_allows(public_link.allowed_fields_json, field.id):
+            raise PermissionDeniedError("Public link cannot edit this field.")
+
+        field_value = CardService(self.session).set_field_value_from_public_link(
+            actor_public_link_id=public_link.id,
+            card_id=card.id,
+            field_id=field.id,
+            value=value,
+        )
+        public_link.used_count += 1
+        self.session.flush()
+        AuditService(self.session).record_public_link_event(
+            actor_public_link_id=public_link.id,
+            action="public_link.update",
+            object_type="field_value",
+            object_id=field_value.id,
+            new_data_json={"card_id": str(card.id), "field_id": str(field.id)},
+        )
+        return field_value
+
+    def _get_usable_public_link(self, raw_token: str) -> CardPublicLink:
+        token_hash = hash_public_token(raw_token)
+        public_link = self.session.scalars(
+            select(CardPublicLink).where(CardPublicLink.token_hash == token_hash)
+        ).one_or_none()
+        if public_link is None:
+            raise PublicLinkError("Public link was not found.")
+
+        now = datetime.now(UTC)
+        if public_link.status != "active" or public_link.expires_at <= now:
+            if public_link.expires_at <= now and public_link.status == "active":
+                public_link.status = "expired"
+                self.session.flush()
+            raise PermissionDeniedError("Public link is not active.")
+        if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
+            raise PermissionDeniedError("Public link usage limit is exhausted.")
+        return public_link
+
+    def _get_active_card(self, card_id: UUID) -> Card:
+        card = self.session.get(Card, card_id)
+        if card is None or card.archived_at is not None or card.lifecycle_status == "archived":
+            raise CardServiceError("Card was not found.")
+        return card
+
+    def _require_card_permission(self, actor_user_id: UUID, card: Card) -> None:
+        if not PermissionService(self.session).has_permission(
+            actor_user_id,
+            "cards.manage",
+            organization_id=card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot manage public links for this card.")
+
+    def _get_active_public_field(self, field_id: UUID) -> FormField:
+        field = self.session.get(FormField, field_id)
+        if field is None or field.archived_at is not None or not field.is_active:
+            raise PublicLinkError("Field was not found.")
+        return field
+
+    def _get_public_block(self, block_id: UUID) -> FormBlock:
+        block = self.session.get(FormBlock, block_id)
+        if block is None or block.archived_at is not None or not block.is_active:
+            raise PublicLinkError("Block was not found.")
+        return block
+
+    def _public_link_allows(self, allowed_json: dict[str, Any] | None, object_id: UUID) -> bool:
+        if not allowed_json:
+            return True
+        allowed_ids = allowed_json.get("ids")
+        if not isinstance(allowed_ids, list):
+            return True
+        return str(object_id) in allowed_ids

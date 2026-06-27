@@ -9,7 +9,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1D Registry Schema And Dynamic Cards implementation.
+- Current checkpoint scope is Phase 1E Public Links, Transfer, Audit implementation.
 - Do not implement API CRUD, endpoints, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -21,7 +21,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
-- Phase 1E remains a planned future phase.
+- Phase 1E Public Links, Transfer, Audit is implemented locally in this checkpoint; server PostgreSQL verification is pending.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
@@ -391,40 +391,71 @@ Next phase:
 
 Purpose: add public editing, card transfer, and audit-event behavior.
 
+Status: implemented locally in this checkpoint; server PostgreSQL verification is pending.
+
 Required work:
 
-- Add `PublicLinkService`.
-- Add card transfer behavior.
-- Add `AuditService`.
-- Enforce public edit rules.
-- Store public link token hashes, not raw tokens.
-- Make public links expire after 7 days by default.
-- Block public editing when `card.public_edit_enabled=false`.
-- Transfer by creating a new card and marking the old card `superseded`.
-- Preserve old-card visibility for the old `org_admin` in archive scope.
-- Write audit events for create/update/archive/transfer/public-link changes.
+- [x] Add `PublicLinkService`.
+- [x] Add card transfer behavior.
+- [x] Add `AuditService`.
+- [x] Enforce public edit rules.
+- [x] Store public link token hashes, not raw tokens.
+- [x] Make public links expire after 7 days by default.
+- [x] Block public editing when `card.public_edit_enabled=false`.
+- [x] Transfer by creating a new card and marking the old card `superseded`.
+- [x] Preserve old-card visibility for the old `org_admin` in archive scope.
+- [x] Write audit events for create/update/archive/transfer/public-link changes.
 
 Required tests:
 
-- Admin can create a public link.
-- Public link expires in 7 days by default.
-- Raw token is returned once and only token hash is stored.
-- Public link edits the card directly through public endpoints.
-- Public link can edit only public-editable blocks/fields.
-- Public link cannot edit when `card.public_edit_enabled=false`.
-- Public link writes audit events.
-- Transfer creates a new card in the target organization.
-- Old card receives `lifecycle_status=superseded`.
-- `card_relations` stores the transfer relation.
-- Old `org_admin` sees the old card in archive scope.
-- Old `org_admin` does not see the new active card if the target organization is outside scope.
-- Audit event is written on organization create/update/archive.
-- Audit event is written on registry/block/field create/update/archive.
-- Audit event is written on reference list/item create/update/archive.
-- Audit event is written on card create/update/archive.
-- Audit event is written on field value update.
-- Audit event is written on public link create/disable/edit.
-- Audit event is written on transfer.
+- [x] Admin can create a public link.
+- [x] Public link expires in 7 days by default.
+- [x] Raw token is returned once and only token hash is stored.
+- [x] Public link edits the card directly through the backend public-link service path.
+- [x] Public link can edit only public-editable blocks/fields.
+- [x] Public link cannot edit when `card.public_edit_enabled=false`.
+- [x] Public link writes audit events.
+- [x] Transfer creates a new card in the target organization.
+- [x] Old card receives `lifecycle_status=superseded`.
+- [x] `card_relations` stores the transfer relation.
+- [x] Old `org_admin` sees the old card in archive scope.
+- [x] Old `org_admin` does not see the new active card if the target organization is outside scope.
+- [x] Audit event is written on organization create/update/archive.
+- [x] Audit event is written on registry/block/field create/update/archive.
+- [x] Audit event is written on reference list/item create/update/archive.
+- [x] Audit event is written on card create/update/archive.
+- [x] Audit event is written on field value update.
+- [x] Audit event is written on public link create/disable/edit.
+- [x] Audit event is written on transfer.
+
+Expected files:
+
+- `backend/app/services/audit.py`
+- `backend/app/services/public_links.py`
+- `backend/app/services/cards.py`
+- `backend/app/services/organizations.py`
+- `backend/app/services/registry_schema.py`
+- `backend/app/services/references.py`
+- `backend/tests/test_public_link_transfer_audit_services.py`
+
+Verification:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy app
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests\test_public_link_transfer_audit_services.py -q
+```
+
+Known limitations:
+
+- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1E.
+- Public editing is implemented as backend service behavior; HTTP public endpoints remain future API work.
+- Audit events are written by the Phase 1C-1E service layer; database triggers are not introduced.
+- No schema migration is required in this phase because Phase 1B already created the Core Schema v1 tables.
 
 ## Verification Commands
 

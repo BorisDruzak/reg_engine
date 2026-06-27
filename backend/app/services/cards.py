@@ -8,7 +8,16 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import Card, CardBlockInstance, FieldValue, FieldValueItem, FormBlock, FormField
+from app.models import (
+    Card,
+    CardBlockInstance,
+    CardRelation,
+    FieldValue,
+    FieldValueItem,
+    FormBlock,
+    FormField,
+)
+from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
 
@@ -62,15 +71,30 @@ class CardService:
         organization_id: UUID,
         display_name: str,
         org_unit_id: UUID | None = None,
+        public_view_enabled: bool = False,
+        public_edit_enabled: bool = False,
     ) -> Card:
         self._require_card_permission(actor_user_id, organization_id, registry_id=registry_id)
-        return self.create_card(
+        card = self.create_card(
             registry_id=registry_id,
             organization_id=organization_id,
             display_name=display_name,
             org_unit_id=org_unit_id,
+            public_view_enabled=public_view_enabled,
+            public_edit_enabled=public_edit_enabled,
             created_by=actor_user_id,
         )
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="card",
+            object_id=card.id,
+            new_data_json={
+                "registry_id": str(registry_id),
+                "organization_id": str(organization_id),
+            },
+        )
+        return card
 
     def create_card(
         self,
@@ -79,6 +103,8 @@ class CardService:
         organization_id: UUID,
         display_name: str,
         org_unit_id: UUID | None = None,
+        public_view_enabled: bool = False,
+        public_edit_enabled: bool = False,
         created_by: UUID | None = None,
     ) -> Card:
         card = Card(
@@ -87,6 +113,8 @@ class CardService:
             org_unit_id=org_unit_id,
             display_name=display_name,
             lifecycle_status="draft",
+            public_view_enabled=public_view_enabled,
+            public_edit_enabled=public_edit_enabled,
             created_by=created_by,
             updated_by=created_by,
         )
@@ -94,7 +122,13 @@ class CardService:
         self.session.flush()
         return card
 
-    def list_visible_cards(self, *, actor_user_id: UUID, registry_id: UUID) -> list[Card]:
+    def list_visible_cards(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        include_archive: bool = False,
+    ) -> list[Card]:
         scope_ids = PermissionService(self.session).get_organization_scope_ids(
             actor_user_id,
             registry_id=registry_id,
@@ -102,16 +136,18 @@ class CardService:
         if not scope_ids:
             return []
 
+        criteria = [
+            Card.registry_id == registry_id,
+            Card.organization_id.in_(scope_ids),
+            Card.lifecycle_status != "archived",
+        ]
+        if not include_archive:
+            criteria.append(Card.lifecycle_status != "superseded")
+            criteria.append(Card.archived_at.is_(None))
+
         return list(
             self.session.scalars(
-                select(Card)
-                .where(
-                    Card.registry_id == registry_id,
-                    Card.organization_id.in_(scope_ids),
-                    Card.archived_at.is_(None),
-                    Card.lifecycle_status != "archived",
-                )
-                .order_by(Card.display_name, Card.id)
+                select(Card).where(*criteria).order_by(Card.display_name, Card.id)
             ).all()
         )
 
@@ -148,7 +184,86 @@ class CardService:
         )
         self._apply_assignment(field_value, assignment, actor_user_id=actor_user_id)
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="field_value",
+            object_id=field_value.id,
+            new_data_json={"card_id": str(card.id), "field_id": str(field_model.id)},
+        )
         return field_value
+
+    def set_field_value_from_public_link(
+        self,
+        *,
+        actor_public_link_id: UUID,
+        card_id: UUID,
+        field_id: UUID,
+        value: object,
+    ) -> FieldValue:
+        card = self._get_active_card(card_id)
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Field does not belong to the card registry.")
+
+        assignment = self._coerce_field_assignment(field_model, value)
+        block_instance = self._get_or_create_block_instance(
+            card_id=card.id,
+            block_id=block.id,
+            created_by=None,
+        )
+        field_value = self._get_or_create_field_value(
+            card_id=card.id,
+            block_instance_id=block_instance.id,
+            field_id=field_model.id,
+            actor_user_id=None,
+        )
+        self._apply_assignment(field_value, assignment, actor_user_id=None)
+        self.session.flush()
+        return field_value
+
+    def update_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        display_name: str | None = None,
+        public_view_enabled: bool | None = None,
+        public_edit_enabled: bool | None = None,
+    ) -> Card:
+        card = self._get_active_card(card_id)
+        self._require_card_permission(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        )
+        old_data = {
+            "display_name": card.display_name,
+            "public_view_enabled": card.public_view_enabled,
+            "public_edit_enabled": card.public_edit_enabled,
+        }
+        if display_name is not None:
+            card.display_name = display_name
+        if public_view_enabled is not None:
+            card.public_view_enabled = public_view_enabled
+        if public_edit_enabled is not None:
+            card.public_edit_enabled = public_edit_enabled
+        card.updated_by = actor_user_id
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="card",
+            object_id=card.id,
+            old_data_json=old_data,
+            new_data_json={
+                "display_name": card.display_name,
+                "public_view_enabled": card.public_view_enabled,
+                "public_edit_enabled": card.public_edit_enabled,
+            },
+        )
+        return card
 
     def read_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> CardRead:
         card = self._get_active_card(card_id)
@@ -204,7 +319,64 @@ class CardService:
         card.archived_by = actor_user_id
         card.lifecycle_status = "archived"
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="card",
+            object_id=card.id,
+        )
         return card
+
+    def transfer_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        target_organization_id: UUID,
+    ) -> Card:
+        old_card = self._get_active_card(card_id)
+        if not PermissionService(self.session).is_superuser(actor_user_id):
+            self._require_card_permission(
+                actor_user_id,
+                old_card.organization_id,
+                registry_id=old_card.registry_id,
+            )
+            self._require_card_permission(
+                actor_user_id,
+                target_organization_id,
+                registry_id=old_card.registry_id,
+            )
+
+        new_card = self.create_card(
+            registry_id=old_card.registry_id,
+            organization_id=target_organization_id,
+            display_name=old_card.display_name,
+            org_unit_id=None,
+            public_view_enabled=old_card.public_view_enabled,
+            public_edit_enabled=old_card.public_edit_enabled,
+            created_by=actor_user_id,
+        )
+        old_card.lifecycle_status = "superseded"
+        old_card.updated_by = actor_user_id
+        relation = CardRelation(
+            source_card_id=old_card.id,
+            target_card_id=new_card.id,
+            relation_type="transferred_to",
+            created_by=actor_user_id,
+        )
+        self.session.add(relation)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="transfer",
+            object_type="card",
+            object_id=old_card.id,
+            new_data_json={
+                "new_card_id": str(new_card.id),
+                "target_organization_id": str(target_organization_id),
+            },
+        )
+        return new_card
 
     def _require_card_permission(
         self,
@@ -244,7 +416,7 @@ class CardService:
         *,
         card_id: UUID,
         block_id: UUID,
-        created_by: UUID,
+        created_by: UUID | None,
     ) -> CardBlockInstance:
         block_instance = self.session.scalars(
             select(CardBlockInstance).where(
@@ -271,7 +443,7 @@ class CardService:
         card_id: UUID,
         block_instance_id: UUID,
         field_id: UUID,
-        actor_user_id: UUID,
+        actor_user_id: UUID | None,
     ) -> FieldValue:
         field_value = self.session.scalars(
             select(FieldValue).where(
@@ -378,7 +550,7 @@ class CardService:
         field_value: FieldValue,
         assignment: _FieldAssignment,
         *,
-        actor_user_id: UUID,
+        actor_user_id: UUID | None,
     ) -> None:
         field_value.value_text = assignment.value_text
         field_value.value_number = assignment.value_number
