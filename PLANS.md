@@ -19,7 +19,8 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B audit SQLAlchemy repository adapter is implemented locally on `codex/core-schema-v1`.
 - Phase 1B organization closure and org unit SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Backend still does not contain Core Schema v1 business endpoints, frontend UI, the complete SQLAlchemy repository adapter set for services, or production schema deployment.
+- Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
+- Backend still does not contain Core Schema v1 business endpoints, frontend UI, runtime dependency composition for Core Schema services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
 
@@ -322,8 +323,8 @@ Remaining limitation: audit wiring is service-layer only until services are comp
 - [x] Add SQLAlchemy repository adapters for org units.
 - [x] Add SQLAlchemy repository adapters for registry schema.
 - [x] Add SQLAlchemy repository adapters for reference lists/items.
-- [ ] Add SQLAlchemy repository adapters for cards, block instances, field values, field value items, and card relations.
-- [ ] Add SQLAlchemy repository adapter for public links.
+- [x] Add SQLAlchemy repository adapters for cards, block instances, field values, field value items, and card relations.
+- [x] Add SQLAlchemy repository adapter for public links.
 
 Verification completed locally for completed repository adapters:
 
@@ -332,13 +333,14 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m pytest tests\test_audit_repository.py tests\test_audit_service.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_organization_repositories.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_registry_reference_repositories.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_card_public_link_repositories.py -q
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: audit, organization closure, org unit, registry schema, and reference adapters exist. Card, public-link adapters and API/runtime dependency composition are still open work.
+Remaining limitation: SQLAlchemy repository adapters exist for all Phase 1B service protocols. API/runtime dependency composition and production PostgreSQL migration remain open work.
 
 ## Phase 1B Acceptance Criteria
 
