@@ -9,8 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1E Public Links, Transfer, Audit implementation.
-- Do not implement API CRUD, endpoints, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
+- Current checkpoint scope is Phase 1F REST API Foundation planning.
+- Phase 1B through Phase 1E service-layer work is completed and synchronized.
+- Do not implement frontend, auth flow, import/export, documents, or MCP in the next checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
 ## Current Phase Status
@@ -22,6 +23,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
+- Phase 1F REST API Foundation And Service Wiring is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
@@ -465,6 +467,66 @@ Known limitations:
 - Public editing is implemented as backend service behavior; HTTP public endpoints remain future API work.
 - Audit events are written by the Phase 1C-1E service layer; database triggers are not introduced.
 - No schema migration is required in this phase because Phase 1B already created the Core Schema v1 tables.
+
+Next phase:
+
+- Phase 1F should expose the completed service layer through REST API endpoints while keeping auth flow, frontend UI, import/export, documents, and MCP out of scope.
+
+## Phase 1F: REST API Foundation And Service Wiring
+
+Purpose: expose the completed Core Schema v1 service layer through FastAPI endpoints without adding auth flow, frontend UI, import/export, documents, or MCP.
+
+Status: planned next.
+
+Required work:
+
+- Add API session dependency that reuses `backend/app/core/database.py`.
+- Add temporary actor context dependency for tests and local development only; do not implement auth flow yet.
+- Add API schemas for organizations, registries, blocks, fields, reference lists/items, cards, public links, transfers, and audit event reads.
+- Add REST endpoints that call existing services instead of duplicating business rules.
+- Map service exceptions to stable HTTP errors.
+- Keep backend access control in service/API layer; frontend remains out of scope.
+- Keep public-link raw token return one-time in the create-link response only.
+- Do not add database schema changes unless a separate migration phase is explicitly approved.
+
+Expected files:
+
+- `backend/app/api/dependencies.py`
+- `backend/app/api/v1/endpoints/organizations.py`
+- `backend/app/api/v1/endpoints/registries.py`
+- `backend/app/api/v1/endpoints/cards.py`
+- `backend/app/api/v1/endpoints/public_links.py`
+- `backend/app/api/v1/endpoints/audit.py`
+- `backend/app/schemas/organizations.py`
+- `backend/app/schemas/registries.py`
+- `backend/app/schemas/cards.py`
+- `backend/app/schemas/public_links.py`
+- `backend/app/schemas/audit.py`
+- `backend/tests/test_api_*.py`
+
+Required tests:
+
+- Healthcheck remains independent from PostgreSQL.
+- API can create and read organizations through `OrganizationService`.
+- API can create registry, blocks, fields, reference lists, and reference items through services.
+- API can create cards and update typed dynamic values through `CardService`.
+- API card visibility follows organization scope.
+- API rejects out-of-scope card reads/writes.
+- API public link create response returns the raw token once and stores only the token hash.
+- API public-link edit path respects `card.public_edit_enabled` and public-editable field/block flags.
+- API transfer path creates the new card, supersedes the old card, and writes `card_relations`.
+- API writes or exposes audit events for create/update/archive/transfer/public-link actions.
+
+Acceptance criteria:
+
+1. API endpoints use the service layer as the business logic boundary.
+2. No hardcoded employee table or HR-specific fields are introduced.
+3. No frontend implementation is added.
+4. No auth flow is added; test/local actor context is clearly documented as temporary.
+5. No import/export, documents, or MCP implementation is added.
+6. No production database migration is run without separate explicit approval.
+7. Local `scripts/check.ps1` passes.
+8. PostgreSQL-backed API tests pass against disposable `reg_engine_test`.
 
 ## Verification Commands
 
