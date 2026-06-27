@@ -1,7 +1,10 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from app.services.audit import AuditEventCreate, AuditService
-from app.services.permissions import ActorContext
+import pytest
+
+from app.services.audit import AuditEventCreate, AuditEventFilters, AuditEventRead, AuditService
+from app.services.permissions import AccessDeniedError, ActorContext
 
 
 class InMemoryAuditRepository:
@@ -37,6 +40,13 @@ class InMemoryAuditRepository:
             }
         )
         return event_id
+
+    def list_events(self, filters: AuditEventFilters) -> list[dict[str, object]]:
+        return [
+            event
+            for event in self.events
+            if filters.object_type is None or event["object_type"] == filters.object_type
+        ][: filters.limit]
 
 
 def test_audit_service_records_user_public_link_and_system_events() -> None:
@@ -75,3 +85,47 @@ def test_audit_service_records_user_public_link_and_system_events() -> None:
     assert repository.events[0]["actor_user_id"] == actor.user_id
     assert repository.events[1]["actor_public_link_id"] == public_link_id
     assert repository.events[2]["source"] == "system"
+
+
+def test_audit_service_lists_events_for_superuser_only() -> None:
+    repository = InMemoryAuditRepository()
+    service = AuditService(repository)
+    system_admin = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    org_admin = ActorContext(user_id=uuid4(), is_superuser=False, grants=())
+    card_id = uuid4()
+    created_at = datetime(2026, 6, 27, 12, 0, tzinfo=UTC)
+    repository.events.append(
+        {
+            "id": uuid4(),
+            "actor_type": "user",
+            "actor_user_id": system_admin.user_id,
+            "actor_public_link_id": None,
+            "action": "card.create",
+            "object_type": "card",
+            "object_id": card_id,
+            "old_data": None,
+            "new_data": {"display_name": "Card"},
+            "source": "api",
+            "created_at": created_at,
+        }
+    )
+
+    events = service.list_events(system_admin, AuditEventFilters(object_type="card"))
+
+    assert events == (
+        AuditEventRead(
+            id=repository.events[0]["id"],
+            actor_type="user",
+            actor_user_id=system_admin.user_id,
+            actor_public_link_id=None,
+            action="card.create",
+            object_type="card",
+            object_id=card_id,
+            old_data=None,
+            new_data={"display_name": "Card"},
+            source="api",
+            created_at=created_at,
+        ),
+    )
+    with pytest.raises(AccessDeniedError):
+        service.list_events(org_admin, AuditEventFilters())

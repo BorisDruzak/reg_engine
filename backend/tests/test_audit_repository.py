@@ -3,18 +3,40 @@ from uuid import UUID, uuid4
 
 from app.models.audit import AuditEvent
 from app.repositories.audit import SQLAlchemyAuditRepository
+from app.services.audit import AuditEventFilters
+
+
+class FakeScalarResult:
+    def __init__(self, values: list[object]) -> None:
+        self.values = values
+
+    def all(self) -> list[object]:
+        return self.values
+
+
+class FakeResult:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def scalars(self) -> FakeScalarResult:
+        return FakeScalarResult(self.rows)
 
 
 class FakeSession:
     def __init__(self) -> None:
         self.added: list[object] = []
         self.flushed = False
+        self.execute_results: list[FakeResult] = []
 
     def add(self, instance: object) -> None:
         self.added.append(instance)
 
     def flush(self) -> None:
         self.flushed = True
+
+    def execute(self, statement: object) -> FakeResult:
+        _ = statement
+        return self.execute_results.pop(0) if self.execute_results else FakeResult([])
 
 
 def test_sqlalchemy_audit_repository_creates_audit_event_model() -> None:
@@ -52,3 +74,21 @@ def test_sqlalchemy_audit_repository_creates_audit_event_model() -> None:
     assert event.new_data_json == {"display_name": "Card"}
     assert event.source == "api"
     assert event.created_at == created_at
+
+    session.execute_results = [FakeResult([event])]
+    events = repository.list_events(AuditEventFilters(object_type="card", object_id=object_id))
+    assert events == [
+        {
+            "id": event_id,
+            "actor_type": "user",
+            "actor_user_id": user_id,
+            "actor_public_link_id": None,
+            "action": "card.create",
+            "object_type": "card",
+            "object_id": object_id,
+            "old_data": None,
+            "new_data": {"display_name": "Card"},
+            "source": "api",
+            "created_at": created_at,
+        }
+    ]

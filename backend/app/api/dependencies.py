@@ -6,6 +6,7 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_session
+from app.repositories.audit import SessionLike as AuditSessionLike
 from app.repositories.audit import SQLAlchemyAuditRepository
 from app.repositories.cards import CardSessionLike, SQLAlchemyCardRepository
 from app.repositories.org_units import OrgUnitSessionLike, SQLAlchemyOrgUnitRepository
@@ -42,10 +43,17 @@ def get_db_session() -> Generator[Session, None, None]:
     yield from get_session()
 
 
+def get_audit_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> AuditService:
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
+    return AuditService(audit_repository)
+
+
 def get_organization_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> OrganizationService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     organization_repository = SQLAlchemyOrganizationRepository(
         cast(OrganizationSessionLike, session)
@@ -56,7 +64,7 @@ def get_organization_service(
 def get_org_unit_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> OrgUnitService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     org_unit_repository = SQLAlchemyOrgUnitRepository(cast(OrgUnitSessionLike, session))
     return OrgUnitService(org_unit_repository, audit_service)
@@ -65,7 +73,7 @@ def get_org_unit_service(
 def get_registry_schema_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> RegistrySchemaService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     registry_repository = SQLAlchemyRegistrySchemaRepository(
         cast(RegistrySchemaSessionLike, session)
@@ -76,7 +84,7 @@ def get_registry_schema_service(
 def get_reference_list_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> ReferenceListService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     reference_repository = SQLAlchemyReferenceListRepository(
         cast(ReferenceListSessionLike, session)
@@ -87,7 +95,7 @@ def get_reference_list_service(
 def get_card_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> CardService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     organization_repository = SQLAlchemyOrganizationRepository(
         cast(OrganizationSessionLike, session)
@@ -111,7 +119,7 @@ def get_card_query_service(
 def get_public_link_service(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> PublicLinkService:
-    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_repository = SQLAlchemyAuditRepository(cast(AuditSessionLike, session))
     audit_service = AuditService(audit_repository)
     organization_repository = SQLAlchemyOrganizationRepository(
         cast(OrganizationSessionLike, session)

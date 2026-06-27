@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.endpoints.audit import router as audit_router
 from app.api.v1.endpoints.cards import router as cards_router
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.org_units import router as org_units_router
@@ -9,6 +10,7 @@ from app.api.v1.endpoints.reference_lists import router as reference_lists_route
 from app.api.v1.endpoints.registries import router as registries_router
 
 api_v1_router = APIRouter()
+api_v1_router.include_router(audit_router)
 api_v1_router.include_router(cards_router)
 api_v1_router.include_router(health_router)
 api_v1_router.include_router(org_units_router)
