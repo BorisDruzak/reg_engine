@@ -20,7 +20,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B.3 Model Smoke Tests are completed in this checkpoint.
 - Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
-- Phase 1D Registry Schema And Dynamic Cards is implemented locally in this checkpoint; server PostgreSQL verification is pending.
+- Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E remains a planned future phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
@@ -320,7 +320,7 @@ Next phase:
 
 Purpose: add schema-driven registry and card behavior.
 
-Status: implemented locally in this checkpoint; server PostgreSQL verification is pending.
+Status: completed and verified in this checkpoint.
 
 Required work:
 
@@ -366,6 +366,15 @@ python -m mypy app
 $env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
 python -m pytest tests\test_registry_card_services.py -q
 ```
+
+Verification completed:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py tests/test_organization_permission_services.py tests/test_registry_card_services.py -q -p no:cacheprovider
+```
+
+Result: `15` PostgreSQL-backed tests passed against disposable database `reg_engine_test`.
 
 Known limitations:
 
