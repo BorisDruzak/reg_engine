@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 17:44:34 +05:00
+- Generated: 2026-06-27 17:48:19 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -33,6 +33,7 @@
 - `backend/app/api/v1/__init__.py`
 - `backend/app/api/v1/endpoints/__init__.py`
 - `backend/app/api/v1/endpoints/health.py`
+- `backend/app/api/v1/endpoints/org_units.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/router.py`
 - `backend/app/core/__init__.py`
@@ -60,6 +61,7 @@
 - `backend/app/repositories/reference_lists.py`
 - `backend/app/repositories/registry_schema.py`
 - `backend/app/schemas/__init__.py`
+- `backend/app/schemas/org_units.py`
 - `backend/app/schemas/organizations.py`
 - `backend/app/services/__init__.py`
 - `backend/app/services/audit.py`
@@ -85,6 +87,7 @@
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
+- `backend/tests/test_org_unit_api.py`
 - `backend/tests/test_org_unit_service.py`
 - `backend/tests/test_organization_api.py`
 - `backend/tests/test_organization_repositories.py`

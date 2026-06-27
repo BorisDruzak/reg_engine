@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_session
 from app.repositories.audit import SQLAlchemyAuditRepository
+from app.repositories.org_units import OrgUnitSessionLike, SQLAlchemyOrgUnitRepository
 from app.repositories.organizations import OrganizationSessionLike, SQLAlchemyOrganizationRepository
 from app.services.audit import AuditService
+from app.services.org_units import OrgUnitService
 from app.services.organizations import OrganizationService
 from app.services.permissions import ActorContext
 
@@ -34,3 +36,12 @@ def get_organization_service(
         cast(OrganizationSessionLike, session)
     )
     return OrganizationService(organization_repository, audit_service)
+
+
+def get_org_unit_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> OrgUnitService:
+    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_service = AuditService(audit_repository)
+    org_unit_repository = SQLAlchemyOrgUnitRepository(cast(OrgUnitSessionLike, session))
+    return OrgUnitService(org_unit_repository, audit_service)
