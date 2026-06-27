@@ -20,7 +20,8 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B organization closure and org unit SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Backend still does not contain Core Schema v1 business endpoints, frontend UI, runtime dependency composition for Core Schema services, or production schema deployment.
+- Phase 1B runtime dependency composition and business endpoints are started locally on `codex/core-schema-v1` for organization root/child creation.
+- Backend still does not contain the complete Core Schema v1 endpoint set, frontend UI, full runtime dependency composition for every Core Schema service, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
 
@@ -341,6 +342,34 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 ```
 
 Remaining limitation: SQLAlchemy repository adapters exist for all Phase 1B service protocols. API/runtime dependency composition and production PostgreSQL migration remain open work.
+
+### 1B.9 API Runtime Composition
+
+- [x] Add API dependency composition for current actor, database session, organization repository, audit repository, audit service, and organization service.
+- [x] Add organization API schemas.
+- [x] Add organization root creation endpoint.
+- [x] Add organization child creation endpoint.
+- [x] Add API tests proving endpoints call services and commit the injected session.
+- [ ] Add organization tree/get/update/archive endpoints.
+- [ ] Add org unit endpoints.
+- [ ] Add registry schema endpoints.
+- [ ] Add reference list endpoints.
+- [ ] Add card endpoints.
+- [ ] Add public link endpoints.
+- [ ] Add audit endpoints.
+
+Verification completed locally for completed organization API slice:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_organization_api.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: only the first organization write endpoints are wired. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ## Phase 1B Acceptance Criteria
 
