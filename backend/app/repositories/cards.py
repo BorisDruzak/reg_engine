@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 
 from app.models.card import Card, CardBlockInstance, CardRelation, FieldValue, FieldValueItem
 from app.models.registry_schema import FormBlock, FormField
@@ -205,6 +205,45 @@ class SQLAlchemyCardRepository:
         self.session.add_all(items)
         self.session.flush()
 
+    def update_card_system_fields(
+        self,
+        *,
+        card_id: UUID,
+        display_name: str | None,
+        org_unit_id: UUID | None,
+        org_unit_id_set: bool,
+        public_view_enabled: bool | None,
+        public_edit_enabled: bool | None,
+        updated_by: UUID | None,
+    ) -> None:
+        card = self._get_card_model(card_id)
+        if display_name is not None:
+            card.display_name = display_name
+        if org_unit_id_set:
+            card.org_unit_id = org_unit_id
+        if public_view_enabled is not None:
+            card.public_view_enabled = public_view_enabled
+        if public_edit_enabled is not None:
+            card.public_edit_enabled = public_edit_enabled
+        card.updated_by = updated_by
+        self.session.flush()
+
+    def list_card_relations(self, card_id: UUID) -> list[dict[str, object]]:
+        result = self.session.execute(
+            select(CardRelation)
+            .where(
+                or_(
+                    CardRelation.source_card_id == card_id,
+                    CardRelation.target_card_id == card_id,
+                )
+            )
+            .order_by(CardRelation.created_at)
+        )
+        return [
+            self._relation_to_dict(cast(CardRelation, relation))
+            for relation in result.scalars().all()
+        ]
+
     def list_schema_blocks(self, registry_id: UUID) -> list[dict[str, object]]:
         result = self.session.execute(
             select(FormBlock)
@@ -273,6 +312,14 @@ class SQLAlchemyCardRepository:
             "lifecycle_status": card.lifecycle_status,
             "public_edit_enabled": card.public_edit_enabled,
             "public_view_enabled": card.public_view_enabled,
+        }
+
+    def _relation_to_dict(self, relation: CardRelation) -> dict[str, object]:
+        return {
+            "id": relation.id,
+            "source_card_id": relation.source_card_id,
+            "target_card_id": relation.target_card_id,
+            "relation_type": relation.relation_type,
         }
 
     def _block_to_dict(self, block: FormBlock) -> dict[str, object]:

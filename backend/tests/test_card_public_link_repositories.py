@@ -116,6 +116,31 @@ def test_card_repository_creates_updates_values_and_relations() -> None:
     assert relation.id == relation_id
 
     session.get_results[(Card, card_id)] = card
+    repository.update_card_system_fields(
+        card_id=card_id,
+        display_name="Updated Card",
+        org_unit_id=None,
+        org_unit_id_set=True,
+        public_view_enabled=True,
+        public_edit_enabled=True,
+        updated_by=created_by,
+    )
+    assert card.display_name == "Updated Card"
+    assert card.org_unit_id is None
+    assert card.public_view_enabled is True
+    assert card.public_edit_enabled is True
+    assert card.updated_by == created_by
+
+    session.execute_results = [FakeResult([relation])]
+    assert repository.list_card_relations(card_id) == [
+        {
+            "id": relation_id,
+            "source_card_id": card_id,
+            "target_card_id": target_card_id,
+            "relation_type": "transferred_to",
+        }
+    ]
+
     repository.archive_card(card_id=card_id, archived_by=created_by, reason="done")
     assert card.lifecycle_status == "archived"
     assert card.archived_at == archived_at

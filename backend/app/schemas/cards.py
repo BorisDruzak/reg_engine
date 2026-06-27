@@ -22,6 +22,13 @@ class CardBlockInstanceCreateRequest(BaseModel):
     ordinal: int = Field(default=0, ge=0)
 
 
+class CardSystemUpdateRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    org_unit_id: UUID | None = None
+    public_view_enabled: bool | None = None
+    public_edit_enabled: bool | None = None
+
+
 class FieldValueWriteRequest(BaseModel):
     card_id: UUID
     block_instance_id: UUID
@@ -44,6 +51,33 @@ class CardTransferResponse(BaseModel):
 
     target_card_id: UUID
     relation_id: UUID
+
+
+class CardSystemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    registry_id: UUID
+    organization_id: UUID
+    org_unit_id: UUID | None
+    display_name: str
+    lifecycle_status: str
+    public_view_enabled: bool
+    public_edit_enabled: bool
+
+
+class CardRelationCreateRequest(BaseModel):
+    target_card_id: UUID
+    relation_type: str
+
+
+class CardRelationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    source_card_id: UUID
+    target_card_id: UUID
+    relation_type: str
 
 
 class CardFieldResponse(BaseModel):

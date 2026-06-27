@@ -4,7 +4,14 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.services.cards import CardCreate, CardService, CardTransfer, FieldValueWrite
+from app.services.cards import (
+    CardCreate,
+    CardRelationCreate,
+    CardService,
+    CardSystemUpdate,
+    CardTransfer,
+    FieldValueWrite,
+)
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
 
@@ -142,6 +149,34 @@ class InMemoryCardRepository:
         reference_item_ids: tuple[UUID, ...],
     ) -> None:
         self.field_value_items[field_value_id] = list(reference_item_ids)
+
+    def update_card_system_fields(
+        self,
+        *,
+        card_id: UUID,
+        display_name: str | None,
+        org_unit_id: UUID | None,
+        org_unit_id_set: bool,
+        public_view_enabled: bool | None,
+        public_edit_enabled: bool | None,
+        updated_by: UUID | None,
+    ) -> None:
+        if display_name is not None:
+            self.cards[card_id]["display_name"] = display_name
+        if org_unit_id_set:
+            self.cards[card_id]["org_unit_id"] = org_unit_id
+        if public_view_enabled is not None:
+            self.cards[card_id]["public_view_enabled"] = public_view_enabled
+        if public_edit_enabled is not None:
+            self.cards[card_id]["public_edit_enabled"] = public_edit_enabled
+        self.cards[card_id]["updated_by"] = updated_by
+
+    def list_card_relations(self, card_id: UUID) -> list[dict[str, object]]:
+        return [
+            relation
+            for relation in self.relations.values()
+            if relation["source_card_id"] == card_id or relation["target_card_id"] == card_id
+        ]
 
 
 def test_org_admin_can_create_card_in_own_organization() -> None:
@@ -482,3 +517,82 @@ def test_transfer_requires_access_to_source_and_target_organizations() -> None:
                 target_org_unit_id=None,
             ),
         )
+
+
+def test_card_system_fields_can_be_updated_inside_scope() -> None:
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(InMemoryPermissionRepository(set()))
+    service = CardService(repository, permission_service)
+    organization_id = uuid4()
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=organization_id)
+    card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=organization_id,
+            org_unit_id=uuid4(),
+            display_name="Original",
+        ),
+    )
+
+    updated = service.update_system_fields(
+        actor,
+        card_id=card_id,
+        data=CardSystemUpdate(
+            display_name="Updated",
+            org_unit_id=None,
+            org_unit_id_set=True,
+            public_view_enabled=True,
+            public_edit_enabled=True,
+        ),
+    )
+
+    assert updated["display_name"] == "Updated"
+    assert updated["org_unit_id"] is None
+    assert updated["public_view_enabled"] is True
+    assert updated["public_edit_enabled"] is True
+    assert updated["updated_by"] == actor.user_id
+
+
+def test_card_relations_can_be_created_and_listed_when_both_cards_are_visible() -> None:
+    source_org_id = uuid4()
+    target_org_id = uuid4()
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(
+        InMemoryPermissionRepository({(source_org_id, target_org_id)})
+    )
+    service = CardService(repository, permission_service)
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=source_org_id)
+    source_card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=source_org_id,
+            org_unit_id=None,
+            display_name="Source",
+        ),
+    )
+    target_card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=target_org_id,
+            org_unit_id=None,
+            display_name="Target",
+        ),
+    )
+
+    relation_id = service.create_relation(
+        actor,
+        CardRelationCreate(
+            source_card_id=source_card_id,
+            target_card_id=target_card_id,
+            relation_type="related_to",
+        ),
+    )
+    relations = service.list_relations(actor, source_card_id)
+
+    assert relations[0].id == relation_id
+    assert relations[0].source_card_id == source_card_id
+    assert relations[0].target_card_id == target_card_id
+    assert relations[0].relation_type == "related_to"

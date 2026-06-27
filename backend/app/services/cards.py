@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Protocol, cast
 from uuid import UUID
 
-from app.domain.constants import FIELD_TYPES
+from app.domain.constants import CARD_RELATION_TYPES, FIELD_TYPES
 from app.services.audit import AuditEventCreate, AuditRecorder
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
@@ -28,6 +28,30 @@ class FieldValueWrite:
     block_instance_id: UUID
     field_id: UUID
     value: object
+
+
+@dataclass(frozen=True)
+class CardSystemUpdate:
+    display_name: str | None = None
+    org_unit_id: UUID | None = None
+    org_unit_id_set: bool = False
+    public_view_enabled: bool | None = None
+    public_edit_enabled: bool | None = None
+
+
+@dataclass(frozen=True)
+class CardRelationCreate:
+    source_card_id: UUID
+    target_card_id: UUID
+    relation_type: str
+
+
+@dataclass(frozen=True)
+class CardRelationRead:
+    id: UUID
+    source_card_id: UUID
+    target_card_id: UUID
+    relation_type: str
 
 
 @dataclass(frozen=True)
@@ -106,6 +130,22 @@ class CardRepository(Protocol):
         reference_item_ids: tuple[UUID, ...],
     ) -> None:
         """Replace multi-select rows for a field value."""
+
+    def update_card_system_fields(
+        self,
+        *,
+        card_id: UUID,
+        display_name: str | None,
+        org_unit_id: UUID | None,
+        org_unit_id_set: bool,
+        public_view_enabled: bool | None,
+        public_edit_enabled: bool | None,
+        updated_by: UUID | None,
+    ) -> None:
+        """Update mutable system fields on a card."""
+
+    def list_card_relations(self, card_id: UUID) -> list[dict[str, object]]:
+        """Return relations where the card is source or target."""
 
 
 def build_typed_field_values(
@@ -340,6 +380,90 @@ class CardService:
             },
         )
         return CardTransferResult(target_card_id=target_card_id, relation_id=relation_id)
+
+    def update_system_fields(
+        self,
+        actor: ActorContext,
+        *,
+        card_id: UUID,
+        data: CardSystemUpdate,
+    ) -> dict[str, object]:
+        card = self.repository.get_card(card_id)
+        self._require_card_access(actor, cast(UUID, card["organization_id"]))
+        self.repository.update_card_system_fields(
+            card_id=card_id,
+            display_name=data.display_name,
+            org_unit_id=data.org_unit_id,
+            org_unit_id_set=data.org_unit_id_set,
+            public_view_enabled=data.public_view_enabled,
+            public_edit_enabled=data.public_edit_enabled,
+            updated_by=actor.user_id,
+        )
+        updated = self.repository.get_card(card_id)
+        self._record_user_event(
+            actor,
+            "card.update_system_fields",
+            "card",
+            card_id,
+            {
+                "display_name": updated["display_name"],
+                "org_unit_id": updated["org_unit_id"],
+                "public_view_enabled": updated["public_view_enabled"],
+                "public_edit_enabled": updated["public_edit_enabled"],
+            },
+        )
+        return updated
+
+    def create_relation(self, actor: ActorContext, data: CardRelationCreate) -> UUID:
+        if data.relation_type not in CARD_RELATION_TYPES:
+            raise InvalidCardOperationError(f"Unsupported relation type: {data.relation_type}")
+        source_card = self.repository.get_card(data.source_card_id)
+        target_card = self.repository.get_card(data.target_card_id)
+        self._require_card_access(actor, cast(UUID, source_card["organization_id"]))
+        self._require_card_access(actor, cast(UUID, target_card["organization_id"]))
+        relation_id = self.repository.create_card_relation(
+            source_card_id=data.source_card_id,
+            target_card_id=data.target_card_id,
+            relation_type=data.relation_type,
+            created_by=actor.user_id,
+        )
+        self._record_user_event(
+            actor,
+            "card_relation.create",
+            "card_relation",
+            relation_id,
+            {
+                "source_card_id": data.source_card_id,
+                "target_card_id": data.target_card_id,
+                "relation_type": data.relation_type,
+            },
+        )
+        return relation_id
+
+    def list_relations(self, actor: ActorContext, card_id: UUID) -> tuple[CardRelationRead, ...]:
+        card = self.repository.get_card(card_id)
+        self._require_card_access(actor, cast(UUID, card["organization_id"]))
+        visible_relations: list[CardRelationRead] = []
+        for relation in self.repository.list_card_relations(card_id):
+            source_card = self.repository.get_card(cast(UUID, relation["source_card_id"]))
+            target_card = self.repository.get_card(cast(UUID, relation["target_card_id"]))
+            if not self.permission_service.can_manage_organization(
+                actor, cast(UUID, source_card["organization_id"])
+            ):
+                continue
+            if not self.permission_service.can_manage_organization(
+                actor, cast(UUID, target_card["organization_id"])
+            ):
+                continue
+            visible_relations.append(
+                CardRelationRead(
+                    id=cast(UUID, relation["id"]),
+                    source_card_id=cast(UUID, relation["source_card_id"]),
+                    target_card_id=cast(UUID, relation["target_card_id"]),
+                    relation_type=str(relation["relation_type"]),
+                )
+            )
+        return tuple(visible_relations)
 
     def _require_card_access(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):

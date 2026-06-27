@@ -141,13 +141,12 @@ The server can also keep the same value outside the repo in `/etc/reg_engine/reg
 - GitHub remote: `git@github.com:BorisDruzak/reg_engine.git`
 - PostgreSQL: `192.168.100.12:5432`, database `reg_engine`, role `reg_engine_admin`
 
-## Known Non-Goals For The Foundation Phase
+## Known Non-Goals After Core Schema v1
 
 - No auth.
-- No RBAC.
-- No registry/card/user business models.
-- No business CRUD.
 - No import/export.
 - No document generation.
 - No MCP.
 - No MDB migration.
+
+Core Schema v1 includes backend models, services, repository adapters, and REST API endpoints for organizations, registries, schema blocks/fields, reference lists, dynamic cards, public links, and audit logs. Authentication and production UI are later phases.

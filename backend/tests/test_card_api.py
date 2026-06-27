@@ -18,7 +18,15 @@ from app.services.card_queries import (
     CardListItem,
     CardReadModel,
 )
-from app.services.cards import CardCreate, CardTransfer, CardTransferResult, FieldValueWrite
+from app.services.cards import (
+    CardCreate,
+    CardRelationCreate,
+    CardRelationRead,
+    CardSystemUpdate,
+    CardTransfer,
+    CardTransferResult,
+    FieldValueWrite,
+)
 from app.services.permissions import ActorContext
 
 
@@ -37,6 +45,9 @@ class FakeCardService:
         self.written_values: list[tuple[ActorContext, FieldValueWrite]] = []
         self.archived_cards: list[tuple[ActorContext, UUID, str | None]] = []
         self.transferred_cards: list[tuple[ActorContext, CardTransfer]] = []
+        self.updated_system_fields: list[tuple[ActorContext, UUID, CardSystemUpdate]] = []
+        self.created_relations: list[tuple[ActorContext, CardRelationCreate]] = []
+        self.relation_requests: list[tuple[ActorContext, UUID]] = []
 
     def create_card(self, actor: ActorContext, data: CardCreate) -> UUID:
         self.created_cards.append((actor, data))
@@ -69,6 +80,40 @@ class FakeCardService:
     def transfer_card(self, actor: ActorContext, data: CardTransfer) -> CardTransferResult:
         self.transferred_cards.append((actor, data))
         return CardTransferResult(target_card_id=uuid4(), relation_id=uuid4())
+
+    def update_system_fields(
+        self,
+        actor: ActorContext,
+        *,
+        card_id: UUID,
+        data: CardSystemUpdate,
+    ) -> dict[str, object]:
+        self.updated_system_fields.append((actor, card_id, data))
+        return {
+            "id": card_id,
+            "registry_id": uuid4(),
+            "organization_id": uuid4(),
+            "org_unit_id": data.org_unit_id,
+            "display_name": data.display_name or "Card A",
+            "lifecycle_status": "active",
+            "public_view_enabled": data.public_view_enabled,
+            "public_edit_enabled": data.public_edit_enabled,
+        }
+
+    def create_relation(self, actor: ActorContext, data: CardRelationCreate) -> UUID:
+        self.created_relations.append((actor, data))
+        return uuid4()
+
+    def list_relations(self, actor: ActorContext, card_id: UUID) -> tuple[CardRelationRead, ...]:
+        self.relation_requests.append((actor, card_id))
+        return (
+            CardRelationRead(
+                id=uuid4(),
+                source_card_id=card_id,
+                target_card_id=uuid4(),
+                relation_type="related_to",
+            ),
+        )
 
 
 class FakeCardQueryService:
@@ -279,4 +324,62 @@ def test_archive_and_transfer_card_endpoints_use_service_and_commit(
         target_org_unit_id=target_org_unit_id,
         display_name="Transferred Card",
     )
+    assert session.committed is True
+
+
+def test_update_card_system_fields_endpoint_uses_service_and_commits(
+    api_client: tuple[TestClient, FakeCardService, FakeCardQueryService, FakeSession],
+) -> None:
+    client, service, _, session = api_client
+    card_id = uuid4()
+    org_unit_id = uuid4()
+
+    response = client.patch(
+        f"/api/v1/cards/{card_id}/system-fields",
+        json={
+            "display_name": "Updated Card",
+            "org_unit_id": str(org_unit_id),
+            "public_view_enabled": True,
+            "public_edit_enabled": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(card_id)
+    assert service.updated_system_fields[0][1:] == (
+        card_id,
+        CardSystemUpdate(
+            display_name="Updated Card",
+            org_unit_id=org_unit_id,
+            org_unit_id_set=True,
+            public_view_enabled=True,
+            public_edit_enabled=True,
+        ),
+    )
+    assert session.committed is True
+
+
+def test_card_relation_endpoints_use_service_and_commit(
+    api_client: tuple[TestClient, FakeCardService, FakeCardQueryService, FakeSession],
+) -> None:
+    client, service, _, session = api_client
+    source_card_id = uuid4()
+    target_card_id = uuid4()
+
+    create_response = client.post(
+        f"/api/v1/cards/{source_card_id}/relations",
+        json={"target_card_id": str(target_card_id), "relation_type": "related_to"},
+    )
+    list_response = client.get(f"/api/v1/cards/{source_card_id}/relations")
+
+    assert create_response.status_code == 201
+    assert UUID(create_response.json()["id"])
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["source_card_id"] == str(source_card_id)
+    assert service.created_relations[0][1] == CardRelationCreate(
+        source_card_id=source_card_id,
+        target_card_id=target_card_id,
+        relation_type="related_to",
+    )
+    assert service.relation_requests[0][1] == source_card_id
     assert session.committed is True

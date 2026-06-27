@@ -16,13 +16,24 @@ from app.schemas.cards import (
     CardCreateRequest,
     CardListItemResponse,
     CardReadResponse,
+    CardRelationCreateRequest,
+    CardRelationResponse,
+    CardSystemResponse,
+    CardSystemUpdateRequest,
     CardTransferRequest,
     CardTransferResponse,
     CreatedIdResponse,
     FieldValueWriteRequest,
 )
 from app.services.card_queries import CardListFilters, CardQueryService
-from app.services.cards import CardCreate, CardService, CardTransfer, FieldValueWrite
+from app.services.cards import (
+    CardCreate,
+    CardRelationCreate,
+    CardService,
+    CardSystemUpdate,
+    CardTransfer,
+    FieldValueWrite,
+)
 from app.services.permissions import ActorContext
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -76,6 +87,63 @@ def get_card(
     service: Annotated[CardQueryService, Depends(get_card_query_service)],
 ) -> CardReadResponse:
     return CardReadResponse.model_validate(service.get_card(actor, card_id))
+
+
+@router.patch("/{card_id}/system-fields", response_model=CardSystemResponse)
+def update_card_system_fields(
+    card_id: UUID,
+    payload: CardSystemUpdateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[CardService, Depends(get_card_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardSystemResponse:
+    card = service.update_system_fields(
+        actor,
+        card_id=card_id,
+        data=CardSystemUpdate(
+            display_name=payload.display_name,
+            org_unit_id=payload.org_unit_id,
+            org_unit_id_set="org_unit_id" in payload.model_fields_set,
+            public_view_enabled=payload.public_view_enabled,
+            public_edit_enabled=payload.public_edit_enabled,
+        ),
+    )
+    session.commit()
+    return CardSystemResponse.model_validate(card)
+
+
+@router.post(
+    "/{card_id}/relations",
+    response_model=CreatedIdResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_relation(
+    card_id: UUID,
+    payload: CardRelationCreateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[CardService, Depends(get_card_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CreatedIdResponse:
+    relation_id = service.create_relation(
+        actor,
+        CardRelationCreate(
+            source_card_id=card_id,
+            target_card_id=payload.target_card_id,
+            relation_type=payload.relation_type,
+        ),
+    )
+    session.commit()
+    return CreatedIdResponse(id=relation_id)
+
+
+@router.get("/{card_id}/relations", response_model=tuple[CardRelationResponse, ...])
+def list_card_relations(
+    card_id: UUID,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[CardService, Depends(get_card_service)],
+) -> tuple[CardRelationResponse, ...]:
+    relations = service.list_relations(actor, card_id)
+    return tuple(CardRelationResponse.model_validate(relation) for relation in relations)
 
 
 @router.post(

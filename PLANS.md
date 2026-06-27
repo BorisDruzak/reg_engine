@@ -21,7 +21,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
-- Phase 1B route-plan completion follow-up is started locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, and reference list/item update endpoints are implemented.
+- Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
 - Backend still does not contain frontend UI or production schema deployment. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ## Phase 1B: Core Schema v1
@@ -203,7 +203,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.2 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
+Remaining limitation: 1B.2 service logic, SQLAlchemy repository adapters, and API/runtime composition are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ### 1B.3 Registry Schema And Reference Lists
 
@@ -227,7 +227,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.3 service logic and SQLAlchemy repository adapters are implemented. API endpoints, registry/block/field update operations, and reference list/item update operations are still open work.
+Remaining limitation: 1B.3 service logic, SQLAlchemy repository adapters, and API endpoints are implemented. Registry/block/field and reference list/item update endpoints are completed in 1B.10.
 
 ### 1B.4 Cards And Dynamic Values
 
@@ -249,7 +249,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.4 service logic and SQLAlchemy repository adapters are implemented. API endpoints, runtime dependency composition, and value validation against concrete reference-list membership are still open work.
+Remaining limitation: 1B.4 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented. Value validation against concrete reference-list membership remains a later hardening task.
 
 ### 1B.5 Public Links
 
@@ -271,7 +271,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.5 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
+Remaining limitation: 1B.5 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented.
 
 ### 1B.6 Transfer, Archive, And Audit
 
@@ -292,7 +292,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: 1B.6 service logic and SQLAlchemy repository adapters are implemented. API endpoints and runtime dependency composition are still open work.
+Remaining limitation: 1B.6 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented.
 
 ### 1B.7 Service-Layer Audit Wiring Follow-Up
 
@@ -315,7 +315,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: audit wiring is service-layer only until services are composed with SQLAlchemy repository adapters in API/runtime dependencies.
+Remaining limitation: audit wiring is service-layer and is composed with SQLAlchemy repository adapters in API/runtime dependencies.
 
 ### 1B.8 SQLAlchemy Repository Adapters
 
@@ -342,7 +342,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: SQLAlchemy repository adapters exist for all Phase 1B service protocols. API/runtime dependency composition and production PostgreSQL migration remain open work.
+Remaining limitation: SQLAlchemy repository adapters and API/runtime dependency composition exist for Phase 1B service protocols. Production PostgreSQL migration remains open work pending explicit approval.
 
 ### 1B.9 API Runtime Composition
 
@@ -395,7 +395,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: Phase 1B.9 route groups are wired for the initial service boundaries. Some endpoints from the broader route plan are tracked in 1B.10. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: Phase 1B.9 route groups are wired for the initial service boundaries. Broader route-plan follow-up endpoints are completed in 1B.10. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ### 1B.10 API Route Plan Completion Follow-Up
 
@@ -408,8 +408,10 @@ Remaining limitation: Phase 1B.9 route groups are wired for the initial service 
 - [x] Add reference list/item update endpoints.
 - [x] Add reference list service and repository update behavior.
 - [x] Add API/service/repository tests for reference list/item update.
-- [ ] Add card system-field update endpoints.
-- [ ] Add card relation endpoints.
+- [x] Add card system-field update endpoints.
+- [x] Add card relation endpoints.
+- [x] Add card service and repository system-field update and relation list behavior.
+- [x] Add API/service/repository tests for card system-field update and relations.
 
 Verification completed locally for completed org unit follow-up:
 
@@ -418,12 +420,13 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m pytest tests\test_org_unit_api.py tests\test_org_unit_service.py tests\test_organization_repositories.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_api.py tests\test_registry_schema_service.py tests\test_registry_reference_repositories.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_reference_list_api.py tests\test_reference_list_service.py tests\test_registry_reference_repositories.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_card_api.py tests\test_card_service.py tests\test_card_public_link_repositories.py -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: card system-field update and card relation endpoints remain open route-plan follow-up work. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: route-plan follow-up endpoints are implemented locally. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ## Phase 1B Acceptance Criteria
 
