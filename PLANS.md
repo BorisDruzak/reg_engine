@@ -9,7 +9,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1B.2 Core Models And Migration implementation.
+- Current checkpoint scope is Phase 1B.3 Model Smoke Tests implementation.
 - Do not implement API CRUD, services, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -17,7 +17,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 
 - Phase 1B.1 Database Foundation is completed locally in this checkpoint.
 - Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
-- Phase 1B.3 Model Smoke Tests for all Core Schema v1 models are partially covered by metadata, constraint, index, and Alembic SQL-render tests; broader insert smoke tests remain next.
+- Phase 1B.3 Model Smoke Tests are in progress: disposable PostgreSQL smoke tests were added and must run against `TEST_DATABASE_URL`, not production `reg_engine`.
 - Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
@@ -215,12 +215,15 @@ Expected test files:
 - `backend/tests/test_schema_constraints.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_healthcheck.py`
+- `backend/tests/test_database_smoke.py`
 
 Verification:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine\backend
 python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py tests\test_healthcheck.py -q
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests\test_database_smoke.py -q
 ```
 
 ## Phase 1B Acceptance Criteria

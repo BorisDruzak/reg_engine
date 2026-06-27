@@ -335,6 +335,8 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - Remote PostgreSQL access is limited to the LAN subnet `192.168.100.0/24`.
 - Use password authentication over TCP. Do not use `trust` authentication for remote connections.
 - Do not store the PostgreSQL password in this file or commit it to Git.
+- DB smoke tests that set `TEST_DATABASE_URL` must use a disposable database whose name ends with `_test`, for example `reg_engine_test`.
+- `backend/tests/test_database_smoke.py` resets the `public` schema in `TEST_DATABASE_URL`; never point it at production `reg_engine`.
 
 Current server listen sockets:
 

@@ -134,6 +134,14 @@ $env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/<te
 python -m alembic upgrade head
 ```
 
+Core schema DB smoke tests use the same `TEST_DATABASE_URL` and reset the `public` schema in that database. The database name must end with `_test`, for example `reg_engine_test`:
+
+```powershell
+cd backend
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests/test_database_smoke.py -q
+```
+
 Do not commit real database passwords. Server schema migration is a separate explicit approval step.
 
 ## Env Loading Strategy
