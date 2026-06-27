@@ -19,8 +19,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
 - Phase 1B.3 Model Smoke Tests for all Core Schema v1 models are partially covered by metadata, constraint, index, and Alembic SQL-render tests; broader insert smoke tests remain next.
 - Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
-- Current synchronization checkpoint: push the verified Phase 1B.1/1B.2 implementation to GitHub on the current branch and update `/opt/reg_engine` from the same branch.
-- Production PostgreSQL schema migration is not part of this synchronization checkpoint; `alembic upgrade head` against production `reg_engine` still requires separate explicit approval.
+- Synchronization checkpoint is completed for the verified Phase 1B.1/1B.2 branch head: local branch, GitHub `origin/codex/core-schema-v1`, and server checkout `/opt/reg_engine` are aligned.
+- Production PostgreSQL schema migration was not run in this synchronization checkpoint; `alembic upgrade head` against production `reg_engine` still requires separate explicit approval.
 
 ## Core Architecture Decisions
 
