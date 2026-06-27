@@ -7,7 +7,13 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_current_actor, get_db_session, get_registry_schema_service
 from app.main import app
 from app.services.permissions import ActorContext
-from app.services.registry_schema import FieldCreate, RegistryCreate
+from app.services.registry_schema import (
+    FieldCreate,
+    FieldUpdate,
+    FormBlockUpdate,
+    RegistryCreate,
+    RegistryUpdate,
+)
 
 
 class FakeSession:
@@ -25,6 +31,10 @@ class FakeRegistrySchemaService:
         self.created_fields: list[tuple[ActorContext, UUID, FieldCreate]] = []
         self.archived_blocks: list[tuple[ActorContext, UUID]] = []
         self.archived_fields: list[tuple[ActorContext, UUID]] = []
+        self.schema_requests: list[tuple[ActorContext, UUID]] = []
+        self.updated_registries: list[tuple[ActorContext, UUID, RegistryUpdate]] = []
+        self.updated_blocks: list[tuple[ActorContext, UUID, FormBlockUpdate]] = []
+        self.updated_fields: list[tuple[ActorContext, UUID, FieldUpdate]] = []
 
     def create_registry(self, actor: ActorContext, data: RegistryCreate) -> UUID:
         self.created_registries.append((actor, data))
@@ -50,6 +60,85 @@ class FakeRegistrySchemaService:
 
     def archive_field(self, actor: ActorContext, field_id: UUID) -> None:
         self.archived_fields.append((actor, field_id))
+
+    def get_schema(self, actor: ActorContext, registry_id: UUID) -> dict[str, object]:
+        self.schema_requests.append((actor, registry_id))
+        block_id = uuid4()
+        field_id = uuid4()
+        return {
+            "id": registry_id,
+            "code": "cards",
+            "name": "Cards",
+            "archived": False,
+            "blocks": [
+                {
+                    "id": block_id,
+                    "registry_id": registry_id,
+                    "code": "main",
+                    "title": "Main",
+                    "archived": False,
+                    "fields": [
+                        {
+                            "id": field_id,
+                            "block_id": block_id,
+                            "code": "status",
+                            "label": "Status",
+                            "field_type": "text",
+                            "required_mode": "not_required",
+                            "archived": False,
+                        }
+                    ],
+                }
+            ],
+        }
+
+    def update_registry(
+        self,
+        actor: ActorContext,
+        registry_id: UUID,
+        data: RegistryUpdate,
+    ) -> dict[str, object]:
+        self.updated_registries.append((actor, registry_id, data))
+        return {
+            "id": registry_id,
+            "code": data.code or "cards",
+            "name": data.name or "Cards",
+            "archived": False,
+            "blocks": [],
+        }
+
+    def update_block(
+        self,
+        actor: ActorContext,
+        block_id: UUID,
+        data: FormBlockUpdate,
+    ) -> dict[str, object]:
+        self.updated_blocks.append((actor, block_id, data))
+        return {
+            "id": block_id,
+            "registry_id": uuid4(),
+            "code": data.code or "main",
+            "title": data.title or "Main",
+            "archived": False,
+            "fields": [],
+        }
+
+    def update_field(
+        self,
+        actor: ActorContext,
+        field_id: UUID,
+        data: FieldUpdate,
+    ) -> dict[str, object]:
+        self.updated_fields.append((actor, field_id, data))
+        return {
+            "id": field_id,
+            "block_id": uuid4(),
+            "code": data.code or "status",
+            "label": data.label or "Status",
+            "field_type": "text",
+            "required_mode": data.required_mode or "not_required",
+            "archived": False,
+        }
 
 
 @pytest.fixture()
@@ -139,4 +228,61 @@ def test_archive_block_and_field_endpoints_use_service_and_commit(
     assert field_response.status_code == 204
     assert service.archived_blocks[0][1] == block_id
     assert service.archived_fields[0][1] == field_id
+    assert session.committed is True
+
+
+def test_get_registry_schema_endpoint_uses_service(
+    api_client: tuple[TestClient, FakeRegistrySchemaService, FakeSession],
+) -> None:
+    client, service, _session = api_client
+    registry_id = uuid4()
+
+    response = client.get(f"/api/v1/registries/{registry_id}/schema")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(registry_id)
+    assert response.json()["blocks"][0]["fields"][0]["code"] == "status"
+    assert service.schema_requests[0][1] == registry_id
+
+
+def test_update_registry_block_and_field_endpoints_use_service_and_commit(
+    api_client: tuple[TestClient, FakeRegistrySchemaService, FakeSession],
+) -> None:
+    client, service, session = api_client
+    registry_id = uuid4()
+    block_id = uuid4()
+    field_id = uuid4()
+
+    registry_response = client.patch(
+        f"/api/v1/registries/{registry_id}",
+        json={"code": "cards-2", "name": "Cards 2"},
+    )
+    block_response = client.patch(
+        f"/api/v1/registries/blocks/{block_id}",
+        json={"code": "main-2", "title": "Main 2"},
+    )
+    field_response = client.patch(
+        f"/api/v1/registries/fields/{field_id}",
+        json={
+            "code": "status-2",
+            "label": "Status 2",
+            "required_mode": "required_on_publish",
+        },
+    )
+
+    assert registry_response.status_code == 200
+    assert block_response.status_code == 200
+    assert field_response.status_code == 200
+    assert service.updated_registries[0][1:] == (
+        registry_id,
+        RegistryUpdate(code="cards-2", name="Cards 2"),
+    )
+    assert service.updated_blocks[0][1:] == (
+        block_id,
+        FormBlockUpdate(code="main-2", title="Main 2"),
+    )
+    assert service.updated_fields[0][1:] == (
+        field_id,
+        FieldUpdate(code="status-2", label="Status 2", required_mode="required_on_publish"),
+    )
     assert session.committed is True

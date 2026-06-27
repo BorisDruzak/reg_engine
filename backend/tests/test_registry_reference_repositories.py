@@ -79,8 +79,32 @@ def test_registry_schema_repository_creates_and_archives_schema_objects() -> Non
     assert field.block_id == block_id
     assert field.field_type == "select"
 
+    session.get_results[(Registry, registry_id)] = registry
     session.get_results[(FormBlock, block_id)] = block
     session.get_results[(FormField, field_id)] = field
+    session.execute_results = [FakeResult([block]), FakeResult([field])]
+    assert repository.get_registry(registry_id)["code"] == "cards"
+    assert repository.get_block(block_id)["title"] == "Main"
+    assert repository.get_field(field_id)["required_mode"] == "not_required"
+    assert repository.list_blocks(registry_id)[0]["id"] == block_id
+    assert repository.list_fields(block_id)[0]["id"] == field_id
+
+    repository.update_registry(registry_id, code="cards-2", name="Cards 2")
+    repository.update_block(block_id, code="main-2", title="Main 2")
+    repository.update_field(
+        field_id,
+        code="status-2",
+        label="Status 2",
+        required_mode="required_on_publish",
+    )
+    assert registry.code == "cards-2"
+    assert registry.name == "Cards 2"
+    assert block.code == "main-2"
+    assert block.title == "Main 2"
+    assert field.code == "status-2"
+    assert field.label == "Status 2"
+    assert field.required_mode == "required_on_publish"
+
     repository.archive_block(block_id)
     repository.archive_field(field_id)
 

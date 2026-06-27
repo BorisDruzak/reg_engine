@@ -8,11 +8,24 @@ from app.api.dependencies import get_current_actor, get_db_session, get_registry
 from app.schemas.registry_schema import (
     CreatedIdResponse,
     FormBlockCreateRequest,
+    FormBlockResponse,
+    FormBlockUpdateRequest,
     FormFieldCreateRequest,
+    FormFieldResponse,
+    FormFieldUpdateRequest,
     RegistryCreateRequest,
+    RegistrySchemaResponse,
+    RegistryUpdateRequest,
 )
 from app.services.permissions import ActorContext
-from app.services.registry_schema import FieldCreate, RegistryCreate, RegistrySchemaService
+from app.services.registry_schema import (
+    FieldCreate,
+    FieldUpdate,
+    FormBlockUpdate,
+    RegistryCreate,
+    RegistrySchemaService,
+    RegistryUpdate,
+)
 
 router = APIRouter(prefix="/registries", tags=["registries"])
 
@@ -30,6 +43,32 @@ def create_registry(
     )
     session.commit()
     return CreatedIdResponse(id=registry_id)
+
+
+@router.get("/{registry_id}/schema", response_model=RegistrySchemaResponse)
+def get_registry_schema(
+    registry_id: UUID,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[RegistrySchemaService, Depends(get_registry_schema_service)],
+) -> RegistrySchemaResponse:
+    return RegistrySchemaResponse.model_validate(service.get_schema(actor, registry_id))
+
+
+@router.patch("/{registry_id}", response_model=RegistrySchemaResponse)
+def update_registry(
+    registry_id: UUID,
+    payload: RegistryUpdateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[RegistrySchemaService, Depends(get_registry_schema_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> RegistrySchemaResponse:
+    registry = service.update_registry(
+        actor,
+        registry_id,
+        RegistryUpdate(code=payload.code, name=payload.name),
+    )
+    session.commit()
+    return RegistrySchemaResponse.model_validate(registry)
 
 
 @router.post(
@@ -52,6 +91,23 @@ def create_form_block(
     )
     session.commit()
     return CreatedIdResponse(id=block_id)
+
+
+@router.patch("/blocks/{block_id}", response_model=FormBlockResponse)
+def update_form_block(
+    block_id: UUID,
+    payload: FormBlockUpdateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[RegistrySchemaService, Depends(get_registry_schema_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> FormBlockResponse:
+    block = service.update_block(
+        actor,
+        block_id,
+        FormBlockUpdate(code=payload.code, title=payload.title),
+    )
+    session.commit()
+    return FormBlockResponse.model_validate(block)
 
 
 @router.post(
@@ -78,6 +134,23 @@ def create_form_field(
     )
     session.commit()
     return CreatedIdResponse(id=field_id)
+
+
+@router.patch("/fields/{field_id}", response_model=FormFieldResponse)
+def update_form_field(
+    field_id: UUID,
+    payload: FormFieldUpdateRequest,
+    actor: Annotated[ActorContext, Depends(get_current_actor)],
+    service: Annotated[RegistrySchemaService, Depends(get_registry_schema_service)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> FormFieldResponse:
+    field = service.update_field(
+        actor,
+        field_id,
+        FieldUpdate(code=payload.code, label=payload.label, required_mode=payload.required_mode),
+    )
+    session.commit()
+    return FormFieldResponse.model_validate(field)
 
 
 @router.post("/blocks/{block_id}/archive", status_code=status.HTTP_204_NO_CONTENT)

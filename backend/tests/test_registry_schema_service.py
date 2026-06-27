@@ -5,9 +5,12 @@ import pytest
 from app.services.permissions import AccessDeniedError, ActorContext
 from app.services.registry_schema import (
     FieldCreate,
+    FieldUpdate,
+    FormBlockUpdate,
     InvalidSchemaOperationError,
     RegistryCreate,
     RegistrySchemaService,
+    RegistryUpdate,
 )
 
 
@@ -75,6 +78,60 @@ class InMemoryRegistrySchemaRepository:
 
     def archive_block(self, block_id: UUID) -> None:
         self.blocks[block_id]["archived"] = True
+
+    def get_registry(self, registry_id: UUID) -> dict[str, object]:
+        return self.registries[registry_id]
+
+    def list_blocks(self, registry_id: UUID) -> list[dict[str, object]]:
+        return [block for block in self.blocks.values() if block["registry_id"] == registry_id]
+
+    def list_fields(self, block_id: UUID) -> list[dict[str, object]]:
+        return [field for field in self.fields.values() if field["block_id"] == block_id]
+
+    def get_block(self, block_id: UUID) -> dict[str, object]:
+        return self.blocks[block_id]
+
+    def get_field(self, field_id: UUID) -> dict[str, object]:
+        return self.fields[field_id]
+
+    def update_registry(
+        self,
+        registry_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        if code is not None:
+            self.registries[registry_id]["code"] = code
+        if name is not None:
+            self.registries[registry_id]["name"] = name
+
+    def update_block(
+        self,
+        block_id: UUID,
+        *,
+        code: str | None,
+        title: str | None,
+    ) -> None:
+        if code is not None:
+            self.blocks[block_id]["code"] = code
+        if title is not None:
+            self.blocks[block_id]["title"] = title
+
+    def update_field(
+        self,
+        field_id: UUID,
+        *,
+        code: str | None,
+        label: str | None,
+        required_mode: str | None,
+    ) -> None:
+        if code is not None:
+            self.fields[field_id]["code"] = code
+        if label is not None:
+            self.fields[field_id]["label"] = label
+        if required_mode is not None:
+            self.fields[field_id]["required_mode"] = required_mode
 
     def field_exists(self, field_id: UUID) -> bool:
         return field_id in self.fields
@@ -158,3 +215,53 @@ def test_archive_block_marks_block_without_deleting() -> None:
 
     assert block_id in repository.blocks
     assert repository.blocks[block_id]["archived"] is True
+
+
+def test_registry_schema_can_be_read_and_updated() -> None:
+    repository = InMemoryRegistrySchemaRepository()
+    service = RegistrySchemaService(repository)
+    actor = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    registry_id = service.create_registry(actor, RegistryCreate(code="reg", name="Registry"))
+    block_id = service.create_block(actor, registry_id=registry_id, code="main", title="Main")
+    field_id = service.create_field(
+        actor,
+        block_id=block_id,
+        data=FieldCreate(code="display", label="Display", field_type="text"),
+    )
+
+    schema = service.get_schema(actor, registry_id)
+    updated_registry = service.update_registry(
+        actor,
+        registry_id,
+        RegistryUpdate(name="Updated Registry"),
+    )
+    updated_block = service.update_block(actor, block_id, FormBlockUpdate(title="Updated Main"))
+    updated_field = service.update_field(
+        actor,
+        field_id,
+        FieldUpdate(label="Updated Display", required_mode="required_on_publish"),
+    )
+
+    assert schema["blocks"][0]["fields"][0]["id"] == field_id
+    assert updated_registry["name"] == "Updated Registry"
+    assert updated_block["title"] == "Updated Main"
+    assert updated_field["label"] == "Updated Display"
+    assert updated_field["required_mode"] == "required_on_publish"
+
+
+def test_invalid_required_mode_is_rejected_before_field_update() -> None:
+    repository = InMemoryRegistrySchemaRepository()
+    service = RegistrySchemaService(repository)
+    actor = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    registry_id = service.create_registry(actor, RegistryCreate(code="reg", name="Registry"))
+    block_id = service.create_block(actor, registry_id=registry_id, code="main", title="Main")
+    field_id = service.create_field(
+        actor,
+        block_id=block_id,
+        data=FieldCreate(code="display", label="Display", field_type="text"),
+    )
+
+    with pytest.raises(InvalidSchemaOperationError):
+        service.update_field(actor, field_id, FieldUpdate(required_mode="bad"))
+
+    assert repository.fields[field_id]["required_mode"] == "not_required"

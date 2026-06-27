@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
@@ -18,11 +18,30 @@ class RegistryCreate:
 
 
 @dataclass(frozen=True)
+class RegistryUpdate:
+    code: str | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class FormBlockUpdate:
+    code: str | None = None
+    title: str | None = None
+
+
+@dataclass(frozen=True)
 class FieldCreate:
     code: str
     label: str
     field_type: str
     required_mode: str = "not_required"
+
+
+@dataclass(frozen=True)
+class FieldUpdate:
+    code: str | None = None
+    label: str | None = None
+    required_mode: str | None = None
 
 
 class RegistrySchemaRepository(Protocol):
@@ -56,6 +75,49 @@ class RegistrySchemaRepository(Protocol):
 
     def archive_block(self, block_id: UUID) -> None:
         """Archive a form block without deleting it."""
+
+    def get_registry(self, registry_id: UUID) -> dict[str, object]:
+        """Return registry attributes."""
+
+    def list_blocks(self, registry_id: UUID) -> list[dict[str, object]]:
+        """Return blocks for a registry."""
+
+    def list_fields(self, block_id: UUID) -> list[dict[str, object]]:
+        """Return fields for a block."""
+
+    def get_block(self, block_id: UUID) -> dict[str, object]:
+        """Return block attributes."""
+
+    def get_field(self, field_id: UUID) -> dict[str, object]:
+        """Return field attributes."""
+
+    def update_registry(
+        self,
+        registry_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        """Update mutable registry fields."""
+
+    def update_block(
+        self,
+        block_id: UUID,
+        *,
+        code: str | None,
+        title: str | None,
+    ) -> None:
+        """Update mutable form block fields."""
+
+    def update_field(
+        self,
+        field_id: UUID,
+        *,
+        code: str | None,
+        label: str | None,
+        required_mode: str | None,
+    ) -> None:
+        """Update mutable form field fields."""
 
 
 class RegistrySchemaService:
@@ -142,6 +204,81 @@ class RegistrySchemaService:
         self.repository.archive_block(block_id)
         self._record_user_event(actor, "form_block.archive", "form_block", block_id, None)
 
+    def get_schema(self, actor: ActorContext, registry_id: UUID) -> dict[str, object]:
+        self._require_schema_manager(actor)
+        return self._registry_schema(registry_id)
+
+    def update_registry(
+        self,
+        actor: ActorContext,
+        registry_id: UUID,
+        data: RegistryUpdate,
+    ) -> dict[str, object]:
+        self._require_schema_manager(actor)
+        before = self.repository.get_registry(registry_id)
+        self.repository.update_registry(registry_id, code=data.code, name=data.name)
+        after = self.repository.get_registry(registry_id)
+        self._record_user_event(
+            actor,
+            "registry.update",
+            "registry",
+            registry_id,
+            {"old": {"code": before["code"], "name": before["name"]}, "new": after},
+        )
+        return self._registry_schema(registry_id)
+
+    def update_block(
+        self,
+        actor: ActorContext,
+        block_id: UUID,
+        data: FormBlockUpdate,
+    ) -> dict[str, object]:
+        self._require_schema_manager(actor)
+        before = self._block_by_id(block_id)
+        self.repository.update_block(block_id, code=data.code, title=data.title)
+        after = self._block_by_id(block_id)
+        self._record_user_event(
+            actor,
+            "form_block.update",
+            "form_block",
+            block_id,
+            {"old": {"code": before["code"], "title": before["title"]}, "new": after},
+        )
+        return self._block_with_fields(after)
+
+    def update_field(
+        self,
+        actor: ActorContext,
+        field_id: UUID,
+        data: FieldUpdate,
+    ) -> dict[str, object]:
+        self._require_schema_manager(actor)
+        if data.required_mode is not None and data.required_mode not in REQUIRED_MODES:
+            raise InvalidSchemaOperationError(f"Unsupported required mode: {data.required_mode}")
+        before = self._field_by_id(field_id)
+        self.repository.update_field(
+            field_id,
+            code=data.code,
+            label=data.label,
+            required_mode=data.required_mode,
+        )
+        after = self._field_by_id(field_id)
+        self._record_user_event(
+            actor,
+            "form_field.update",
+            "form_field",
+            field_id,
+            {
+                "old": {
+                    "code": before["code"],
+                    "label": before["label"],
+                    "required_mode": before["required_mode"],
+                },
+                "new": after,
+            },
+        )
+        return after
+
     def _require_schema_manager(self, actor: ActorContext) -> None:
         if not actor.is_superuser:
             raise AccessDeniedError("Only a system administrator can manage registry schema in v1.")
@@ -151,6 +288,24 @@ class RegistrySchemaService:
             raise InvalidSchemaOperationError(f"Unsupported field type: {data.field_type}")
         if data.required_mode not in REQUIRED_MODES:
             raise InvalidSchemaOperationError(f"Unsupported required mode: {data.required_mode}")
+
+    def _registry_schema(self, registry_id: UUID) -> dict[str, object]:
+        registry = dict(self.repository.get_registry(registry_id))
+        registry["blocks"] = [
+            self._block_with_fields(block) for block in self.repository.list_blocks(registry_id)
+        ]
+        return registry
+
+    def _block_with_fields(self, block: dict[str, object]) -> dict[str, object]:
+        result = dict(block)
+        result["fields"] = self.repository.list_fields(cast(UUID, block["id"]))
+        return result
+
+    def _block_by_id(self, block_id: UUID) -> dict[str, object]:
+        return self.repository.get_block(block_id)
+
+    def _field_by_id(self, field_id: UUID) -> dict[str, object]:
+        return self.repository.get_field(field_id)
 
     def _record_user_event(
         self,
