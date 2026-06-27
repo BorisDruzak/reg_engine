@@ -29,6 +29,20 @@ class FieldValueWrite:
     value: object
 
 
+@dataclass(frozen=True)
+class CardTransfer:
+    source_card_id: UUID
+    target_organization_id: UUID
+    target_org_unit_id: UUID | None
+    display_name: str | None = None
+
+
+@dataclass(frozen=True)
+class CardTransferResult:
+    target_card_id: UUID
+    relation_id: UUID
+
+
 class CardRepository(Protocol):
     def create_card(
         self,
@@ -46,6 +60,19 @@ class CardRepository(Protocol):
 
     def archive_card(self, *, card_id: UUID, archived_by: UUID | None, reason: str | None) -> None:
         """Archive a card without deleting values."""
+
+    def mark_card_superseded(self, *, card_id: UUID, updated_by: UUID | None) -> None:
+        """Mark a source card as superseded after transfer."""
+
+    def create_card_relation(
+        self,
+        *,
+        source_card_id: UUID,
+        target_card_id: UUID,
+        relation_type: str,
+        created_by: UUID | None,
+    ) -> UUID:
+        """Create a card relation and return its id."""
 
     def create_block_instance(
         self,
@@ -239,6 +266,31 @@ class CardService:
                 reference_item_ids=multi_select_items,
             )
         return field_value_id
+
+    def transfer_card(self, actor: ActorContext, data: CardTransfer) -> CardTransferResult:
+        source_card = self.repository.get_card(data.source_card_id)
+        source_organization_id = cast(UUID, source_card["organization_id"])
+        self._require_card_access(actor, source_organization_id)
+        self._require_card_access(actor, data.target_organization_id)
+
+        target_card_id = self.repository.create_card(
+            registry_id=cast(UUID, source_card["registry_id"]),
+            organization_id=data.target_organization_id,
+            org_unit_id=data.target_org_unit_id,
+            display_name=data.display_name or str(source_card["display_name"]),
+            created_by=actor.user_id,
+        )
+        self.repository.mark_card_superseded(
+            card_id=data.source_card_id,
+            updated_by=actor.user_id,
+        )
+        relation_id = self.repository.create_card_relation(
+            source_card_id=data.source_card_id,
+            target_card_id=target_card_id,
+            relation_type="transferred_to",
+            created_by=actor.user_id,
+        )
+        return CardTransferResult(target_card_id=target_card_id, relation_id=relation_id)
 
     def _require_card_access(self, actor: ActorContext, organization_id: UUID) -> None:
         if not self.permission_service.can_manage_organization(actor, organization_id):

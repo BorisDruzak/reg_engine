@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.services.cards import CardCreate, CardService, FieldValueWrite
+from app.services.cards import CardCreate, CardService, CardTransfer, FieldValueWrite
 from app.services.permissions import AccessDeniedError, ActorContext, PermissionService
 
 
@@ -23,6 +23,7 @@ class InMemoryCardRepository:
         self.fields: dict[UUID, dict[str, object]] = {}
         self.field_values: dict[UUID, dict[str, object]] = {}
         self.field_value_items: dict[UUID, list[UUID]] = {}
+        self.relations: dict[UUID, dict[str, object]] = {}
 
     def add_field(self, field_type: str) -> UUID:
         field_id = uuid4()
@@ -60,6 +61,28 @@ class InMemoryCardRepository:
         self.cards[card_id]["lifecycle_status"] = "archived"
         self.cards[card_id]["archived_by"] = archived_by
         self.cards[card_id]["archive_reason"] = reason
+
+    def mark_card_superseded(self, *, card_id: UUID, updated_by: UUID | None) -> None:
+        self.cards[card_id]["lifecycle_status"] = "superseded"
+        self.cards[card_id]["updated_by"] = updated_by
+
+    def create_card_relation(
+        self,
+        *,
+        source_card_id: UUID,
+        target_card_id: UUID,
+        relation_type: str,
+        created_by: UUID | None,
+    ) -> UUID:
+        relation_id = uuid4()
+        self.relations[relation_id] = {
+            "id": relation_id,
+            "source_card_id": source_card_id,
+            "target_card_id": target_card_id,
+            "relation_type": relation_type,
+            "created_by": created_by,
+        }
+        return relation_id
 
     def create_block_instance(
         self,
@@ -387,3 +410,75 @@ def test_archived_card_leaves_existing_values_intact() -> None:
 
     assert repository.cards[card_id]["lifecycle_status"] == "archived"
     assert repository.field_values[value_id]["value_text"] == "keep me"
+
+
+def test_transfer_creates_new_card_marks_old_superseded_and_records_relation() -> None:
+    source_org_id = uuid4()
+    target_org_id = uuid4()
+    registry_id = uuid4()
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(
+        InMemoryPermissionRepository({(source_org_id, target_org_id)})
+    )
+    service = CardService(repository, permission_service)
+    actor = ActorContext.for_org_admin(user_id=uuid4(), organization_id=source_org_id)
+    source_card_id = service.create_card(
+        actor,
+        CardCreate(
+            registry_id=registry_id,
+            organization_id=source_org_id,
+            org_unit_id=None,
+            display_name="Source card",
+        ),
+    )
+
+    result = service.transfer_card(
+        actor,
+        CardTransfer(
+            source_card_id=source_card_id,
+            target_organization_id=target_org_id,
+            target_org_unit_id=None,
+            display_name="Transferred card",
+        ),
+    )
+
+    assert repository.cards[source_card_id]["lifecycle_status"] == "superseded"
+    assert repository.cards[result.target_card_id]["registry_id"] == registry_id
+    assert repository.cards[result.target_card_id]["organization_id"] == target_org_id
+    assert repository.cards[result.target_card_id]["display_name"] == "Transferred card"
+    assert repository.relations[result.relation_id] == {
+        "id": result.relation_id,
+        "source_card_id": source_card_id,
+        "target_card_id": result.target_card_id,
+        "relation_type": "transferred_to",
+        "created_by": actor.user_id,
+    }
+
+
+def test_transfer_requires_access_to_source_and_target_organizations() -> None:
+    source_org_id = uuid4()
+    target_org_id = uuid4()
+    repository = InMemoryCardRepository()
+    permission_service = PermissionService(InMemoryPermissionRepository(set()))
+    service = CardService(repository, permission_service)
+    system_actor = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    source_card_id = service.create_card(
+        system_actor,
+        CardCreate(
+            registry_id=uuid4(),
+            organization_id=source_org_id,
+            org_unit_id=None,
+            display_name="Source card",
+        ),
+    )
+    source_admin = ActorContext.for_org_admin(user_id=uuid4(), organization_id=source_org_id)
+
+    with pytest.raises(AccessDeniedError):
+        service.transfer_card(
+            source_admin,
+            CardTransfer(
+                source_card_id=source_card_id,
+                target_organization_id=target_org_id,
+                target_org_unit_id=None,
+            ),
+        )

@@ -229,3 +229,39 @@ def test_card_list_filters_by_registry_scope_status_org_unit_and_display_name() 
     )
 
     assert [card.id for card in cards] == [parent_card_id, child_card_id]
+
+
+def test_old_org_admin_sees_superseded_source_card_but_not_target_card_outside_scope() -> None:
+    old_org_id = uuid4()
+    new_org_id = uuid4()
+    registry_id = uuid4()
+    repository = InMemoryCardQueryRepository()
+    old_card_id = repository.add_card(
+        registry_id=registry_id,
+        organization_id=old_org_id,
+        org_unit_id=None,
+        display_name="Old card",
+        lifecycle_status="superseded",
+    )
+    repository.add_card(
+        registry_id=registry_id,
+        organization_id=new_org_id,
+        org_unit_id=None,
+        display_name="New card",
+        lifecycle_status="active",
+    )
+    permission_service = PermissionService(InMemoryPermissionRepository(set()))
+    service = CardQueryService(repository, permission_service)
+    old_admin = ActorContext.for_org_admin(user_id=uuid4(), organization_id=old_org_id)
+
+    archive_cards = service.list_cards(
+        old_admin,
+        CardListFilters(registry_id=registry_id, lifecycle_status="superseded"),
+    )
+    active_cards = service.list_cards(
+        old_admin,
+        CardListFilters(registry_id=registry_id, lifecycle_status="active"),
+    )
+
+    assert [card.id for card in archive_cards] == [old_card_id]
+    assert active_cards == ()

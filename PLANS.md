@@ -14,6 +14,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B.3 registry schema and reference list service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.4 card command/query and dynamic value service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.5 public link service logic is implemented locally on `codex/core-schema-v1`.
+- Phase 1B.6 card transfer and audit service boundaries are implemented locally on `codex/core-schema-v1`.
 - Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
@@ -267,10 +268,24 @@ Remaining limitation: 1B.5 is implemented as service logic over repository proto
 
 ### 1B.6 Transfer, Archive, And Audit
 
-- [ ] Implement transfer as new-card creation plus old-card `superseded`.
-- [ ] Write `card_relations` with `transferred_to`.
-- [ ] Preserve old card visibility in old organization archive scope.
-- [ ] Centralize audit writes for create/update/archive/transfer/public-link actions.
+- [x] Implement transfer as new-card creation plus old-card `superseded`.
+- [x] Write `card_relations` with `transferred_to`.
+- [x] Preserve old card visibility in old organization archive scope.
+- [x] Add `AuditService` as the centralized audit-event boundary for user, public-link, and system actors.
+- [x] Add service tests for transfer relation creation, target-scope denial, old/new organization visibility after transfer, and audit actor/source mapping.
+
+Verification completed locally:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_audit_service.py tests\test_card_service.py tests\test_card_query_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: 1B.6 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, and wiring every service method to a concrete persisted `AuditService` are still open work.
 
 ## Phase 1B Acceptance Criteria
 
