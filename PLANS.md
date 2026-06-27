@@ -16,7 +16,8 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B.5 public link service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.6 card transfer and audit service boundaries are implemented locally on `codex/core-schema-v1`.
 - Phase 1B service-layer audit wiring is implemented locally on `codex/core-schema-v1` for organization, org unit, registry schema, reference list, card, transfer, and public-link actions.
-- Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
+- Phase 1B audit SQLAlchemy repository adapter is implemented locally on `codex/core-schema-v1`.
+- Backend still does not contain Core Schema v1 business endpoints, frontend UI, the complete SQLAlchemy repository adapter set for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
 
@@ -309,7 +310,31 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: audit wiring is service-layer only until SQLAlchemy repository adapters persist `audit_events` in PostgreSQL.
+Remaining limitation: audit wiring is service-layer only until services are composed with SQLAlchemy repository adapters in API/runtime dependencies.
+
+### 1B.8 SQLAlchemy Repository Adapters
+
+- [x] Add SQLAlchemy repository adapter for `audit_events`.
+- [x] Add repository tests proving `AuditEvent` ORM objects are created with UUID, actor, action, object, JSON data, source, and timestamp fields.
+- [ ] Add SQLAlchemy repository adapters for organizations and organization closure.
+- [ ] Add SQLAlchemy repository adapters for org units.
+- [ ] Add SQLAlchemy repository adapters for registry schema.
+- [ ] Add SQLAlchemy repository adapters for reference lists/items.
+- [ ] Add SQLAlchemy repository adapters for cards, block instances, field values, field value items, and card relations.
+- [ ] Add SQLAlchemy repository adapter for public links.
+
+Verification completed locally for the completed audit adapter:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_audit_repository.py tests\test_audit_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: only the audit repository adapter exists. Business service repository adapters and API/runtime dependency composition are still open work.
 
 ## Phase 1B Acceptance Criteria
 

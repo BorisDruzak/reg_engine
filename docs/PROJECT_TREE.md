@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 17:19:00 +05:00
+- Generated: 2026-06-27 17:22:03 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -50,6 +50,7 @@
 - `backend/app/models/reference.py`
 - `backend/app/models/registry_schema.py`
 - `backend/app/repositories/__init__.py`
+- `backend/app/repositories/audit.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/services/__init__.py`
 - `backend/app/services/audit.py`
@@ -67,6 +68,7 @@
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
+- `backend/tests/test_audit_repository.py`
 - `backend/tests/test_audit_service.py`
 - `backend/tests/test_card_query_service.py`
 - `backend/tests/test_card_service.py`
