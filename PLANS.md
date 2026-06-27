@@ -21,7 +21,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
-- Production PostgreSQL schema migration was not run in this synchronization checkpoint; `alembic upgrade head` against production `reg_engine` still requires separate explicit approval.
+- Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
+- Production backup before migration: `/var/backups/reg_engine/reg_engine_before_alembic_head_20260627_191407.dump`, sha256 `9b7e6d0f5870f6da5f7da72f9fa77fa1856b3e1454030afe4350347824826152`.
+- Production live schema compare against SQLAlchemy metadata passed after migration: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, and no `employees` table.
 
 ## Core Architecture Decisions
 
@@ -171,6 +173,7 @@ Expected model files:
 Expected migration file:
 
 - `backend/migrations/versions/0002_core_schema_v1.py`
+- `backend/migrations/versions/0003_reconcile_core_schema_v1.py` reconciles existing production schema drift from the superseded `0001_core_schema_v1` revision by adding missing constraints/indexes idempotently.
 
 Verification:
 
@@ -183,7 +186,7 @@ python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tes
 Known limitations:
 
 - No API CRUD, services, repositories, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1B.2.
-- Local migration tests render PostgreSQL SQL offline. Real `alembic upgrade head` must use a disposable PostgreSQL database through `TEST_DATABASE_URL`; do not run schema tests against production `reg_engine`.
+- Local migration tests render PostgreSQL SQL offline. Routine schema tests should use a disposable PostgreSQL database through `TEST_DATABASE_URL`; production `reg_engine` migrations require backup-first explicit approval.
 - Role/permission seed data is not inserted in this phase; initial seed strategy belongs to a later auth/RBAC phase.
 
 Next phase:
