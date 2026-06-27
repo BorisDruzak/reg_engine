@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 18:13:40 +05:00
+- Generated: 2026-06-27 21:56:53 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -96,6 +96,7 @@
 - `backend/tests/test_card_public_link_repositories.py`
 - `backend/tests/test_card_query_service.py`
 - `backend/tests/test_card_service.py`
+- `backend/tests/test_config.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`

@@ -71,6 +71,7 @@ pnpm -C frontend exec playwright install chromium
 | Purpose | Command |
 | --- | --- |
 | Full check | `powershell -ExecutionPolicy Bypass -File scripts/check.ps1` |
+| Local-only check | `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote` |
 | Tests | `powershell -ExecutionPolicy Bypass -File scripts/test.ps1` |
 | Tests with e2e | `powershell -ExecutionPolicy Bypass -File scripts/test.ps1 -E2E` |
 | Lint | `powershell -ExecutionPolicy Bypass -File scripts/lint.ps1` |
@@ -113,6 +114,29 @@ python -m alembic upgrade head
 
 Do not commit real database passwords. Server schema migration is a separate explicit approval step.
 
+## Env Loading Strategy
+
+Backend settings load direct environment variables first. For local development, `backend/.env` may provide defaults and must not contain committed secrets.
+
+For server/runtime use, keep secrets outside the repository and point the backend to that file:
+
+```powershell
+$env:REG_ENGINE_ENV_FILE = "C:\path\to\reg_engine.env"
+```
+
+On `registoryengine`, the intended runtime file is:
+
+```text
+/etc/reg_engine/reg_engine.env
+```
+
+Alembic resolves database configuration in this order:
+
+1. `TEST_DATABASE_URL`
+2. `DATABASE_URL`
+3. `REG_ENGINE_ENV_FILE` through backend settings
+4. `backend/alembic.ini` fallback URL
+
 ## Direct Frontend Commands
 
 ```powershell
@@ -133,6 +157,8 @@ powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1
 ```
 
 The server can also keep the same value outside the repo in `/etc/reg_engine/reg_engine.env`.
+
+Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/build checks without GitHub SSH or server SSH reachability.
 
 ## Server
 

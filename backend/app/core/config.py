@@ -1,4 +1,6 @@
+import os
 from functools import lru_cache
+from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,4 +21,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings_kwargs: dict[str, Any] = {}
+    if env_file := os.environ.get("REG_ENGINE_ENV_FILE"):
+        settings_kwargs["_env_file"] = env_file
+    return Settings(**settings_kwargs)

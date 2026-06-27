@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from app.core.config import get_settings
 from app.models import Base
 
 config = context.config
@@ -18,6 +19,7 @@ def _database_url() -> str:
     return (
         os.environ.get("TEST_DATABASE_URL")
         or os.environ.get("DATABASE_URL")
+        or get_settings().database_url
         or config.get_main_option("sqlalchemy.url")
     )
 

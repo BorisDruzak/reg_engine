@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [switch]$SkipRemote,
     [switch]$SkipPython
 )
 
@@ -15,11 +16,17 @@ Invoke-RegEngineCommand -FilePath "git" -Arguments @("status", "--short", "--bra
 Write-RegEngineStep "Repository remote"
 Assert-RegEngineRemote
 
-Write-RegEngineStep "GitHub SSH authentication from Windows"
-Test-RegEngineGitHubAuth
+if ($SkipRemote) {
+    Write-RegEngineStep "Remote checks"
+    Write-Host "Skipping GitHub SSH and server SSH checks because -SkipRemote was passed."
+}
+else {
+    Write-RegEngineStep "GitHub SSH authentication from Windows"
+    Test-RegEngineGitHubAuth
 
-Write-RegEngineStep "Server root SSH authentication"
-Invoke-RegEngineCommand -FilePath "ssh" -Arguments @("-o", "BatchMode=yes", $config.ServerTarget, "whoami; hostname; id -u")
+    Write-RegEngineStep "Server root SSH authentication"
+    Invoke-RegEngineCommand -FilePath "ssh" -Arguments @("-o", "BatchMode=yes", $config.ServerTarget, "whoami; hostname; id -u")
+}
 
 if (-not $SkipPython) {
     $pythonFiles = @(Get-RegEnginePythonFiles)

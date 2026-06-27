@@ -255,6 +255,12 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"
 ```
 
+Use local-only checks when remote SSH/GitHub reachability is not part of the current task:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+```
+
 Server update flow:
 
 ```bash
@@ -281,7 +287,8 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 
 ## Development Scripts
 
-- `scripts/check.ps1` runs local Git, GitHub SSH, server SSH, and Python syntax checks.
+- `scripts/check.ps1` runs local Git, GitHub SSH, server SSH, Python syntax checks, backend checks, frontend checks, and project-map checks.
+- `scripts/check.ps1 -SkipRemote` skips GitHub SSH and server SSH reachability while keeping local checks.
 - `scripts/test.ps1` runs backend pytest and frontend unit tests; pass `-E2E` for Playwright.
 - `scripts/lint.ps1` runs backend ruff and frontend eslint.
 - `scripts/format.ps1 -Check` verifies backend ruff format and frontend prettier.
@@ -296,6 +303,9 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop: check, push, deploy, server-check.
 - Shared PowerShell helpers live in `scripts/lib/RegEngine.ps1`.
 - Scripts must not contain secrets. Use local environment variables or `/etc/reg_engine/reg_engine.env` for runtime passwords.
+- Backend runtime settings load direct environment variables first, then `backend/.env` by default.
+- Set `REG_ENGINE_ENV_FILE=/etc/reg_engine/reg_engine.env` for server/runtime processes that should load an explicit external env file.
+- Alembic uses `TEST_DATABASE_URL`, then `DATABASE_URL`, then `REG_ENGINE_ENV_FILE` through backend settings, then the `backend/alembic.ini` fallback URL.
 
 ---
 

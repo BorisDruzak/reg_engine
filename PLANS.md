@@ -25,6 +25,9 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B value hardening validates `select` and `multi_select` values against the configured `reference_list` membership for authenticated card edits and public-link edits.
 - Phase 1B registry schema API supports configuring `select` and `multi_select` field option sources through `options_source_type=reference_list` and `options_source_id`.
 - Phase 1B backend implementation is complete for the planned Core Schema v1 service, repository, API, and test scope.
+- Phase 1B final table contract is frozen with all 20 Core Schema v1 tables, including `organization_closure`, `org_units`, `reference_lists`, `reference_items`, `field_value_items`, `card_relations`, and `card_public_links`.
+- Foundation tooling follow-up is in scope for this checkpoint: Vite alias uses a Windows-safe absolute `src` path, backend/Alembic env loading supports `REG_ENGINE_ENV_FILE`, and `scripts/check.ps1` supports `-SkipRemote` for local-only verification.
+- Foundation tooling follow-up verification completed on 2026-06-27 with both `scripts/check.ps1 -SkipRemote` and `scripts/check.ps1`.
 - Backend still does not contain production frontend UI. Auth is still a placeholder system actor until a dedicated auth phase.
 - Server `/opt/reg_engine` is deployed on `codex/core-schema-v1`; verify the exact deployed commit with `git log --oneline -1` on the server checkout.
 - Production PostgreSQL is migrated to `0001_core_schema_v1` after backup `/var/backups/reg_engine/reg_engine_before_core_schema_v1_20260627_143452.dump`.
@@ -452,6 +455,7 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 ## Phase 1B Acceptance Criteria
 
 - All 20 final Core Schema v1 tables exist in SQLAlchemy models and Alembic migration.
+- The final table list includes `organization_closure`, `org_units`, `reference_lists`, `reference_items`, `field_value_items`, `card_relations`, and `card_public_links`; these are not deferred tables.
 - `alembic upgrade head` applies cleanly against PostgreSQL.
 - No hardcoded `employees` table or employee-specific fixed business columns are introduced.
 - One registry can hold cards from multiple organizations.
@@ -469,6 +473,21 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 - All create/update/archive/transfer/public-link changes write `audit_events`.
 - Healthcheck remains independent from PostgreSQL.
 - README is updated with migration/test commands after implementation.
+
+## Env Loading Strategy
+
+- Backend runtime settings load direct environment variables first.
+- Local developer defaults may live in `backend/.env`; this file must not be committed with secrets.
+- `REG_ENGINE_ENV_FILE` points the backend to an explicit external env file and is intended for server/runtime use, for example `/etc/reg_engine/reg_engine.env`.
+- Alembic uses `TEST_DATABASE_URL` first for tests, then `DATABASE_URL`, then `REG_ENGINE_ENV_FILE` through backend settings, then the fallback URL in `backend/alembic.ini`.
+- Server deployments must keep runtime secrets outside the repository. The repository documents variable names but does not store real passwords.
+
+## Foundation Tooling Acceptance Criteria
+
+- Vite and TypeScript resolve `@/*` imports to `frontend/src/*` on Windows and CI.
+- `scripts/check.ps1` without flags runs local checks plus GitHub SSH and server SSH reachability.
+- `scripts/check.ps1 -SkipRemote` runs local checks while skipping GitHub SSH and server SSH reachability.
+- Frontend tests or imports exercise the `@` alias so alias breakage is caught by local checks.
 
 ## Mandatory Phase 1B Tests
 
