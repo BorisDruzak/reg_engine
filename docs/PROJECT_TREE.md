@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 00:55:30 +05:00
+- Generated: 2026-06-28 02:02:43 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -52,8 +52,11 @@
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/services/__init__.py`
+- `backend/app/services/cards.py`
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
+- `backend/app/services/references.py`
+- `backend/app/services/registry_schema.py`
 - `backend/migrations/env.py`
 - `backend/migrations/script.py.mako`
 - `backend/migrations/versions/0001_database_foundation.py`
@@ -68,6 +71,7 @@
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
 - `backend/tests/test_organization_permission_services.py`
+- `backend/tests/test_registry_card_services.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ARCHITECTURE.md`

@@ -9,7 +9,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1C Organization Tree And RBAC Services completion.
+- Current checkpoint scope is Phase 1D Registry Schema And Dynamic Cards implementation.
 - Do not implement API CRUD, endpoints, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -20,7 +20,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B.3 Model Smoke Tests are completed in this checkpoint.
 - Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
-- Phase 1D and Phase 1E remain planned future phases.
+- Phase 1D Registry Schema And Dynamic Cards is implemented locally in this checkpoint; server PostgreSQL verification is pending.
+- Phase 1E remains a planned future phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
@@ -319,31 +320,63 @@ Next phase:
 
 Purpose: add schema-driven registry and card behavior.
 
+Status: implemented locally in this checkpoint; server PostgreSQL verification is pending.
+
 Required work:
 
-- Add `RegistrySchemaService`.
-- Add `ReferenceListService`.
-- Add `CardService`.
-- Implement dynamic field values.
-- Implement card reads that merge schema plus existing values.
-- Ensure old cards show newly added fields as null/empty.
-- Enforce that only `system_admin` or `registry_admin` can change registry/card schema.
-- Allow `org_admin` to manage cards in organization scope.
+- [x] Add `RegistrySchemaService`.
+- [x] Add `ReferenceListService`.
+- [x] Add `CardService`.
+- [x] Implement dynamic field values.
+- [x] Implement card reads that merge schema plus existing values.
+- [x] Ensure old cards show newly added fields as null/empty.
+- [x] Enforce that only `system_admin` or `registry_admin` can change registry/card schema.
+- [x] Allow `org_admin` to manage cards in organization scope.
 
 Required tests:
 
-- Registry can be created without organization-specific schema duplication.
-- One registry can contain cards from different organizations.
-- Card visibility follows organization scope.
-- `system_admin` or `registry_admin` can create/update/archive blocks and fields.
-- `org_admin` cannot manage card schema in v1.
-- Text/number/date/datetime/bool/json values save to the correct typed columns.
-- `select` values store `reference_items.id`.
-- `multi_select` values store rows in `field_value_items`.
-- Select and multi-select writes reject items outside the field's configured reference list.
-- Adding a field after card creation does not create mass old-card value rows.
-- Old card response includes the new field as null/empty.
-- Archived fields, blocks, cards, and organizations remain in the database.
+- [x] Registry can be created without organization-specific schema duplication.
+- [x] One registry can contain cards from different organizations.
+- [x] Card visibility follows organization scope.
+- [x] `system_admin` or `registry_admin` can create/update/archive blocks and fields.
+- [x] `org_admin` cannot manage card schema in v1.
+- [x] Text/number/date/datetime/bool/json values save to the correct typed columns.
+- [x] `select` values store `reference_items.id`.
+- [x] `multi_select` values store rows in `field_value_items`.
+- [x] Select and multi-select writes reject items outside the field's configured reference list.
+- [x] Adding a field after card creation does not create mass old-card value rows.
+- [x] Old card response includes the new field as null/empty.
+- [x] Archived fields, blocks, cards, and organizations remain in the database.
+
+Expected files:
+
+- `backend/app/services/registry_schema.py`
+- `backend/app/services/references.py`
+- `backend/app/services/cards.py`
+- `backend/tests/test_registry_card_services.py`
+
+Verification:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy app
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests\test_registry_card_services.py -q
+```
+
+Known limitations:
+
+- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1D.
+- Role and permission seed data is not implemented; tests create minimal roles and permissions directly.
+- Card services cover schema-driven field persistence and organization-scoped visibility only; public links, transfer, audit events, and public editing belong to Phase 1E.
+- No schema migration is required in this phase because Phase 1B already created the Core Schema v1 tables.
+
+Next phase:
+
+- Phase 1E should add public links, transfer behavior, and audit events.
 
 ## Phase 1E: Public Links, Transfer, Audit
 
