@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 17:26:56 +05:00
+- Generated: 2026-06-27 17:30:43 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -53,6 +53,8 @@
 - `backend/app/repositories/audit.py`
 - `backend/app/repositories/org_units.py`
 - `backend/app/repositories/organizations.py`
+- `backend/app/repositories/reference_lists.py`
+- `backend/app/repositories/registry_schema.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/services/__init__.py`
 - `backend/app/services/audit.py`
@@ -83,6 +85,7 @@
 - `backend/tests/test_permission_service.py`
 - `backend/tests/test_public_link_service.py`
 - `backend/tests/test_reference_list_service.py`
+- `backend/tests/test_registry_reference_repositories.py`
 - `backend/tests/test_registry_schema_service.py`
 - `backend/tests/test_schema_constraints.py`
 - `backend/tests/test_service_audit_wiring.py`
