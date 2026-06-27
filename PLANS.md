@@ -12,6 +12,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B.1 models and migration are implemented locally on `codex/core-schema-v1`.
 - Phase 1B.2 organization scope and access foundation service logic is implemented locally on `codex/core-schema-v1`.
 - Phase 1B.3 registry schema and reference list service logic is implemented locally on `codex/core-schema-v1`.
+- Phase 1B.4 card command/query and dynamic value service logic is implemented locally on `codex/core-schema-v1`.
 - Backend still does not contain Core Schema v1 business endpoints, frontend UI, SQLAlchemy repository adapters for services, or production schema deployment.
 
 ## Phase 1B: Core Schema v1
@@ -221,11 +222,25 @@ Remaining limitation: 1B.3 is implemented as service logic over repository proto
 
 ### 1B.4 Cards And Dynamic Values
 
-- [ ] Implement card creation and archive.
-- [ ] Implement card block instances.
-- [ ] Implement typed field value writes.
-- [ ] Implement schema plus values read model with null missing values.
-- [ ] Implement card list filters by registry, organization scope, lifecycle status, org unit, and display name query.
+- [x] Implement card creation and archive.
+- [x] Implement card block instances.
+- [x] Implement typed field value writes.
+- [x] Implement schema plus values read model with null missing values.
+- [x] Implement card list filters by registry, organization scope, lifecycle status, org unit, and display name query.
+- [x] Add service tests for org-scope create/edit denial, typed value column mapping, multi-select item rows, archived-card value retention, schema/value read merging, null missing values, and scoped list filters.
+
+Verification completed locally:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+.\.venv\Scripts\python.exe -m pytest tests\test_card_service.py tests\test_card_query_service.py -q
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy app
+```
+
+Remaining limitation: 1B.4 is implemented as service logic over repository protocols with in-memory test repositories. Database-backed repository adapters, API endpoints, value validation against concrete reference-list membership, and audit writes are still open work.
 
 ### 1B.5 Public Links
 
