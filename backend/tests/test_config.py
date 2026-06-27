@@ -1,22 +1,19 @@
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 
-def test_settings_can_load_env_file_from_reg_engine_env_file(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    env_file = tmp_path / "reg_engine.env"
-    env_file.write_text(
-        "\n".join(
-            [
-                "APP_NAME=Registry Engine From File",
-                "DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/reg_engine",
-            ]
-        ),
-        encoding="utf-8",
-    )
+def test_settings_can_be_created_without_database_url(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
 
-    monkeypatch.setenv("REG_ENGINE_ENV_FILE", str(env_file))
+    settings = Settings(_env_file=None)
+
+    assert settings.database_url is None
+
+
+def test_database_url_is_read_when_provided(monkeypatch) -> None:
+    database_url = "postgresql+psycopg://user:pass@localhost:5432/reg_engine"
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
     get_settings.cache_clear()
 
     try:
@@ -24,5 +21,4 @@ def test_settings_can_load_env_file_from_reg_engine_env_file(
     finally:
         get_settings.cache_clear()
 
-    assert settings.app_name == "Registry Engine From File"
-    assert settings.database_url == "postgresql+psycopg://user:pass@localhost:5432/reg_engine"
+    assert settings.database_url == database_url

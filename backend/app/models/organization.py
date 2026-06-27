@@ -21,9 +21,7 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "organizations"
     __table_args__ = (
         UniqueConstraint("code", name="uq_organizations_code"),
-        CheckConstraint(
-            "parent_id is null or parent_id <> id", name="organizations_parent_not_self"
-        ),
+        CheckConstraint("parent_id is null or parent_id <> id", name="parent_not_self"),
         Index("ix_organizations_parent_id", "parent_id"),
         Index("ix_organizations_code", "code"),
         Index("ix_organizations_is_active", "is_active"),
@@ -43,7 +41,7 @@ class Organization(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class OrganizationClosure(Base):
     __tablename__ = "organization_closure"
     __table_args__ = (
-        CheckConstraint("depth >= 0", name="organization_closure_depth_non_negative"),
+        CheckConstraint("depth >= 0", name="depth_non_negative"),
         Index("ix_organization_closure_descendant_id", "descendant_id"),
     )
 
@@ -85,6 +83,12 @@ class OrgUnit(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class AccessGrant(UUIDPrimaryKeyMixin, CreatedAtMixin, ArchiveMixin, Base):
     __tablename__ = "access_grants"
     __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "role_id",
+            "organization_id",
+            name="uq_access_grants_user_role_organization",
+        ),
         Index("ix_access_grants_user_id", "user_id"),
         Index("ix_access_grants_role_id", "role_id"),
         Index("ix_access_grants_registry_id", "registry_id"),

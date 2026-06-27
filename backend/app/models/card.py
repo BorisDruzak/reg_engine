@@ -21,14 +21,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domain.constants import CARD_LIFECYCLE_STATUSES, CARD_RELATION_TYPES
 from app.models.base import ArchiveMixin, Base, CreatedAtMixin, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.identity import _quoted
+from app.models.identity import quoted
 
 
 class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "cards"
     __table_args__ = (
         CheckConstraint(
-            f"lifecycle_status in ({_quoted(CARD_LIFECYCLE_STATUSES)})",
+            f"lifecycle_status in ({quoted(CARD_LIFECYCLE_STATUSES)})",
             name="lifecycle_status",
         ),
         Index("ix_cards_registry_id", "registry_id"),
@@ -68,6 +68,7 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class CardBlockInstance(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "card_block_instances"
     __table_args__ = (
+        UniqueConstraint("card_id", "block_id", name="uq_card_block_instances_card_id_block_id"),
         Index("ix_card_block_instances_card_id", "card_id"),
         Index("ix_card_block_instances_block_id", "block_id"),
         Index("ix_card_block_instances_card_block", "card_id", "block_id"),
@@ -140,6 +141,7 @@ class FieldValueItem(UUIDPrimaryKeyMixin, Base):
             "field_value_id", "reference_item_id", name="uq_field_value_items_value_item"
         ),
         Index("ix_field_value_items_field_value_id", "field_value_id"),
+        Index("ix_field_value_items_reference_item_id", "reference_item_id"),
     )
 
     field_value_id: Mapped[UUID] = mapped_column(
@@ -154,10 +156,13 @@ class FieldValueItem(UUIDPrimaryKeyMixin, Base):
 class CardRelation(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "card_relations"
     __table_args__ = (
-        CheckConstraint(
-            f"relation_type in ({_quoted(CARD_RELATION_TYPES)})",
-            name="relation_type",
+        UniqueConstraint(
+            "source_card_id",
+            "target_card_id",
+            "relation_type",
+            name="uq_card_relations_source_target_type",
         ),
+        CheckConstraint(f"relation_type in ({quoted(CARD_RELATION_TYPES)})", name="relation_type"),
         Index("ix_card_relations_source_card_id", "source_card_id"),
         Index("ix_card_relations_target_card_id", "target_card_id"),
     )

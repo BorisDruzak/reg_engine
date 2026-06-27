@@ -16,17 +16,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domain.constants import FIELD_TYPES, REGISTRY_STATUSES, REQUIRED_MODES
 from app.models.base import ArchiveMixin, Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.models.identity import _quoted
+from app.models.identity import quoted
 
 
 class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "registries"
     __table_args__ = (
         UniqueConstraint("code", name="uq_registries_code"),
-        CheckConstraint(
-            f"lifecycle_status in ({_quoted(REGISTRY_STATUSES)})",
-            name="lifecycle_status",
-        ),
+        CheckConstraint(f"lifecycle_status in ({quoted(REGISTRY_STATUSES)})", name="status"),
         Index("ix_registries_code", "code"),
     )
 
@@ -51,12 +48,8 @@ class FormBlock(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "form_blocks"
     __table_args__ = (
         UniqueConstraint("registry_id", "code", name="uq_form_blocks_registry_id_code"),
-        CheckConstraint(
-            "min_instances is null or min_instances >= 0", name="form_blocks_min_non_negative"
-        ),
-        CheckConstraint(
-            "max_instances is null or max_instances >= 0", name="form_blocks_max_non_negative"
-        ),
+        CheckConstraint("min_instances is null or min_instances >= 0", name="min_non_negative"),
+        CheckConstraint("max_instances is null or max_instances >= 0", name="max_non_negative"),
         Index("ix_form_blocks_registry_id", "registry_id"),
     )
 
@@ -82,11 +75,8 @@ class FormField(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "form_fields"
     __table_args__ = (
         UniqueConstraint("block_id", "code", name="uq_form_fields_block_id_code"),
-        CheckConstraint(f"field_type in ({_quoted(FIELD_TYPES)})", name="field_type"),
-        CheckConstraint(
-            f"required_mode in ({_quoted(REQUIRED_MODES)})",
-            name="required_mode",
-        ),
+        CheckConstraint(f"field_type in ({quoted(FIELD_TYPES)})", name="field_type"),
+        CheckConstraint(f"required_mode in ({quoted(REQUIRED_MODES)})", name="required_mode"),
         Index("ix_form_fields_block_id", "block_id"),
     )
 

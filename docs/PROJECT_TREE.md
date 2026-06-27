@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-27 21:56:53 +05:00
+- Generated: 2026-06-27 23:45:37 +05:00
 - Branch: codex/core-schema-v1
 
 ## Entrypoints
@@ -29,17 +29,9 @@
 - `backend/alembic.ini`
 - `backend/app/__init__.py`
 - `backend/app/api/__init__.py`
-- `backend/app/api/dependencies.py`
 - `backend/app/api/v1/__init__.py`
 - `backend/app/api/v1/endpoints/__init__.py`
-- `backend/app/api/v1/endpoints/audit.py`
-- `backend/app/api/v1/endpoints/cards.py`
 - `backend/app/api/v1/endpoints/health.py`
-- `backend/app/api/v1/endpoints/org_units.py`
-- `backend/app/api/v1/endpoints/organizations.py`
-- `backend/app/api/v1/endpoints/public_links.py`
-- `backend/app/api/v1/endpoints/reference_lists.py`
-- `backend/app/api/v1/endpoints/registries.py`
 - `backend/app/api/v1/router.py`
 - `backend/app/core/__init__.py`
 - `backend/app/core/config.py`
@@ -58,63 +50,20 @@
 - `backend/app/models/reference.py`
 - `backend/app/models/registry_schema.py`
 - `backend/app/repositories/__init__.py`
-- `backend/app/repositories/audit.py`
-- `backend/app/repositories/cards.py`
-- `backend/app/repositories/org_units.py`
-- `backend/app/repositories/organizations.py`
-- `backend/app/repositories/public_links.py`
-- `backend/app/repositories/reference_lists.py`
-- `backend/app/repositories/registry_schema.py`
 - `backend/app/schemas/__init__.py`
-- `backend/app/schemas/audit.py`
-- `backend/app/schemas/cards.py`
-- `backend/app/schemas/org_units.py`
-- `backend/app/schemas/organizations.py`
-- `backend/app/schemas/public_links.py`
-- `backend/app/schemas/reference_lists.py`
-- `backend/app/schemas/registry_schema.py`
 - `backend/app/services/__init__.py`
-- `backend/app/services/audit.py`
-- `backend/app/services/card_queries.py`
-- `backend/app/services/cards.py`
-- `backend/app/services/org_units.py`
-- `backend/app/services/organizations.py`
-- `backend/app/services/permissions.py`
-- `backend/app/services/public_links.py`
-- `backend/app/services/reference_lists.py`
-- `backend/app/services/registry_schema.py`
 - `backend/migrations/env.py`
 - `backend/migrations/script.py.mako`
-- `backend/migrations/versions/0001_core_schema_v1.py`
+- `backend/migrations/versions/0001_database_foundation.py`
+- `backend/migrations/versions/0002_core_schema_v1.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
-- `backend/tests/test_audit_api.py`
-- `backend/tests/test_audit_repository.py`
-- `backend/tests/test_audit_service.py`
-- `backend/tests/test_card_api.py`
-- `backend/tests/test_card_public_link_repositories.py`
-- `backend/tests/test_card_query_service.py`
-- `backend/tests/test_card_service.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
-- `backend/tests/test_org_unit_api.py`
-- `backend/tests/test_org_unit_service.py`
-- `backend/tests/test_organization_api.py`
-- `backend/tests/test_organization_repositories.py`
-- `backend/tests/test_organization_service.py`
-- `backend/tests/test_permission_service.py`
-- `backend/tests/test_public_link_api.py`
-- `backend/tests/test_public_link_service.py`
-- `backend/tests/test_reference_list_api.py`
-- `backend/tests/test_reference_list_service.py`
-- `backend/tests/test_registry_reference_repositories.py`
-- `backend/tests/test_registry_schema_api.py`
-- `backend/tests/test_registry_schema_service.py`
 - `backend/tests/test_schema_constraints.py`
-- `backend/tests/test_service_audit_wiring.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`

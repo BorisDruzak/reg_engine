@@ -4,51 +4,59 @@
 
 Registry Engine is a configurable web engine for schema-driven registries. It is not a hardcoded employee registry.
 
-The system must keep card structure in registry metadata and dynamic typed values. Backend access checks are the security boundary. Frontend checks are UX hints only.
+The system keeps card structure in registry metadata and dynamic typed values. Backend access checks are the security boundary. Frontend checks are UX hints only.
 
-## Current Status
+## Current Planning Scope
 
-- Phase 1A foundation tooling is complete: FastAPI backend skeleton, React/Vite frontend skeleton, PowerShell scripts, CI workflow, GitHub/SSH/server connectivity, and healthcheck tests.
-- Phase 1B.1 models and migration are implemented locally on `codex/core-schema-v1`.
-- Phase 1B.2 organization scope and access foundation service logic is implemented locally on `codex/core-schema-v1`.
-- Phase 1B.3 registry schema and reference list service logic is implemented locally on `codex/core-schema-v1`.
-- Phase 1B.4 card command/query and dynamic value service logic is implemented locally on `codex/core-schema-v1`.
-- Phase 1B.5 public link service logic is implemented locally on `codex/core-schema-v1`.
-- Phase 1B.6 card transfer and audit service boundaries are implemented locally on `codex/core-schema-v1`.
-- Phase 1B service-layer audit wiring is implemented locally on `codex/core-schema-v1` for organization, org unit, registry schema, reference list, card, transfer, and public-link actions.
-- Phase 1B audit SQLAlchemy repository adapter is implemented locally on `codex/core-schema-v1`.
-- Phase 1B organization closure and org unit SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
-- Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
-- Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
-- Phase 1B value hardening validates `select` and `multi_select` values against the configured `reference_list` membership for authenticated card edits and public-link edits.
-- Phase 1B registry schema API supports configuring `select` and `multi_select` field option sources through `options_source_type=reference_list` and `options_source_id`.
-- Phase 1B backend implementation is complete for the planned Core Schema v1 service, repository, API, and test scope.
-- Phase 1B final table contract is frozen with all 20 Core Schema v1 tables, including `organization_closure`, `org_units`, `reference_lists`, `reference_items`, `field_value_items`, `card_relations`, and `card_public_links`.
-- Foundation tooling follow-up is in scope for this checkpoint: Vite alias uses a Windows-safe absolute `src` path, backend/Alembic env loading supports `REG_ENGINE_ENV_FILE`, and `scripts/check.ps1` supports `-SkipRemote` for local-only verification.
-- Foundation tooling follow-up verification completed on 2026-06-27 with both `scripts/check.ps1 -SkipRemote` and `scripts/check.ps1`.
-- Backend still does not contain production frontend UI. Auth is still a placeholder system actor until a dedicated auth phase.
-- Server `/opt/reg_engine` is deployed on `codex/core-schema-v1`; verify the exact deployed commit with `git log --oneline -1` on the server checkout.
-- Production PostgreSQL is migrated to `0001_core_schema_v1` after backup `/var/backups/reg_engine/reg_engine_before_core_schema_v1_20260627_143452.dump`.
+- This document is the active plan for Phase 1 Core Schema v1.
+- Current checkpoint scope is Phase 1B.2 Core Models And Migration implementation.
+- Do not implement API CRUD, services, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
+- Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
-## Phase 1B: Core Schema v1
+## Current Phase Status
 
-### Goal
+- Phase 1B.1 Database Foundation is completed locally in this checkpoint.
+- Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
+- Phase 1B.3 Model Smoke Tests for all Core Schema v1 models are partially covered by metadata, constraint, index, and Alembic SQL-render tests; broader insert smoke tests remain next.
+- Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
+- Current synchronization checkpoint: push the verified Phase 1B.1/1B.2 implementation to GitHub on the current branch and update `/opt/reg_engine` from the same branch.
+- Production PostgreSQL schema migration is not part of this synchronization checkpoint; `alembic upgrade head` against production `reg_engine` still requires separate explicit approval.
 
-Define and implement the backend foundation for the final Core Schema v1: SQLAlchemy models, Alembic migration, service boundaries, API route plan, and required tests for a schema-driven registry engine.
+## Core Architecture Decisions
 
-### Final Core Schema v1 Tables
+1. Registry is the mechanism for organizing card lists, search, filters, display behavior, and access rules.
+2. Card is the unit of content inside a registry.
+3. Do not create a separate registry schema or separate database schema for each organization.
+4. One `registry` can contain cards from different organizations.
+5. Card visibility is determined by organization scope.
+6. Organizations are hierarchical.
+7. `org_admin` sees the assigned organization and all descendants.
+8. `org_admin` does not see parent organizations or sibling branches.
+9. `org_units` are departments/subdivisions used as filters and reference data; they are not an RBAC boundary in v1.
+10. Only `system_admin` or `registry_admin` changes card schema.
+11. `org_admin` manages cards and child organizations inside the assigned branch.
+12. New fields appear in old cards as empty/null until a value is saved.
+13. Fields, blocks, cards, and organizations are not physically deleted by normal business flows; they are archived.
+14. `select` and `multi_select` fields use `reference_lists` and `reference_items`.
+15. A public link edits the card directly through backend-validated public endpoints.
+16. A public link lives for 7 days by default.
+17. If `card.public_edit_enabled=false`, public-link editing is blocked.
+18. Card transfer creates a new card.
+19. The old card receives `lifecycle_status=superseded`.
+20. The old card remains visible to the old `org_admin` in archive scope.
+21. All create, update, archive, transfer, and public-link changes write `audit_events`.
 
-Phase 1B must cover these tables:
+## Core Schema v1 Model List
 
-1. `organizations`
-2. `organization_closure`
-3. `org_units`
-4. `users`
-5. `roles`
-6. `permissions`
-7. `role_permissions`
+Core Schema v1 consists of these tables/models:
+
+1. `users`
+2. `roles`
+3. `permissions`
+4. `role_permissions`
+5. `organizations`
+6. `organization_closure`
+7. `org_units`
 8. `access_grants`
 9. `registries`
 10. `form_blocks`
@@ -63,510 +71,251 @@ Phase 1B must cover these tables:
 19. `card_public_links`
 20. `audit_events`
 
-### Accepted Architecture Decisions
-
-1. A registry is a card-list mechanism: it defines how cards are grouped, searched, filtered, displayed, and protected.
-2. One `registry` can contain cards from many organizations.
-3. Do not create a separate registry schema or separate database schema per organization.
-4. Card visibility is determined by organization scope.
-5. `org_admin` can see and manage the assigned organization and descendants when the grant allows descendants.
-6. `org_admin` cannot see parent organizations or sibling branches.
-7. `org_units` are departments/subdivisions and filters in v1; they are not an RBAC boundary.
-8. New fields appear in old cards as empty/null until a value is saved.
-9. Fields, blocks, cards, and organizations are archived, not physically deleted by normal business flows.
-10. `reference_lists` and `reference_items` are used for `select` and `multi_select` fields.
-11. A public link edits a card directly through backend-validated public endpoints.
-12. A public link lives for 7 days by default.
-13. If `card.public_edit_enabled=false`, the public link cannot edit the card.
-14. Card transfer creates a new card in the target organization and marks the old card `superseded`.
-15. The old card remains visible to the old `org_admin` in archive scope.
-16. All create, update, archive, transfer, and public-link changes write `audit_events`.
-
-### Data Model Requirements
+## Data Model Rules
 
 - Every main entity uses UUID primary keys.
 - Use PostgreSQL `gen_random_uuid()` through `pgcrypto` for server-side UUID defaults.
-- Use `created_at` and `updated_at` timestamps where the entity is mutable.
-- Use `archived_at` for soft archive where normal business flows must not hard-delete records.
+- Use `created_at` and `updated_at` timestamps for mutable entities.
+- Use `archived_at` for archive/soft-delete behavior.
 - Use `timestamptz` for timestamp columns.
 - Use `jsonb` for `*_json` fields.
-- Avoid PostgreSQL enum types for business statuses; use `text` plus application constants and safe check constraints.
+- Avoid PostgreSQL enum types for business statuses; use `text` plus application constants and check constraints.
 - Keep card structure schema-driven through `registries`, `form_blocks`, and `form_fields`.
-- Store dynamic values in typed columns such as `value_text`, `value_number`, `value_date`, `value_datetime`, `value_bool`, `value_json`, and reference FK value columns.
-- Do not add employee-specific fixed business columns such as education, awards, service history, dismissal details, or other кадровые fields.
+- Store dynamic values in typed columns, for example `value_text`, `value_number`, `value_date`, `value_datetime`, `value_bool`, `value_json`, and reference FK columns.
+- Do not add employee-specific fixed business columns such as education, awards, service history, dismissal details, or HR-only fields.
 
-### Phase 1B File Plan
+## Phase 1B: Core Schema v1 Database Foundation
 
-#### Migration Infrastructure
+### Phase 1B Goal
 
-- Create `backend/alembic.ini`.
-- Create `backend/migrations/env.py`.
-- Create `backend/migrations/script.py.mako`.
-- Create `backend/migrations/versions/0001_core_schema_v1.py`.
-- Modify `backend/app/core/database.py` only for SQLAlchemy engine/session helpers; healthcheck must remain independent from PostgreSQL.
-- Modify `backend/app/models/__init__.py` so Alembic can import all model metadata.
+Create the database and model foundation for Core Schema v1 only. Phase 1B is not a business-logic phase.
 
-#### SQLAlchemy Model Files
+Phase 1B may include:
 
-- Create `backend/app/models/base.py`.
-- Create `backend/app/models/identity.py` for `users`, `roles`, `permissions`, `role_permissions`.
-- Create `backend/app/models/organization.py` for `organizations`, `organization_closure`, `org_units`, `access_grants`.
-- Create `backend/app/models/registry_schema.py` for `registries`, `form_blocks`, `form_fields`.
-- Create `backend/app/models/reference.py` for `reference_lists`, `reference_items`.
-- Create `backend/app/models/card.py` for `cards`, `card_block_instances`, `field_values`, `field_value_items`, `card_relations`.
-- Create `backend/app/models/public_link.py` for `card_public_links`.
-- Create `backend/app/models/audit.py` for `audit_events`.
+- SQLAlchemy infrastructure;
+- Alembic infrastructure;
+- SQLAlchemy model declarations for Core Schema v1;
+- Core Schema v1 migration;
+- model/migration smoke tests;
+- healthcheck staying independent from PostgreSQL.
 
-#### Domain Constants
+Phase 1B must not include:
 
-- Create `backend/app/domain/__init__.py`.
-- Create `backend/app/domain/constants.py`.
-- Include constants for user statuses, registry statuses, card lifecycle statuses, field types, required modes, public link statuses, relation types, actor types, audit sources, seed roles, and seed permissions.
+- business services;
+- registry/card management endpoints;
+- frontend implementation;
+- import/export;
+- documents;
+- MCP;
+- business-specific HR columns.
 
-#### Service Boundaries
+## Phase 1B.1: Database Foundation
 
-Phase 1B service design must reserve these modules:
+Purpose: prepare the database infrastructure that later Core Schema v1 models and migrations will use.
 
-- `backend/app/services/organizations.py`
-- `backend/app/services/org_units.py`
-- `backend/app/services/permissions.py`
-- `backend/app/services/registry_schema.py`
-- `backend/app/services/reference_lists.py`
-- `backend/app/services/cards.py`
-- `backend/app/services/card_queries.py`
-- `backend/app/services/public_links.py`
-- `backend/app/services/audit.py`
+Status: completed locally in this checkpoint.
 
-Rules:
+Required work:
 
-- Audit writes go through `AuditService`; do not scatter audit inserts across route handlers.
-- Permission decisions go through `PermissionService`; do not duplicate access logic in route handlers.
-- Card read behavior must merge schema plus existing values and return null for missing values.
-- Public-link edits must reuse the same value validation rules as authenticated card edits.
+- [x] Add SQLAlchemy Base.
+- [x] Add engine/session helpers.
+- [x] Set up Alembic.
+- [x] Define UUID and timestamp conventions.
+- [x] Keep healthcheck independent from PostgreSQL.
+- [x] Add a migration smoke test proving Alembic can render or run a baseline migration path.
+- [x] Keep the initial foundation migration free of business tables.
 
-#### API Route Plan
+Expected files:
 
-Do not add endpoints before their tests and services exist. When Phase 1B implementation starts, use this route structure:
+- `backend/app/models/base.py`
+- `backend/app/core/database.py`
+- `backend/alembic.ini`
+- `backend/migrations/env.py`
+- `backend/migrations/script.py.mako`
+- `backend/tests/test_migrations.py`
 
-- `backend/app/api/v1/endpoints/organizations.py`
-- `backend/app/api/v1/endpoints/org_units.py`
-- `backend/app/api/v1/endpoints/registries.py`
-- `backend/app/api/v1/endpoints/reference_lists.py`
-- `backend/app/api/v1/endpoints/cards.py`
-- `backend/app/api/v1/endpoints/public_links.py`
-- `backend/app/api/v1/endpoints/audit.py`
+Verification:
 
-Planned route groups:
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m alembic upgrade head --sql
+python -m pytest tests\test_migrations.py -q
+```
 
-- Organizations: create root, create child, tree, get, update, archive.
-- Org units: create, list by organization, get, update, archive.
-- Registries and schema: create registry, get schema, create/update/archive blocks, create/update/archive fields.
-- Reference lists: create/update/archive lists and items.
-- Cards: create, list, get, update system fields, values, block instances, archive, transfer, relations.
-- Public links: create, list, disable, public get, public values update.
-- Audit: global audit list, card audit, organization audit.
+## Phase 1B.2: Core Models And Migration
 
-## Phase 1B Implementation Slices
+Purpose: declare all Core Schema v1 SQLAlchemy models and create the first real schema migration.
 
-### 1B.1 Models And Migration
+Status: completed locally in this checkpoint.
 
-- [x] Add Alembic infrastructure.
-- [x] Add SQLAlchemy model base and all Core Schema v1 models.
-- [x] Add `0001_core_schema_v1` migration.
-- [x] Enable `pgcrypto`.
+Required work:
+
+- [x] Add SQLAlchemy models for all Core Schema v1 tables.
+- [x] Add Alembic migration for all Core Schema v1 tables.
 - [x] Add indexes, unique constraints, foreign keys, and safe check constraints.
-- [x] Add deterministic seed data for initial roles and permissions.
-- [x] Add migration/schema tests for all 20 tables, typed values, constraints, indexes, `pgcrypto`, no `employees` table, and `timestamptz` SQL rendering.
+- [x] Enable `pgcrypto` for UUID defaults.
+- [x] Do not add services or endpoints, except the existing healthcheck.
 
-Verification completed locally:
+Expected model files:
 
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-.\.venv\Scripts\python.exe -m alembic upgrade head --sql
-```
+- `backend/app/models/identity.py` for `users`, `roles`, `permissions`, `role_permissions`.
+- `backend/app/models/organization.py` for `organizations`, `organization_closure`, `org_units`, `access_grants`.
+- `backend/app/models/registry_schema.py` for `registries`, `form_blocks`, `form_fields`.
+- `backend/app/models/reference.py` for `reference_lists`, `reference_items`.
+- `backend/app/models/card.py` for `cards`, `card_block_instances`, `field_values`, `field_value_items`, `card_relations`.
+- `backend/app/models/public_link.py` for `card_public_links`.
+- `backend/app/models/audit.py` for `audit_events`.
+- `backend/app/models/__init__.py` imports all model metadata for Alembic.
 
-Server migration completed after explicit approval:
+Expected migration file:
 
-```powershell
-ssh root@registoryengine "cd /opt/reg_engine/backend && DATABASE_URL='<runtime secret url>' .venv/bin/python -m alembic upgrade head"
-```
+- `backend/migrations/versions/0002_core_schema_v1.py`
 
-Verification on `registoryengine`:
-
-```text
-alembic_version=0001_core_schema_v1
-public_table_count=21
-employees_table_count=0
-pgcrypto=1
-roles=2
-permissions=18
-```
-
-### 1B.2 Organization Scope And Access Foundation
-
-- [x] Implement organization tree creation and `organization_closure` maintenance.
-- [x] Implement org unit create/list/archive behavior.
-- [x] Implement access grants and permission checks.
-- [x] Enforce descendant access and block parent/sibling access.
-- [x] Add service tests for root organization creation, child organization creation, sibling denial, descendant-only visibility, org unit list/archive behavior, and permission scope rules.
-
-Verification completed locally:
+Verification:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_organization_service.py tests\test_org_unit_service.py tests\test_permission_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
+python -m alembic upgrade head --sql
+python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py -q
 ```
 
-Remaining limitation: 1B.2 service logic, SQLAlchemy repository adapters, and API/runtime composition are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
+Known limitations:
 
-### 1B.3 Registry Schema And Reference Lists
+- No API CRUD, services, repositories, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1B.2.
+- Local migration tests render PostgreSQL SQL offline. Real `alembic upgrade head` must use a disposable PostgreSQL database through `TEST_DATABASE_URL`; do not run schema tests against production `reg_engine`.
+- Role/permission seed data is not inserted in this phase; initial seed strategy belongs to a later auth/RBAC phase.
 
-- [x] Implement registry creation.
-- [x] Implement form block creation/archive.
-- [x] Implement form field creation/archive.
-- [x] Validate field types and required modes.
-- [x] Implement reference lists and reference items for select/multi_select.
-- [x] Configure select/multi_select fields with `reference_list` option sources through field create/update.
-- [x] Implement reference list and reference item archive behavior.
-- [x] Enforce locked inherited reference-list behavior.
-- [x] Add service tests for system admin registry/block/field creation, org admin schema denial, field type validation, block/field archive, inherited reference lists, locked descendant edit denial, and reference list/item archive.
+Next phase:
 
-Verification completed locally:
+- Phase 1B.3 should add broader model smoke tests, including minimal insert tests against a disposable PostgreSQL database when available.
 
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_service.py tests\test_reference_list_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
+## Phase 1B.3: Model Smoke Tests
 
-Remaining limitation: 1B.3 service logic, SQLAlchemy repository adapters, and API endpoints are implemented. Registry/block/field and reference list/item update endpoints are completed in 1B.10.
+Purpose: prove the Core Schema v1 model and migration contract before adding business services.
 
-### 1B.4 Cards And Dynamic Values
-
-- [x] Implement card creation and archive.
-- [x] Implement card block instances.
-- [x] Implement typed field value writes.
-- [x] Implement schema plus values read model with null missing values.
-- [x] Implement card list filters by registry, organization scope, lifecycle status, org unit, and display name query.
-- [x] Add service tests for org-scope create/edit denial, typed value column mapping, multi-select item rows, archived-card value retention, schema/value read merging, null missing values, and scoped list filters.
-
-Verification completed locally:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_card_service.py tests\test_card_query_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: 1B.4 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
-
-### 1B.5 Public Links
-
-- [x] Implement 7-day public link creation.
-- [x] Store `token_hash`, not raw token.
-- [x] Enforce link status, expiry, usage, `card.public_edit_enabled`, block public flags, and field public flags.
-- [x] Implement direct public value update using the same typed value mapper as authenticated card edits.
-- [x] Write public-link audit events through the repository boundary.
-- [x] Add service tests for token hashing, default expiry, scope denial, disabled/expired/overused links, public edit flags, direct field update, usage count, and audit recording.
-
-Verification completed locally:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_public_link_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: 1B.5 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented.
-
-### 1B.6 Transfer, Archive, And Audit
-
-- [x] Implement transfer as new-card creation plus old-card `superseded`.
-- [x] Write `card_relations` with `transferred_to`.
-- [x] Preserve old card visibility in old organization archive scope.
-- [x] Add `AuditService` as the centralized audit-event boundary for user, public-link, and system actors.
-- [x] Add service tests for transfer relation creation, target-scope denial, old/new organization visibility after transfer, and audit actor/source mapping.
-
-Verification completed locally:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_audit_service.py tests\test_card_service.py tests\test_card_query_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: 1B.6 service logic, SQLAlchemy repository adapters, API endpoints, and runtime dependency composition are implemented.
-
-### 1B.7 Service-Layer Audit Wiring Follow-Up
-
-- [x] Wire organization create actions to `AuditService`.
-- [x] Wire org unit create/archive actions to `AuditService`.
-- [x] Wire registry/block/field create/archive actions to `AuditService`.
-- [x] Wire reference list/item create/archive actions to `AuditService`.
-- [x] Wire card create/archive, block instance create, field value update, and transfer actions to `AuditService`.
-- [x] Wire public-link create/disable actions as user audit events and public value edits as public-link audit events.
-- [x] Add service tests proving audit event actions are emitted through the shared `AuditService` boundary.
-
-Verification completed locally:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_service_audit_wiring.py tests\test_public_link_service.py tests\test_card_service.py tests\test_organization_service.py tests\test_org_unit_service.py tests\test_registry_schema_service.py tests\test_reference_list_service.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: audit wiring is service-layer and is composed with SQLAlchemy repository adapters in API/runtime dependencies.
-
-### 1B.8 SQLAlchemy Repository Adapters
-
-- [x] Add SQLAlchemy repository adapter for `audit_events`.
-- [x] Add repository tests proving `AuditEvent` ORM objects are created with UUID, actor, action, object, JSON data, source, and timestamp fields.
-- [x] Add SQLAlchemy repository adapters for organizations and organization closure.
-- [x] Add SQLAlchemy repository adapters for org units.
-- [x] Add SQLAlchemy repository adapters for registry schema.
-- [x] Add SQLAlchemy repository adapters for reference lists/items.
-- [x] Add SQLAlchemy repository adapters for cards, block instances, field values, field value items, and card relations.
-- [x] Add SQLAlchemy repository adapter for public links.
-
-Verification completed locally for completed repository adapters:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_audit_repository.py tests\test_audit_service.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_organization_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_registry_reference_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_card_public_link_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: SQLAlchemy repository adapters and API/runtime dependency composition exist for Phase 1B service protocols.
-
-### 1B.9 API Runtime Composition
-
-- [x] Add API dependency composition for current actor, database session, organization repository, audit repository, audit service, and organization service.
-- [x] Add organization API schemas.
-- [x] Add organization root creation endpoint.
-- [x] Add organization child creation endpoint.
-- [x] Add API tests proving endpoints call services and commit the injected session.
-- [x] Add org unit API schemas.
-- [x] Add org unit create/list/archive endpoints.
-- [x] Add API tests proving org unit endpoints call services and commit the injected session for writes.
-- [x] Add registry schema API schemas.
-- [x] Add registry, form block, and form field create endpoints.
-- [x] Add form block and form field archive endpoints.
-- [x] Add API tests proving registry schema endpoints call services and commit the injected session for writes.
-- [x] Add reference list API schemas.
-- [x] Add reference list/item create endpoints.
-- [x] Add reference list/item archive endpoints.
-- [x] Add API tests proving reference list endpoints call services and commit the injected session for writes.
-- [x] Add card API schemas.
-- [x] Add card create, list, get, block instance, value write, archive, and transfer endpoints.
-- [x] Add API dependency composition for card command/query services.
-- [x] Add API tests proving card endpoints call services and commit the injected session for writes.
-- [x] Add public link API schemas.
-- [x] Add public link create, list, disable, public get, and public value update endpoints.
-- [x] Add API dependency composition for public link services.
-- [x] Add API tests proving public link endpoints call services and commit the injected session for writes.
-- [x] Add audit API schemas.
-- [x] Add audit global list, card audit, and organization audit endpoints.
-- [x] Add API dependency composition for audit service.
-- [x] Add API tests proving audit endpoints call the audit service with object filters.
-- [x] Add organization tree/get/update/archive endpoints.
-- [x] Add API tests proving organization tree/get/update/archive endpoints call services and commit the injected session for writes.
-
-Verification completed locally for completed organization API slice:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_organization_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_org_unit_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_reference_list_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_card_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_public_link_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_audit_api.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_organization_api.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: Phase 1B.9 route groups are wired for the initial service boundaries. Broader route-plan follow-up endpoints are completed in 1B.10. Auth is still a placeholder system actor until a dedicated auth phase.
-
-### 1B.10 API Route Plan Completion Follow-Up
-
-- [x] Add org unit get/update endpoints.
-- [x] Add org unit service and repository get/update behavior.
-- [x] Add API/service/repository tests for org unit get/update.
-- [x] Add registry schema get/update endpoints for registries, form blocks, and form fields.
-- [x] Add registry schema service and repository read/update behavior.
-- [x] Add API/service/repository tests for registry schema get/update.
-- [x] Add reference list/item update endpoints.
-- [x] Add reference list service and repository update behavior.
-- [x] Add API/service/repository tests for reference list/item update.
-- [x] Add card system-field update endpoints.
-- [x] Add card relation endpoints.
-- [x] Add card service and repository system-field update and relation list behavior.
-- [x] Add API/service/repository tests for card system-field update and relations.
-
-Verification completed locally for completed org unit follow-up:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-.\.venv\Scripts\python.exe -m pytest tests\test_org_unit_api.py tests\test_org_unit_service.py tests\test_organization_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_api.py tests\test_registry_schema_service.py tests\test_registry_reference_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_reference_list_api.py tests\test_reference_list_service.py tests\test_registry_reference_repositories.py -q
-.\.venv\Scripts\python.exe -m pytest tests\test_card_api.py tests\test_card_service.py tests\test_card_public_link_repositories.py -q
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m mypy app
-```
-
-Remaining limitation: route-plan follow-up endpoints are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
-
-## Phase 1B Acceptance Criteria
-
-- All 20 final Core Schema v1 tables exist in SQLAlchemy models and Alembic migration.
-- The final table list includes `organization_closure`, `org_units`, `reference_lists`, `reference_items`, `field_value_items`, `card_relations`, and `card_public_links`; these are not deferred tables.
-- `alembic upgrade head` applies cleanly against PostgreSQL.
-- No hardcoded `employees` table or employee-specific fixed business columns are introduced.
-- One registry can hold cards from multiple organizations.
-- Organization scope controls card visibility.
-- `org_admin` sees own organization and descendants, not parent or sibling branches.
-- `org_units` are usable as filters/subdivisions and are not an RBAC boundary in v1.
-- New fields appear in existing cards as null/empty without creating mass `field_values` rows.
-- Field values are stored in the correct typed value columns or reference tables.
-- `reference_lists` and `reference_items` support select and multi_select.
-- Normal business flows archive fields, blocks, cards, organizations, and reference data instead of physical deletion.
-- Public links expire after 7 days by default.
-- Public links cannot edit when `card.public_edit_enabled=false`.
-- Transfer creates a new target card, marks the old card `superseded`, and records `card_relations`.
-- Old organization admin can still see the superseded old card in archive scope.
-- All create/update/archive/transfer/public-link changes write `audit_events`.
-- Healthcheck remains independent from PostgreSQL.
-- README is updated with migration/test commands after implementation.
-
-## Env Loading Strategy
-
-- Backend runtime settings load direct environment variables first.
-- Local developer defaults may live in `backend/.env`; this file must not be committed with secrets.
-- `REG_ENGINE_ENV_FILE` points the backend to an explicit external env file and is intended for server/runtime use, for example `/etc/reg_engine/reg_engine.env`.
-- Alembic uses `TEST_DATABASE_URL` first for tests, then `DATABASE_URL`, then `REG_ENGINE_ENV_FILE` through backend settings, then the fallback URL in `backend/alembic.ini`.
-- Server deployments must keep runtime secrets outside the repository. The repository documents variable names but does not store real passwords.
-
-## Foundation Tooling Acceptance Criteria
-
-- Vite and TypeScript resolve `@/*` imports to `frontend/src/*` on Windows and CI.
-- `scripts/check.ps1` without flags runs local checks plus GitHub SSH and server SSH reachability.
-- `scripts/check.ps1 -SkipRemote` runs local checks while skipping GitHub SSH and server SSH reachability.
-- Frontend tests or imports exercise the `@` alias so alias breakage is caught by local checks.
-
-## Mandatory Phase 1B Tests
-
-### Migration And Schema Tests
+Required tests:
 
 - `alembic upgrade head` works.
-- All 20 tables exist.
-- Important unique constraints exist.
+- All 20 Core Schema v1 tables exist.
+- Key constraints exist.
 - Required indexes exist.
 - `pgcrypto` is enabled.
 - No `employees` table exists.
+- No business-specific HR columns exist.
+- Core model insert smoke tests can create minimal valid rows where practical.
+- Healthcheck remains independent from PostgreSQL.
 
-### Organization And RBAC Tests
+Expected test files:
+
+- `backend/tests/test_models_smoke.py`
+- `backend/tests/test_schema_constraints.py`
+- `backend/tests/test_migrations.py`
+- `backend/tests/test_healthcheck.py`
+
+Verification:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py tests\test_healthcheck.py -q
+```
+
+## Phase 1B Acceptance Criteria
+
+1. `PLANS.md` reflects final Core Schema v1.
+2. No hardcoded employee table is introduced.
+3. No business-specific HR columns are introduced.
+4. No frontend implementation is added.
+5. No import/export implementation is added.
+6. No documents implementation is added.
+7. No MCP implementation is added.
+8. Core Schema v1 model list is complete.
+9. Tests required for later phases are listed.
+
+## Phase 1C: Organization Tree And RBAC Services
+
+Purpose: add backend service behavior for organization hierarchy and organization-scoped access.
+
+Required work:
+
+- Add `OrganizationService`.
+- Add `PermissionService`.
+- Implement `access_grants` behavior.
+- Maintain and query `organization_closure`.
+- Enforce subtree visibility.
+- Prove `org_admin` sees descendants and cannot see parent/sibling branches.
+- Keep `org_units` as filters/reference data, not an RBAC boundary.
+
+Required tests:
 
 - `system_admin` can create a root organization.
-- `org_admin` can create a child organization inside own subtree.
-- `org_admin` cannot create a sibling organization.
+- `org_admin` can create/manage child organizations inside own subtree.
+- `org_admin` cannot create or see sibling organizations.
+- `org_admin` cannot see parent organizations.
 - `org_admin` sees descendants.
-- `org_admin` cannot see parent organization.
-- `org_admin` cannot see sibling branch.
-- `org_units` can be listed by organization and do not grant access by themselves.
+- Access grant without descendants only allows exact organization when that mode is used.
+- `org_units` can be listed/used by organization and do not grant access by themselves.
 
-### Registry Schema Tests
+## Phase 1D: Registry Schema And Dynamic Cards
 
-- `system_admin` can create a registry.
-- `system_admin` can create a block.
-- `system_admin` can create a field.
-- `org_admin` cannot manage registry schema in v1.
-- Archived field remains in the database.
-- Adding a field after card creation does not create old-card field value rows.
+Purpose: add schema-driven registry and card behavior.
+
+Required work:
+
+- Add `RegistrySchemaService`.
+- Add `ReferenceListService`.
+- Add `CardService`.
+- Implement dynamic field values.
+- Implement card reads that merge schema plus existing values.
+- Ensure old cards show newly added fields as null/empty.
+- Enforce that only `system_admin` or `registry_admin` can change registry/card schema.
+- Allow `org_admin` to manage cards in organization scope.
+
+Required tests:
+
+- Registry can be created without organization-specific schema duplication.
+- One registry can contain cards from different organizations.
+- Card visibility follows organization scope.
+- `system_admin` or `registry_admin` can create/update/archive blocks and fields.
+- `org_admin` cannot manage card schema in v1.
+- Text/number/date/datetime/bool/json values save to the correct typed columns.
+- `select` values store `reference_items.id`.
+- `multi_select` values store rows in `field_value_items`.
+- Select and multi-select writes reject items outside the field's configured reference list.
+- Adding a field after card creation does not create mass old-card value rows.
 - Old card response includes the new field as null/empty.
+- Archived fields, blocks, cards, and organizations remain in the database.
 
-### Reference List Tests
+## Phase 1E: Public Links, Transfer, Audit
 
-- Reference list can be created.
-- Reference item can be created.
-- Select values store `reference_items.id`, not copied text.
-- Multi-select values store rows in `field_value_items`.
-- Select and multi-select values must belong to the field's configured reference list.
-- Field create/update can configure `options_source_type=reference_list` and `options_source_id`.
-- Descendant organization can use an inherited reference list.
-- Descendant admin cannot edit a locked inherited reference list.
+Purpose: add public editing, card transfer, and audit-event behavior.
 
-### Card And Dynamic Value Tests
+Required work:
 
-- `org_admin` can create a card in own organization.
-- `org_admin` cannot create a card in sibling organization.
-- `org_admin` can edit a card in own subtree.
-- `org_admin` cannot edit a parent or sibling card.
-- Text value saves to `value_text`.
-- Date value saves to `value_date`.
-- Boolean value saves to `value_bool`.
-- Select value saves to `value_reference_item_id`.
-- Multi-select saves to `field_value_items`.
-- Select and multi-select writes reject items outside the configured reference list.
-- Archived card leaves existing values intact.
+- Add `PublicLinkService`.
+- Add card transfer behavior.
+- Add `AuditService`.
+- Enforce public edit rules.
+- Store public link token hashes, not raw tokens.
+- Make public links expire after 7 days by default.
+- Block public editing when `card.public_edit_enabled=false`.
+- Transfer by creating a new card and marking the old card `superseded`.
+- Preserve old-card visibility for the old `org_admin` in archive scope.
+- Write audit events for create/update/archive/transfer/public-link changes.
 
-### Public Link Tests
+Required tests:
 
 - Admin can create a public link.
 - Public link expires in 7 days by default.
 - Raw token is returned once and only token hash is stored.
-- Public link can edit public-editable fields.
-- Public link cannot edit an admin-only block.
-- Public link cannot edit a field with `public_editable=false`.
+- Public link edits the card directly through public endpoints.
+- Public link can edit only public-editable blocks/fields.
 - Public link cannot edit when `card.public_edit_enabled=false`.
-- Public link writes an audit event.
-
-### Transfer Tests
-
-- Transfer creates a new card in target organization.
-- Old card becomes `superseded`.
-- `card_relations` stores `transferred_to`.
-- Old `org_admin` sees old card in archive.
-- Old `org_admin` does not see the new active card if target organization is outside scope.
-- Top organization admin sees both cards when scope includes both organizations.
-
-### Audit Tests
-
+- Public link writes audit events.
+- Transfer creates a new card in the target organization.
+- Old card receives `lifecycle_status=superseded`.
+- `card_relations` stores the transfer relation.
+- Old `org_admin` sees the old card in archive scope.
+- Old `org_admin` does not see the new active card if the target organization is outside scope.
 - Audit event is written on organization create/update/archive.
 - Audit event is written on registry/block/field create/update/archive.
 - Audit event is written on reference list/item create/update/archive.
@@ -575,34 +324,26 @@ Remaining limitation: route-plan follow-up endpoints are implemented. Auth is st
 - Audit event is written on public link create/disable/edit.
 - Audit event is written on transfer.
 
-## Verification Commands For Phase 1B
+## Verification Commands
 
-Run locally before marking Phase 1B complete:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m alembic upgrade head
-python -m pytest
-```
-
-Run the repo gates:
+Documentation-only checks for this planning task:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine
-powershell -ExecutionPolicy Bypass -File scripts/check.ps1
-powershell -ExecutionPolicy Bypass -File scripts/test.ps1
-powershell -ExecutionPolicy Bypass -File scripts/lint.ps1
-powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check
-powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1
+git diff --check -- PLANS.md
 powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1 -Check
 ```
 
-Server migration completed after explicit approval:
+Backend checks for future implementation phases:
 
 ```powershell
-ssh root@registoryengine "cd /opt/reg_engine/backend && python -m alembic upgrade head"
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 ```
 
 ## Implementation Guardrail
 
-Phase 1B backend implementation and server migration are complete for the current plan. Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` still require a separate explicit approval step.
+- Phase 1B.2 added schema models and migration only.
+- Future service/API work must be implemented in the phase order above.
+- Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` require a separate explicit approval step.
+- After each verified implementation checkpoint, synchronize the scoped commit to GitHub and update the server checkout from the same branch before continuing to the next phase, unless the user explicitly requests local-only work.

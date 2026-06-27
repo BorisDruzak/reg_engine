@@ -3,12 +3,25 @@ $ErrorActionPreference = "Stop"
 
 function Get-RegEngineConfig {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+    $currentBranch = "main"
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        Push-Location $repoRoot.Path
+        try {
+            $branchOutput = & git branch --show-current 2>$null | Select-Object -First 1
+            if (-not [string]::IsNullOrWhiteSpace($branchOutput)) {
+                $currentBranch = $branchOutput.Trim()
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
 
     [pscustomobject]@{
         RepoRoot     = $repoRoot.Path
         BackendRoot  = Join-Path $repoRoot.Path "backend"
         FrontendRoot = Join-Path $repoRoot.Path "frontend"
-        Branch       = "main"
+        Branch       = $currentBranch
         Remote       = "origin"
         RepoUrl      = "git@github.com:BorisDruzak/reg_engine.git"
         ServerHost   = "registoryengine"

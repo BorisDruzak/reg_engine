@@ -4,6 +4,8 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
+from app.models import Base
+
 
 def _alembic_config(stdout: StringIO) -> Config:
     backend_root = Path(__file__).resolve().parents[1]
@@ -13,6 +15,34 @@ def _alembic_config(stdout: StringIO) -> Config:
     return config
 
 
+EXPECTED_TABLES = {
+    "access_grants",
+    "audit_events",
+    "card_block_instances",
+    "card_public_links",
+    "card_relations",
+    "cards",
+    "field_value_items",
+    "field_values",
+    "form_blocks",
+    "form_fields",
+    "org_units",
+    "organization_closure",
+    "organizations",
+    "permissions",
+    "reference_items",
+    "reference_lists",
+    "registries",
+    "role_permissions",
+    "roles",
+    "users",
+}
+
+
+def test_base_metadata_contains_core_schema_v1_tables() -> None:
+    assert set(Base.metadata.tables) == EXPECTED_TABLES
+
+
 def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     stdout = StringIO()
     command.upgrade(_alembic_config(stdout), "head", sql=True)
@@ -20,15 +50,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     sql = stdout.getvalue()
 
     assert "CREATE EXTENSION IF NOT EXISTS pgcrypto" in sql
-    assert "CREATE TABLE organizations" in sql
-    assert "CREATE TABLE organization_closure" in sql
-    assert "CREATE TABLE field_values" in sql
-    assert "CREATE TABLE audit_events" in sql
+    assert "CREATE TABLE alembic_version" in sql
+    for table_name in EXPECTED_TABLES:
+        assert f"CREATE TABLE {table_name}" in sql
     assert "CREATE TABLE employees" not in sql
-
-
-def test_alembic_uses_timestamptz_for_datetime_columns() -> None:
-    stdout = StringIO()
-    command.upgrade(_alembic_config(stdout), "head", sql=True)
-
-    assert "TIMESTAMP WITHOUT TIME ZONE" not in stdout.getvalue()

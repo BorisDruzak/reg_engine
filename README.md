@@ -40,6 +40,9 @@ Target system:
 - Automation: PowerShell-first scripts in `scripts/` for the Codex Windows app.
 - CI: GitHub Actions backend and frontend quality gates.
 - Server: `/opt/reg_engine` on `registoryengine`.
+- Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
+- Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models, and migrations only; business services/endpoints are later phases.
 
 ## Local Setup
 
@@ -81,7 +84,11 @@ pnpm -C frontend exec playwright install chromium
 | Frontend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-frontend.ps1` |
 | Project map | `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1` |
 | Server check | `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` |
-| Deploy | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
+| Push current branch | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
+| Deploy current branch | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
+| Deploy specific branch | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Branch <branch>` |
+
+After a verified implementation checkpoint, commit the scoped local changes, push the current branch to GitHub, update `/opt/reg_engine` from the same branch, and run non-mutating server checks. Production PostgreSQL schema migrations require separate explicit approval.
 
 ## Direct Backend Commands
 
@@ -109,6 +116,22 @@ Apply migrations to the configured PostgreSQL database:
 ```powershell
 cd backend
 $env:DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/<database>"
+python -m alembic upgrade head
+```
+
+Create a new autogenerate revision after model changes:
+
+```powershell
+cd backend
+$env:DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/<database>"
+python -m alembic revision --autogenerate -m "<message>"
+```
+
+Local migration tests render PostgreSQL SQL offline and do not connect to the production server. For a real upgrade test, point `TEST_DATABASE_URL` to a disposable PostgreSQL database, not `reg_engine` production:
+
+```powershell
+cd backend
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/<test_database>"
 python -m alembic upgrade head
 ```
 
@@ -175,4 +198,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Core Schema v1 includes backend models, services, repository adapters, and REST API endpoints for organizations, registries, schema blocks/fields, reference lists, dynamic cards, public links, and audit logs. Authentication and production UI are later phases.
+Phase 1B.2 includes Core Schema v1 SQLAlchemy models and migration only. Business services, repository adapters, REST API endpoints, authentication, and production UI are later phases.

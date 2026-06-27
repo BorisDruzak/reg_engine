@@ -48,6 +48,7 @@ class ReferenceItem(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __table_args__ = (
         UniqueConstraint("list_id", "code", name="uq_reference_items_list_id_code"),
         Index("ix_reference_items_list_id", "list_id"),
+        Index("ix_reference_items_parent_id", "parent_id"),
     )
 
     list_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("reference_lists.id"))

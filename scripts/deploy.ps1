@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Branch = "main",
+    [string]$Branch = "",
     [switch]$HardReset,
     [switch]$SkipServerCheck
 )
@@ -8,6 +8,9 @@ param(
 . "$PSScriptRoot\lib\RegEngine.ps1"
 
 $config = Get-RegEngineConfig
+if ([string]::IsNullOrWhiteSpace($Branch)) {
+    $Branch = $config.Branch
+}
 Assert-RegEngineCleanCommandPrerequisites
 
 $mode = if ($HardReset) { "hard-reset" } else { "fast-forward" }

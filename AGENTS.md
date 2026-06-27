@@ -255,6 +255,15 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1
 powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"
 ```
 
+After a verified implementation checkpoint, synchronize in this order unless the user explicitly requests local-only work:
+
+1. Commit the scoped local changes.
+2. Push the current branch to GitHub.
+3. Update the server checkout in `/opt/reg_engine` from the same GitHub branch.
+4. Run server checks that do not mutate production data.
+
+Do not run production PostgreSQL migrations automatically. Any schema-changing `alembic upgrade head` against the production `reg_engine` database requires a separate explicit approval.
+
 Use local-only checks when remote SSH/GitHub reachability is not part of the current task:
 
 ```powershell
@@ -269,14 +278,14 @@ mkdir -p /opt/reg_engine
 cd /opt/reg_engine
 git remote -v
 git fetch origin
-git checkout main
-git pull --ff-only origin main
+git checkout <branch>
+git pull --ff-only origin <branch>
 ```
 
 Preferred scripted server update flow:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
+powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Branch <branch>
 ```
 
 Do not copy code manually with ad hoc file moves unless GitHub is unavailable.
@@ -298,9 +307,10 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - `scripts/dev-backend.ps1` starts the FastAPI dev server.
 - `scripts/dev-frontend.ps1` starts the Vite dev server.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, and database access.
-- `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
-- `scripts/deploy.ps1` updates `/opt/reg_engine` from `origin/main` and runs server checks.
-- `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop: check, push, deploy, server-check.
+- `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to the current Git branch.
+- `scripts/deploy.ps1` updates `/opt/reg_engine` from the current Git branch and runs server checks.
+- `scripts/deploy.ps1 -Branch <branch>` updates `/opt/reg_engine` from a specific GitHub branch.
+- `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop against the current Git branch: check, push, deploy, server-check.
 - Shared PowerShell helpers live in `scripts/lib/RegEngine.ps1`.
 - Scripts must not contain secrets. Use local environment variables or `/etc/reg_engine/reg_engine.env` for runtime passwords.
 - Backend runtime settings load direct environment variables first, then `backend/.env` by default.

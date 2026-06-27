@@ -1,1 +1,1 @@
-"""Domain constants and shared business identifiers."""
+"""Domain constants for schema-level validation."""

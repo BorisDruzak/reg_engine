@@ -11,7 +11,9 @@ $branch = (Invoke-RegEngineCapture -FilePath "git" -Arguments @("branch", "--sho
 $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss zzz")
 $files = Invoke-RegEngineCapture -FilePath "git" -Arguments @("ls-files") -WorkingDirectory $config.RepoRoot
 $others = Invoke-RegEngineCapture -FilePath "git" -Arguments @("ls-files", "--others", "--exclude-standard") -WorkingDirectory $config.RepoRoot
-$allFiles = @($files.Output + $others.Output) | Where-Object { $_ } | Sort-Object -Unique
+$allFiles = @($files.Output + $others.Output) |
+    Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $config.RepoRoot $_)) } |
+    Sort-Object -Unique
 
 $content = @()
 $content += "# Project Tree"

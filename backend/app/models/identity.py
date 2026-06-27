@@ -19,25 +19,22 @@ from app.domain.constants import USER_STATUSES
 from app.models.base import ArchiveMixin, Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
-def _quoted(values: tuple[str, ...]) -> str:
+def quoted(values: tuple[str, ...]) -> str:
     return ", ".join(f"'{value}'" for value in values)
 
 
 role_permissions = Table(
     "role_permissions",
     Base.metadata,
-    Column(
-        "role_id",
-        PG_UUID(as_uuid=True),
-        ForeignKey("roles.id"),
-        primary_key=True,
-    ),
+    Column("role_id", PG_UUID(as_uuid=True), ForeignKey("roles.id"), primary_key=True),
     Column(
         "permission_id",
         PG_UUID(as_uuid=True),
         ForeignKey("permissions.id"),
         primary_key=True,
     ),
+    Index("ix_role_permissions_role_id", "role_id"),
+    Index("ix_role_permissions_permission_id", "permission_id"),
 )
 
 
@@ -45,7 +42,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
-        CheckConstraint(f"status in ({_quoted(USER_STATUSES)})", name="status"),
+        CheckConstraint(f"status in ({quoted(USER_STATUSES)})", name="status"),
         Index("ix_users_email_lower", text("lower(email)"), unique=True),
         Index("ix_users_status", "status"),
         Index("ix_users_is_superuser", "is_superuser"),

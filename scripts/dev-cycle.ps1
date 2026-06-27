@@ -6,6 +6,8 @@ param(
 
 . "$PSScriptRoot\lib\RegEngine.ps1"
 
+$config = Get-RegEngineConfig
+
 & "$PSScriptRoot\check.ps1"
 if ($LASTEXITCODE -ne 0) {
     throw "Local checks failed."
@@ -17,10 +19,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($HardResetDeploy) {
-    & "$PSScriptRoot\deploy.ps1" -HardReset
+    & "$PSScriptRoot\deploy.ps1" -Branch $config.Branch -HardReset
 }
 else {
-    & "$PSScriptRoot\deploy.ps1"
+    & "$PSScriptRoot\deploy.ps1" -Branch $config.Branch
 }
 
 if ($LASTEXITCODE -ne 0) {

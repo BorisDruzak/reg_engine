@@ -18,20 +18,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.domain.constants import PUBLIC_LINK_STATUSES
 from app.models.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
-from app.models.identity import _quoted
+from app.models.identity import quoted
 
 
 class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "card_public_links"
     __table_args__ = (
         UniqueConstraint("token_hash", name="uq_card_public_links_token_hash"),
-        CheckConstraint(
-            f"status in ({_quoted(PUBLIC_LINK_STATUSES)})",
-            name="status",
-        ),
+        CheckConstraint(f"status in ({quoted(PUBLIC_LINK_STATUSES)})", name="status"),
         CheckConstraint("used_count >= 0", name="used_count_non_negative"),
         Index("ix_card_public_links_card_id", "card_id"),
         Index("ix_card_public_links_token_hash", "token_hash"),
+        Index("ix_card_public_links_expires_at", "expires_at"),
     )
 
     card_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cards.id"))
