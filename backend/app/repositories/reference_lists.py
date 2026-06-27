@@ -149,6 +149,46 @@ class SQLAlchemyReferenceListRepository:
         typed_item.archived_at = self.now_provider()
         self.session.flush()
 
+    def update_reference_list(
+        self,
+        list_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        reference_list = self._get_reference_list_model(list_id)
+        if code is not None:
+            reference_list.code = code
+        if name is not None:
+            reference_list.name = name
+        self.session.flush()
+
+    def update_reference_item(
+        self,
+        item_id: UUID,
+        *,
+        code: str | None,
+        label: str | None,
+    ) -> None:
+        reference_item = self._get_reference_item_model(item_id)
+        if code is not None:
+            reference_item.code = code
+        if label is not None:
+            reference_item.label = label
+        self.session.flush()
+
+    def _get_reference_list_model(self, list_id: UUID) -> ReferenceList:
+        reference_list = self.session.get(ReferenceList, list_id)
+        if reference_list is None:
+            raise LookupError(f"Reference list not found: {list_id}")
+        return cast(ReferenceList, reference_list)
+
+    def _get_reference_item_model(self, item_id: UUID) -> ReferenceItem:
+        reference_item = self.session.get(ReferenceItem, item_id)
+        if reference_item is None:
+            raise LookupError(f"Reference item not found: {item_id}")
+        return cast(ReferenceItem, reference_item)
+
     def _list_to_dict(self, reference_list: ReferenceList) -> dict[str, object]:
         return {
             "id": reference_list.id,

@@ -150,6 +150,12 @@ def test_reference_list_repository_creates_reads_inherits_and_archives_reference
     session.get_results[(ReferenceItem, item_id)] = reference_item
     assert repository.get_reference_list(list_id)["owner_organization_id"] == organization_id
     assert repository.get_reference_item(item_id)["list_id"] == list_id
+    repository.update_reference_list(list_id, code="statuses-2", name="Statuses 2")
+    repository.update_reference_item(item_id, code="active-2", label="Active 2")
+    assert reference_list.code == "statuses-2"
+    assert reference_list.name == "Statuses 2"
+    assert reference_item.code == "active-2"
+    assert reference_item.label == "Active 2"
 
     inherited_id = uuid4()
     session.execute_results = [FakeResult([list_id, inherited_id])]

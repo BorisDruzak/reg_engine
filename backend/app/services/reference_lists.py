@@ -17,9 +17,21 @@ class ReferenceListCreate:
 
 
 @dataclass(frozen=True)
+class ReferenceListUpdate:
+    code: str | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True)
 class ReferenceItemCreate:
     code: str
     label: str
+
+
+@dataclass(frozen=True)
+class ReferenceItemUpdate:
+    code: str | None = None
+    label: str | None = None
 
 
 class ReferenceListRepository(Protocol):
@@ -60,6 +72,24 @@ class ReferenceListRepository(Protocol):
 
     def archive_reference_item(self, item_id: UUID) -> None:
         """Archive a reference item without deleting it."""
+
+    def update_reference_list(
+        self,
+        list_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        """Update mutable reference list fields."""
+
+    def update_reference_item(
+        self,
+        item_id: UUID,
+        *,
+        code: str | None,
+        label: str | None,
+    ) -> None:
+        """Update mutable reference item fields."""
 
 
 class ReferenceListService:
@@ -136,6 +166,51 @@ class ReferenceListService:
         self._ensure_can_edit_list(actor, list_id)
         self.repository.archive_reference_item(item_id)
         self._record_user_event(actor, "reference_item.archive", "reference_item", item_id, None)
+
+    def update_list(
+        self,
+        actor: ActorContext,
+        list_id: UUID,
+        data: ReferenceListUpdate,
+    ) -> dict[str, object]:
+        self._ensure_can_edit_list(actor, list_id)
+        before = self.repository.get_reference_list(list_id)
+        self.repository.update_reference_list(list_id, code=data.code, name=data.name)
+        after = self.repository.get_reference_list(list_id)
+        self._record_user_event(
+            actor,
+            "reference_list.update",
+            "reference_list",
+            list_id,
+            {
+                "old": {"code": before["code"], "name": before["name"]},
+                "new": {"code": after["code"], "name": after["name"]},
+            },
+        )
+        return after
+
+    def update_item(
+        self,
+        actor: ActorContext,
+        item_id: UUID,
+        data: ReferenceItemUpdate,
+    ) -> dict[str, object]:
+        before = self.repository.get_reference_item(item_id)
+        list_id = cast(UUID, before["list_id"])
+        self._ensure_can_edit_list(actor, list_id)
+        self.repository.update_reference_item(item_id, code=data.code, label=data.label)
+        after = self.repository.get_reference_item(item_id)
+        self._record_user_event(
+            actor,
+            "reference_item.update",
+            "reference_item",
+            item_id,
+            {
+                "old": {"code": before["code"], "label": before["label"]},
+                "new": {"code": after["code"], "label": after["label"]},
+            },
+        )
+        return after
 
     def _ensure_can_edit_list(self, actor: ActorContext, list_id: UUID) -> None:
         if actor.is_superuser:

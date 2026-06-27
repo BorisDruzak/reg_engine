@@ -5,8 +5,10 @@ import pytest
 from app.services.permissions import AccessDeniedError, ActorContext
 from app.services.reference_lists import (
     ReferenceItemCreate,
+    ReferenceItemUpdate,
     ReferenceListCreate,
     ReferenceListService,
+    ReferenceListUpdate,
 )
 
 
@@ -84,6 +86,30 @@ class InMemoryReferenceListRepository:
 
     def archive_reference_item(self, item_id: UUID) -> None:
         self.items[item_id]["archived"] = True
+
+    def update_reference_list(
+        self,
+        list_id: UUID,
+        *,
+        code: str | None,
+        name: str | None,
+    ) -> None:
+        if code is not None:
+            self.lists[list_id]["code"] = code
+        if name is not None:
+            self.lists[list_id]["name"] = name
+
+    def update_reference_item(
+        self,
+        item_id: UUID,
+        *,
+        code: str | None,
+        label: str | None,
+    ) -> None:
+        if code is not None:
+            self.items[item_id]["code"] = code
+        if label is not None:
+            self.items[item_id]["label"] = label
 
 
 def test_system_admin_can_create_reference_list_and_item() -> None:
@@ -170,3 +196,34 @@ def test_reference_list_and_item_archive_without_deleting() -> None:
     assert item_id in repository.items
     assert repository.lists[list_id]["archived"] is True
     assert repository.items[item_id]["archived"] is True
+
+
+def test_reference_list_and_item_can_be_updated() -> None:
+    repository = InMemoryReferenceListRepository(set())
+    service = ReferenceListService(repository)
+    actor = ActorContext(user_id=uuid4(), is_superuser=True, grants=())
+    list_id = service.create_list(
+        actor,
+        ReferenceListCreate(code="statuses", name="Statuses"),
+    )
+    item_id = service.create_item(
+        actor,
+        list_id=list_id,
+        data=ReferenceItemCreate(code="active", label="Active"),
+    )
+
+    updated_list = service.update_list(
+        actor,
+        list_id,
+        ReferenceListUpdate(name="Updated Statuses"),
+    )
+    updated_item = service.update_item(
+        actor,
+        item_id,
+        ReferenceItemUpdate(label="Updated Active"),
+    )
+
+    assert updated_list["code"] == "statuses"
+    assert updated_list["name"] == "Updated Statuses"
+    assert updated_item["code"] == "active"
+    assert updated_item["label"] == "Updated Active"

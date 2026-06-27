@@ -21,7 +21,7 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B registry schema and reference list SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
-- Phase 1B route-plan completion follow-up is started locally on `codex/core-schema-v1`; org unit get/update endpoints and registry schema get/update endpoints are implemented.
+- Phase 1B route-plan completion follow-up is started locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, and reference list/item update endpoints are implemented.
 - Backend still does not contain frontend UI or production schema deployment. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ## Phase 1B: Core Schema v1
@@ -405,7 +405,9 @@ Remaining limitation: Phase 1B.9 route groups are wired for the initial service 
 - [x] Add registry schema get/update endpoints for registries, form blocks, and form fields.
 - [x] Add registry schema service and repository read/update behavior.
 - [x] Add API/service/repository tests for registry schema get/update.
-- [ ] Add reference list/item update endpoints.
+- [x] Add reference list/item update endpoints.
+- [x] Add reference list service and repository update behavior.
+- [x] Add API/service/repository tests for reference list/item update.
 - [ ] Add card system-field update endpoints.
 - [ ] Add card relation endpoints.
 
@@ -415,12 +417,13 @@ Verification completed locally for completed org unit follow-up:
 cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m pytest tests\test_org_unit_api.py tests\test_org_unit_service.py tests\test_organization_repositories.py -q
 .\.venv\Scripts\python.exe -m pytest tests\test_registry_schema_api.py tests\test_registry_schema_service.py tests\test_registry_reference_repositories.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_reference_list_api.py tests\test_reference_list_service.py tests\test_registry_reference_repositories.py -q
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: reference update, card system-field update, and card relation endpoints remain open route-plan follow-up work. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: card system-field update and card relation endpoints remain open route-plan follow-up work. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
 
 ## Phase 1B Acceptance Criteria
 

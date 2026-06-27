@@ -7,7 +7,12 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import get_current_actor, get_db_session, get_reference_list_service
 from app.main import app
 from app.services.permissions import ActorContext
-from app.services.reference_lists import ReferenceItemCreate, ReferenceListCreate
+from app.services.reference_lists import (
+    ReferenceItemCreate,
+    ReferenceItemUpdate,
+    ReferenceListCreate,
+    ReferenceListUpdate,
+)
 
 
 class FakeSession:
@@ -22,6 +27,8 @@ class FakeReferenceListService:
     def __init__(self) -> None:
         self.created_lists: list[tuple[ActorContext, ReferenceListCreate]] = []
         self.created_items: list[tuple[ActorContext, UUID, ReferenceItemCreate]] = []
+        self.updated_lists: list[tuple[ActorContext, UUID, ReferenceListUpdate]] = []
+        self.updated_items: list[tuple[ActorContext, UUID, ReferenceItemUpdate]] = []
         self.archived_lists: list[tuple[ActorContext, UUID]] = []
         self.archived_items: list[tuple[ActorContext, UUID]] = []
 
@@ -44,6 +51,39 @@ class FakeReferenceListService:
 
     def archive_item(self, actor: ActorContext, item_id: UUID) -> None:
         self.archived_items.append((actor, item_id))
+
+    def update_list(
+        self,
+        actor: ActorContext,
+        list_id: UUID,
+        data: ReferenceListUpdate,
+    ) -> dict[str, object]:
+        self.updated_lists.append((actor, list_id, data))
+        return {
+            "id": list_id,
+            "registry_id": None,
+            "owner_organization_id": None,
+            "code": data.code or "statuses",
+            "name": data.name or "Statuses",
+            "locked_for_descendants": True,
+            "inherit_to_descendants": True,
+            "archived": False,
+        }
+
+    def update_item(
+        self,
+        actor: ActorContext,
+        item_id: UUID,
+        data: ReferenceItemUpdate,
+    ) -> dict[str, object]:
+        self.updated_items.append((actor, item_id, data))
+        return {
+            "id": item_id,
+            "list_id": uuid4(),
+            "code": data.code or "active",
+            "label": data.label or "Active",
+            "archived": False,
+        }
 
 
 @pytest.fixture()
@@ -123,4 +163,33 @@ def test_archive_reference_list_and_item_endpoints_use_service_and_commit(
     assert item_response.status_code == 204
     assert service.archived_lists[0][1] == list_id
     assert service.archived_items[0][1] == item_id
+    assert session.committed is True
+
+
+def test_update_reference_list_and_item_endpoints_use_service_and_commit(
+    api_client: tuple[TestClient, FakeReferenceListService, FakeSession],
+) -> None:
+    client, service, session = api_client
+    list_id = uuid4()
+    item_id = uuid4()
+
+    list_response = client.patch(
+        f"/api/v1/reference-lists/{list_id}",
+        json={"code": "statuses-2", "name": "Statuses 2"},
+    )
+    item_response = client.patch(
+        f"/api/v1/reference-lists/items/{item_id}",
+        json={"code": "active-2", "label": "Active 2"},
+    )
+
+    assert list_response.status_code == 200
+    assert item_response.status_code == 200
+    assert service.updated_lists[0][1:] == (
+        list_id,
+        ReferenceListUpdate(code="statuses-2", name="Statuses 2"),
+    )
+    assert service.updated_items[0][1:] == (
+        item_id,
+        ReferenceItemUpdate(code="active-2", label="Active 2"),
+    )
     assert session.committed is True
