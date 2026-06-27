@@ -9,7 +9,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1B.3 Model Smoke Tests implementation.
+- Current checkpoint scope is Phase 1B.3 Model Smoke Tests completion.
 - Do not implement API CRUD, services, frontend, auth flow, import/export, documents, or MCP in this checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -17,7 +17,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 
 - Phase 1B.1 Database Foundation is completed locally in this checkpoint.
 - Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
-- Phase 1B.3 Model Smoke Tests are in progress: disposable PostgreSQL smoke tests were added and must run against `TEST_DATABASE_URL`, not production `reg_engine`.
+- Phase 1B.3 Model Smoke Tests are completed in this checkpoint.
+- Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
 - Phase 1C, Phase 1D, and Phase 1E remain planned future phases.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
@@ -197,17 +198,19 @@ Next phase:
 
 Purpose: prove the Core Schema v1 model and migration contract before adding business services.
 
+Status: completed in this checkpoint.
+
 Required tests:
 
-- `alembic upgrade head` works.
-- All 20 Core Schema v1 tables exist.
-- Key constraints exist.
-- Required indexes exist.
-- `pgcrypto` is enabled.
-- No `employees` table exists.
-- No business-specific HR columns exist.
-- Core model insert smoke tests can create minimal valid rows where practical.
-- Healthcheck remains independent from PostgreSQL.
+- [x] `alembic upgrade head` works against disposable PostgreSQL.
+- [x] All 20 Core Schema v1 tables exist.
+- [x] Key constraints exist.
+- [x] Required indexes exist.
+- [x] `pgcrypto` is enabled.
+- [x] No `employees` table exists.
+- [x] No business-specific HR columns exist.
+- [x] Core model insert smoke tests can create minimal valid rows.
+- [x] Healthcheck remains independent from PostgreSQL.
 
 Expected test files:
 
@@ -225,6 +228,15 @@ python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tes
 $env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
 python -m pytest tests\test_database_smoke.py -q
 ```
+
+Verification completed:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py -q
+```
+
+Result: `3 passed` against disposable PostgreSQL `reg_engine_test`.
 
 ## Phase 1B Acceptance Criteria
 
