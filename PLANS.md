@@ -22,9 +22,10 @@ The system must keep card structure in registry metadata and dynamic typed value
 - Phase 1B card, field value, card relation, and public-link SQLAlchemy repository adapters are implemented locally on `codex/core-schema-v1`.
 - Phase 1B runtime dependency composition and business endpoints are implemented locally on `codex/core-schema-v1` for organization root/child/tree/get/update/archive, org unit create/list/archive, registry schema create/archive operations, reference list/item create/archive operations, card create/list/get/value/block/archive/transfer operations, public-link create/list/disable/public-get/public-value-update operations, and audit global/card/organization list operations.
 - Phase 1B route-plan completion follow-up is implemented locally on `codex/core-schema-v1`; org unit get/update, registry schema get/update, reference list/item update, card system-field update, and card relation endpoints are implemented.
-- Phase 1B backend implementation is complete locally for the planned Core Schema v1 service, repository, API, and test scope.
-- Backend still does not contain frontend UI or production schema deployment. Auth is still a placeholder system actor until a dedicated auth phase.
-- Production PostgreSQL migration and server deployment remain explicit approval steps.
+- Phase 1B backend implementation is complete for the planned Core Schema v1 service, repository, API, and test scope.
+- Backend still does not contain production frontend UI. Auth is still a placeholder system actor until a dedicated auth phase.
+- Server `/opt/reg_engine` is deployed on `codex/core-schema-v1` at `c159481`.
+- Production PostgreSQL is migrated to `0001_core_schema_v1` after backup `/var/backups/reg_engine/reg_engine_before_core_schema_v1_20260627_143452.dump`.
 
 ## Phase 1B: Core Schema v1
 
@@ -184,7 +185,22 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m alembic upgrade head --sql
 ```
 
-Remaining limitation: online `python -m alembic upgrade head` against PostgreSQL is not run yet. Server schema migration remains an explicit approval step because it changes PostgreSQL schema.
+Server migration completed after explicit approval:
+
+```powershell
+ssh root@registoryengine "cd /opt/reg_engine/backend && DATABASE_URL='<runtime secret url>' .venv/bin/python -m alembic upgrade head"
+```
+
+Verification on `registoryengine`:
+
+```text
+alembic_version=0001_core_schema_v1
+public_table_count=21
+employees_table_count=0
+pgcrypto=1
+roles=2
+permissions=18
+```
 
 ### 1B.2 Organization Scope And Access Foundation
 
@@ -344,7 +360,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: SQLAlchemy repository adapters and API/runtime dependency composition exist for Phase 1B service protocols. Production PostgreSQL migration remains open work pending explicit approval.
+Remaining limitation: SQLAlchemy repository adapters and API/runtime dependency composition exist for Phase 1B service protocols.
 
 ### 1B.9 API Runtime Composition
 
@@ -397,7 +413,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: Phase 1B.9 route groups are wired for the initial service boundaries. Broader route-plan follow-up endpoints are completed in 1B.10. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: Phase 1B.9 route groups are wired for the initial service boundaries. Broader route-plan follow-up endpoints are completed in 1B.10. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ### 1B.10 API Route Plan Completion Follow-Up
 
@@ -428,7 +444,7 @@ cd C:\Users\admin-2\Documents\reg_engine\backend
 .\.venv\Scripts\python.exe -m mypy app
 ```
 
-Remaining limitation: route-plan follow-up endpoints are implemented locally. Auth is still a placeholder system actor until a dedicated auth phase; production PostgreSQL migration remains a separate explicit approval step.
+Remaining limitation: route-plan follow-up endpoints are implemented. Auth is still a placeholder system actor until a dedicated auth phase.
 
 ## Phase 1B Acceptance Criteria
 
@@ -556,7 +572,7 @@ powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1
 powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1 -Check
 ```
 
-Server migration is a separate explicit approval step because it changes PostgreSQL schema:
+Server migration completed after explicit approval:
 
 ```powershell
 ssh root@registoryengine "cd /opt/reg_engine/backend && python -m alembic upgrade head"
@@ -564,4 +580,4 @@ ssh root@registoryengine "cd /opt/reg_engine/backend && python -m alembic upgrad
 
 ## Implementation Guardrail
 
-Phase 1B local backend implementation is complete for the current plan. Do not run server PostgreSQL schema migration or deploy schema-changing code to `/opt/reg_engine` without a separate explicit approval step.
+Phase 1B backend implementation and server migration are complete for the current plan. Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` still require a separate explicit approval step.
