@@ -9,10 +9,15 @@ from app.core.database import get_session
 from app.repositories.audit import SQLAlchemyAuditRepository
 from app.repositories.org_units import OrgUnitSessionLike, SQLAlchemyOrgUnitRepository
 from app.repositories.organizations import OrganizationSessionLike, SQLAlchemyOrganizationRepository
+from app.repositories.registry_schema import (
+    RegistrySchemaSessionLike,
+    SQLAlchemyRegistrySchemaRepository,
+)
 from app.services.audit import AuditService
 from app.services.org_units import OrgUnitService
 from app.services.organizations import OrganizationService
 from app.services.permissions import ActorContext
+from app.services.registry_schema import RegistrySchemaService
 
 
 def get_current_actor() -> ActorContext:
@@ -45,3 +50,14 @@ def get_org_unit_service(
     audit_service = AuditService(audit_repository)
     org_unit_repository = SQLAlchemyOrgUnitRepository(cast(OrgUnitSessionLike, session))
     return OrgUnitService(org_unit_repository, audit_service)
+
+
+def get_registry_schema_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> RegistrySchemaService:
+    audit_repository = SQLAlchemyAuditRepository(session)
+    audit_service = AuditService(audit_repository)
+    registry_repository = SQLAlchemyRegistrySchemaRepository(
+        cast(RegistrySchemaSessionLike, session)
+    )
+    return RegistrySchemaService(registry_repository, audit_service)
