@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 00:05:10 +05:00
+- Generated: 2026-06-28 00:17:15 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -56,6 +56,7 @@
 - `backend/migrations/script.py.mako`
 - `backend/migrations/versions/0001_database_foundation.py`
 - `backend/migrations/versions/0002_core_schema_v1.py`
+- `backend/migrations/versions/0003_reconcile_core_schema_v1.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
