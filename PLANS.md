@@ -496,6 +496,8 @@ Acceptance criteria:
 
 ### Phase 2E: Document Security And Live Validation
 
+Status: in progress.
+
 Planned work after approval:
 
 - Verify authorization on metadata, upload, download, archive, and generated-document reads.
@@ -508,6 +510,10 @@ Acceptance criteria:
 - No storage credentials are committed.
 - Audit events exist for create/read-sensitive where required, archive, and generated-document operations.
 - Deployment and server checks pass after implementation.
+
+Partial validation evidence:
+
+- Runtime-server live security smoke used disposable database `reg_engine_phase2e_security_test` and temporary storage to verify authenticated upload, MIME allow-list rejection, no-access denial, parent-without-descendants denial, sibling denial, download, archive, archive-scope read, audit actions, storage-key non-exposure, and cleanup. Production data was not mutated.
 
 ## Verification
 
