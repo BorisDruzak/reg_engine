@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 20:46:20 +05:00
+- Generated: 2026-06-28 20:49:58 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -108,6 +108,7 @@
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ADR/0002-browser-session-storage.md`
 - `docs/ADR/0003-repository-visibility.md`
+- `docs/ADR/0004-phase-2-documents-scope-proposal.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`

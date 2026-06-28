@@ -316,6 +316,7 @@ Known inputs:
 - `docs/BASE.md` reserves `file_ref` for the future documents phase.
 - README identifies documents and attachments as later phases.
 - Current Core Schema v1 has dynamic card fields but no document/file storage tables.
+- `docs/ADR/0004-phase-2-documents-scope-proposal.md` records a proposed, not yet accepted, starting scope and storage direction.
 
 Non-goals until explicitly approved:
 
@@ -336,6 +337,13 @@ Required decisions:
 - `file_ref`: whether dynamic fields should support file references in Phase 2.
 - Public links: whether public-link users can upload or download documents.
 - Retention: whether archive hides files, disables access, or keeps read-only access.
+
+Proposed default if the user approves:
+
+- Start with card-level attachments first.
+- Use a storage abstraction with a local filesystem backend configured outside Git for MVP/internal staging.
+- Defer generated `.docx`/`.pdf` documents until attachment metadata, authorization, archive behavior, and audit are proven.
+- Add `file_ref` only after the attachment metadata model is stable.
 
 Acceptance criteria:
 
