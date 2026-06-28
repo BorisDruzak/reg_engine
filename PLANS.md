@@ -28,8 +28,9 @@ Completed phases:
 - Phase 1L.2: Runtime configuration guardrails.
 - Phase 1L.3: Login and session hardening.
 - Phase 1L.4: Bootstrap UX hardening.
+- Phase 1L.5: Frontend live integration validation.
 
-The next active checkpoint is Phase 1L.5.
+The next active checkpoint is Phase 1L.6.
 
 ## Core Rules
 
@@ -149,7 +150,7 @@ Delivered:
 
 ### Phase 1L.5: Frontend Live Integration Validation
 
-Status: planned next.
+Status: completed.
 
 Required work:
 
@@ -162,6 +163,26 @@ Acceptance criteria:
 
 - Browser validation proves the real API contract.
 - No production data is mutated.
+
+Delivered:
+
+- Added explicit `CORS_ALLOWED_ORIGINS` runtime configuration for browser frontends that call the API from another origin.
+- Added CORS preflight regression coverage for `POST /api/v1/auth/login`.
+- Fixed audit event API serialization for PostgreSQL `INET` values returned as `IPv4Address` objects.
+- Added audit schema regression coverage for `AuditEventRead.ip_address`.
+- Validated frontend against a real staging backend on `http://192.168.100.12:18080` and local Vite frontend on `http://127.0.0.1:5174`.
+- Used disposable PostgreSQL database `reg_engine_test`; production `reg_engine` was not migrated or mutated.
+- Verified real browser flows: login, organizations, registries, card list/read, dynamic field save, audit update visibility, and public-link edit.
+- Stored ignored screenshots under `artifacts/phase-1l5/admin-live.png` and `artifacts/phase-1l5/public-live.png`.
+
+Verification:
+
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_config.py -q` -> 5 passed.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_audit_schema.py backend\tests\test_config.py -q` -> 6 passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` -> passed after CORS and audit fixes.
+- `curl.exe -i -X OPTIONS http://192.168.100.12:18080/api/v1/auth/login -H "Origin: http://127.0.0.1:5173" -H "Access-Control-Request-Method: POST"` -> `200 OK` with `access-control-allow-origin`.
+- `node tmp\phase1l5-live-validate.mjs` -> passed for real browser validation.
+- `ssh root@registoryengine "cd /opt/reg_engine/backend && sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -p no:cacheprovider --tb=short"` -> 94 passed, 2 warnings.
 
 ### Phase 1L.6: Frontend Structure Refactor
 
