@@ -21,6 +21,12 @@ class RegistryRead(BaseModel):
     schema_version: int
 
 
+class RegistrySchemaRead(BaseModel):
+    registry: RegistryRead
+    blocks: list["FormBlockRead"]
+    fields: list["FormFieldRead"]
+
+
 class FormBlockCreate(BaseModel):
     code: str
     title: str
@@ -44,6 +50,12 @@ class FormBlockRead(BaseModel):
     is_active: bool
     public_visible: bool
     public_editable: bool
+
+
+class FormBlockUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    position: int | None = None
 
 
 class FormFieldCreate(BaseModel):
@@ -75,6 +87,13 @@ class FormFieldRead(BaseModel):
     public_editable: bool
 
 
+class FormFieldUpdate(BaseModel):
+    label: str | None = None
+    description: str | None = None
+    position: int | None = None
+    is_active: bool | None = None
+
+
 class ReferenceListCreate(BaseModel):
     code: str
     name: str
@@ -100,6 +119,15 @@ class ReferenceListRead(BaseModel):
     is_active: bool
 
 
+class ReferenceListUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class ReferenceListListRead(BaseModel):
+    items: list[ReferenceListRead]
+
+
 class ReferenceItemCreate(BaseModel):
     code: str
     label: str
@@ -119,6 +147,16 @@ class ReferenceItemRead(BaseModel):
     description: str | None
     position: int
     is_active: bool
+
+
+class ReferenceItemUpdate(BaseModel):
+    label: str | None = None
+    description: str | None = None
+    position: int | None = None
+
+
+class ReferenceItemListRead(BaseModel):
+    items: list[ReferenceItemRead]
 
 
 class DynamicValuePayload(BaseModel):

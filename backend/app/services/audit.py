@@ -115,6 +115,7 @@ class AuditService:
         new_data_json: dict[str, Any] | None,
         source: str,
     ) -> AuditEvent:
+        metadata = self._request_metadata()
         event = AuditEvent(
             actor_type=actor_type,
             actor_user_id=actor_user_id,
@@ -125,7 +126,26 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source=source,
+            ip_address=metadata.get("ip_address"),
+            user_agent=metadata.get("user_agent"),
+            request_id=metadata.get("request_id"),
         )
         self.session.add(event)
         self.session.flush()
         return event
+
+    def _request_metadata(self) -> dict[str, str | None]:
+        raw_metadata = self.session.info.get("audit_metadata")
+        if raw_metadata is None:
+            return {"ip_address": None, "user_agent": None, "request_id": None}
+        if isinstance(raw_metadata, dict):
+            return {
+                "ip_address": raw_metadata.get("ip_address"),
+                "user_agent": raw_metadata.get("user_agent"),
+                "request_id": raw_metadata.get("request_id"),
+            }
+        return {
+            "ip_address": getattr(raw_metadata, "ip_address", None),
+            "user_agent": getattr(raw_metadata, "user_agent", None),
+            "request_id": getattr(raw_metadata, "request_id", None),
+        }

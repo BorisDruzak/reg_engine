@@ -217,6 +217,29 @@ class OrganizationService:
             raise PermissionDeniedError("Actor cannot read this organization.")
         return organization
 
+    def list_organizations_for_actor(self, *, actor_user_id: UUID) -> list[Organization]:
+        permissions = PermissionService(self.session)
+        if permissions.is_superuser(actor_user_id):
+            criteria = [
+                Organization.archived_at.is_(None),
+                Organization.is_active.is_(True),
+            ]
+        else:
+            scope_ids = permissions.get_organization_scope_ids(actor_user_id)
+            if not scope_ids:
+                return []
+            criteria = [
+                Organization.id.in_(scope_ids),
+                Organization.archived_at.is_(None),
+                Organization.is_active.is_(True),
+            ]
+
+        return list(
+            self.session.scalars(
+                select(Organization).where(*criteria).order_by(Organization.code, Organization.id)
+            ).all()
+        )
+
     def get_descendant_ids(
         self,
         organization_id: UUID,

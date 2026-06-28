@@ -16,6 +16,10 @@ from app.models import (
     FieldValueItem,
     FormBlock,
     FormField,
+    Organization,
+    OrgUnit,
+    Registry,
+    User,
 )
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
@@ -147,7 +151,9 @@ class CardService:
         *,
         actor_user_id: UUID,
         registry_id: UUID,
+        organization_id: UUID | None = None,
         include_archive: bool = False,
+        query: str | None = None,
     ) -> list[Card]:
         scope_ids = PermissionService(self.session).get_organization_scope_ids(
             actor_user_id,
@@ -155,15 +161,21 @@ class CardService:
         )
         if not scope_ids:
             return []
+        if organization_id is not None:
+            if organization_id not in scope_ids:
+                return []
+            scope_ids = {organization_id}
 
         criteria = [
             Card.registry_id == registry_id,
             Card.organization_id.in_(scope_ids),
-            Card.lifecycle_status != "archived",
         ]
         if not include_archive:
             criteria.append(Card.lifecycle_status != "superseded")
+            criteria.append(Card.lifecycle_status != "archived")
             criteria.append(Card.archived_at.is_(None))
+        if query:
+            criteria.append(Card.display_name.ilike(f"%{query}%"))
 
         return list(
             self.session.scalars(
@@ -191,7 +203,11 @@ class CardService:
             card.organization_id,
             registry_id=card.registry_id,
         )
-        assignment = self._coerce_field_assignment(field_model, value)
+        assignment = self._coerce_field_assignment(
+            field_model,
+            value,
+            actor_user_id=actor_user_id,
+        )
         block_instance = self._resolve_block_instance_for_value(
             card=card,
             block=block,
@@ -229,7 +245,11 @@ class CardService:
         if block.registry_id != card.registry_id:
             raise CardServiceError("Field does not belong to the card registry.")
 
-        assignment = self._coerce_field_assignment(field_model, value)
+        assignment = self._coerce_field_assignment(
+            field_model,
+            value,
+            public_context=True,
+        )
         block_instance = self._resolve_block_instance_for_value(
             card=card,
             block=block,
@@ -482,6 +502,13 @@ class CardService:
         )
         self.session.add(block_instance)
         self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="card_block_instance",
+            object_id=block_instance.id,
+            new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
+        )
         return block_instance
 
     def _require_card_permission(
@@ -613,7 +640,14 @@ class CardService:
         self.session.flush()
         return field_value
 
-    def _coerce_field_assignment(self, field_model: FormField, value: object) -> _FieldAssignment:
+    def _coerce_field_assignment(
+        self,
+        field_model: FormField,
+        value: object,
+        *,
+        actor_user_id: UUID | None = None,
+        public_context: bool = False,
+    ) -> _FieldAssignment:
         if field_model.field_type == "text":
             if not isinstance(value, str):
                 raise InvalidFieldValueError("Text fields require a string value.")
@@ -660,38 +694,42 @@ class CardService:
             return _FieldAssignment(item_ids=item_ids)
 
         if field_model.field_type == "organization_ref":
-            return _FieldAssignment(
-                value_organization_id=self._ensure_uuid(
-                    value,
-                    "Organization reference fields require an organization id.",
-                )
+            organization_id = self._ensure_uuid(
+                value,
+                "Organization reference fields require an organization id.",
             )
+            self._ensure_active_organization_reference(organization_id)
+            return _FieldAssignment(value_organization_id=organization_id)
 
         if field_model.field_type == "org_unit_ref":
-            return _FieldAssignment(
-                value_org_unit_id=self._ensure_uuid(
-                    value,
-                    "Org unit reference fields require an org unit id.",
-                )
+            org_unit_id = self._ensure_uuid(
+                value,
+                "Org unit reference fields require an org unit id.",
             )
+            self._ensure_active_org_unit_reference(org_unit_id)
+            return _FieldAssignment(value_org_unit_id=org_unit_id)
 
         if field_model.field_type == "user_ref":
-            return _FieldAssignment(
-                value_user_id=self._ensure_uuid(value, "User reference fields require a user id.")
-            )
+            user_id = self._ensure_uuid(value, "User reference fields require a user id.")
+            self._ensure_active_user_reference(user_id)
+            return _FieldAssignment(value_user_id=user_id)
 
         if field_model.field_type == "card_ref":
-            return _FieldAssignment(
-                value_card_id=self._ensure_uuid(value, "Card reference fields require a card id.")
+            card_id = self._ensure_uuid(value, "Card reference fields require a card id.")
+            self._ensure_active_card_reference(
+                card_id,
+                actor_user_id=actor_user_id,
+                public_context=public_context,
             )
+            return _FieldAssignment(value_card_id=card_id)
 
         if field_model.field_type == "registry_ref":
-            return _FieldAssignment(
-                value_registry_id=self._ensure_uuid(
-                    value,
-                    "Registry reference fields require a registry id.",
-                )
+            registry_id = self._ensure_uuid(
+                value,
+                "Registry reference fields require a registry id.",
             )
+            self._ensure_active_registry_reference(registry_id)
+            return _FieldAssignment(value_registry_id=registry_id)
 
         raise InvalidFieldValueError(f"Unsupported field type: {field_model.field_type}")
 
@@ -725,6 +763,57 @@ class CardService:
             )
         except ReferenceListError as exc:
             raise InvalidFieldValueError(str(exc)) from exc
+
+    def _ensure_active_organization_reference(self, organization_id: UUID) -> None:
+        organization = self.session.get(Organization, organization_id)
+        if (
+            organization is None
+            or organization.archived_at is not None
+            or not organization.is_active
+        ):
+            raise InvalidFieldValueError("Organization reference target was not found.")
+
+    def _ensure_active_org_unit_reference(self, org_unit_id: UUID) -> None:
+        org_unit = self.session.get(OrgUnit, org_unit_id)
+        if org_unit is None or org_unit.archived_at is not None or not org_unit.is_active:
+            raise InvalidFieldValueError("Org unit reference target was not found.")
+
+    def _ensure_active_user_reference(self, user_id: UUID) -> None:
+        user = self.session.get(User, user_id)
+        if user is None or user.archived_at is not None or user.status == "archived":
+            raise InvalidFieldValueError("User reference target was not found.")
+
+    def _ensure_active_card_reference(
+        self,
+        card_id: UUID,
+        *,
+        actor_user_id: UUID | None,
+        public_context: bool,
+    ) -> None:
+        card = self.session.get(Card, card_id)
+        if (
+            card is None
+            or card.archived_at is not None
+            or card.lifecycle_status in {"archived", "superseded"}
+        ):
+            raise InvalidFieldValueError("Card reference target was not found.")
+        if actor_user_id is not None and not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise InvalidFieldValueError("Card reference target is not readable.")
+        if public_context and not card.public_view_enabled:
+            raise InvalidFieldValueError("Card reference target is not public readable.")
+
+    def _ensure_active_registry_reference(self, registry_id: UUID) -> None:
+        registry = self.session.get(Registry, registry_id)
+        if (
+            registry is None
+            or registry.archived_at is not None
+            or registry.lifecycle_status == "archived"
+        ):
+            raise InvalidFieldValueError("Registry reference target was not found.")
 
     def _apply_assignment(
         self,

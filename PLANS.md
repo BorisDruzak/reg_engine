@@ -9,9 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Phase 1B through Phase 1F backend foundation work is completed and synchronized.
-- Current next checkpoint is **Phase 1G: Current API/Service Bugfix And Hardening**.
-- Phase 1G must run before auth/session work, frontend workflows, import/export, documents, or MCP.
+- Phase 1B through Phase 1G backend foundation and API hardening work is completed.
+- Current next checkpoint is **Phase 1H: Bootstrap And Seed**.
+- Phase 1H must not start until Phase 1G code is synchronized and verified on the server checkout.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -25,10 +25,12 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
 - Phase 1E.1 Core Service Hardening Before API is completed and verified against server test database `reg_engine_test`.
 - Phase 1F REST API Foundation And Service Wiring is completed and verified against server test database `reg_engine_test`.
-- Phase 1G is now the next implementation phase and must fix current API/service issues before new feature phases.
+- Phase 1G Current API/Service Bugfix And Hardening is completed and verified against disposable PostgreSQL database `reg_engine_test`.
+- Phase 1H Bootstrap And Seed is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
+- Phase 1G did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -276,11 +278,56 @@ Known limitations at Phase 1F closeout:
 - No frontend implementation, auth/session flow, import/export, documents, or MCP implementation was added in Phase 1F.
 - No database migration is required for Phase 1F.
 
+### Phase 1G: Current API/Service Bugfix And Hardening
+
+Status: completed.
+
+Delivered:
+
+- Safe-by-default temporary actor header: `ALLOW_DEV_ACTOR_HEADER=false` blocks `X-Actor-User-Id`.
+- Test/local actor injection remains available only when `ALLOW_DEV_ACTOR_HEADER=true`.
+- Organization list/tree/update/archive endpoints.
+- Registry read and registry schema read endpoints.
+- Block update/archive endpoints.
+- Field update/archive endpoints.
+- Reference list read/list/update/archive endpoints.
+- Reference item read/list/update/archive endpoints.
+- Card list/update/archive endpoints with registry, organization, archive, and query filters.
+- Repeatable card block instance create endpoint.
+- Public link list and disable endpoints.
+- Public link `expires_in_days` validation in the API/service range `1..30`.
+- Public edit validates token usability before field lookup/coercion.
+- Reference field target validation for organization, org unit, user, card, and registry refs before commit.
+- Request metadata capture for audit events through API session context.
+- Stable HTTP mapping for common integrity errors without raw database details.
+- Phase 1G API regression tests.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@192.168.100.12:5432/reg_engine_test"
+backend\.venv\Scripts\python.exe -m pytest backend -q
+backend\.venv\Scripts\ruff.exe check backend
+backend\.venv\Scripts\ruff.exe format --check backend
+backend\.venv\Scripts\mypy.exe backend\app
+```
+
+Result at local closeout: `54` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`; ruff check, ruff format check, and mypy passed.
+
+Known limitations after Phase 1G:
+
+- `X-Actor-User-Id` remains a temporary development/test mechanism only.
+- No production auth/session flow has been added.
+- No frontend implementation has been added.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1G.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
 
-Status: planned next.
+Status: completed.
 
 Phase 1G must not implement:
 
@@ -468,7 +515,7 @@ Acceptance criteria for Phase 1G:
 
 ## Planned Phases After Phase 1G
 
-The following phases must not start until Phase 1G is completed and verified.
+The following phases must not start until Phase 1G is synchronized to GitHub/server and verified there.
 
 ### Phase 1H: Bootstrap And Seed
 

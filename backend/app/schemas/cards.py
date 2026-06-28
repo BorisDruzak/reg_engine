@@ -23,6 +23,16 @@ class CardSummaryRead(BaseModel):
     public_edit_enabled: bool
 
 
+class CardListRead(BaseModel):
+    items: list[CardSummaryRead]
+
+
+class CardUpdate(BaseModel):
+    display_name: str | None = None
+    public_view_enabled: bool | None = None
+    public_edit_enabled: bool | None = None
+
+
 class FieldValueUpdate(BaseModel):
     value: Any
     block_instance_id: UUID | None = None
@@ -47,6 +57,13 @@ class CardBlockInstanceRead(BaseModel):
     block_instance_id: UUID | None
     ordinal: int
     fields: dict[str, CardFieldRead]
+
+
+class CardBlockInstanceSummaryRead(BaseModel):
+    id: UUID
+    card_id: UUID
+    block_id: UUID
+    ordinal: int
 
 
 class CardBlockRead(BaseModel):

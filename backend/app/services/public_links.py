@@ -41,6 +41,8 @@ class PublicLinkService:
         card_id: UUID,
         expires_in_days: int = DEFAULT_PUBLIC_LINK_TTL_DAYS,
     ) -> PublicLinkToken:
+        if expires_in_days < 1 or expires_in_days > 30:
+            raise PublicLinkError("Public link expiration must be between 1 and 30 days.")
         card = self._get_active_card(card_id)
         self._require_card_permission(actor_user_id, card)
 
@@ -65,6 +67,22 @@ class PublicLinkService:
         )
         return PublicLinkToken(raw_token=raw_token, public_link=public_link)
 
+    def list_public_links_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+    ) -> list[CardPublicLink]:
+        card = self._get_active_card(card_id)
+        self._require_card_permission(actor_user_id, card)
+        return list(
+            self.session.scalars(
+                select(CardPublicLink)
+                .where(CardPublicLink.card_id == card.id)
+                .order_by(CardPublicLink.created_at.desc(), CardPublicLink.id)
+            ).all()
+        )
+
     def disable_public_link_for_actor(
         self,
         *,
@@ -88,6 +106,9 @@ class PublicLinkService:
             new_data_json={"card_id": str(card.id)},
         )
         return public_link
+
+    def validate_public_edit_token(self, *, raw_token: str) -> CardPublicLink:
+        return self._get_usable_public_link(raw_token)
 
     def edit_card_field_with_token(
         self,

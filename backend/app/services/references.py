@@ -106,6 +106,51 @@ class ReferenceListService:
         )
         return reference_list
 
+    def read_reference_list_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        list_id: UUID,
+    ) -> ReferenceList:
+        reference_list = self._get_active_reference_list(list_id)
+        if not PermissionService(self.session).is_superuser(actor_user_id):
+            self._require_reference_edit_permission(actor_user_id, reference_list)
+        return reference_list
+
+    def list_reference_lists_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        organization_id: UUID | None = None,
+    ) -> list[ReferenceList]:
+        if organization_id is not None:
+            return self.list_available_reference_lists_for_actor(
+                actor_user_id=actor_user_id,
+                registry_id=registry_id,
+                organization_id=organization_id,
+            )
+
+        permissions = PermissionService(self.session)
+        if not permissions.has_permission(
+            actor_user_id,
+            "registry.schema.manage",
+            registry_id=registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read reference lists.")
+
+        return list(
+            self.session.scalars(
+                select(ReferenceList)
+                .where(
+                    ReferenceList.registry_id == registry_id,
+                    ReferenceList.archived_at.is_(None),
+                    ReferenceList.is_active.is_(True),
+                )
+                .order_by(ReferenceList.code, ReferenceList.id)
+            ).all()
+        )
+
     def create_reference_item_for_actor(
         self,
         *,
@@ -144,6 +189,28 @@ class ReferenceListService:
             new_data_json={"list_id": str(list_id), "code": code, "label": label},
         )
         return item
+
+    def read_reference_item_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        item_id: UUID,
+    ) -> ReferenceItem:
+        item = self._get_active_reference_item(item_id)
+        self.read_reference_list_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=item.list_id,
+        )
+        return item
+
+    def list_items_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        list_id: UUID,
+    ) -> list[ReferenceItem]:
+        self.read_reference_list_for_actor(actor_user_id=actor_user_id, list_id=list_id)
+        return self.list_items(list_id)
 
     def update_reference_item_for_actor(
         self,

@@ -6,14 +6,18 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
 from app.api.v1.endpoints._field_values import coerce_api_field_value, field_value_to_read
+from app.models import Card
 from app.schemas.cards import (
     CardBlockInstanceRead,
+    CardBlockInstanceSummaryRead,
     CardBlockRead,
     CardCreate,
     CardFieldRead,
+    CardListRead,
     CardRead,
     CardSummaryRead,
     CardTransferRequest,
+    CardUpdate,
     FieldValueRead,
     FieldValueUpdate,
 )
@@ -46,16 +50,29 @@ def create_card(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return CardSummaryRead(
-        id=card.id,
-        registry_id=card.registry_id,
-        organization_id=card.organization_id,
-        org_unit_id=card.org_unit_id,
-        display_name=card.display_name,
-        lifecycle_status=card.lifecycle_status,
-        public_view_enabled=card.public_view_enabled,
-        public_edit_enabled=card.public_edit_enabled,
-    )
+    return _card_to_summary(card)
+
+
+@router.get("/registries/{registry_id}/cards", response_model=CardListRead)
+def list_cards(
+    registry_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    organization_id: Annotated[UUID | None, Query()] = None,
+    include_archive: Annotated[bool, Query()] = False,
+    q: Annotated[str | None, Query()] = None,
+) -> CardListRead:
+    try:
+        cards = CardService(session).list_visible_cards(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            organization_id=organization_id,
+            include_archive=include_archive,
+            query=q,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardListRead(items=[_card_to_summary(card) for card in cards])
 
 
 @router.get("/cards/{card_id}", response_model=CardRead)
@@ -98,6 +115,69 @@ def set_card_field_value(
     return field_value_to_read(session, field_value)
 
 
+@router.patch("/cards/{card_id}", response_model=CardSummaryRead)
+def update_card(
+    card_id: UUID,
+    payload: CardUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card = CardService(session).update_card_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            display_name=payload.display_name,
+            public_view_enabled=payload.public_view_enabled,
+            public_edit_enabled=payload.public_edit_enabled,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card)
+
+
+@router.delete("/cards/{card_id}", response_model=CardSummaryRead)
+def archive_card(
+    card_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card = CardService(session).archive_card_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card)
+
+
+@router.post(
+    "/cards/{card_id}/blocks/{block_id}/instances",
+    response_model=CardBlockInstanceSummaryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_block_instance(
+    card_id: UUID,
+    block_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardBlockInstanceSummaryRead:
+    try:
+        block_instance = CardService(session).create_block_instance_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            block_id=block_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardBlockInstanceSummaryRead(
+        id=block_instance.id,
+        card_id=block_instance.card_id,
+        block_id=block_instance.block_id,
+        ordinal=block_instance.ordinal,
+    )
+
+
 @router.post(
     "/cards/{card_id}/transfer",
     response_model=CardSummaryRead,
@@ -117,16 +197,7 @@ def transfer_card(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return CardSummaryRead(
-        id=card.id,
-        registry_id=card.registry_id,
-        organization_id=card.organization_id,
-        org_unit_id=card.org_unit_id,
-        display_name=card.display_name,
-        lifecycle_status=card.lifecycle_status,
-        public_view_enabled=card.public_view_enabled,
-        public_edit_enabled=card.public_edit_enabled,
-    )
+    return _card_to_summary(card)
 
 
 def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
@@ -167,4 +238,17 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
             )
             for field_code, field in card_read.fields.items()
         },
+    )
+
+
+def _card_to_summary(card: Card) -> CardSummaryRead:
+    return CardSummaryRead(
+        id=card.id,
+        registry_id=card.registry_id,
+        organization_id=card.organization_id,
+        org_unit_id=card.org_unit_id,
+        display_name=card.display_name,
+        lifecycle_status=card.lifecycle_status,
+        public_view_enabled=card.public_view_enabled,
+        public_edit_enabled=card.public_edit_enabled,
     )

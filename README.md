@@ -42,7 +42,7 @@ Target system:
 - Server: `/opt/reg_engine` on `registoryengine`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, and REST API foundation endpoints for organizations, registries, dynamic cards, public links, transfer, and audit reads.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, and audit reads.
 - Auth flow, production frontend workflows, import/export, documents, and MCP are later phases.
 
 ## Local Setup
@@ -168,6 +168,14 @@ Alembic resolves database configuration in this order:
 3. `REG_ENGINE_ENV_FILE` through backend settings
 4. `backend/alembic.ini` fallback URL
 
+Temporary API actor injection is controlled by:
+
+```powershell
+$env:ALLOW_DEV_ACTOR_HEADER = "true"
+```
+
+When absent or false, protected API endpoints reject `X-Actor-User-Id`. This header is only for tests and local development until the production auth/session phase replaces it.
+
 ## Direct Frontend Commands
 
 ```powershell
@@ -208,4 +216,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1F completed the Core Schema v1 database, backend service layer, and REST API foundation. Authentication, production UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1G completed the Core Schema v1 database, backend service layer, REST API foundation, and current API hardening checkpoint. Authentication, production UI, import/export, documents, and MCP remain later phases.

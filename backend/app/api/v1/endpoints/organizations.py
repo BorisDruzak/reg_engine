@@ -5,7 +5,15 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
-from app.schemas.organizations import OrganizationCreate, OrganizationRead
+from app.models import Organization
+from app.schemas.organizations import (
+    OrganizationCreate,
+    OrganizationListRead,
+    OrganizationRead,
+    OrganizationTreeNodeRead,
+    OrganizationTreeRead,
+    OrganizationUpdate,
+)
 from app.services.organizations import OrganizationService
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -39,6 +47,36 @@ def create_organization(
     return OrganizationRead.model_validate(organization)
 
 
+@router.get("", response_model=OrganizationListRead)
+def list_organizations(
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrganizationListRead:
+    try:
+        organizations = OrganizationService(session).list_organizations_for_actor(
+            actor_user_id=actor_user_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrganizationListRead(
+        items=[OrganizationRead.model_validate(organization) for organization in organizations]
+    )
+
+
+@router.get("/tree", response_model=OrganizationTreeRead)
+def read_organization_tree(
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrganizationTreeRead:
+    try:
+        organizations = OrganizationService(session).list_organizations_for_actor(
+            actor_user_id=actor_user_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrganizationTreeRead(items=_organization_tree_nodes(organizations))
+
+
 @router.get("/{organization_id}", response_model=OrganizationRead)
 def read_organization(
     organization_id: UUID,
@@ -53,3 +91,58 @@ def read_organization(
     except Exception as exc:
         raise_service_http_error(exc)
     return OrganizationRead.model_validate(organization)
+
+
+@router.patch("/{organization_id}", response_model=OrganizationRead)
+def update_organization(
+    organization_id: UUID,
+    payload: OrganizationUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrganizationRead:
+    try:
+        organization = OrganizationService(session).update_organization_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            name=payload.name,
+            organization_type=payload.organization_type,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrganizationRead.model_validate(organization)
+
+
+@router.delete("/{organization_id}", response_model=OrganizationRead)
+def archive_organization(
+    organization_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrganizationRead:
+    try:
+        organization = OrganizationService(session).archive_organization_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrganizationRead.model_validate(organization)
+
+
+def _organization_tree_nodes(organizations: list[Organization]) -> list[OrganizationTreeNodeRead]:
+    by_parent: dict[UUID | None, list[Organization]] = {}
+    visible_ids = {organization.id for organization in organizations}
+    for organization in organizations:
+        parent_id = organization.parent_id if organization.parent_id in visible_ids else None
+        by_parent.setdefault(parent_id, []).append(organization)
+
+    def build(parent_id: UUID | None) -> list[OrganizationTreeNodeRead]:
+        nodes: list[OrganizationTreeNodeRead] = []
+        for organization in sorted(
+            by_parent.get(parent_id, []), key=lambda item: (item.code, item.id)
+        ):
+            node = OrganizationTreeNodeRead.model_validate(organization)
+            node.children = build(organization.id)
+            nodes.append(node)
+        return nodes
+
+    return build(None)

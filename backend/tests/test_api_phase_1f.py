@@ -94,15 +94,26 @@ def db_session(migrated_test_engine: Engine) -> Iterator[Session]:
 @pytest.fixture()
 def api_client(db_session: Session) -> Iterator[TestClient]:
     from app.api.dependencies import get_db_session
+    from app.core.config import get_settings
 
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
     app = create_app()
 
     def override_session() -> Iterator[Session]:
         yield db_session
 
     app.dependency_overrides[get_db_session] = override_session
-    with TestClient(app) as client:
-        yield client
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
 
 
 def _actor_headers(user_id: UUID) -> dict[str, str]:

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OrganizationCreate(BaseModel):
@@ -19,3 +19,20 @@ class OrganizationRead(BaseModel):
     name: str
     type: str
     is_active: bool
+
+
+class OrganizationUpdate(BaseModel):
+    name: str | None = None
+    organization_type: str | None = None
+
+
+class OrganizationListRead(BaseModel):
+    items: list[OrganizationRead]
+
+
+class OrganizationTreeNodeRead(OrganizationRead):
+    children: list["OrganizationTreeNodeRead"] = Field(default_factory=list)
+
+
+class OrganizationTreeRead(BaseModel):
+    items: list[OrganizationTreeNodeRead]

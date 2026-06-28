@@ -18,6 +18,9 @@ class AuditEventRead(BaseModel):
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
     source: str
+    ip_address: str | None
+    user_agent: str | None
+    request_id: str | None
     created_at: datetime
 
 

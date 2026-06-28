@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES
@@ -45,6 +46,48 @@ class RegistrySchemaService:
         )
         return registry
 
+    def read_registry_for_actor(self, *, actor_user_id: UUID, registry_id: UUID) -> Registry:
+        registry = self._get_active_registry(registry_id)
+        self._require_schema_permission(actor_user_id, registry.id)
+        return registry
+
+    def read_schema_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+    ) -> tuple[Registry, list[FormBlock], list[FormField]]:
+        registry = self.read_registry_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+        )
+        blocks = list(
+            self.session.scalars(
+                select(FormBlock)
+                .where(
+                    FormBlock.registry_id == registry.id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                )
+                .order_by(FormBlock.position, FormBlock.code, FormBlock.id)
+            ).all()
+        )
+        block_ids = [block.id for block in blocks]
+        fields = []
+        if block_ids:
+            fields = list(
+                self.session.scalars(
+                    select(FormField)
+                    .where(
+                        FormField.block_id.in_(block_ids),
+                        FormField.archived_at.is_(None),
+                        FormField.is_active.is_(True),
+                    )
+                    .order_by(FormField.position, FormField.code, FormField.id)
+                ).all()
+            )
+        return registry, blocks, fields
+
     def create_block_for_actor(
         self,
         *,
@@ -85,6 +128,11 @@ class RegistrySchemaService:
             object_id=block.id,
             new_data_json={"registry_id": str(registry_id), "code": code},
         )
+        return block
+
+    def read_block_for_actor(self, *, actor_user_id: UUID, block_id: UUID) -> FormBlock:
+        block = self._get_active_block(block_id)
+        self._require_schema_permission(actor_user_id, block.registry_id)
         return block
 
     def update_block_for_actor(
@@ -192,6 +240,12 @@ class RegistrySchemaService:
             object_id=field.id,
             new_data_json={"block_id": str(block_id), "code": code, "field_type": field_type},
         )
+        return field
+
+    def read_field_for_actor(self, *, actor_user_id: UUID, field_id: UUID) -> FormField:
+        field = self._get_active_field(field_id)
+        block = self._get_active_block(field.block_id)
+        self._require_schema_permission(actor_user_id, block.registry_id)
         return field
 
     def update_field_for_actor(

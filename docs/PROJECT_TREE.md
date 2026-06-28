@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 14:10:08 +05:00
+- Generated: 2026-06-28 16:21:29 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -81,6 +81,7 @@
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
 - `backend/tests/test_api_phase_1f.py`
+- `backend/tests/test_api_phase_1g.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`

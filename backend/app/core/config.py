@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Registry Engine"
     api_v1_prefix: str = "/api/v1"
     database_url: str | None = None
+    allow_dev_actor_header: bool = False
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
