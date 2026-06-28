@@ -72,6 +72,16 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 
 ---
 
+## Browser Session Rules
+
+- Current frontend `localStorage` bearer-token persistence is allowed only for MVP, local development, disposable test environments, and internal staging.
+- Do not call the current browser session approach production-ready.
+- Before production frontend hosting, implement a replacement based on server-side session or refresh-token persistence, hashed stored tokens, explicit logout revocation, httpOnly `Secure` `SameSite` cookies, short-lived access tokens, CSRF protection for cookie-authenticated unsafe methods, and session audit events.
+- Keep logout limitations documented until server-side revocation exists.
+- Re-check `docs/ADR/0002-browser-session-storage.md` before adding features that increase browser XSS risk.
+
+---
+
 ## Phase 1 Scope
 
 Implement gradually:
@@ -154,36 +164,24 @@ Do not revert or delete unrelated local changes.
 - GitHub repository: `git@github.com:BorisDruzak/reg_engine.git`
 - Local default branch: `main`
 - Local Git remote: `origin`
-- Runtime server: `registoryengine`
-- Runtime server IP: `192.168.100.12`
-- Server admin user: `osn_admin`
-- Server root user: `root`
-- Server code directory: `/opt/reg_engine`
-- Server Git remote in `/opt/reg_engine`: `git@github.com:BorisDruzak/reg_engine.git`
-- PostgreSQL host: `registoryengine`
-- PostgreSQL port: `5432`
-- PostgreSQL database: `reg_engine`
-- PostgreSQL admin role for this project: `reg_engine_admin`
-- PostgreSQL version on server: `16`
+- Runtime server, SSH target, checkout path, PostgreSQL host, and PostgreSQL role must be configured outside Git through environment variables or ignored `scripts/local.reg_engine.psd1`.
+- Public documentation must use placeholders for internal hostnames, LAN IP addresses, users, checkout paths, and database endpoints.
+- The local ignored config may be created from `scripts/local.reg_engine.example.psd1`.
 
 ---
 
 ## SSH Access
 
-Local SSH config file:
+Local SSH configuration is machine-local and must not be committed. Use a local SSH alias or `REG_ENGINE_SERVER_TARGET`.
 
-```text
-C:\Users\admin-2\.ssh\config
-```
-
-Expected host alias:
+Example host alias shape:
 
 ```sshconfig
-Host registoryengine
-    HostName 192.168.100.12
-    User osn_admin
+Host <server-alias>
+    HostName <server-host-or-ip>
+    User <server-admin-user>
     Port 22
-    IdentityFile C:\Users\admin-2\.ssh\id_ed25519
+    IdentityFile <local-private-key-path>
     IdentitiesOnly yes
     ServerAliveInterval 30
     ServerAliveCountMax 3
@@ -192,13 +190,13 @@ Host registoryengine
 Verify user access:
 
 ```powershell
-ssh -o BatchMode=yes osn_admin@registoryengine "whoami; hostname; id -u"
+ssh -o BatchMode=yes <server-admin-user>@<server-alias> "whoami; hostname; id -u"
 ```
 
 Verify root access:
 
 ```powershell
-ssh -o BatchMode=yes root@registoryengine "whoami; hostname; id -u"
+ssh -o BatchMode=yes <server-root-target> "whoami; hostname; id -u"
 ```
 
 Root SSH access is allowed only by key. Do not enable password login for `root`.
@@ -216,7 +214,7 @@ PubkeyAuthentication yes
 
 - GitHub SSH access must use `git@github.com`.
 - Local GitHub SSH authentication is configured on the Windows machine.
-- Server GitHub SSH authentication uses a separate deploy key stored on `registoryengine`.
+- Server GitHub SSH authentication uses a separate deploy key stored on the configured runtime server.
 - Do not copy private SSH keys from Windows to the server.
 
 Verify GitHub auth:
@@ -245,22 +243,15 @@ git remote -v
 
 ### Server GitHub Deploy Key
 
-- Server private deploy key path: `/root/.ssh/reg_engine_github_ed25519`
-- Server SSH config path: `/root/.ssh/config`
-- Public deploy key value:
-
-```text
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBIy27sDRrcdIMfLCNFtDotv6L19RJkwM5lHHnC7j+aJ reg_engine@registoryengine
-```
-
-This public key must be added to GitHub repository deploy keys for `BorisDruzak/reg_engine`.
-Read-only deploy key access is enough for server pulls. Write access is not required for runtime deployment.
+- Server deploy-key paths and public key values are operational details and must not be documented in the public repository.
+- Add the server public deploy key to GitHub repository deploy keys out-of-band.
+- Read-only deploy key access is enough for server pulls. Write access is not required for runtime deployment.
 
 Verify server GitHub access after the deploy key is added:
 
 ```bash
-ssh root@registoryengine "ssh -T git@github.com"
-ssh root@registoryengine "cd /opt/reg_engine && git fetch origin"
+ssh <server-root-target> "ssh -T git@github.com"
+ssh <server-root-target> "cd <server-checkout> && git fetch origin"
 ```
 
 ---
@@ -275,7 +266,7 @@ This project uses a single-branch workflow:
 - Do not create feature branches unless the user explicitly requests a temporary exception.
 - If a temporary branch is used, merge or fast-forward its work into `main`, then delete the temporary branch locally and on GitHub.
 - Routine checks, pushes, and deploys must run from `main`.
-- Server checkout `/opt/reg_engine` must track `origin/main`.
+- Server checkout configured by `REG_ENGINE_SERVER_REPO` or `scripts/local.reg_engine.psd1` must track `origin/main`.
 
 Prefer project scripts for routine checks, pushes, and deploys.
 
@@ -290,7 +281,7 @@ After a verified implementation checkpoint, synchronize in this order unless the
 
 1. Commit the scoped local changes.
 2. Push `main` to GitHub.
-3. Update the server checkout in `/opt/reg_engine` from `origin/main`.
+3. Update the configured server checkout from `origin/main`.
 4. Run server checks that do not mutate production data.
 
 Production PostgreSQL migrations are allowed without an additional per-run question when all of these are true:
@@ -314,9 +305,9 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 Server update flow:
 
 ```bash
-ssh root@registoryengine
-mkdir -p /opt/reg_engine
-cd /opt/reg_engine
+ssh <server-root-target>
+mkdir -p <server-checkout>
+cd <server-checkout>
 git remote -v
 git fetch origin
 git checkout main
@@ -331,7 +322,7 @@ powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
 
 Do not copy code manually with ad hoc file moves unless GitHub is unavailable.
 If server files differ from Git, inspect with `git status --short --branch` before overwriting.
-Runtime commands must be executed on `registoryengine`, not from the Windows workspace.
+Runtime commands must be executed on the configured runtime server, not from the Windows workspace.
 
 ---
 
@@ -349,21 +340,20 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - `scripts/dev-frontend.ps1` starts the Vite dev server.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, and database access.
 - `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
-- `scripts/deploy.ps1` updates `/opt/reg_engine` from `origin/main` and runs server checks.
+- `scripts/deploy.ps1` updates the configured server checkout from `origin/main` and runs server checks.
 - `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop on `main`: check, push, deploy, server-check.
 - Shared PowerShell helpers live in `scripts/lib/RegEngine.ps1`.
-- Scripts must not contain secrets. Use local environment variables or `/etc/reg_engine/reg_engine.env` for runtime passwords.
+- Scripts must not contain secrets or private operational details. Use local environment variables, ignored `scripts/local.reg_engine.psd1`, or the server runtime environment file for runtime values.
 - Backend runtime settings load direct environment variables first, then `backend/.env` by default.
-- Set `REG_ENGINE_ENV_FILE=/etc/reg_engine/reg_engine.env` for server/runtime processes that should load an explicit external env file.
+- Set `REG_ENGINE_ENV_FILE=<server-env-file>` for server/runtime processes that should load an explicit external env file.
 - Alembic uses `TEST_DATABASE_URL`, then `DATABASE_URL`, then `REG_ENGINE_ENV_FILE` through backend settings, then the `backend/alembic.ini` fallback URL.
 
 ---
 
 ## PostgreSQL Rules
 
-- PostgreSQL runs on `registoryengine`.
-- Project database: `reg_engine`.
-- Project admin role: `reg_engine_admin`.
+- PostgreSQL runs on the configured runtime server.
+- Project database and role are configured by local environment or ignored script config.
 - PostgreSQL listens on localhost and the server LAN address.
 - Remote PostgreSQL access is limited to the LAN subnet `192.168.100.0/24`.
 - Use password authentication over TCP. Do not use `trust` authentication for remote connections.
@@ -371,30 +361,30 @@ Runtime commands must be executed on `registoryengine`, not from the Windows wor
 - DB smoke tests that set `TEST_DATABASE_URL` must use a disposable database whose name ends with `_test`, for example `reg_engine_test`.
 - `backend/tests/test_database_smoke.py` resets the `public` schema in `TEST_DATABASE_URL`; never point it at production `reg_engine`.
 
-Current server listen sockets:
+Expected server listen sockets:
 
 ```text
 127.0.0.1:5432
-192.168.100.12:5432
+<server-lan-address>:5432
 ```
 
 Verify local server access:
 
 ```bash
-sudo -u postgres psql -d reg_engine -c "select current_database(), current_user;"
+sudo -u postgres psql -d <database> -c "select current_database(), current_user;"
 ```
 
 Verify TCP access from the server:
 
 ```bash
-PGPASSWORD='<password>' psql -h 127.0.0.1 -U reg_engine_admin -d reg_engine -c "select current_database(), current_user;"
+PGPASSWORD='<password>' psql -h 127.0.0.1 -U <database-role> -d <database> -c "select current_database(), current_user;"
 ```
 
 Verify TCP access from Windows when `psql` is available locally:
 
 ```powershell
 $env:PGPASSWORD = '<password>'
-psql -h registoryengine -U reg_engine_admin -d reg_engine -c "select current_database(), current_user;"
+psql -h <database-host> -U <database-role> -d <database> -c "select current_database(), current_user;"
 ```
 
 ---
@@ -406,7 +396,7 @@ psql -h registoryengine -U reg_engine_admin -d reg_engine -c "select current_dat
 - Required effective settings:
 
 ```text
-listen_addresses = 'localhost,192.168.100.12'
+listen_addresses = 'localhost,<server-lan-address>'
 password_encryption = scram-sha-256
 ```
 

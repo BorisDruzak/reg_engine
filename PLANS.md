@@ -30,8 +30,10 @@ Completed phases:
 - Phase 1L.4: Bootstrap UX hardening.
 - Phase 1L.5: Frontend live integration validation.
 - Phase 1L.6: Frontend structure refactor and full Russian UI naming.
+- Phase 1L.7: Browser storage risk decision.
+- Phase 1L.8: Repository visibility and infrastructure exposure.
 
-The next active checkpoint is Phase 1L.7.
+Phase 1L is complete. The next planned product phase is Phase 2, but document-generation implementation requires explicit approval before starting.
 
 ## Core Rules
 
@@ -46,6 +48,7 @@ The next active checkpoint is Phase 1L.7.
 - Keep the visible product name in UI as `Реестровая система`; keep `Registry Engine` only for technical project/repository context.
 - Keep built-in UI display names for roles, permissions, statuses, validation, and API errors Russian-first.
 - Keep visible demo/test names Russian unless a test intentionally verifies legacy stored text.
+- Keep browser `localStorage` bearer-token persistence limited to MVP/internal staging until a production session persistence phase replaces it.
 
 Phase 1K.6 delivered:
 
@@ -59,7 +62,7 @@ Phase 1K.6 delivered:
 
 Purpose: stabilize the current backend and frontend implementation before starting new product capabilities.
 
-Status: in progress.
+Status: completed.
 
 Phase 1L must not implement:
 
@@ -173,19 +176,20 @@ Delivered:
 - Added CORS preflight regression coverage for `POST /api/v1/auth/login`.
 - Fixed audit event API serialization for PostgreSQL `INET` values returned as `IPv4Address` objects.
 - Added audit schema regression coverage for `AuditEventRead.ip_address`.
-- Validated frontend against a real staging backend on `http://192.168.100.12:18080` and local Vite frontend on `http://127.0.0.1:5174`.
+- Validated frontend against a configured staging backend and local Vite frontend.
 - Used disposable PostgreSQL database `reg_engine_test`; production `reg_engine` was not migrated or mutated.
 - Verified real browser flows: login, organizations, registries, card list/read, dynamic field save, audit update visibility, and public-link edit.
 - Stored ignored screenshots under `artifacts/phase-1l5/admin-live.png` and `artifacts/phase-1l5/public-live.png`.
+- Concrete staging URLs and SSH/database targets are intentionally not recorded in public documentation.
 
 Verification:
 
 - `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_config.py -q` -> 5 passed.
 - `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_audit_schema.py backend\tests\test_config.py -q` -> 6 passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` -> passed after CORS and audit fixes.
-- `curl.exe -i -X OPTIONS http://192.168.100.12:18080/api/v1/auth/login -H "Origin: http://127.0.0.1:5173" -H "Access-Control-Request-Method: POST"` -> `200 OK` with `access-control-allow-origin`.
+- CORS preflight against the configured staging API origin -> `200 OK` with `access-control-allow-origin`.
 - `node tmp\phase1l5-live-validate.mjs` -> passed for real browser validation.
-- `ssh root@registoryengine "cd /opt/reg_engine/backend && sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -p no:cacheprovider --tb=short"` -> 94 passed, 2 warnings.
+- PostgreSQL-backed tests on the configured runtime server against disposable `reg_engine_test` -> 94 passed, 2 warnings.
 
 ### Phase 1L.6: Frontend Structure Refactor
 
@@ -223,6 +227,8 @@ Verification:
 
 ### Phase 1L.7: Browser Storage Risk Decision
 
+Status: completed.
+
 Required work:
 
 - Decide whether browser storage remains acceptable for MVP session persistence.
@@ -233,7 +239,26 @@ Acceptance criteria:
 
 - The session storage decision is explicit before production frontend hosting.
 
+Decision:
+
+- Keep current frontend `localStorage` session persistence only for MVP, local development, disposable tests, and internal staging.
+- Do not treat `localStorage` bearer-token persistence as production-ready for externally hosted or untrusted-client deployments.
+- Before production frontend hosting, replace it with server-side session or refresh-token persistence, hashed stored tokens, explicit logout revocation, httpOnly `Secure` `SameSite` cookies, short-lived access tokens, CSRF protection for cookie-authenticated unsafe methods, and session audit events.
+
+Delivered:
+
+- Added ADR 0002 for browser session storage.
+- README documents the current `localStorage` behavior, logout limitation, MVP risk assumptions, and production replacement direction.
+- AGENTS.md records the standing rule that current browser storage is MVP-only.
+
+Verification:
+
+- Documentation-only checkpoint; no backend, migration, auth-flow, or frontend UI code was changed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` -> passed after documentation update.
+
 ### Phase 1L.8: Repository Visibility And Infrastructure Exposure
+
+Status: completed.
 
 Required work:
 
@@ -246,9 +271,28 @@ Acceptance criteria:
 - Public documentation does not expose unnecessary infrastructure details.
 - Private repository decision is recorded if chosen.
 
+Decision:
+
+- GitHub API showed `BorisDruzak/reg_engine` is public at this checkpoint.
+- The repository may remain public only if committed documentation and defaults do not expose concrete internal hostnames, LAN IP addresses, SSH users, private key paths, deploy-key values, database endpoints, or operator-only runbooks.
+- If future work needs to keep concrete operational runbooks in Git, the repository must be made private first.
+
+Delivered:
+
+- Replaced concrete runtime server, SSH, checkout, and PostgreSQL details in public docs with placeholders and local-config guidance.
+- Added ignored `scripts/local.reg_engine.psd1` support through `scripts/local.reg_engine.example.psd1` so operational values can stay machine-local.
+- Kept GitHub remote, branch policy, and generic deploy workflow documented.
+- Added ADR 0003 for repository visibility and operational details.
+
+Verification:
+
+- GitHub REST API check for `BorisDruzak/reg_engine` -> `private=false`, `visibility=public`.
+- `rg` check across public docs/scripts found no concrete internal host/IP/user/path/deploy-key strings after redaction.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1` -> passed with remote checks using ignored local config.
+
 ## Planned Phases After Phase 1L
 
-- Phase 2: Documents.
+- Phase 2: Documents. Requires explicit approval before implementation.
 - Phase 3: Import and export.
 - Phase 4: Reports.
 - Phase 5: MCP over API only.

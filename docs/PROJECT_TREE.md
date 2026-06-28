@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 20:29:48 +05:00
+- Generated: 2026-06-28 20:42:15 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -106,6 +106,8 @@
 - `backend/tests/test_registry_card_services.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
+- `docs/ADR/0002-browser-session-storage.md`
+- `docs/ADR/0003-repository-visibility.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
@@ -173,6 +175,7 @@
 - `scripts/format.ps1`
 - `scripts/lib/RegEngine.ps1`
 - `scripts/lint.ps1`
+- `scripts/local.reg_engine.example.psd1`
 - `scripts/project-map.ps1`
 - `scripts/push-git.ps1`
 - `scripts/server-check.ps1`

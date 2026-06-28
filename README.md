@@ -39,7 +39,7 @@ Target system:
 - Frontend: React + TypeScript + Vite in `frontend/`.
 - Automation: PowerShell-first scripts in `scripts/` for the Codex Windows app.
 - CI: GitHub Actions backend and frontend quality gates.
-- Server: `/opt/reg_engine` on `registoryengine`.
+- Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, and user/access management API.
@@ -90,7 +90,7 @@ pnpm -C frontend exec playwright install chromium
 | Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
 | Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
 
-This project uses one long-lived branch: `main`. After a verified implementation checkpoint, commit the scoped local changes, push `main` to GitHub, update `/opt/reg_engine` from `origin/main`, and run server checks. Planned production PostgreSQL migrations may be applied by Codex after disposable PostgreSQL verification, fresh backup, data preflight, and post-migration checks.
+This project uses one long-lived branch: `main`. After a verified implementation checkpoint, commit the scoped local changes, push `main` to GitHub, update the configured server checkout from `origin/main`, and run server checks. Planned production PostgreSQL migrations may be applied by Codex after disposable PostgreSQL verification, fresh backup, data preflight, and post-migration checks.
 
 ## Direct Backend Commands
 
@@ -157,7 +157,7 @@ For server/runtime use, keep secrets outside the repository and point the backen
 $env:REG_ENGINE_ENV_FILE = "C:\path\to\reg_engine.env"
 ```
 
-On `registoryengine`, the intended runtime file is:
+On the runtime server, the intended runtime file is outside the repository, for example:
 
 ```text
 /etc/reg_engine/reg_engine.env
@@ -205,6 +205,39 @@ POST /api/v1/auth/logout
 ```
 
 `POST /api/v1/auth/logout` validates the bearer token and returns `{"status":"ok"}`. Server-side token revocation storage is intentionally deferred until the session persistence phase.
+
+## Browser Session Storage Decision
+
+The MVP frontend currently stores the bearer token and current-user snapshot in browser `localStorage` under `reg_engine.session.v1`. This is accepted only for local development, disposable tests, and internal MVP/staging use.
+
+Do not treat browser `localStorage` bearer-token persistence as production-ready. Before production frontend hosting, replace it with server-side session or refresh-token persistence, hashed stored tokens, explicit logout revocation, httpOnly `Secure` `SameSite` cookies, short-lived access tokens, CSRF protection for cookie-authenticated unsafe methods, and session audit events.
+
+The current logout flow clears browser storage in the frontend and validates the bearer token on the backend, but it does not revoke already issued tokens server-side. See `docs/ADR/0002-browser-session-storage.md`.
+
+## Remote Infrastructure Configuration
+
+This repository is public. Do not commit concrete runtime hostnames, LAN IP addresses, SSH users, private key paths, database endpoints, passwords, deploy-key values, or operator-only runbooks.
+
+Remote scripts read operational values from environment variables or from an ignored local file:
+
+```powershell
+Copy-Item scripts/local.reg_engine.example.psd1 scripts/local.reg_engine.psd1
+```
+
+Supported local config keys and matching environment variables:
+
+| Local config key | Environment variable |
+| --- | --- |
+| `ServerHost` | `REG_ENGINE_SERVER_HOST` |
+| `ServerUser` | `REG_ENGINE_SERVER_USER` |
+| `ServerTarget` | `REG_ENGINE_SERVER_TARGET` |
+| `ServerRepo` | `REG_ENGINE_SERVER_REPO` |
+| `PgHost` | `REG_ENGINE_PGHOST` |
+| `PgPort` | `REG_ENGINE_PGPORT` |
+| `PgDatabase` | `REG_ENGINE_PGDATABASE` |
+| `PgUser` | `REG_ENGINE_PGUSER` |
+
+The local config file is ignored by Git and must remain machine-local.
 
 Access management API:
 
@@ -267,16 +300,16 @@ $env:REG_ENGINE_PGPASSWORD = "<password>"
 powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1
 ```
 
-The server can also keep the same value outside the repo in `/etc/reg_engine/reg_engine.env`.
+The server can also keep the same value outside the repo in its runtime environment file.
 
 Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/build checks without GitHub SSH or server SSH reachability.
 
 ## Server
 
-- SSH target: `root@registoryengine`
-- Server checkout: `/opt/reg_engine`
+- SSH target: configured by `REG_ENGINE_SERVER_TARGET` or `ServerHost`/`ServerUser`.
+- Server checkout: configured by `REG_ENGINE_SERVER_REPO`.
 - GitHub remote: `git@github.com:BorisDruzak/reg_engine.git`
-- PostgreSQL: `192.168.100.12:5432`, database `reg_engine`, role `reg_engine_admin`
+- PostgreSQL endpoint: configured by `REG_ENGINE_PGHOST`, `REG_ENGINE_PGPORT`, `REG_ENGINE_PGDATABASE`, and `REG_ENGINE_PGUSER`.
 
 ## Known Remaining Non-Goals After Core Schema v1 API Foundation
 

@@ -22,6 +22,8 @@ if ($SkipRemote) {
     Write-Host "Skipping GitHub SSH and server SSH checks because -SkipRemote was passed."
 }
 else {
+    Assert-RegEngineRemoteConfig
+
     Write-RegEngineStep "GitHub SSH authentication from Windows"
     Test-RegEngineGitHubAuth
 

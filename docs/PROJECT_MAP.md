@@ -56,7 +56,7 @@ Project Foundation Tooling:
 - `scripts/dev-backend.ps1`: start FastAPI dev server.
 - `scripts/dev-frontend.ps1`: start Vite dev server.
 - `scripts/server-check.ps1`: verify remote server and PostgreSQL.
-- `scripts/deploy.ps1`: update `/opt/reg_engine` from GitHub.
+- `scripts/deploy.ps1`: update the configured server checkout from GitHub.
 
 ## Test Strategy
 

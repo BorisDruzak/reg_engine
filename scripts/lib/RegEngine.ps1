@@ -3,6 +3,13 @@ $ErrorActionPreference = "Stop"
 
 function Get-RegEngineConfig {
     $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+    $localConfig = Get-RegEngineLocalConfig -RepoRoot $repoRoot.Path
+    $serverHost = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServerHost" -EnvName "REG_ENGINE_SERVER_HOST" -Default ""
+    $serverUser = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServerUser" -EnvName "REG_ENGINE_SERVER_USER" -Default "root"
+    $serverTarget = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServerTarget" -EnvName "REG_ENGINE_SERVER_TARGET" -Default ""
+    if ([string]::IsNullOrWhiteSpace($serverTarget) -and -not [string]::IsNullOrWhiteSpace($serverHost)) {
+        $serverTarget = "$serverUser@$serverHost"
+    }
 
     [pscustomobject]@{
         RepoRoot     = $repoRoot.Path
@@ -11,14 +18,58 @@ function Get-RegEngineConfig {
         Branch       = "main"
         Remote       = "origin"
         RepoUrl      = "git@github.com:BorisDruzak/reg_engine.git"
-        ServerHost   = "registoryengine"
-        ServerUser   = "root"
-        ServerTarget = "root@registoryengine"
-        ServerRepo   = "/opt/reg_engine"
-        PgHost       = "192.168.100.12"
-        PgPort       = "5432"
-        PgDatabase   = "reg_engine"
-        PgUser       = "reg_engine_admin"
+        ServerHost   = $serverHost
+        ServerUser   = $serverUser
+        ServerTarget = $serverTarget
+        ServerRepo   = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServerRepo" -EnvName "REG_ENGINE_SERVER_REPO" -Default ""
+        PgHost       = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgHost" -EnvName "REG_ENGINE_PGHOST" -Default ""
+        PgPort       = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgPort" -EnvName "REG_ENGINE_PGPORT" -Default "5432"
+        PgDatabase   = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgDatabase" -EnvName "REG_ENGINE_PGDATABASE" -Default "reg_engine"
+        PgUser       = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgUser" -EnvName "REG_ENGINE_PGUSER" -Default ""
+    }
+}
+
+function Get-RegEngineLocalConfig {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $localConfigPath = $env:REG_ENGINE_LOCAL_CONFIG
+    if ([string]::IsNullOrWhiteSpace($localConfigPath)) {
+        $localConfigPath = Join-Path $RepoRoot "scripts\local.reg_engine.psd1"
+    }
+    if (-not (Test-Path -LiteralPath $localConfigPath)) {
+        return @{}
+    }
+    return Import-PowerShellDataFile -LiteralPath $localConfigPath
+}
+
+function Get-RegEngineConfigValue {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$LocalConfig,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string]$EnvName,
+        [Parameter()][string]$Default = ""
+    )
+
+    $envValue = [Environment]::GetEnvironmentVariable($EnvName)
+    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+        return $envValue
+    }
+    if ($LocalConfig.ContainsKey($Key) -and -not [string]::IsNullOrWhiteSpace([string]$LocalConfig[$Key])) {
+        return [string]$LocalConfig[$Key]
+    }
+    return $Default
+}
+
+function Assert-RegEngineRemoteConfig {
+    $config = Get-RegEngineConfig
+    $missing = @()
+    if ([string]::IsNullOrWhiteSpace($config.ServerTarget)) { $missing += "REG_ENGINE_SERVER_HOST or REG_ENGINE_SERVER_TARGET" }
+    if ([string]::IsNullOrWhiteSpace($config.ServerRepo)) { $missing += "REG_ENGINE_SERVER_REPO" }
+    if ([string]::IsNullOrWhiteSpace($config.PgHost)) { $missing += "REG_ENGINE_PGHOST" }
+    if ([string]::IsNullOrWhiteSpace($config.PgUser)) { $missing += "REG_ENGINE_PGUSER" }
+
+    if ($missing.Count -gt 0) {
+        throw "Remote configuration is missing: $($missing -join ', '). Set environment variables or create ignored scripts/local.reg_engine.psd1 from scripts/local.reg_engine.example.psd1."
     }
 }
 
@@ -87,6 +138,7 @@ function Invoke-RegEngineServerScript {
     )
 
     $config = Get-RegEngineConfig
+    Assert-RegEngineRemoteConfig
     Write-RegEngineStep "ssh $($config.ServerTarget) bash -s"
     $Script | & ssh -o BatchMode=yes $config.ServerTarget "tr -d '\r' | bash -s"
     $exitCode = if ($null -eq $global:LASTEXITCODE) { 0 } else { $global:LASTEXITCODE }

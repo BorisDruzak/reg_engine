@@ -4,7 +4,7 @@
 
 **Goal:** Add PowerShell-first scripts for local checks, GitHub push, server deploy, and server verification.
 
-**Architecture:** Shared configuration and command helpers live in `scripts/lib/RegEngine.ps1`. Thin command scripts import the helper and perform one workflow each. Server-side operations are executed from Windows through `ssh root@registoryengine`.
+**Architecture:** Shared configuration and command helpers live in `scripts/lib/RegEngine.ps1`. Thin command scripts import the helper and perform one workflow each. Server-side operations are executed from Windows through the configured SSH target.
 
 **Tech Stack:** PowerShell 5.1+, Git, OpenSSH, PostgreSQL `psql` on the server.
 
@@ -51,13 +51,13 @@ Expected: all configured checks pass.
 
 - [ ] **Step 1: Add server checks**
 
-Check root SSH, `/opt/reg_engine` Git remote, GitHub fetch, PostgreSQL active state, PostgreSQL listen sockets, and database TCP login.
+Check root SSH, configured server checkout Git remote, GitHub fetch, PostgreSQL active state, PostgreSQL listen sockets, and database TCP login.
 
 - [ ] **Step 2: Verify**
 
 Run: `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`
 
-Expected: GitHub fetch passes and database query returns `reg_engine_admin`.
+Expected: GitHub fetch passes and database query returns the configured database role.
 
 ### Task 4: Push and Deploy
 
@@ -72,7 +72,7 @@ Stage selected files or all files, commit with a required message, and push to `
 
 - [ ] **Step 2: Add deploy script**
 
-Fetch `origin`, checkout/reset `main` on `/opt/reg_engine`, then run server checks.
+Fetch `origin`, checkout/reset `main` in the configured server checkout, then run server checks.
 
 - [ ] **Step 3: Add full-cycle script**
 
@@ -98,4 +98,3 @@ powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1
 ```
 
 Expected: both scripts exit with code `0`.
-
