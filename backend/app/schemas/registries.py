@@ -21,6 +21,10 @@ class RegistryRead(BaseModel):
     schema_version: int
 
 
+class RegistryListRead(BaseModel):
+    items: list[RegistryRead]
+
+
 class RegistrySchemaRead(BaseModel):
     registry: RegistryRead
     blocks: list["FormBlockRead"]

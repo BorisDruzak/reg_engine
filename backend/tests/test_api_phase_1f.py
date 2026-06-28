@@ -218,6 +218,80 @@ def test_phase_1f_api_routes_are_registered_without_database() -> None:
     assert "/api/v1/audit-events" in paths
 
 
+def test_api_lists_registries_visible_to_actor(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-registry-list-system@example.test",
+        is_superuser=True,
+    )
+    card_admin = _create_user(db_session, "api-registry-list-card-admin@example.test")
+    outsider = _create_user(db_session, "api-registry-list-outsider@example.test")
+    card_role = _create_role_with_permissions(
+        db_session,
+        "api_registry_list_card_admin",
+        ["cards.manage"],
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "api-registry-list", "name": "API Registry List"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "status", "label": "Status", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    _grant_access(
+        db_session,
+        user_id=card_admin.id,
+        role_id=card_role.id,
+        registry_id=UUID(registry["id"]),
+        created_by=system_admin.id,
+    )
+
+    admin_response = api_client.get(
+        "/api/v1/registries",
+        headers=_actor_headers(system_admin.id),
+    )
+    card_admin_response = api_client.get(
+        "/api/v1/registries",
+        headers=_actor_headers(card_admin.id),
+    )
+    card_admin_schema_response = api_client.get(
+        f"/api/v1/registries/{registry['id']}/schema",
+        headers=_actor_headers(card_admin.id),
+    )
+    outsider_schema_response = api_client.get(
+        f"/api/v1/registries/{registry['id']}/schema",
+        headers=_actor_headers(outsider.id),
+    )
+    outsider_response = api_client.get(
+        "/api/v1/registries",
+        headers=_actor_headers(outsider.id),
+    )
+
+    assert admin_response.status_code == 200, admin_response.text
+    assert any(item["id"] == registry["id"] for item in admin_response.json()["items"])
+    assert card_admin_response.status_code == 200, card_admin_response.text
+    assert [item["id"] for item in card_admin_response.json()["items"]] == [registry["id"]]
+    assert card_admin_schema_response.status_code == 200, card_admin_schema_response.text
+    assert card_admin_schema_response.json()["fields"][0]["code"] == "status"
+    assert outsider_response.status_code == 200, outsider_response.text
+    assert outsider_response.json()["items"] == []
+    assert outsider_schema_response.status_code == 403, outsider_schema_response.text
+
+
 def test_api_can_create_schema_cards_public_links_transfer_and_read_audit(
     api_client: TestClient,
     db_session: Session,

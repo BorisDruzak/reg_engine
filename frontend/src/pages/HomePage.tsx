@@ -1,29 +1,47 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import {
   ApiError,
   getCurrentUser,
+  getRegistrySchema,
+  listCards,
   listAccessGrants,
   listAuditEvents,
   listOrganizations,
   listPermissions,
+  listRegistries,
   listRoles,
   listUsers,
   login,
+  readCard,
 } from "@/api/client";
 import type {
   AccessGrantRead,
   AuditEventRead,
+  CardRead,
+  CardSummaryRead,
   CurrentUser,
+  FormBlockRead,
+  FormFieldRead,
   OrganizationRead,
   PermissionRead,
+  RegistryRead,
+  RegistrySchemaRead,
   RoleRead,
   UserRead,
 } from "@/api/types";
 
 const SESSION_STORAGE_KEY = "reg_engine.session.v1";
-const visibleSections = ["Overview", "Organizations", "Users", "Access", "Audit"] as const;
+const visibleSections = [
+  "Overview",
+  "Organizations",
+  "Registries",
+  "Cards",
+  "Users",
+  "Access",
+  "Audit",
+] as const;
 
 type VisibleSection = (typeof visibleSections)[number];
 
@@ -36,6 +54,8 @@ export function HomePage() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SessionState | null>(() => loadSession());
   const [activeSection, setActiveSection] = useState<VisibleSection>("Overview");
+  const [selectedRegistryId, setSelectedRegistryId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   const token = session?.token ?? "";
   const currentUserQuery = useQuery({
@@ -47,6 +67,28 @@ export function HomePage() {
     queryKey: ["organizations", token],
     queryFn: () => listOrganizations(token),
     enabled: Boolean(token),
+  });
+  const registriesQuery = useQuery({
+    queryKey: ["registries", token],
+    queryFn: () => listRegistries(token),
+    enabled: Boolean(token),
+  });
+  const activeRegistryId = selectedRegistryId ?? registriesQuery.data?.items[0]?.id ?? "";
+  const registrySchemaQuery = useQuery({
+    queryKey: ["registry-schema", token, activeRegistryId],
+    queryFn: () => getRegistrySchema(token, activeRegistryId),
+    enabled: Boolean(token && activeRegistryId),
+  });
+  const cardsQuery = useQuery({
+    queryKey: ["cards", token, activeRegistryId],
+    queryFn: () => listCards(token, activeRegistryId),
+    enabled: Boolean(token && activeRegistryId),
+  });
+  const activeCardId = selectedCardId ?? cardsQuery.data?.items[0]?.id ?? "";
+  const cardReadQuery = useQuery({
+    queryKey: ["card", token, activeCardId],
+    queryFn: () => readCard(token, activeCardId),
+    enabled: Boolean(token && activeCardId),
   });
   const usersQuery = useQuery({
     queryKey: ["users", token],
@@ -78,14 +120,14 @@ export function HomePage() {
   const metrics = useMemo(
     () => [
       { label: "Organizations", value: organizationsQuery.data?.items.length ?? 0 },
+      { label: "Registries", value: registriesQuery.data?.items.length ?? 0 },
+      { label: "Cards", value: cardsQuery.data?.items.length ?? 0 },
       { label: "Users", value: usersQuery.data?.items.length ?? 0 },
-      { label: "Roles", value: rolesQuery.data?.items.length ?? 0 },
-      { label: "Grants", value: grantsQuery.data?.items.length ?? 0 },
     ],
     [
-      grantsQuery.data?.items.length,
+      cardsQuery.data?.items.length,
       organizationsQuery.data?.items.length,
-      rolesQuery.data?.items.length,
+      registriesQuery.data?.items.length,
       usersQuery.data?.items.length,
     ],
   );
@@ -100,6 +142,8 @@ export function HomePage() {
     queryClient.clear();
     setSession(null);
     setActiveSection("Overview");
+    setSelectedRegistryId(null);
+    setSelectedCardId(null);
   }
 
   if (!session) {
@@ -151,6 +195,10 @@ export function HomePage() {
           error={[
             currentUserQuery.error,
             organizationsQuery.error,
+            registriesQuery.error,
+            registrySchemaQuery.error,
+            cardsQuery.error,
+            cardReadQuery.error,
             usersQuery.error,
             rolesQuery.error,
             permissionsQuery.error,
@@ -169,6 +217,26 @@ export function HomePage() {
         )}
         {activeSection === "Organizations" && (
           <OrganizationsTable organizations={organizationsQuery.data?.items ?? []} />
+        )}
+        {activeSection === "Registries" && (
+          <RegistriesAndSchema
+            registries={registriesQuery.data?.items ?? []}
+            schema={registrySchemaQuery.data ?? null}
+            selectedRegistryId={activeRegistryId}
+            onSelectRegistry={(registryId) => {
+              setSelectedRegistryId(registryId);
+              setSelectedCardId(null);
+            }}
+          />
+        )}
+        {activeSection === "Cards" && (
+          <CardsWorkspace
+            cards={cardsQuery.data?.items ?? []}
+            card={cardReadQuery.data ?? null}
+            organizations={organizationsQuery.data?.items ?? []}
+            selectedCardId={activeCardId}
+            onSelectCard={setSelectedCardId}
+          />
         )}
         {activeSection === "Users" && (
           <UsersAndRoles
@@ -324,6 +392,173 @@ function OrganizationsTable({ organizations }: { organizations: OrganizationRead
   );
 }
 
+function RegistriesAndSchema({
+  registries,
+  schema,
+  selectedRegistryId,
+  onSelectRegistry,
+}: {
+  registries: RegistryRead[];
+  schema: RegistrySchemaRead | null;
+  selectedRegistryId: string;
+  onSelectRegistry: (registryId: string) => void;
+}) {
+  const blocksById = useMemo(
+    () => new Map((schema?.blocks ?? []).map((block) => [block.id, block])),
+    [schema?.blocks],
+  );
+
+  return (
+    <div className="stack">
+      <div className="split-grid">
+        <Panel title="Registries">
+          <SelectableList
+            items={registries.map((registry) => ({
+              id: registry.id,
+              title: registry.name,
+              detail: `${registry.code} / v${registry.schema_version} / ${registry.lifecycle_status}`,
+            }))}
+            selectedId={selectedRegistryId}
+            onSelect={onSelectRegistry}
+          />
+        </Panel>
+        <Panel title="Schema blocks">
+          <BlocksTable blocks={schema?.blocks ?? []} />
+        </Panel>
+      </div>
+      <Panel title="Schema fields">
+        <FieldsTable fields={schema?.fields ?? []} blocksById={blocksById} />
+      </Panel>
+    </div>
+  );
+}
+
+function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Code</th>
+            <th>Repeatable</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {blocks.map((block) => (
+            <tr key={block.id}>
+              <td>{block.title}</td>
+              <td>{block.code}</td>
+              <td>{block.is_repeatable ? "yes" : "no"}</td>
+              <td>{block.is_active ? "active" : "inactive"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FieldsTable({
+  fields,
+  blocksById,
+}: {
+  fields: FormFieldRead[];
+  blocksById: Map<string, FormBlockRead>;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Code</th>
+            <th>Block</th>
+            <th>Type</th>
+            <th>Options</th>
+          </tr>
+        </thead>
+        <tbody>
+          {fields.map((field) => (
+            <tr key={field.id}>
+              <td>{field.label}</td>
+              <td>{field.code}</td>
+              <td>{blocksById.get(field.block_id)?.title ?? shortId(field.block_id)}</td>
+              <td>{field.field_type}</td>
+              <td>{field.options_source_type ?? "none"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CardsWorkspace({
+  cards,
+  card,
+  organizations,
+  selectedCardId,
+  onSelectCard,
+}: {
+  cards: CardSummaryRead[];
+  card: CardRead | null;
+  organizations: OrganizationRead[];
+  selectedCardId: string;
+  onSelectCard: (cardId: string) => void;
+}) {
+  const organizationsById = useMemo(
+    () => new Map(organizations.map((organization) => [organization.id, organization])),
+    [organizations],
+  );
+  const fieldRows = useMemo(() => flattenCardFields(card), [card]);
+
+  return (
+    <div className="stack">
+      <div className="split-grid">
+        <Panel title="Cards">
+          <SelectableList
+            items={cards.map((item) => ({
+              id: item.id,
+              title: item.display_name,
+              detail: `${organizationsById.get(item.organization_id)?.name ?? shortId(item.organization_id)} / ${
+                item.lifecycle_status
+              }`,
+            }))}
+            selectedId={selectedCardId}
+            onSelect={onSelectCard}
+          />
+        </Panel>
+        <Panel title="Card fields">
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Block</th>
+                  <th>Field</th>
+                  <th>Type</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fieldRows.map((field) => (
+                  <tr key={field.key}>
+                    <td>{field.block}</td>
+                    <td>{field.field}</td>
+                    <td>{field.type}</td>
+                    <td>{field.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function UsersAndRoles({
   users,
   roles,
@@ -420,8 +655,8 @@ function AccessGrantsTable({
                 <td>{rolesById.get(grant.role_id)?.code ?? shortId(grant.role_id)}</td>
                 <td>
                   {grant.organization_id
-                    ? organizationsById.get(grant.organization_id)?.name ??
-                      shortId(grant.organization_id)
+                    ? (organizationsById.get(grant.organization_id)?.name ??
+                      shortId(grant.organization_id))
                     : "global"}
                 </td>
                 <td>{grant.include_descendants ? "descendants" : "exact"}</td>
@@ -463,7 +698,7 @@ function AuditTable({ auditEvents }: { auditEvents: AuditEventRead[] }) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="data-panel">
       <header>
@@ -471,6 +706,32 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       </header>
       {children}
     </section>
+  );
+}
+
+function SelectableList({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  items: { id: string; title: string; detail: string }[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="selectable-list">
+      {items.map((item) => (
+        <button
+          type="button"
+          key={item.id}
+          className={item.id === selectedId ? "selectable-row is-selected" : "selectable-row"}
+          onClick={() => onSelect(item.id)}
+        >
+          <strong>{item.title}</strong>
+          <span>{item.detail}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -523,6 +784,37 @@ function errorText(error: unknown) {
     return error.message;
   }
   return "Request failed";
+}
+
+function flattenCardFields(card: CardRead | null) {
+  if (!card) {
+    return [];
+  }
+
+  return Object.values(card.blocks).flatMap((block) =>
+    block.instances.flatMap((instance) =>
+      Object.values(instance.fields).map((field) => ({
+        key: `${block.code}:${instance.ordinal}:${field.field_id}`,
+        block: `${block.code} #${instance.ordinal + 1}`,
+        field: field.code,
+        type: field.field_type,
+        value: formatValue(field.value),
+      })),
+    ),
+  );
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "empty";
+  }
+  if (Array.isArray(value)) {
+    return value.map(formatValue).join(", ");
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
 }
 
 function shortId(value: string) {

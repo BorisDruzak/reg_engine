@@ -43,8 +43,8 @@ Target system:
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, and user/access management API.
-- Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, and audit reads.
-- Registry/card frontend workflows, import/export, documents, and MCP are later phases.
+- Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read shell, and audit reads.
+- Dynamic card editing, public-link frontend editing, import/export, documents, and MCP are later phases.
 
 ## Local Setup
 
@@ -268,11 +268,11 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 ## Known Remaining Non-Goals After Core Schema v1 API Foundation
 
 - No server-side token revocation table yet.
-- No registry/card dynamic frontend workflow yet.
+- No dynamic card form editor yet.
 - No public-link frontend edit page yet.
 - No import/export.
 - No document generation.
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Registry/card UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Dynamic card editing, public-link frontend editing, import/export, documents, and MCP remain later phases.

@@ -21,6 +21,7 @@ from app.schemas.registries import (
     ReferenceListRead,
     ReferenceListUpdate,
     RegistryCreate,
+    RegistryListRead,
     RegistryRead,
     RegistrySchemaRead,
 )
@@ -46,6 +47,22 @@ def create_registry(
     except Exception as exc:
         raise_service_http_error(exc)
     return RegistryRead.model_validate(registry)
+
+
+@router.get("/registries", response_model=RegistryListRead)
+def list_registries(
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> RegistryListRead:
+    try:
+        registries = RegistrySchemaService(session).list_registries_for_actor(
+            actor_user_id=actor_user_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return RegistryListRead(
+        items=[RegistryRead.model_validate(registry) for registry in registries]
+    )
 
 
 @router.get("/registries/{registry_id}", response_model=RegistryRead)

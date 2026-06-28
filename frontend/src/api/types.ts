@@ -31,6 +31,96 @@ export type OrganizationListRead = {
   items: OrganizationRead[];
 };
 
+export type RegistryRead = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  lifecycle_status: string;
+  schema_version: number;
+};
+
+export type RegistryListRead = {
+  items: RegistryRead[];
+};
+
+export type FormBlockRead = {
+  id: string;
+  registry_id: string;
+  code: string;
+  title: string;
+  description: string | null;
+  position: number;
+  is_repeatable: boolean;
+  is_active: boolean;
+  public_visible: boolean;
+  public_editable: boolean;
+};
+
+export type FormFieldRead = {
+  id: string;
+  block_id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  field_type: string;
+  position: number;
+  options_source_type: string | null;
+  options_source_id: string | null;
+  is_active: boolean;
+  public_visible: boolean;
+  public_editable: boolean;
+};
+
+export type RegistrySchemaRead = {
+  registry: RegistryRead;
+  blocks: FormBlockRead[];
+  fields: FormFieldRead[];
+};
+
+export type CardSummaryRead = {
+  id: string;
+  registry_id: string;
+  organization_id: string;
+  org_unit_id: string | null;
+  display_name: string;
+  lifecycle_status: string;
+  public_view_enabled: boolean;
+  public_edit_enabled: boolean;
+};
+
+export type CardListRead = {
+  items: CardSummaryRead[];
+};
+
+export type CardFieldRead = {
+  field_id: string;
+  code: string;
+  field_type: string;
+  value: unknown;
+};
+
+export type CardBlockInstanceRead = {
+  block_instance_id: string | null;
+  ordinal: number;
+  fields: Record<string, CardFieldRead>;
+};
+
+export type CardBlockRead = {
+  block_id: string;
+  code: string;
+  instances: CardBlockInstanceRead[];
+};
+
+export type CardRead = {
+  id: string;
+  registry_id: string;
+  organization_id: string;
+  display_name: string;
+  blocks: Record<string, CardBlockRead>;
+  fields: Record<string, CardFieldRead>;
+};
+
 export type UserRead = {
   id: string;
   email: string;

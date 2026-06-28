@@ -18,6 +18,35 @@ class RegistrySchemaService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def list_registries_for_actor(self, *, actor_user_id: UUID) -> list[Registry]:
+        statement = (
+            select(Registry)
+            .where(
+                Registry.archived_at.is_(None),
+                Registry.lifecycle_status != "archived",
+            )
+            .order_by(Registry.code, Registry.id)
+        )
+        registries = list(self.session.scalars(statement).all())
+        permissions = PermissionService(self.session)
+        if permissions.is_superuser(actor_user_id):
+            return registries
+
+        return [
+            registry
+            for registry in registries
+            if permissions.has_permission(
+                actor_user_id,
+                "registry.schema.manage",
+                registry_id=registry.id,
+            )
+            or permissions.has_permission(
+                actor_user_id,
+                "cards.manage",
+                registry_id=registry.id,
+            )
+        ]
+
     def create_registry_for_actor(
         self,
         *,
@@ -48,7 +77,7 @@ class RegistrySchemaService:
 
     def read_registry_for_actor(self, *, actor_user_id: UUID, registry_id: UUID) -> Registry:
         registry = self._get_active_registry(registry_id)
-        self._require_schema_permission(actor_user_id, registry.id)
+        self._require_registry_read_permission(actor_user_id, registry.id)
         return registry
 
     def read_schema_for_actor(
@@ -323,6 +352,21 @@ class RegistrySchemaService:
             registry_id=registry_id,
         ):
             raise PermissionDeniedError("Actor cannot manage registry schema.")
+
+    def _require_registry_read_permission(self, actor_user_id: UUID, registry_id: UUID) -> None:
+        permissions = PermissionService(self.session)
+        if permissions.has_permission(
+            actor_user_id,
+            "registry.schema.manage",
+            registry_id=registry_id,
+        ) or permissions.has_permission(
+            actor_user_id,
+            "cards.manage",
+            registry_id=registry_id,
+        ):
+            return
+
+        raise PermissionDeniedError("Actor cannot read registry.")
 
     def _get_active_registry(self, registry_id: UUID) -> Registry:
         registry = self.session.get(Registry, registry_id)

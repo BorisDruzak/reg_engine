@@ -37,9 +37,7 @@ button {
   display: grid;
   place-items: center;
   padding: 32px;
-  background:
-    linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 42%),
-    #f5f6f8;
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 42%), #f5f6f8;
 }
 
 .login-panel {
@@ -374,6 +372,50 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.selectable-list {
+  display: grid;
+  margin: 0;
+}
+
+.selectable-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #edf0f4;
+  border-radius: 0;
+  padding: 12px 14px;
+  color: #344054;
+  background: #ffffff;
+  text-align: left;
+}
+
+.selectable-row:last-child {
+  border-bottom: 0;
+}
+
+.selectable-row:hover {
+  background: #f6f8fa;
+}
+
+.selectable-row.is-selected {
+  background: #eef3f2;
+  box-shadow: inset 3px 0 #0f766e;
+}
+
+.selectable-row strong {
+  color: #101828;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.selectable-row span {
+  color: #667085;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .form-error,
 .data-alert {
   margin: 0;
@@ -402,7 +444,7 @@ tr:last-child td {
   }
 
   .workspace-nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
     margin-top: 18px;
   }
 

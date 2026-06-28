@@ -1,10 +1,14 @@
 import type {
   AccessGrantListRead,
   AuditEventListRead,
+  CardListRead,
+  CardRead,
   CurrentUser,
   LoginResponse,
   OrganizationListRead,
   PermissionListRead,
+  RegistryListRead,
+  RegistrySchemaRead,
   RoleListRead,
   UserListRead,
 } from "./types";
@@ -40,6 +44,22 @@ export async function getCurrentUser(token: string) {
 
 export async function listOrganizations(token: string) {
   return apiRequest<OrganizationListRead>("/api/v1/organizations", { token });
+}
+
+export async function listRegistries(token: string) {
+  return apiRequest<RegistryListRead>("/api/v1/registries", { token });
+}
+
+export async function getRegistrySchema(token: string, registryId: string) {
+  return apiRequest<RegistrySchemaRead>(`/api/v1/registries/${registryId}/schema`, { token });
+}
+
+export async function listCards(token: string, registryId: string) {
+  return apiRequest<CardListRead>(`/api/v1/registries/${registryId}/cards`, { token });
+}
+
+export async function readCard(token: string, cardId: string) {
+  return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
 }
 
 export async function listUsers(token: string) {

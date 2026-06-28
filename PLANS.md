@@ -12,7 +12,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1B through Phase 1J backend foundation, API hardening, bootstrap tooling, auth flow, and user/access management API is completed.
 - Phase 1K Production Frontend Workflows is in progress.
 - Phase 1K.1 Authenticated Admin Shell is completed.
-- Current next checkpoint is **Phase 1K.2: Registry And Card Frontend Workflows**.
+- Phase 1K.2 Registry And Card Frontend Workflows is completed.
+- Current next checkpoint is **Phase 1K.3: Dynamic Card Form Editing**.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -31,7 +32,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1I Auth And Session Flow is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1J User And Access Management API is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1K.1 Authenticated Admin Shell is completed and verified locally.
-- Phase 1K.2 Registry And Card Frontend Workflows is the next planned implementation phase.
+- Phase 1K.2 Registry And Card Frontend Workflows is completed and verified locally.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -40,6 +41,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1I did not require a database migration.
 - Phase 1J did not require a database migration.
 - Phase 1K.1 did not require a database migration.
+- Phase 1K.2 did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -491,6 +493,43 @@ Known limitations after Phase 1K.1:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1K.1.
 
+### Phase 1K.2: Registry And Card Frontend Workflows
+
+Status: completed.
+
+Delivered:
+
+- Backend registry list endpoint: `GET /api/v1/registries`.
+- Registry/schema read access supports `registry.schema.manage` and `cards.manage`; schema mutation still requires `registry.schema.manage`.
+- Frontend API client and TypeScript types for registry list, registry schema, card list, and card read responses.
+- Authenticated `Registries` workspace tab with registry selection, schema blocks, and schema fields.
+- Authenticated `Cards` workspace tab with card selection and nested `blocks -> instances -> fields` value rendering.
+- Overview metrics now include registry and card counts for the active registry context.
+- Vitest coverage for registry/schema and card read rendering after login.
+- Playwright smoke coverage for authenticated registry/schema and card read workflow.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+pnpm -C frontend lint
+pnpm -C frontend format:check
+pnpm -C frontend typecheck
+pnpm -C frontend test:run -- App.test.tsx
+pnpm -C frontend e2e
+backend\.venv\Scripts\python.exe -m ruff check backend\app\services\registry_schema.py backend\app\schemas\registries.py backend\app\api\v1\endpoints\registries.py backend\tests\test_api_phase_1f.py
+backend\.venv\Scripts\python.exe -m mypy backend\app
+```
+
+Known limitations after Phase 1K.2:
+
+- Backend PostgreSQL API test for `GET /api/v1/registries` requires `TEST_DATABASE_URL`; it is skipped when disposable PostgreSQL is not configured locally.
+- Card field editing is not implemented in the frontend yet.
+- Dynamic card form renderer with typed input controls is not implemented yet.
+- Public-link frontend edit page is not implemented yet.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1K.2.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -756,11 +795,11 @@ Required work:
 Completed subphases:
 
 - Phase 1K.1 Authenticated Admin Shell.
+- Phase 1K.2 Registry and schema frontend workflows plus card list/read shell.
 
 Remaining subphases:
 
-- Phase 1K.2 Registry and schema frontend workflows.
-- Phase 1K.3 Card list/read/edit shell and dynamic form renderer.
+- Phase 1K.3 Dynamic card form renderer and card field editing.
 - Phase 1K.4 Public-link edit page.
 - Phase 1K.5 Frontend browser/live validation pass.
 
