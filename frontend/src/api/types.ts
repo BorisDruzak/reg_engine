@@ -288,6 +288,14 @@ export type DocumentTemplateRead = {
   archived_at: string | null;
 };
 
+export type DocumentTemplateCreatePayload = {
+  code: string;
+  name: string;
+  description?: string | null;
+  template_body: string;
+  output_filename_template: string;
+};
+
 export type DocumentTemplateListRead = {
   items: DocumentTemplateRead[];
 };

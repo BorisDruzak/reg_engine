@@ -6,7 +6,9 @@ import type {
   CardListRead,
   CardRead,
   CurrentUser,
+  DocumentTemplateCreatePayload,
   DocumentTemplateListRead,
+  DocumentTemplateRead,
   FieldValueRead,
   GeneratedDocumentListRead,
   GeneratedDocumentRead,
@@ -174,6 +176,25 @@ export async function listDocumentTemplates(token: string, registryId: string) {
     `/api/v1/registries/${registryId}/document-templates`,
     { token },
   );
+}
+
+export async function createDocumentTemplate(
+  token: string,
+  registryId: string,
+  payload: DocumentTemplateCreatePayload,
+) {
+  return apiRequest<DocumentTemplateRead>(`/api/v1/registries/${registryId}/document-templates`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveDocumentTemplate(token: string, templateId: string) {
+  return apiRequest<DocumentTemplateRead>(`/api/v1/document-templates/${templateId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function listGeneratedDocuments(token: string, cardId: string) {

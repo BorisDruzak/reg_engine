@@ -47,6 +47,11 @@ Public links do not generate, upload, or download documents in Phase 2C.
 `file_ref` remains deferred. PDF remains deferred. Frontend attachment/document
 UI remains Phase 2D work.
 
+Follow-up implementation kept this decision narrow: Phase 2D added authenticated
+generation/download/archive UI, and Phase 2G added authenticated text-template
+create/archive UI. Public-link file flows, `file_ref`, PDF conversion, binary
+template upload, and template versioning remain deferred.
+
 ## Consequences
 
 The first generated document slice is intentionally narrow. It proves schema
@@ -59,4 +64,3 @@ storage root remains configured outside Git.
 
 Template body text is metadata in the database for this slice. Binary operator
 templates and template versioning remain future work.
-

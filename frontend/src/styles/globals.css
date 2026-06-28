@@ -548,6 +548,35 @@ tr:last-child td {
   grid-template-columns: minmax(180px, 1fr) auto;
 }
 
+.template-manager {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.template-manager h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.template-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.template-body-control {
+  grid-column: 1 / -1;
+}
+
+.template-list {
+  border-top: 1px solid #edf0f4;
+}
+
 .attachment-status {
   padding: 10px 14px 0;
 }
@@ -683,6 +712,7 @@ tr:last-child td {
   .field-editor-row,
   .attachment-form,
   .document-generator,
+  .template-form,
   .file-action-list li {
     grid-template-columns: 1fr;
   }

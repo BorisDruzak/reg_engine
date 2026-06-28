@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { App } from "@/App";
-import type { AttachmentRead, GeneratedDocumentRead } from "@/api/types";
+import type { AttachmentRead, DocumentTemplateRead, GeneratedDocumentRead } from "@/api/types";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -282,6 +282,7 @@ let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
 let attachmentItems: typeof apiPayloads.attachments.items;
+let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
 
 beforeEach(() => {
@@ -291,6 +292,7 @@ beforeEach(() => {
   cardApprovedValue = false;
   publicStatusValue = "drafted";
   attachmentItems = [];
+  documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   vi.stubGlobal(
@@ -392,7 +394,44 @@ beforeEach(() => {
       if (
         url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates")
       ) {
-        return jsonResponse(apiPayloads.documentTemplates);
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            description: string | null;
+            template_body: string;
+            output_filename_template: string;
+          };
+          const created: DocumentTemplateRead = {
+            id: "abababab-abab-4aba-8bab-abababababab",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            code: payload.code,
+            name: payload.name,
+            description: payload.description,
+            template_format: "docx_text_v1",
+            output_filename_template: payload.output_filename_template,
+            output_content_type:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            is_active: true,
+            created_at: "2026-06-28T12:05:00Z",
+            archived_at: null,
+          };
+          documentTemplateItems = [...documentTemplateItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: documentTemplateItems });
+      }
+      if (url.endsWith("/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab")) {
+        const archived = {
+          ...documentTemplateItems.find(
+            (item) => item.id === "abababab-abab-4aba-8bab-abababababab",
+          )!,
+          archived_at: "2026-06-28T12:06:00Z",
+        };
+        documentTemplateItems = documentTemplateItems.filter(
+          (item) => item.id !== "abababab-abab-4aba-8bab-abababababab",
+        );
+        return jsonResponse(archived);
       }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents")) {
         if (init?.method === "POST") {
@@ -732,6 +771,77 @@ test("manages card attachments and generated documents in Russian UI", async () 
         }
         const body = JSON.parse(String(init.body ?? "{}")) as { template_id?: string };
         return body.template_id === "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      }),
+    ).toBe(true);
+  });
+});
+
+test("creates and archives document templates in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByRole("heading", { name: "Шаблоны документов" })).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Код шаблона"), "acceptance_act");
+  await user.type(screen.getByLabelText("Название шаблона"), "Акт приема");
+  await user.type(screen.getByLabelText("Описание шаблона"), "Документ по карточке");
+  fireEvent.change(screen.getByLabelText("Шаблон имени файла"), {
+    target: { value: "{{ card.display_name }}-act.docx" },
+  });
+  fireEvent.change(screen.getByLabelText("Текст шаблона"), {
+    target: { value: "Карточка: {{ card.display_name }}" },
+  });
+  await user.click(screen.getByRole("button", { name: "Создать шаблон" }));
+
+  expect(await screen.findByText("Шаблон создан")).toBeInTheDocument();
+  expect(screen.getAllByText("Акт приема").length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: "Архивировать шаблон Акт приема" }));
+
+  expect(await screen.findByText("Шаблон архивирован")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryAllByText("Акт приема")).toHaveLength(0));
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          code?: string;
+          name?: string;
+          description?: string | null;
+          template_body?: string;
+          output_filename_template?: string;
+        };
+        return (
+          body.code === "acceptance_act" &&
+          body.name === "Акт приема" &&
+          body.description === "Документ по карточке" &&
+          body.template_body === "Карточка: {{ card.display_name }}" &&
+          body.output_filename_template === "{{ card.display_name }}-act.docx"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return (
+          url.endsWith("/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab") &&
+          init?.method === "DELETE"
+        );
       }),
     ).toBe(true);
   });

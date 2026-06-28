@@ -269,6 +269,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   let cardStatusValue = "drafted";
   let cardApprovedValue = false;
   let attachmentItems = [...apiPayloads.attachments.items];
+  let documentTemplateItems = [...apiPayloads.documentTemplates.items];
   let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
   await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -329,10 +330,55 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     if (
       url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates"
     ) {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          code: string;
+          name: string;
+          description: string | null;
+          template_body: string;
+          output_filename_template: string;
+        };
+        const created = {
+          id: "abababab-abab-4aba-8bab-abababababab",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          code: body.code,
+          name: body.name,
+          description: body.description,
+          template_format: "docx_text_v1",
+          output_filename_template: body.output_filename_template,
+          output_content_type:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          is_active: true,
+          created_at: "2026-06-28T12:05:00Z",
+          archived_at: null,
+        };
+        documentTemplateItems = [...documentTemplateItems, created];
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(created),
+        });
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(apiPayloads.documentTemplates),
+        body: JSON.stringify({ items: documentTemplateItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab") {
+      const archived = {
+        ...documentTemplateItems.find((item) => item.id === "abababab-abab-4aba-8bab-abababababab"),
+        archived_at: "2026-06-28T12:06:00Z",
+      };
+      documentTemplateItems = documentTemplateItems.filter(
+        (item) => item.id !== "abababab-abab-4aba-8bab-abababababab",
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(archived),
       });
       return;
     }
@@ -476,8 +522,20 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Сохранено: Подтверждено")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
   await expect(page.getByText("Нет файлов")).toBeVisible();
   await expect(page.getByText("Нет документов")).toBeVisible();
+  await page.getByLabel("Код шаблона").fill("acceptance_act");
+  await page.getByLabel("Название шаблона").fill("Акт приема");
+  await page.getByLabel("Описание шаблона").fill("Документ по карточке");
+  await page.getByLabel("Шаблон имени файла").fill("{{ card.display_name }}-act.docx");
+  await page.getByLabel("Текст шаблона").fill("Карточка: {{ card.display_name }}");
+  await page.getByRole("button", { name: "Создать шаблон" }).click();
+  await expect(page.getByText("Шаблон создан")).toBeVisible();
+  await expect(page.getByLabel("Шаблоны документов").getByText("Акт приема")).toBeVisible();
+  await page.getByRole("button", { name: "Архивировать шаблон Акт приема" }).click();
+  await expect(page.getByText("Шаблон архивирован")).toBeVisible();
+  await expect(page.getByLabel("Шаблоны документов").getByText("Акт приема")).toHaveCount(0);
   await page.getByLabel("Название файла").fill("Акт проверки");
   await page.getByLabel("Файл", { exact: true }).setInputFiles({
     name: "akt.txt",

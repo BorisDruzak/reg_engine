@@ -32,15 +32,15 @@ Completed phases:
 - Phase 2F: Attachment backend hardening before next document phases.
 - Phase 2C: Generated document templates backend foundation.
 - Phase 2D: Frontend document workflows.
+- Phase 2G: Document template management UI.
 
 Current stop point:
 
-- Phase 2D authenticated frontend attachment/document workflows are complete.
+- Phase 2G authenticated frontend attachment/document workflows are complete.
 - PDF conversion remains deferred.
 - Public-link upload/download remains deferred.
 - `file_ref` remains deferred.
-- Generated document template management UI remains deferred; Phase 2D lists
-  existing templates and generates documents from the card workspace.
+- Binary `.docx` template upload and template versioning remain deferred.
 
 ## Core Rules
 
@@ -64,7 +64,7 @@ Approved scope:
 
 - Card-level attachments first.
 - Generated documents started backend-only in Phase 2C and have authenticated
-  card-workspace UI in Phase 2D.
+  card-workspace UI in Phase 2D and template management UI in Phase 2G.
 - Local filesystem backend through a storage abstraction, configured outside Git.
 - No public-link upload/download in the first attachment slice.
 - `file_ref` deferred until attachment metadata is stable.
@@ -78,6 +78,7 @@ Completed Phase 2 work:
 - Phase 2F hardened upload bounds, storage cleanup, filename/download headers, runtime settings, scanner mode handling, and attachment lifecycle documentation.
 - Phase 2C added `document_templates`, `generated_documents`, backend-only `docx_text_v1` rendering, generated file storage, audit, and archive behavior.
 - Phase 2D added authenticated Russian-first card-workspace panels for attachments and generated documents, plus generated-document API endpoints needed by the UI.
+- Phase 2G added authenticated Russian-first template creation and archive controls for existing `docx_text_v1` document templates.
 
 ## Review Findings After Phase 2E
 
@@ -238,12 +239,66 @@ Phase 2D did not implement:
 - MCP;
 - MDB migration.
 
+### Phase 2G: Document Template Management UI
+
+Status: completed.
+
+Purpose: expose the already-approved authenticated document-template backend in
+the card workspace without adding new backend schema, public-link file behavior,
+binary template uploads, PDF conversion, import/export, or MCP.
+
+Delivered:
+
+- Added authenticated frontend API client methods for document template create
+  and archive.
+- Added Russian-first document template management UI inside the authenticated
+  card workspace.
+- Added active template list with archive actions.
+- Kept generation based on active templates and refreshed the generator after
+  template create/archive.
+- Kept public-link screens without attachment, generated-document, or template
+  controls.
+- Added unit and e2e coverage for template create/archive workflows.
+
+Verification evidence:
+
+- `pnpm -C frontend test:run -- App.test.tsx` passed.
+- `pnpm -C frontend typecheck` passed.
+- `pnpm -C frontend e2e` passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote` passed.
+
+Acceptance criteria:
+
+- Template management UI uses Russian user-facing labels.
+- Template create sends `code`, `name`, optional `description`,
+  `template_body`, and `output_filename_template` to the existing API.
+- Template archive uses the existing archive endpoint and removes archived
+  templates from the active list.
+- Public-link pages do not call attachment, generated-document, or
+  document-template endpoints.
+- No backend models, migrations, services, auth flow, import/export, documents
+  beyond `docx_text_v1`, MCP, or frontend public-link file controls are added.
+
+Phase 2G did not implement:
+
+- public-link upload/download;
+- public document generation;
+- binary `.docx` template upload;
+- template versioning;
+- `file_ref`;
+- PDF conversion;
+- import/export;
+- MCP;
+- MDB migration.
+
 ## Future Directions
 
 ### Later deferred items
 
 - Public-link file upload/download.
 - `file_ref` dynamic field type.
+- Binary `.docx` template upload and template versioning.
+- PDF conversion.
 - Import/export.
 - Reports.
 - MCP over API only.
