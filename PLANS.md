@@ -182,6 +182,17 @@ Delivered:
 - Preserved stored file metadata and bytes when generated documents are archived.
 - Recorded audit events for template create/archive and document generate/archive.
 
+Verification evidence:
+
+- Disposable PostgreSQL backend suite passed against a database ending with `_test`.
+- Local `scripts/check.ps1 -SkipRemote` passed.
+- `scripts/push-git.ps1` passed and pushed `main`.
+- Server checkout was updated from `origin/main`.
+- Fresh production PostgreSQL backup was created outside Git before migration.
+- Production preflight confirmed Alembic `0005_attachments` and absent Phase 2C tables.
+- Production Alembic upgrade reached `0006_generated_documents`.
+- Production post-check confirmed `document_templates`, `generated_documents`, constraints, and backend `create_app`.
+
 Phase 2C did not implement:
 
 - frontend attachment/document UI;
