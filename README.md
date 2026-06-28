@@ -234,6 +234,15 @@ When `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` is non-empty, the attachment service
 rejects uploads whose MIME type is outside the comma-separated allow-list before
 writing bytes to storage.
 
+For production-like `APP_ENV` values, `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` is
+required. The current MVP allow-list checks the upload MIME type supplied by the
+client and records this trust boundary; deeper server-side content sniffing is
+deferred to a later scanner/content-inspection phase.
+
+`REG_ENGINE_MALWARE_SCANNER=deferred` is the only supported scanner mode in the
+current attachment slice. Unsupported scanner mode values fail startup clearly
+instead of silently falling back.
+
 Authenticated attachment API:
 
 ```powershell
@@ -245,6 +254,24 @@ DELETE /api/v1/attachments/{attachment_id}
 ```
 
 Upload uses multipart form data with `file` and optional `title` / `description`. Backend access checks follow card scope: create/archive require editable card access, and metadata/download require readable card access. Public links intentionally have no attachment upload or download endpoints in this slice.
+
+Upload reads are bounded by `REG_ENGINE_MAX_ATTACHMENT_BYTES`; oversized uploads
+are rejected before unbounded request-body growth is possible. If metadata
+persistence fails after bytes have been written, the storage object is deleted
+before the error is re-raised.
+
+Download responses include a safe `Content-Disposition: attachment` header with
+an ASCII fallback filename and a UTF-8 `filename*` value. Stored original
+filenames are normalized to remove control characters and header-unsafe
+characters.
+
+Archiving a card attachment archives the card-scoped attachment link and keeps
+the stored file metadata and bytes. `stored_files.archived_at` is not used by the
+MVP attachment-link archive flow; physical byte cleanup and stored-file garbage
+collection are deferred to a future retention phase. Authenticated attachment
+responses currently include `stored_file_id` and `checksum_sha256` as technical
+metadata for authorized API consumers; frontend UI should treat them as
+diagnostic metadata, not primary user-facing labels.
 
 `scripts/server-check.ps1` verifies the configured attachment storage backend and confirms that `REG_ENGINE_STORAGE_ROOT` exists outside the Git checkout.
 

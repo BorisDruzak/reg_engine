@@ -1,3 +1,4 @@
+import asyncio
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+from app.api.v1.endpoints import attachments as attachment_endpoints
 from app.main import create_app
 from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_permissions
 from app.services.cards import CardService
@@ -124,6 +126,21 @@ def _restore_env(name: str, value: str | None) -> None:
 
 def _actor_headers(user_id: UUID) -> dict[str, str]:
     return {"X-Actor-User-Id": str(user_id)}
+
+
+class _FakeUpload:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = chunks
+        self.read_sizes: list[int] = []
+
+    async def read(self, size: int = -1) -> bytes:
+        self.read_sizes.append(size)
+        if not self._chunks:
+            return b""
+        chunk = self._chunks.pop(0)
+        if size >= 0:
+            return chunk[:size]
+        return chunk
 
 
 def _create_user(
@@ -315,6 +332,9 @@ def test_api_attachment_upload_list_read_download_and_archive_use_card_scope(
     assert download_response.status_code == 200, download_response.text
     assert download_response.content == b"attachment bytes"
     assert download_response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert "attachment;" in download_response.headers["content-disposition"]
+    assert "\r" not in download_response.headers["content-disposition"]
+    assert "\n" not in download_response.headers["content-disposition"]
 
     archive_response = api_client.delete(
         f"/api/v1/attachments/{upload_payload['id']}",
@@ -411,3 +431,44 @@ def test_api_attachment_upload_rejects_disallowed_content_type(
         get_settings.cache_clear()
 
     assert response.status_code == 400, response.text
+
+
+def test_api_attachment_upload_rejects_oversized_file(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _attachment_api_context(db_session)
+
+    response = api_client.post(
+        f"/api/v1/cards/{context['card'].id}/attachments",
+        headers=_actor_headers(context["card_admin"].id),
+        files={"file": ("large.txt", b"x" * 65, "text/plain")},
+    )
+
+    assert response.status_code == 413, response.text
+
+
+def test_upload_reader_rejects_oversized_content_without_unbounded_read() -> None:
+    reader = _FakeUpload([b"x" * 65])
+
+    with pytest.raises(attachment_endpoints.AttachmentUploadTooLargeError):
+        asyncio.run(attachment_endpoints._read_upload_bytes_with_limit(reader, max_bytes=64))
+
+    assert reader.read_sizes
+    assert all(size != -1 for size in reader.read_sizes)
+    assert max(reader.read_sizes) <= 65
+
+
+def test_download_headers_use_safe_content_disposition() -> None:
+    headers = attachment_endpoints._download_headers_for_filename('bad\r\n"name";.txt')
+
+    assert headers["X-Attachment-Filename"] == "bad_name_.txt"
+    assert headers["Content-Disposition"].startswith("attachment;")
+    assert "filename*=UTF-8''bad_name_.txt" in headers["Content-Disposition"]
+    assert "\r" not in headers["Content-Disposition"]
+    assert "\n" not in headers["Content-Disposition"]
+
+    unicode_headers = attachment_endpoints._download_headers_for_filename("файл.txt")
+    assert unicode_headers["X-Attachment-Filename"] == "____.txt"
+    assert 'filename="____.txt"' in unicode_headers["Content-Disposition"]
+    assert "filename*=UTF-8''%D1%84%D0%B0%D0%B9%D0%BB.txt" in unicode_headers["Content-Disposition"]

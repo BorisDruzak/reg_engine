@@ -99,6 +99,8 @@ Responsibilities:
 - return byte count and checksum data needed for metadata validation;
 - open a stored object for authorized reads;
 - verify a key exists for smoke tests;
+- delete a newly written object if post-write metadata work fails before the
+  transaction can commit;
 - reject path traversal and absolute paths.
 
 The local filesystem backend reads its root from external configuration such as `REG_ENGINE_STORAGE_ROOT`. It must write under that root only. It must never derive storage paths from `original_filename`.
@@ -188,6 +190,29 @@ When the MIME allow-list is configured, rejected uploads must fail before bytes 
 written to the storage backend. Empty filename and content-type metadata must also
 be rejected before storage writes, so invalid requests do not leave orphaned
 binary objects.
+
+Phase 2F hardening decisions:
+
+- Upload reads are bounded by `REG_ENGINE_MAX_ATTACHMENT_BYTES`; the API does
+  not call an unbounded multipart `read()`.
+- Production-like runtimes must configure `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`.
+- The MVP allow-list trusts the client-provided MIME type; server-side content
+  sniffing remains a later scanner/content-inspection phase.
+- `REG_ENGINE_MALWARE_SCANNER=deferred` is the only supported scanner mode until
+  a concrete scanner backend is implemented. Unsupported values fail startup.
+- Original filenames are normalized for metadata and response headers by
+  removing control characters and header-unsafe characters. Downloads use
+  `Content-Disposition: attachment` with an ASCII fallback filename and UTF-8
+  `filename*`.
+- If metadata persistence or scanner work fails after bytes are written, the
+  just-written object is removed from storage before the error is propagated.
+- Attachment archive currently archives `card_attachments` links. Stored file
+  bytes and `stored_files` metadata are retained indefinitely; a future retention
+  or garbage-collection phase owns physical cleanup and any use of
+  `stored_files.archived_at`.
+- Authenticated API responses keep `stored_file_id` and `checksum_sha256` as
+  technical metadata for authorized callers. Browser UI should avoid presenting
+  those fields as primary labels.
 
 The configured root should be backed up with the database metadata. It should not live under the Git checkout.
 

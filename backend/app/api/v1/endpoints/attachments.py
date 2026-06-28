@@ -1,4 +1,5 @@
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import (
@@ -18,9 +19,19 @@ from app.api.dependencies import get_actor_user_id, get_db_session, raise_servic
 from app.core.config import get_settings
 from app.models import CardAttachment
 from app.schemas.attachments import AttachmentListRead, AttachmentRead
-from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
+from app.services.attachments import (
+    AttachmentService,
+    LocalFilesystemAttachmentStorage,
+    normalize_attachment_filename,
+)
 
 router = APIRouter(tags=["attachments"])
+
+_UPLOAD_READ_CHUNK_SIZE = 64 * 1024
+
+
+class AttachmentUploadTooLargeError(ValueError):
+    """Raised when a multipart upload exceeds the configured attachment size."""
 
 
 @router.post(
@@ -37,8 +48,11 @@ async def create_attachment(
     description: Annotated[str | None, Form()] = None,
 ) -> AttachmentRead:
     service = _attachment_service(session)
-    content = await file.read()
     try:
+        content = await _read_upload_bytes_with_limit(
+            file,
+            max_bytes=get_settings().max_attachment_bytes,
+        )
         attachment = service.create_attachment_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
@@ -48,6 +62,8 @@ async def create_attachment(
             title=title,
             description=description,
         )
+    except AttachmentUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except Exception as exc:
         raise_service_http_error(exc)
     return _attachment_to_read(service, attachment)
@@ -116,7 +132,7 @@ def read_attachment_content(
     return Response(
         content=content,
         media_type=stored_file.content_type,
-        headers={"X-Attachment-Filename": stored_file.original_filename},
+        headers=_download_headers_for_filename(stored_file.original_filename),
     )
 
 
@@ -153,6 +169,38 @@ def _attachment_service(session: Session) -> AttachmentService:
 
 def _parse_allowed_content_types(raw_value: str) -> set[str]:
     return {item.strip().lower() for item in raw_value.split(",") if item.strip()}
+
+
+async def _read_upload_bytes_with_limit(file: UploadFile, *, max_bytes: int) -> bytes:
+    content = bytearray()
+    while True:
+        remaining = max_bytes + 1 - len(content)
+        chunk = await file.read(min(_UPLOAD_READ_CHUNK_SIZE, remaining))
+        if not chunk:
+            break
+        content.extend(chunk)
+        if len(content) > max_bytes:
+            raise AttachmentUploadTooLargeError(
+                "Attachment content exceeds the configured size limit."
+            )
+    return bytes(content)
+
+
+def _download_headers_for_filename(original_filename: str) -> dict[str, str]:
+    filename = normalize_attachment_filename(original_filename)
+    fallback_filename = _ascii_download_filename_fallback(filename)
+    quoted_filename = quote(filename, safe="")
+    return {
+        "X-Attachment-Filename": fallback_filename,
+        "Content-Disposition": (
+            f"attachment; filename=\"{fallback_filename}\"; filename*=UTF-8''{quoted_filename}"
+        ),
+    }
+
+
+def _ascii_download_filename_fallback(filename: str) -> str:
+    fallback = "".join(char if char.isascii() and char.isprintable() else "_" for char in filename)
+    return fallback if fallback.strip("._ ") else "attachment"
 
 
 def _attachment_to_read(service: AttachmentService, attachment: CardAttachment) -> AttachmentRead:

@@ -18,6 +18,7 @@ from app.services.attachments import (
     AttachmentServiceError,
     AttachmentStorageError,
     LocalFilesystemAttachmentStorage,
+    MalwareScanResult,
     StoredObjectInfo,
 )
 from app.services.cards import CardService
@@ -352,6 +353,75 @@ def test_attachment_rejects_blank_metadata_before_storage_write(
         )
 
     assert storage.write_count == 0
+
+
+def test_attachment_storage_is_cleaned_when_post_write_work_fails(
+    db_session: Session,
+) -> None:
+    class RecordingStorage(LocalFilesystemAttachmentStorage):
+        backend_name = "recording"
+
+        def __init__(self) -> None:
+            self.deleted_keys: list[str] = []
+
+        def write_bytes(self, content: bytes) -> StoredObjectInfo:
+            return StoredObjectInfo(
+                storage_key="attachments/test/cleanup",
+                content_length_bytes=len(content),
+                checksum_sha256=hashlib.sha256(content).hexdigest(),
+            )
+
+        def read_bytes(self, storage_key: str) -> bytes:
+            return b""
+
+        def exists(self, storage_key: str) -> bool:
+            return storage_key not in self.deleted_keys
+
+        def delete_bytes(self, storage_key: str) -> None:
+            self.deleted_keys.append(storage_key)
+
+    class FailingScanner:
+        def scan(self, *, storage, storage_key: str) -> MalwareScanResult:
+            raise RuntimeError("scanner failed after storage write")
+
+    context = _attachment_context(db_session)
+    storage = RecordingStorage()
+    attachment_service = AttachmentService(
+        db_session,
+        storage=storage,
+        scanner=FailingScanner(),
+    )
+
+    with pytest.raises(RuntimeError, match="scanner failed"):
+        attachment_service.create_attachment_for_actor(
+            actor_user_id=context["child_admin"].id,
+            card_id=context["card"].id,
+            original_filename="cleanup.txt",
+            content_type="text/plain",
+            content=b"cleanup",
+        )
+
+    assert storage.deleted_keys == ["attachments/test/cleanup"]
+
+
+def test_attachment_filename_metadata_is_normalized(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename='..\\bad\r\n"name";.txt',
+        content_type="text/plain",
+        content=b"safe-name",
+    )
+
+    stored_file = db_session.get(StoredFile, attachment.stored_file_id)
+    assert stored_file is not None
+    assert stored_file.original_filename == ".._bad_name_.txt"
+    assert attachment.title == ".._bad_name_.txt"
 
 
 def test_attachment_metadata_records_checksum_sha256(

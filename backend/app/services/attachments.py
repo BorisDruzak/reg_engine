@@ -1,4 +1,6 @@
 import hashlib
+import re
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -50,6 +52,10 @@ class AttachmentStorage(Protocol):
         """Return whether the backend has an object for the key."""
         ...
 
+    def delete_bytes(self, storage_key: str) -> None:
+        """Delete a stored object after failed metadata persistence."""
+        ...
+
 
 class MalwareScanner(Protocol):
     def scan(self, *, storage: AttachmentStorage, storage_key: str) -> MalwareScanResult:
@@ -86,6 +92,12 @@ class LocalFilesystemAttachmentStorage:
 
     def exists(self, storage_key: str) -> bool:
         return self._path_for_key(storage_key).is_file()
+
+    def delete_bytes(self, storage_key: str) -> None:
+        try:
+            self._path_for_key(storage_key).unlink()
+        except FileNotFoundError:
+            return
 
     def _path_for_key(self, storage_key: str) -> Path:
         if "\\" in storage_key:
@@ -141,55 +153,60 @@ class AttachmentService:
             card.organization_id,
             registry_id=card.registry_id,
         )
-        clean_original_filename = self._clean_required_text(
-            original_filename,
-            "original filename",
-        )
+        clean_original_filename = normalize_attachment_filename(original_filename)
         clean_content_type = self._clean_required_text(content_type, "content type")
         self._validate_attachment_content(content)
         self._validate_content_type(clean_content_type)
 
         stored_info = self.storage.write_bytes(content)
-        scan_result = self.scanner.scan(storage=self.storage, storage_key=stored_info.storage_key)
-        stored_file = StoredFile(
-            storage_backend=self.storage.backend_name,
-            storage_key=stored_info.storage_key,
-            original_filename=clean_original_filename,
-            content_type=clean_content_type,
-            content_length_bytes=stored_info.content_length_bytes,
-            checksum_sha256=stored_info.checksum_sha256,
-            scanner_status=scan_result.scanner_status,
-            scanner_checked_at=scan_result.scanner_checked_at,
-            scanner_details_json=scan_result.scanner_details_json,
-            created_by=actor_user_id,
-        )
-        self.session.add(stored_file)
-        self.session.flush()
+        try:
+            scan_result = self.scanner.scan(
+                storage=self.storage,
+                storage_key=stored_info.storage_key,
+            )
+            stored_file = StoredFile(
+                storage_backend=self.storage.backend_name,
+                storage_key=stored_info.storage_key,
+                original_filename=clean_original_filename,
+                content_type=clean_content_type,
+                content_length_bytes=stored_info.content_length_bytes,
+                checksum_sha256=stored_info.checksum_sha256,
+                scanner_status=scan_result.scanner_status,
+                scanner_checked_at=scan_result.scanner_checked_at,
+                scanner_details_json=scan_result.scanner_details_json,
+                created_by=actor_user_id,
+            )
+            self.session.add(stored_file)
+            self.session.flush()
 
-        attachment = CardAttachment(
-            card_id=card.id,
-            stored_file_id=stored_file.id,
-            title=self._attachment_title(title, clean_original_filename),
-            description=description,
-            position=self._next_position(card.id),
-            created_by=actor_user_id,
-        )
-        self.session.add(attachment)
-        self.session.flush()
-        AuditService(self.session).record_user_event(
-            actor_user_id=actor_user_id,
-            action="attachment_create",
-            object_type="card_attachment",
-            object_id=attachment.id,
-            new_data_json={
-                "card_id": str(card.id),
-                "stored_file_id": str(stored_file.id),
-                "content_length_bytes": stored_file.content_length_bytes,
-                "checksum_sha256": stored_file.checksum_sha256,
-                "scanner_status": stored_file.scanner_status,
-            },
-        )
-        return attachment
+            attachment = CardAttachment(
+                card_id=card.id,
+                stored_file_id=stored_file.id,
+                title=self._attachment_title(title, clean_original_filename),
+                description=description,
+                position=self._next_position(card.id),
+                created_by=actor_user_id,
+            )
+            self.session.add(attachment)
+            self.session.flush()
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="attachment_create",
+                object_type="card_attachment",
+                object_id=attachment.id,
+                new_data_json={
+                    "card_id": str(card.id),
+                    "stored_file_id": str(stored_file.id),
+                    "content_length_bytes": stored_file.content_length_bytes,
+                    "checksum_sha256": stored_file.checksum_sha256,
+                    "scanner_status": stored_file.scanner_status,
+                },
+            )
+            return attachment
+        except Exception:
+            with suppress(Exception):
+                self.storage.delete_bytes(stored_info.storage_key)
+            raise
 
     def list_attachments_for_actor(
         self,
@@ -395,3 +412,16 @@ class AttachmentService:
         if not cleaned:
             raise AttachmentServiceError(f"Attachment {label} must not be empty.")
         return cleaned
+
+
+_UNSAFE_FILENAME_PATTERN = re.compile("[\\x00-\\x1f\\x7f\\\\/\"';]+")
+
+
+def normalize_attachment_filename(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise AttachmentServiceError("Attachment original filename must not be empty.")
+    normalized = _UNSAFE_FILENAME_PATTERN.sub("_", cleaned)
+    if not normalized.strip("._ "):
+        raise AttachmentServiceError("Attachment original filename must not be empty.")
+    return normalized

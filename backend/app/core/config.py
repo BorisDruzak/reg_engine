@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEVELOPMENT_AUTH_TOKEN_SECRET = "change-me-development-auth-secret"
 PRODUCTION_LIKE_ENVS = {"prod", "production", "stage", "staging"}
+SUPPORTED_MALWARE_SCANNERS = {"deferred"}
 
 
 class Settings(BaseSettings):
@@ -56,6 +57,13 @@ def get_settings() -> Settings:
 
 
 def validate_runtime_configuration(settings: Settings) -> None:
+    malware_scanner = settings.malware_scanner.strip().lower()
+    if malware_scanner not in SUPPORTED_MALWARE_SCANNERS:
+        raise RuntimeError(
+            "REG_ENGINE_MALWARE_SCANNER must be one of "
+            f"{sorted(SUPPORTED_MALWARE_SCANNERS)}; got {settings.malware_scanner!r}."
+        )
+
     app_env = settings.app_env.strip().lower()
     if app_env not in PRODUCTION_LIKE_ENVS:
         return
@@ -64,6 +72,12 @@ def validate_runtime_configuration(settings: Settings) -> None:
         raise RuntimeError(
             "AUTH_TOKEN_SECRET must be set to a non-development value when APP_ENV is "
             f"production-like ({settings.app_env})."
+        )
+
+    if not settings.attachment_allowed_types.strip():
+        raise RuntimeError(
+            "REG_ENGINE_ATTACHMENT_ALLOWED_TYPES must be set to an explicit MIME allow-list "
+            f"when APP_ENV is production-like ({settings.app_env})."
         )
 
 

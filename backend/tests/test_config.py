@@ -41,6 +41,33 @@ def test_production_like_app_rejects_default_auth_secret(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
+def test_production_like_app_requires_attachment_allowed_types(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_TOKEN_SECRET", "not-the-development-secret")
+    monkeypatch.delenv("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", raising=False)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        with pytest.raises(RuntimeError, match="REG_ENGINE_ATTACHMENT_ALLOWED_TYPES"):
+            create_app()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_unsupported_malware_scanner_mode_is_rejected(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("REG_ENGINE_MALWARE_SCANNER", "clamav")
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        with pytest.raises(RuntimeError, match="REG_ENGINE_MALWARE_SCANNER"):
+            create_app()
+    finally:
+        get_settings.cache_clear()
+
+
 def test_development_app_allows_default_auth_secret(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)

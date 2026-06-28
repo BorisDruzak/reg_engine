@@ -29,6 +29,7 @@ Completed phases:
 - Phase 2A: Document storage architecture.
 - Phase 2B: Attachment backend foundation.
 - Phase 2E: Attachment security and live validation slice for attachment-first backend.
+- Phase 2F: Attachment backend hardening before next document phases.
 
 Current stop point:
 
@@ -36,7 +37,7 @@ Current stop point:
 - Frontend attachment/document workflows remain deferred until Phase 2D.
 - Public-link upload/download remains deferred.
 - `file_ref` remains deferred.
-- Before approving Phase 2C or 2D, run Phase 2F to harden the attachment backend slice.
+- Phase 2F hardening is complete for the attachment-first backend slice. Phase 2C and Phase 2D still require explicit approval before implementation.
 
 ## Core Rules
 
@@ -70,48 +71,49 @@ Completed Phase 2 work:
 - Phase 2A accepted the attachment storage architecture and metadata model.
 - Phase 2B added attachment metadata models, migration `0005_attachments`, local filesystem storage abstraction, attachment service, authenticated attachment endpoints, and tests.
 - Phase 2E completed live security validation for the attachment-first backend slice using disposable data and temporary storage.
+- Phase 2F hardened upload bounds, storage cleanup, filename/download headers, runtime settings, scanner mode handling, and attachment lifecycle documentation.
 
-## Current Review Findings After Phase 2E
+## Review Findings After Phase 2E
 
-These findings must be addressed before generated documents, frontend attachment UI, public-link file flows, or `file_ref`.
+These findings were addressed in Phase 2F before generated documents, frontend attachment UI, public-link file flows, or `file_ref`.
 
 ### P0: Upload memory behavior
 
-Current API reads uploaded file content into memory before service-level size validation. This is acceptable only for small test files. Phase 2F must implement a bounded read or streaming storage path that enforces configured size limits before unbounded memory growth is possible.
+Before Phase 2F, the API read uploaded file content into memory before service-level size validation. This was acceptable only for small test files. Phase 2F had to implement a bounded read or streaming storage path that enforces configured size limits before unbounded memory growth is possible.
 
 ### P0: Storage and database consistency
 
-Current service writes bytes to storage before metadata rows are fully committed. If the database transaction fails after storage write, an orphaned file can remain. Phase 2F must add cleanup-on-failure behavior or a documented pending/committed storage lifecycle.
+Before Phase 2F, the service wrote bytes to storage before metadata rows were fully committed. If the database transaction failed after storage write, an orphaned file could remain. Phase 2F had to add cleanup-on-failure behavior or a documented pending/committed storage lifecycle.
 
 ### P1: Filename and download header hardening
 
-Attachment filenames are stored as metadata and later returned in response headers. Phase 2F must normalize or validate filenames for control characters and unsafe header characters, and should use a safe `Content-Disposition` attachment header for downloads.
+Attachment filenames are stored as metadata and later returned in response headers. Phase 2F had to normalize or validate filenames for control characters and unsafe header characters, and use a safe `Content-Disposition` attachment header for downloads.
 
 ### P1: Runtime content-type policy
 
-The attachment service supports `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`, but an empty allow-list currently means all content types are accepted. Phase 2F must decide and document whether an explicit allow-list is required for staging/production-like runtimes while remaining convenient for tests.
+The attachment service supports `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`, but an empty allow-list means all content types are accepted in development/test. Phase 2F had to decide and document whether an explicit allow-list is required for staging/production-like runtimes while remaining convenient for tests.
 
 ### P1: MIME trust boundary
 
-The backend currently relies on the client-provided upload MIME type for allow-list checks. Phase 2F must document this as MVP behavior or add a basic server-side type check where practical.
+The backend relies on the client-provided upload MIME type for MVP allow-list checks. Phase 2F had to document this as MVP behavior or add a basic server-side type check where practical.
 
 ### P1: Malware scanner setting is not enforced
 
-Runtime setting `REG_ENGINE_MALWARE_SCANNER` exists, while the service currently uses the deferred scanner hook for the MVP slice. Phase 2F must either enforce only the documented `deferred` mode or wire supported scanner modes explicitly. Unsupported scanner modes must fail clearly.
+Runtime setting `REG_ENGINE_MALWARE_SCANNER` exists, while the service uses the deferred scanner hook for the MVP slice. Phase 2F had to either enforce only the documented `deferred` mode or wire supported scanner modes explicitly. Unsupported scanner modes must fail clearly.
 
 ### P1: Attachment retention and stored file lifecycle
 
-Archiving an attachment preserves metadata and bytes. Phase 2F must explicitly document whether `stored_files.archived_at` remains unused for now, whether file bytes are retained indefinitely, and what later garbage-collection or retention phase will own cleanup.
+Archiving an attachment preserves metadata and bytes. Phase 2F had to explicitly document whether `stored_files.archived_at` remains unused for now, whether file bytes are retained indefinitely, and what later garbage-collection or retention phase will own cleanup.
 
 ### P2: Attachment API response shape
 
-Attachment responses expose internal `stored_file_id` and checksum. This is currently acceptable for authenticated users with card visibility, but Phase 2F should confirm whether these values should remain visible before frontend document UI starts.
+Attachment responses expose internal `stored_file_id` and checksum. Phase 2F had to confirm whether these values should remain visible before frontend document UI starts.
 
 ## Phase 2F: Attachment Backend Hardening Before Next Document Phases
 
 Purpose: close attachment backend correctness and security gaps before approving generated documents, frontend attachment UI, public-link file flows, or `file_ref`.
 
-Status: planned next.
+Status: completed.
 
 Phase 2F must not implement:
 
@@ -136,6 +138,19 @@ Required work:
 8. Decide whether `stored_file_id` and checksum stay in user-facing API responses.
 9. Add regression tests for the items above.
 10. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs where needed.
+
+Delivered:
+
+- Added bounded multipart upload reading in the attachment API. Oversized uploads fail with `413` before an unbounded `read()`.
+- Added storage cleanup when post-write scanner/metadata work fails before transaction completion.
+- Normalized stored filenames for control/header-unsafe characters.
+- Added safe `Content-Disposition: attachment` download headers with ASCII fallback and UTF-8 `filename*`.
+- Required `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` in production-like runtimes while keeping development/test convenient.
+- Documented the MVP MIME trust boundary: the allow-list checks the client-provided upload MIME type until a later scanner/content-inspection phase.
+- Enforced `REG_ENGINE_MALWARE_SCANNER=deferred` as the only supported scanner mode for this slice; unsupported modes fail startup.
+- Documented that attachment archive preserves stored file metadata and bytes, leaves `stored_files.archived_at` unused in the MVP link-archive flow, and defers physical cleanup to a later retention phase.
+- Kept `stored_file_id` and `checksum_sha256` in authenticated API responses as technical metadata for authorized callers; frontend UI should not present them as primary labels.
+- Added regression tests for bounded upload reads, cleanup-on-failure, filename/header safety, production-like allow-list enforcement, and unsupported scanner mode rejection.
 
 Acceptance criteria:
 
