@@ -35,8 +35,9 @@ Completed phases:
 - Phase 2.0: Documents product scope decision.
 - Phase 2A: Document storage architecture.
 - Phase 2B: Attachment backend foundation.
+- Phase 2E: Attachment security and live validation slice.
 
-Phase 1L is complete. Phase 2 has started with card-level attachments first. Phase 2.0, Phase 2A, and Phase 2B are complete. The next phase must be selected explicitly because generated documents, `file_ref`, public-link file flows, and frontend attachment UI remain deferred.
+Phase 1L is complete. Phase 2 has started with card-level attachments first. Phase 2.0, Phase 2A, Phase 2B, and the Phase 2E attachment security/live validation slice are complete. The next phase must be selected explicitly because generated documents, `file_ref`, public-link file flows, and frontend attachment UI remain deferred.
 
 ## Core Rules
 
@@ -496,7 +497,7 @@ Acceptance criteria:
 
 ### Phase 2E: Document Security And Live Validation
 
-Status: in progress.
+Status: completed for the attachment-first backend slice. Generated-document validation is deferred until Phase 2C introduces generated documents.
 
 Planned work after approval:
 
@@ -511,9 +512,16 @@ Acceptance criteria:
 - Audit events exist for create/read-sensitive where required, archive, and generated-document operations.
 - Deployment and server checks pass after implementation.
 
-Partial validation evidence:
+Delivered for the attachment-first backend slice:
 
 - Runtime-server live security smoke used disposable database `reg_engine_phase2e_security_test` and temporary storage to verify authenticated upload, MIME allow-list rejection, no-access denial, parent-without-descendants denial, sibling denial, download, archive, archive-scope read, audit actions, storage-key non-exposure, and cleanup. Production data was not mutated.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` passed after the validation evidence was recorded.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1` updated the runtime checkout and server checks passed.
+
+Still deferred:
+
+- Generated-document reads and generated-document audit validation remain pending until Phase 2C is explicitly approved and implemented.
+- Frontend attachment/document workflows remain pending until Phase 2D is explicitly approved.
 
 ## Verification
 
