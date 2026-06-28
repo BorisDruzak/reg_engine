@@ -72,6 +72,21 @@ export type FormFieldRead = {
   public_editable: boolean;
 };
 
+export type ReferenceItemRead = {
+  id: string;
+  list_id: string;
+  parent_id: string | null;
+  code: string;
+  label: string;
+  description: string | null;
+  position: number;
+  is_active: boolean;
+};
+
+export type ReferenceItemListRead = {
+  items: ReferenceItemRead[];
+};
+
 export type RegistrySchemaRead = {
   registry: RegistryRead;
   blocks: FormBlockRead[];
@@ -119,6 +134,14 @@ export type CardRead = {
   display_name: string;
   blocks: Record<string, CardBlockRead>;
   fields: Record<string, CardFieldRead>;
+};
+
+export type FieldValueRead = {
+  id: string;
+  card_id: string;
+  block_instance_id: string | null;
+  field_id: string;
+  value: unknown;
 };
 
 export type UserRead = {

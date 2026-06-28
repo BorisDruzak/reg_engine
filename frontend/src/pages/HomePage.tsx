@@ -10,11 +10,13 @@ import {
   listAuditEvents,
   listOrganizations,
   listPermissions,
+  listReferenceItems,
   listRegistries,
   listRoles,
   listUsers,
   login,
   readCard,
+  updateCardFieldValue,
 } from "@/api/client";
 import type {
   AccessGrantRead,
@@ -26,6 +28,7 @@ import type {
   FormFieldRead,
   OrganizationRead,
   PermissionRead,
+  ReferenceItemRead,
   RegistryRead,
   RegistrySchemaRead,
   RoleRead,
@@ -233,6 +236,8 @@ export function HomePage() {
           <CardsWorkspace
             cards={cardsQuery.data?.items ?? []}
             card={cardReadQuery.data ?? null}
+            schema={registrySchemaQuery.data ?? null}
+            token={token}
             organizations={organizationsQuery.data?.items ?? []}
             selectedCardId={activeCardId}
             onSelectCard={setSelectedCardId}
@@ -498,12 +503,16 @@ function FieldsTable({
 function CardsWorkspace({
   cards,
   card,
+  schema,
+  token,
   organizations,
   selectedCardId,
   onSelectCard,
 }: {
   cards: CardSummaryRead[];
   card: CardRead | null;
+  schema: RegistrySchemaRead | null;
+  token: string;
   organizations: OrganizationRead[];
   selectedCardId: string;
   onSelectCard: (cardId: string) => void;
@@ -512,7 +521,7 @@ function CardsWorkspace({
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
   );
-  const fieldRows = useMemo(() => flattenCardFields(card), [card]);
+  const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
 
   return (
     <div className="stack">
@@ -531,31 +540,184 @@ function CardsWorkspace({
           />
         </Panel>
         <Panel title="Card fields">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Block</th>
-                  <th>Field</th>
-                  <th>Type</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fieldRows.map((field) => (
-                  <tr key={field.key}>
-                    <td>{field.block}</td>
-                    <td>{field.field}</td>
-                    <td>{field.type}</td>
-                    <td>{field.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="field-editor-list">
+            {card &&
+              fieldRows.map((field) => (
+                <CardFieldEditor key={field.key} cardId={card.id} field={field} token={token} />
+              ))}
           </div>
         </Panel>
       </div>
     </div>
+  );
+}
+
+type FieldEditorState = string | boolean | string[];
+
+type EditableCardField = {
+  key: string;
+  blockLabel: string;
+  instanceLabel: string;
+  label: string;
+  field: CardRead["fields"][string];
+  schema: FormFieldRead | null;
+  blockInstanceId: string | null;
+};
+
+function CardFieldEditor({
+  cardId,
+  field,
+  token,
+}: {
+  cardId: string;
+  field: EditableCardField;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field.field));
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const referenceListId =
+    field.schema?.options_source_type === "reference_list" ? field.schema.options_source_id : null;
+  const referenceItemsQuery = useQuery({
+    queryKey: ["reference-items", token, referenceListId],
+    queryFn: () => listReferenceItems(token, referenceListId ?? ""),
+    enabled:
+      Boolean(token && referenceListId) &&
+      ["select", "multi_select"].includes(field.field.field_type),
+  });
+  const mutation = useMutation({
+    mutationFn: (value: unknown) =>
+      updateCardFieldValue(token, cardId, field.field.field_id, value, field.blockInstanceId),
+    onSuccess: async () => {
+      setSaved(true);
+      await queryClient.invalidateQueries({ queryKey: ["card", token, cardId] });
+      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+    },
+  });
+
+  function updateRawValue(nextValue: FieldEditorState) {
+    setRawValue(nextValue);
+    setSaved(false);
+    setLocalError(null);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      mutation.mutate(coerceEditorValue(field.field.field_type, rawValue));
+    } catch (error) {
+      setLocalError(errorText(error));
+    }
+  }
+
+  return (
+    <form className="field-editor-row" onSubmit={handleSubmit}>
+      <div className="field-editor-meta">
+        <strong>{field.label}</strong>
+        <span>
+          {field.blockLabel} / {field.instanceLabel} / {field.field.field_type}
+        </span>
+        <span>Current: {formatValue(field.field.value)}</span>
+      </div>
+      <label className="field-editor-control">
+        <span>{field.label}</span>
+        <FieldEditorControl
+          fieldType={field.field.field_type}
+          label={field.label}
+          options={referenceItemsQuery.data?.items ?? []}
+          value={rawValue}
+          onChange={updateRawValue}
+        />
+      </label>
+      <button type="submit" className="primary-button" disabled={mutation.isPending}>
+        Save {field.label}
+      </button>
+      {(localError || mutation.error) && (
+        <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
+      )}
+      {saved && <p className="inline-success">Saved {field.label}</p>}
+    </form>
+  );
+}
+
+function FieldEditorControl({
+  fieldType,
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  fieldType: string;
+  label: string;
+  options: ReferenceItemRead[];
+  value: FieldEditorState;
+  onChange: (value: FieldEditorState) => void;
+}) {
+  if (fieldType === "bool") {
+    return (
+      <input
+        aria-label={label}
+        checked={Boolean(value)}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        type="checkbox"
+      />
+    );
+  }
+
+  if (fieldType === "json") {
+    return (
+      <textarea
+        aria-label={label}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        value={typeof value === "string" ? value : "{}"}
+      />
+    );
+  }
+
+  if (fieldType === "multi_select") {
+    return (
+      <select
+        aria-label={label}
+        multiple
+        onChange={(event) =>
+          onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
+        }
+        value={Array.isArray(value) ? value : []}
+      >
+        {options.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (fieldType === "select") {
+    return (
+      <select
+        aria-label={label}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        value={typeof value === "string" ? value : ""}
+      >
+        <option value="">empty</option>
+        {options.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      aria-label={label}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      type={inputTypeForField(fieldType)}
+      value={typeof value === "string" ? value : ""}
+    />
   );
 }
 
@@ -786,22 +948,96 @@ function errorText(error: unknown) {
   return "Request failed";
 }
 
-function flattenCardFields(card: CardRead | null) {
+function buildEditableCardFields(
+  card: CardRead | null,
+  schema: RegistrySchemaRead | null,
+): EditableCardField[] {
   if (!card) {
     return [];
   }
 
+  const fieldsById = new Map((schema?.fields ?? []).map((field) => [field.id, field]));
+  const blocksById = new Map((schema?.blocks ?? []).map((block) => [block.id, block]));
+
   return Object.values(card.blocks).flatMap((block) =>
     block.instances.flatMap((instance) =>
-      Object.values(instance.fields).map((field) => ({
-        key: `${block.code}:${instance.ordinal}:${field.field_id}`,
-        block: `${block.code} #${instance.ordinal + 1}`,
-        field: field.code,
-        type: field.field_type,
-        value: formatValue(field.value),
-      })),
+      Object.values(instance.fields).map((field) => {
+        const fieldSchema = fieldsById.get(field.field_id) ?? null;
+        const blockSchema = blocksById.get(block.block_id);
+        return {
+          key: `${card.id}:${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
+          blockLabel: blockSchema?.title ?? block.code,
+          instanceLabel: `instance ${instance.ordinal + 1}`,
+          label: fieldSchema?.label ?? field.code,
+          field,
+          schema: fieldSchema,
+          blockInstanceId: instance.block_instance_id,
+        };
+      }),
     ),
   );
+}
+
+function initialEditorValue(field: CardRead["fields"][string]): FieldEditorState {
+  if (field.field_type === "bool") {
+    return Boolean(field.value);
+  }
+  if (field.field_type === "multi_select") {
+    return Array.isArray(field.value) ? field.value.map(String) : [];
+  }
+  if (field.field_type === "json") {
+    return field.value ? JSON.stringify(field.value, null, 2) : "{}";
+  }
+  if (field.value === null || field.value === undefined) {
+    return "";
+  }
+  if (field.field_type === "datetime") {
+    return String(field.value).slice(0, 16);
+  }
+  return String(field.value);
+}
+
+function coerceEditorValue(fieldType: string, value: FieldEditorState): unknown {
+  if (fieldType === "bool") {
+    return Boolean(value);
+  }
+  if (fieldType === "multi_select") {
+    return Array.isArray(value) ? value : [];
+  }
+  if (fieldType === "json") {
+    if (typeof value !== "string") {
+      throw new Error("JSON fields require an object value.");
+    }
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+      throw new Error("JSON fields require an object value.");
+    }
+    return parsed;
+  }
+  if (fieldType === "number") {
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new Error("Number fields require a numeric value.");
+    }
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) {
+      throw new Error("Number fields require a numeric value.");
+    }
+    return numberValue;
+  }
+  return typeof value === "string" ? value : "";
+}
+
+function inputTypeForField(fieldType: string) {
+  if (fieldType === "number") {
+    return "number";
+  }
+  if (fieldType === "date") {
+    return "date";
+  }
+  if (fieldType === "datetime") {
+    return "datetime-local";
+  }
+  return "text";
 }
 
 function formatValue(value: unknown): string {

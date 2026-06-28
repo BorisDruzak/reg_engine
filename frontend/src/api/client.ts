@@ -4,9 +4,11 @@ import type {
   CardListRead,
   CardRead,
   CurrentUser,
+  FieldValueRead,
   LoginResponse,
   OrganizationListRead,
   PermissionListRead,
+  ReferenceItemListRead,
   RegistryListRead,
   RegistrySchemaRead,
   RoleListRead,
@@ -60,6 +62,24 @@ export async function listCards(token: string, registryId: string) {
 
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
+}
+
+export async function updateCardFieldValue(
+  token: string,
+  cardId: string,
+  fieldId: string,
+  value: unknown,
+  blockInstanceId: string | null,
+) {
+  return apiRequest<FieldValueRead>(`/api/v1/cards/${cardId}/fields/${fieldId}`, {
+    method: "PATCH",
+    token,
+    body: { value, block_instance_id: blockInstanceId },
+  });
+}
+
+export async function listReferenceItems(token: string, listId: string) {
+  return apiRequest<ReferenceItemListRead>(`/api/v1/reference-lists/${listId}/items`, { token });
 }
 
 export async function listUsers(token: string) {

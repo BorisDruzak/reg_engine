@@ -156,6 +156,20 @@ const apiPayloads = {
         public_visible: true,
         public_editable: false,
       },
+      {
+        id: "99999999-9999-4999-8999-999999999998",
+        block_id: "88888888-8888-4888-8888-888888888888",
+        code: "approved",
+        label: "Approved Field",
+        description: null,
+        field_type: "bool",
+        position: 1,
+        options_source_type: null,
+        options_source_id: null,
+        is_active: true,
+        public_visible: true,
+        public_editable: false,
+      },
     ],
   },
   cards: {
@@ -208,11 +222,16 @@ const apiPayloads = {
   },
 };
 
+let cardStatusValue = "drafted";
+let cardApprovedValue = false;
+
 beforeEach(() => {
   localStorage.clear();
+  cardStatusValue = "drafted";
+  cardApprovedValue = false;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
       if (url.endsWith("/api/v1/auth/login")) {
         return jsonResponse(apiPayloads.login);
@@ -244,8 +263,44 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
         return jsonResponse(apiPayloads.cards);
       }
+      if (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999",
+        )
+      ) {
+        const payload = JSON.parse(String(init?.body)) as {
+          value: string;
+          block_instance_id: string | null;
+        };
+        cardStatusValue = payload.value;
+        return jsonResponse({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: payload.block_instance_id,
+          field_id: "99999999-9999-4999-8999-999999999999",
+          value: cardStatusValue,
+        });
+      }
+      if (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999998",
+        )
+      ) {
+        const payload = JSON.parse(String(init?.body)) as {
+          value: boolean;
+          block_instance_id: string | null;
+        };
+        cardApprovedValue = payload.value;
+        return jsonResponse({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: payload.block_instance_id,
+          field_id: "99999999-9999-4999-8999-999999999998",
+          value: cardApprovedValue,
+        });
+      }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")) {
-        return jsonResponse(apiPayloads.cardRead);
+        return jsonResponse(currentCardRead());
       }
       if (url.endsWith("/api/v1/audit-events?limit=20")) {
         return jsonResponse(apiPayloads.audit);
@@ -259,6 +314,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
 });
+
+function currentCardRead() {
+  return {
+    ...apiPayloads.cardRead,
+    blocks: {
+      main: {
+        ...apiPayloads.cardRead.blocks.main,
+        instances: [
+          {
+            block_instance_id: null,
+            ordinal: 0,
+            fields: {
+              status: {
+                field_id: "99999999-9999-4999-8999-999999999999",
+                code: "status",
+                field_type: "text",
+                value: cardStatusValue,
+              },
+              approved: {
+                field_id: "99999999-9999-4999-8999-999999999998",
+                code: "approved",
+                field_type: "bool",
+                value: cardApprovedValue,
+              },
+            },
+          },
+        ],
+      },
+    },
+    fields: {
+      status: {
+        field_id: "99999999-9999-4999-8999-999999999999",
+        code: "status",
+        field_type: "text",
+        value: cardStatusValue,
+      },
+      approved: {
+        field_id: "99999999-9999-4999-8999-999999999998",
+        code: "approved",
+        field_type: "bool",
+        value: cardApprovedValue,
+      },
+    },
+  };
+}
 
 test("renders login screen before authentication", () => {
   render(<App />);
@@ -287,7 +387,18 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.getByText("Status Field")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cards" }));
   expect(await screen.findByText("Asset Card")).toBeInTheDocument();
-  expect(screen.getByText("drafted")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("drafted")).toBeInTheDocument();
+  const statusInput = await screen.findByLabelText("Status Field");
+  await user.clear(statusInput);
+  await user.type(statusInput, "published");
+  await user.click(screen.getByRole("button", { name: "Save Status Field" }));
+  expect(await screen.findByText("Saved Status Field")).toBeInTheDocument();
+
+  const approvedInput = await screen.findByLabelText("Approved Field");
+  await user.click(approvedInput);
+  await user.click(screen.getByRole("button", { name: "Save Approved Field" }));
+  expect(await screen.findByText("Saved Approved Field")).toBeInTheDocument();
+
   await user.click(screen.getByRole("button", { name: "Audit" }));
   expect(screen.getByText("create")).toBeInTheDocument();
 
@@ -297,6 +408,40 @@ test("logs in and renders authenticated admin workspace", async () => {
       fetchMock.mock.calls.some(([, init]) => {
         const headers = init?.headers as Record<string, string> | undefined;
         return headers?.Authorization === "Bearer test-token";
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          value?: unknown;
+          block_instance_id?: unknown;
+        };
+        return (
+          url.endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999",
+          ) &&
+          init?.method === "PATCH" &&
+          body.value === "published" &&
+          body.block_instance_id === null
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          value?: unknown;
+          block_instance_id?: unknown;
+        };
+        return (
+          url.endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999998",
+          ) &&
+          init?.method === "PATCH" &&
+          body.value === true &&
+          body.block_instance_id === null
+        );
       }),
     ).toBe(true);
   });

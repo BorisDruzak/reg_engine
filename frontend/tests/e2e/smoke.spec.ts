@@ -144,6 +144,20 @@ const apiPayloads = {
         public_visible: true,
         public_editable: false,
       },
+      {
+        id: "99999999-9999-4999-8999-999999999998",
+        block_id: "88888888-8888-4888-8888-888888888888",
+        code: "approved",
+        label: "Approved Field",
+        description: null,
+        field_type: "bool",
+        position: 1,
+        options_source_type: null,
+        options_source_id: null,
+        is_active: true,
+        public_visible: true,
+        public_editable: false,
+      },
     ],
   },
   cards: {
@@ -197,9 +211,53 @@ const apiPayloads = {
 };
 
 test("renders login shell and authenticated admin workspace", async ({ page }) => {
+  let cardStatusValue = "drafted";
+  let cardApprovedValue = false;
   await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
-    const payload = responsePayload(url.pathname, url.search);
+    const request = route.request();
+    const payload = responsePayload(url.pathname, url.search, {
+      approvedValue: cardApprovedValue,
+      statusValue: cardStatusValue,
+    });
+    if (
+      url.pathname ===
+      "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999"
+    ) {
+      const body = request.postDataJSON() as { value: string; block_instance_id: string | null };
+      cardStatusValue = body.value;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: body.block_instance_id,
+          field_id: "99999999-9999-4999-8999-999999999999",
+          value: cardStatusValue,
+        }),
+      });
+      return;
+    }
+    if (
+      url.pathname ===
+      "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999998"
+    ) {
+      const body = request.postDataJSON() as { value: boolean; block_instance_id: string | null };
+      cardApprovedValue = body.value;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: body.block_instance_id,
+          field_id: "99999999-9999-4999-8999-999999999998",
+          value: cardApprovedValue,
+        }),
+      });
+      return;
+    }
     await route.fulfill({
       status: payload ? 200 : 404,
       contentType: "application/json",
@@ -226,13 +284,23 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Cards" }).click();
   await expect(page.getByText("Asset Card")).toBeVisible();
-  await expect(page.getByText("drafted")).toBeVisible();
+  await expect(page.getByLabel("Status Field")).toHaveValue("drafted");
+  await page.getByLabel("Status Field").fill("published");
+  await page.getByRole("button", { name: "Save Status Field" }).click();
+  await expect(page.getByText("Saved Status Field")).toBeVisible();
+  await page.getByLabel("Approved Field").check();
+  await page.getByRole("button", { name: "Save Approved Field" }).click();
+  await expect(page.getByText("Saved Approved Field")).toBeVisible();
 
   await page.getByRole("button", { name: "Audit" }).click();
   await expect(page.getByText("create")).toBeVisible();
 });
 
-function responsePayload(pathname: string, search: string) {
+function responsePayload(
+  pathname: string,
+  search: string,
+  cardValues: { approvedValue: boolean; statusValue: string },
+) {
   if (pathname === "/api/v1/auth/login") {
     return apiPayloads.login;
   }
@@ -264,7 +332,48 @@ function responsePayload(pathname: string, search: string) {
     return apiPayloads.cards;
   }
   if (pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") {
-    return apiPayloads.cardRead;
+    return {
+      ...apiPayloads.cardRead,
+      blocks: {
+        main: {
+          ...apiPayloads.cardRead.blocks.main,
+          instances: [
+            {
+              block_instance_id: null,
+              ordinal: 0,
+              fields: {
+                status: {
+                  field_id: "99999999-9999-4999-8999-999999999999",
+                  code: "status",
+                  field_type: "text",
+                  value: cardValues.statusValue,
+                },
+                approved: {
+                  field_id: "99999999-9999-4999-8999-999999999998",
+                  code: "approved",
+                  field_type: "bool",
+                  value: cardValues.approvedValue,
+                },
+              },
+            },
+          ],
+        },
+      },
+      fields: {
+        status: {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          code: "status",
+          field_type: "text",
+          value: cardValues.statusValue,
+        },
+        approved: {
+          field_id: "99999999-9999-4999-8999-999999999998",
+          code: "approved",
+          field_type: "bool",
+          value: cardValues.approvedValue,
+        },
+      },
+    };
   }
   if (pathname === "/api/v1/audit-events" && search === "?limit=20") {
     return apiPayloads.audit;
