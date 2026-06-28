@@ -9,24 +9,23 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1F REST API Foundation And Service Wiring.
 - Phase 1B through Phase 1F backend foundation work is completed and synchronized.
-- Phase 1F exposes the hardened service layer through REST API endpoints.
-- Do not implement frontend, auth flow, import/export, documents, or MCP in the next checkpoint.
+- Current next checkpoint is **Phase 1G: Current API/Service Bugfix And Hardening**.
+- Phase 1G must run before auth/session work, frontend workflows, import/export, documents, or MCP.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
+- Do not add service desk integration or MDB migration until explicitly requested.
 
 ## Current Phase Status
 
-- Phase 1B.1 Database Foundation is completed locally in this checkpoint.
-- Phase 1B.2 Core Models And Migration is completed locally in this checkpoint.
-- Phase 1B.3 Model Smoke Tests are completed in this checkpoint.
-- Disposable PostgreSQL smoke tests passed against server test database `reg_engine_test` using `TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_test`.
+- Phase 1B.1 Database Foundation is completed.
+- Phase 1B.2 Core Models And Migration is completed.
+- Phase 1B.3 Model Smoke Tests are completed.
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
 - Phase 1E.1 Core Service Hardening Before API is completed and verified against server test database `reg_engine_test`.
 - Phase 1F REST API Foundation And Service Wiring is completed and verified against server test database `reg_engine_test`.
-- The next phase is not detailed enough for implementation yet; define Phase 1G before adding auth flow, frontend workflows, import/export, documents, or MCP.
+- Phase 1G is now the next implementation phase and must fix current API/service issues before new feature phases.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -95,455 +94,126 @@ Core Schema v1 consists of these tables/models:
 - Store dynamic values in typed columns, for example `value_text`, `value_number`, `value_date`, `value_datetime`, `value_bool`, `value_json`, and reference FK columns.
 - Do not add employee-specific fixed business columns such as education, awards, service history, dismissal details, or HR-only fields.
 
-## Phase 1B: Core Schema v1 Database Foundation
+## Completed Phase Summary
 
-### Phase 1B Goal
+### Phase 1B: Core Schema v1 Database Foundation
 
-Create the database and model foundation for Core Schema v1 only. Phase 1B is not a business-logic phase.
+Status: completed.
 
-Phase 1B may include:
+Delivered:
 
-- SQLAlchemy infrastructure;
-- Alembic infrastructure;
-- SQLAlchemy model declarations for Core Schema v1;
-- Core Schema v1 migration;
-- model/migration smoke tests;
-- healthcheck staying independent from PostgreSQL.
+- SQLAlchemy infrastructure.
+- Alembic infrastructure.
+- SQLAlchemy model declarations for all 20 Core Schema v1 tables.
+- Core Schema v1 migration path through `0004_core_service_hardening`.
+- Model/migration smoke tests.
+- Healthcheck independent from PostgreSQL.
 
-Phase 1B must not include:
+Verification highlights:
 
-- business services;
-- registry/card management endpoints;
-- frontend implementation;
-- import/export;
-- documents;
-- MCP;
-- business-specific HR columns.
+- Disposable PostgreSQL smoke tests passed against `reg_engine_test`.
+- All 20 Core Schema v1 tables exist.
+- `pgcrypto` is enabled.
+- No `employees` table exists.
+- No business-specific HR columns exist.
 
-## Phase 1B.1: Database Foundation
+### Phase 1C: Organization Tree And RBAC Services
 
-Purpose: prepare the database infrastructure that later Core Schema v1 models and migrations will use.
+Status: completed.
 
-Status: completed locally in this checkpoint.
+Delivered:
 
-Required work:
+- `OrganizationService`.
+- `PermissionService`.
+- `access_grants` behavior.
+- `organization_closure` maintenance and subtree visibility.
+- `org_units` as filters/reference data, not RBAC boundary.
 
-- [x] Add SQLAlchemy Base.
-- [x] Add engine/session helpers.
-- [x] Set up Alembic.
-- [x] Define UUID and timestamp conventions.
-- [x] Keep healthcheck independent from PostgreSQL.
-- [x] Add a migration smoke test proving Alembic can render or run a baseline migration path.
-- [x] Keep the initial foundation migration free of business tables.
+Verified behavior:
 
-Expected files:
+- `system_admin` can create a root organization.
+- `org_admin` can create/manage child organizations inside own subtree.
+- `org_admin` cannot create or see sibling organizations.
+- `org_admin` cannot see parent organizations.
+- `org_admin` sees descendants.
+- Exact organization grants work when `include_descendants=false`.
 
-- `backend/app/models/base.py`
-- `backend/app/core/database.py`
-- `backend/alembic.ini`
-- `backend/migrations/env.py`
-- `backend/migrations/script.py.mako`
-- `backend/tests/test_migrations.py`
+### Phase 1D: Registry Schema And Dynamic Cards
 
-Verification:
+Status: completed.
 
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m alembic upgrade head --sql
-python -m pytest tests\test_migrations.py -q
-```
+Delivered:
 
-## Phase 1B.2: Core Models And Migration
+- `RegistrySchemaService`.
+- `ReferenceListService`.
+- `CardService`.
+- Dynamic typed field values.
+- Card reads that merge schema plus existing values.
+- Old cards show newly added fields as null/empty.
+- `org_admin` manages cards in organization scope.
+- `system_admin` / `registry_admin` manage schema.
 
-Purpose: declare all Core Schema v1 SQLAlchemy models and create the first real schema migration.
+Verified behavior:
 
-Status: completed locally in this checkpoint.
+- Registry is not duplicated per organization.
+- One registry can contain cards from different organizations.
+- Card visibility follows organization scope.
+- Text/number/date/datetime/bool/json values save to correct typed columns.
+- `select` values store `reference_items.id`.
+- `multi_select` values store rows in `field_value_items`.
+- Archived fields, blocks, cards, and organizations remain in the database.
 
-Required work:
+### Phase 1E: Public Links, Transfer, Audit
 
-- [x] Add SQLAlchemy models for all Core Schema v1 tables.
-- [x] Add Alembic migration for all Core Schema v1 tables.
-- [x] Add indexes, unique constraints, foreign keys, and safe check constraints.
-- [x] Enable `pgcrypto` for UUID defaults.
-- [x] Do not add services or endpoints, except the existing healthcheck.
+Status: completed.
 
-Expected model files:
+Delivered:
 
-- `backend/app/models/identity.py` for `users`, `roles`, `permissions`, `role_permissions`.
-- `backend/app/models/organization.py` for `organizations`, `organization_closure`, `org_units`, `access_grants`.
-- `backend/app/models/registry_schema.py` for `registries`, `form_blocks`, `form_fields`.
-- `backend/app/models/reference.py` for `reference_lists`, `reference_items`.
-- `backend/app/models/card.py` for `cards`, `card_block_instances`, `field_values`, `field_value_items`, `card_relations`.
-- `backend/app/models/public_link.py` for `card_public_links`.
-- `backend/app/models/audit.py` for `audit_events`.
-- `backend/app/models/__init__.py` imports all model metadata for Alembic.
+- `PublicLinkService`.
+- Card transfer behavior.
+- `AuditService`.
+- Public edit rules.
+- Public link token hashing.
+- Default public link TTL of 7 days.
+- Transfer by creating a new card and marking old card `superseded`.
+- Audit events for create/update/archive/transfer/public-link changes.
 
-Expected migration file:
+Verified behavior:
 
-- `backend/migrations/versions/0002_core_schema_v1.py`
-- `backend/migrations/versions/0003_reconcile_core_schema_v1.py` reconciles existing production schema drift from the superseded `0001_core_schema_v1` revision by adding missing constraints/indexes idempotently.
+- Public links return raw token once and store only token hash.
+- Public links edit only public-editable blocks/fields.
+- Public editing is blocked when `card.public_edit_enabled=false`.
+- Transfer creates a new card and stores `card_relations`.
+- Old `org_admin` sees old card in archive scope.
 
-Verification:
+### Phase 1E.1: Core Service Hardening Before API
 
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m alembic upgrade head --sql
-python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py -q
-```
+Status: completed.
 
-Known limitations:
+Delivered:
 
-- No API CRUD, services, repositories, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1B.2.
-- Local migration tests render PostgreSQL SQL offline. Routine schema tests should use a disposable PostgreSQL database through `TEST_DATABASE_URL`; production `reg_engine` migrations require backup-first explicit approval.
-- Role/permission seed data is not inserted in this phase; initial seed strategy belongs to a later auth/RBAC phase.
-
-Next phase:
-
-- Phase 1B.3 should add broader model smoke tests, including minimal insert tests against a disposable PostgreSQL database when available.
-
-## Phase 1B.3: Model Smoke Tests
-
-Purpose: prove the Core Schema v1 model and migration contract before adding business services.
-
-Status: completed in this checkpoint.
-
-Required tests:
-
-- [x] `alembic upgrade head` works against disposable PostgreSQL.
-- [x] All 20 Core Schema v1 tables exist.
-- [x] Key constraints exist.
-- [x] Required indexes exist.
-- [x] `pgcrypto` is enabled.
-- [x] No `employees` table exists.
-- [x] No business-specific HR columns exist.
-- [x] Core model insert smoke tests can create minimal valid rows.
-- [x] Healthcheck remains independent from PostgreSQL.
-
-Expected test files:
-
-- `backend/tests/test_models_smoke.py`
-- `backend/tests/test_schema_constraints.py`
-- `backend/tests/test_migrations.py`
-- `backend/tests/test_healthcheck.py`
-- `backend/tests/test_database_smoke.py`
+- Fixed baseline migration strategy; `0002_core_schema_v1.py` must not call live model metadata at migration runtime.
+- Added `0004_core_service_hardening.py` for constraint/index hardening.
+- Ref field type persistence for `organization_ref`, `org_unit_ref`, `user_ref`, `card_ref`, and `registry_ref`.
+- Repeatable block support through multiple `card_block_instances`.
+- Nested card read structure: `blocks -> instances -> fields`.
+- Read/edit split for cards; `superseded` cards are archive-readable only and not editable.
+- Transfer copies dynamic values and multi-select items.
+- Reference list inheritance/locking behavior.
+- Scope-aware uniqueness for `access_grants` and `reference_lists`.
+- Locked/system schema blocks and fields cannot be changed by normal service methods.
+- Cached database engine/sessionmaker.
 
 Verification:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m pytest tests\test_models_smoke.py tests\test_schema_constraints.py tests\test_migrations.py tests\test_healthcheck.py -q
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
-python -m pytest tests\test_database_smoke.py -q
-```
-
-Verification completed:
-
-```bash
-cd /opt/reg_engine/backend
-sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py -q
-```
-
-Result: `3 passed` against disposable PostgreSQL `reg_engine_test`.
-
-## Phase 1B Acceptance Criteria
-
-1. `PLANS.md` reflects final Core Schema v1.
-2. No hardcoded employee table is introduced.
-3. No business-specific HR columns are introduced.
-4. No frontend implementation is added.
-5. No import/export implementation is added.
-6. No documents implementation is added.
-7. No MCP implementation is added.
-8. Core Schema v1 model list is complete.
-9. Tests required for later phases are listed.
-
-## Phase 1C: Organization Tree And RBAC Services
-
-Purpose: add backend service behavior for organization hierarchy and organization-scoped access.
-
-Status: completed and verified in this checkpoint.
-
-Required work:
-
-- [x] Add `OrganizationService`.
-- [x] Add `PermissionService`.
-- [x] Implement `access_grants` behavior.
-- [x] Maintain and query `organization_closure`.
-- [x] Enforce subtree visibility.
-- [x] Prove `org_admin` sees descendants and cannot see parent/sibling branches.
-- [x] Keep `org_units` as filters/reference data, not an RBAC boundary.
-
-Required tests:
-
-- [x] `system_admin` can create a root organization.
-- [x] `org_admin` can create/manage child organizations inside own subtree.
-- [x] `org_admin` cannot create or see sibling organizations.
-- [x] `org_admin` cannot see parent organizations.
-- [x] `org_admin` sees descendants.
-- [x] Access grant without descendants only allows exact organization when that mode is used.
-- [x] `org_units` can be listed/used by organization and do not grant access by themselves.
-
-Expected files:
-
-- `backend/app/services/organizations.py`
-- `backend/app/services/permissions.py`
-- `backend/tests/test_organization_permission_services.py`
-
-Verification:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m pytest
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy app
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
-python -m pytest tests\test_organization_permission_services.py -q
-```
-
-Verification completed:
-
-```bash
-cd /opt/reg_engine/backend
-sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py tests/test_organization_permission_services.py -q -p no:cacheprovider
-```
-
-Result: `8 passed` against disposable PostgreSQL `reg_engine_test`.
-
-Known limitations:
-
-- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1C.
-- Role and permission seed data is not implemented; tests create minimal roles and permissions directly.
-- `org_units` remain filter/reference entities only and do not participate in RBAC decisions.
-- Services do not implement card visibility yet; card reads and registry behavior belong to Phase 1D.
-
-Next phase:
-
-- Phase 1D should add registry schema and dynamic card services on top of the organization scope service.
-
-## Phase 1D: Registry Schema And Dynamic Cards
-
-Purpose: add schema-driven registry and card behavior.
-
-Status: completed and verified in this checkpoint.
-
-Required work:
-
-- [x] Add `RegistrySchemaService`.
-- [x] Add `ReferenceListService`.
-- [x] Add `CardService`.
-- [x] Implement dynamic field values.
-- [x] Implement card reads that merge schema plus existing values.
-- [x] Ensure old cards show newly added fields as null/empty.
-- [x] Enforce that only `system_admin` or `registry_admin` can change registry/card schema.
-- [x] Allow `org_admin` to manage cards in organization scope.
-
-Required tests:
-
-- [x] Registry can be created without organization-specific schema duplication.
-- [x] One registry can contain cards from different organizations.
-- [x] Card visibility follows organization scope.
-- [x] `system_admin` or `registry_admin` can create/update/archive blocks and fields.
-- [x] `org_admin` cannot manage card schema in v1.
-- [x] Text/number/date/datetime/bool/json values save to the correct typed columns.
-- [x] `select` values store `reference_items.id`.
-- [x] `multi_select` values store rows in `field_value_items`.
-- [x] Select and multi-select writes reject items outside the field's configured reference list.
-- [x] Adding a field after card creation does not create mass old-card value rows.
-- [x] Old card response includes the new field as null/empty.
-- [x] Archived fields, blocks, cards, and organizations remain in the database.
-
-Expected files:
-
-- `backend/app/services/registry_schema.py`
-- `backend/app/services/references.py`
-- `backend/app/services/cards.py`
-- `backend/tests/test_registry_card_services.py`
-
-Verification:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m pytest
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy app
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
-python -m pytest tests\test_registry_card_services.py -q
-```
-
-Verification completed:
-
-```bash
-cd /opt/reg_engine/backend
-sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py tests/test_organization_permission_services.py tests/test_registry_card_services.py -q -p no:cacheprovider
-```
-
-Result: `15` PostgreSQL-backed tests passed against disposable database `reg_engine_test`.
-
-Known limitations:
-
-- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1D.
-- Role and permission seed data is not implemented; tests create minimal roles and permissions directly.
-- Card services cover schema-driven field persistence and organization-scoped visibility only; public links, transfer, audit events, and public editing belong to Phase 1E.
-- No schema migration is required in this phase because Phase 1B already created the Core Schema v1 tables.
-
-Next phase:
-
-- Phase 1E should add public links, transfer behavior, and audit events.
-
-## Phase 1E: Public Links, Transfer, Audit
-
-Purpose: add public editing, card transfer, and audit-event behavior.
-
-Status: completed and verified in this checkpoint.
-
-Required work:
-
-- [x] Add `PublicLinkService`.
-- [x] Add card transfer behavior.
-- [x] Add `AuditService`.
-- [x] Enforce public edit rules.
-- [x] Store public link token hashes, not raw tokens.
-- [x] Make public links expire after 7 days by default.
-- [x] Block public editing when `card.public_edit_enabled=false`.
-- [x] Transfer by creating a new card and marking the old card `superseded`.
-- [x] Preserve old-card visibility for the old `org_admin` in archive scope.
-- [x] Write audit events for create/update/archive/transfer/public-link changes.
-
-Required tests:
-
-- [x] Admin can create a public link.
-- [x] Public link expires in 7 days by default.
-- [x] Raw token is returned once and only token hash is stored.
-- [x] Public link edits the card directly through the backend public-link service path.
-- [x] Public link can edit only public-editable blocks/fields.
-- [x] Public link cannot edit when `card.public_edit_enabled=false`.
-- [x] Public link writes audit events.
-- [x] Transfer creates a new card in the target organization.
-- [x] Old card receives `lifecycle_status=superseded`.
-- [x] `card_relations` stores the transfer relation.
-- [x] Old `org_admin` sees the old card in archive scope.
-- [x] Old `org_admin` does not see the new active card if the target organization is outside scope.
-- [x] Audit event is written on organization create/update/archive.
-- [x] Audit event is written on registry/block/field create/update/archive.
-- [x] Audit event is written on reference list/item create/update/archive.
-- [x] Audit event is written on card create/update/archive.
-- [x] Audit event is written on field value update.
-- [x] Audit event is written on public link create/disable/edit.
-- [x] Audit event is written on transfer.
-
-Expected files:
-
-- `backend/app/services/audit.py`
-- `backend/app/services/public_links.py`
-- `backend/app/services/cards.py`
-- `backend/app/services/organizations.py`
-- `backend/app/services/registry_schema.py`
-- `backend/app/services/references.py`
-- `backend/tests/test_public_link_transfer_audit_services.py`
-
-Verification:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m pytest
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy app
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
-python -m pytest tests\test_public_link_transfer_audit_services.py -q
-```
-
-Verification completed:
-
-```bash
-cd /opt/reg_engine/backend
-sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest tests/test_database_smoke.py tests/test_organization_permission_services.py tests/test_registry_card_services.py tests/test_public_link_transfer_audit_services.py -q -p no:cacheprovider
-```
-
-Result: `19` PostgreSQL-backed tests passed against disposable database `reg_engine_test`.
-
-Known limitations:
-
-- No API CRUD, endpoints, auth flow, frontend UI, import/export, documents, or MCP are implemented in Phase 1E.
-- Public editing is implemented as backend service behavior; HTTP public endpoints remain future API work.
-- Audit events are written by the Phase 1C-1E service layer; database triggers are not introduced.
-- No schema migration is required in this phase because Phase 1B already created the Core Schema v1 tables.
-
-Next phase:
-
-- Phase 1E.1 should harden the completed service layer before exposing it through REST API endpoints.
-
-## Phase 1E.1: Core Service Hardening Before API
-
-Purpose: close critical Core Schema v1 service and migration gaps before Phase 1F REST API Foundation.
-
-Status: completed and verified in this checkpoint.
-
-Required work:
-
-- [x] Replace `Base.metadata.create_all/drop_all` in `0002_core_schema_v1.py` with a fixed static DDL migration strategy.
-- [x] Add `0004_core_service_hardening.py` for constraint/index hardening.
-- [x] Keep production `reg_engine` untouched; run hardening migration only against disposable PostgreSQL test database unless separately approved.
-- [x] Fix field type persistence for `organization_ref`, `org_unit_ref`, `user_ref`, `card_ref`, and `registry_ref`.
-- [x] Keep field type names as `number` and `bool`; do not introduce `decimal` or `boolean` aliases in v1.
-- [x] Allow repeatable blocks to have multiple `card_block_instances`.
-- [x] Keep non-repeatable blocks single-instance.
-- [x] Change card read structure to nested `blocks -> instances -> fields`; keep compatibility field paths where unambiguous.
-- [x] Split readable and editable card lookup.
-- [x] Allow `superseded` cards to be read only through archive scope.
-- [x] Block edit, transfer, and public-edit for `superseded` cards.
-- [x] Transfer cards by copying active dynamic `field_values` and `field_value_items` into the new card.
-- [x] Enforce reference list inheritance: descendants can use inherited lists, but locked inherited lists cannot be edited from descendants.
-- [x] Harden nullable uniqueness for `access_grants` using registry and organization scope.
-- [x] Harden nullable uniqueness for `reference_lists` using registry and owner organization scope.
-- [x] Block normal service update/archive of locked or system blocks and fields.
-- [x] Cache database engine and sessionmaker instances; healthcheck remains independent from `DATABASE_URL`.
-
-Required tests:
-
-- [x] Migration file no longer uses runtime `Base.metadata.create_all/drop_all`.
-- [x] Database engine and sessionmaker factories are cached.
-- [x] `number`/`bool` naming is fixed.
-- [x] Ref field types save to dedicated typed FK columns.
-- [x] Repeatable blocks support multiple instances, non-repeatable blocks remain single-instance.
-- [x] Card read supports duplicate field codes in different blocks through nested structure.
-- [x] `superseded` cards are archive-readable and not editable/transferable.
-- [x] Transfer copies dynamic values and multi-select items.
-- [x] Inherited locked reference lists are usable by descendants but not editable by descendants.
-- [x] Nullable unique index behavior is covered for access grants and reference lists.
-- [x] Locked/system schema blocks and fields cannot be changed by normal methods.
-
-Safe migration plan:
-
-- `0002_core_schema_v1.py` is treated as the fixed baseline Core Schema v1 migration and must not call live model metadata at migration runtime.
-- `0004_core_service_hardening.py` drops obsolete uniqueness constraints if present and creates the new scope-aware constraints/indexes idempotently.
-- Fresh disposable PostgreSQL verification must run with `TEST_DATABASE_URL` against a database ending in `_test`.
-- Production `reg_engine` was upgraded to `0004` after explicit approval, a fresh backup, duplicate-data preflight, and an explicit `alembic upgrade head` command.
-
-Verification:
-
-```powershell
-cd C:\Users\admin-2\Documents\reg_engine\backend
-python -m pytest
-python -m ruff check .
-python -m ruff format --check .
-python -m mypy app
-$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
-python -m pytest tests\test_core_service_hardening.py tests\test_database_smoke.py -q
-```
-
-Verification completed:
 
 ```bash
 cd /opt/reg_engine/backend
 sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
 ```
 
-Result: `42` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
+Result at closeout: `42` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
 
-Production migration completed:
+Production migration completed after explicit approval:
 
 ```bash
 cd /opt/reg_engine/backend
@@ -552,34 +222,21 @@ sudo -u postgres env DATABASE_URL='postgresql+psycopg:///reg_engine' .venv/bin/p
 
 Result: production `alembic_version` is `0004_core_service_hardening`; post-migration schema compare passed.
 
-Known limitations at Phase 1E.1 closeout:
+### Phase 1F: REST API Foundation And Service Wiring
 
-- No REST API endpoints, frontend, auth flow, import/export, documents, or MCP were implemented in Phase 1E.1.
-- `0004_core_service_hardening` is applied to production; future migrations follow the standing planned-migration rule in `AGENTS.md`.
-- Public editing remained service-layer behavior until Phase 1F added the HTTP public-link edit path.
+Status: completed.
 
-Next phase:
+Delivered:
 
-- Phase 1F should expose the hardened service layer through REST API endpoints while keeping auth flow, frontend UI, import/export, documents, and MCP out of scope.
+- API session dependency using `backend/app/core/database.py`.
+- Temporary actor context dependency using `X-Actor-User-Id` for tests/local development only.
+- API schemas for organizations, registries, blocks, fields, reference lists/items, cards, public links, transfers, and audit event reads.
+- REST endpoints that call the service layer instead of duplicating business rules.
+- Service exceptions mapped to stable HTTP errors.
+- Public link raw token returned one time in create-link response only.
+- No database schema changes in Phase 1F.
 
-## Phase 1F: REST API Foundation And Service Wiring
-
-Purpose: expose the completed Core Schema v1 service layer through FastAPI endpoints without adding auth flow, frontend UI, import/export, documents, or MCP.
-
-Status: completed and verified in this checkpoint.
-
-Required work:
-
-- [x] Add API session dependency that reuses `backend/app/core/database.py`.
-- [x] Add temporary actor context dependency for tests and local development only; do not implement auth flow yet.
-- [x] Add API schemas for organizations, registries, blocks, fields, reference lists/items, cards, public links, transfers, and audit event reads.
-- [x] Add REST endpoints that call existing services instead of duplicating business rules.
-- [x] Map service exceptions to stable HTTP errors.
-- [x] Keep backend access control in service/API layer; frontend remains out of scope.
-- [x] Keep public-link raw token return one-time in the create-link response only.
-- [x] Do not add database schema changes in Phase 1F.
-
-Expected files:
+Expected/current files:
 
 - `backend/app/api/dependencies.py`
 - `backend/app/api/v1/endpoints/_field_values.py`
@@ -594,31 +251,6 @@ Expected files:
 - `backend/app/schemas/public_links.py`
 - `backend/app/schemas/audit.py`
 - `backend/tests/test_api_phase_1f.py`
-
-Required tests:
-
-- [x] Healthcheck remains independent from PostgreSQL.
-- [x] API routes are registered without requiring PostgreSQL.
-- [x] API can create and read organizations through `OrganizationService`.
-- [x] API can create registry, blocks, fields, reference lists, and reference items through services.
-- [x] API can create cards and update typed dynamic values through `CardService`.
-- [x] API card visibility follows organization scope.
-- [x] API rejects out-of-scope card reads/writes.
-- [x] API public link create response returns the raw token once and stores only the token hash.
-- [x] API public-link edit path respects `card.public_edit_enabled` and public-editable field/block flags.
-- [x] API transfer path creates the new card, supersedes the old card, and writes `card_relations`.
-- [x] API writes or exposes audit events for create/update/archive/transfer/public-link actions.
-
-Acceptance criteria:
-
-1. [x] API endpoints use the service layer as the business logic boundary.
-2. [x] No hardcoded employee table or HR-specific fields are introduced.
-3. [x] No frontend implementation is added.
-4. [x] No auth flow is added; test/local actor context is clearly documented as temporary.
-5. [x] No import/export, documents, or MCP implementation is added.
-6. [x] No production database migration is introduced or run in Phase 1F.
-7. [x] Local `scripts/check.ps1 -SkipRemote` passes.
-8. [x] PostgreSQL-backed API tests pass against disposable `reg_engine_test`.
 
 Verification completed:
 
@@ -636,20 +268,321 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 
 Result: `47` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
 
-Known limitations:
+Known limitations at Phase 1F closeout:
 
 - Temporary API actor context uses `X-Actor-User-Id`; this is not a production auth flow.
-- API coverage is foundation-level service wiring for Core Schema v1 workflows; production auth/session behavior remains future work.
-- No frontend implementation, import/export, documents, or MCP implementation is added in Phase 1F.
+- API coverage is foundation-level service wiring for Core Schema v1 workflows.
+- Some REST workflows are intentionally incomplete and must be hardened before frontend work.
+- No frontend implementation, auth/session flow, import/export, documents, or MCP implementation was added in Phase 1F.
 - No database migration is required for Phase 1F.
 
-Next phase:
+## Phase 1G: Current API/Service Bugfix And Hardening
 
-- Define Phase 1G before implementation. Candidate directions are auth/session flow, API seed/role bootstrap, production frontend workflows, or deeper API hardening; the current plan does not choose between them.
+Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
+
+Status: planned next.
+
+Phase 1G must not implement:
+
+- production frontend workflows;
+- full auth/session flow;
+- import/export;
+- documents;
+- MCP;
+- service desk integration;
+- MDB migration.
+
+### Phase 1G.1: Temporary Actor Context Hardening
+
+Problem:
+
+- Current protected API endpoints accept `X-Actor-User-Id` as temporary actor identity.
+- This is acceptable for tests/local development only, but unsafe for production-like use.
+
+Required work:
+
+- Add explicit setting, for example `ALLOW_DEV_ACTOR_HEADER` or equivalent.
+- Default must be safe for production. If the setting is absent/false, protected endpoints must not accept arbitrary `X-Actor-User-Id` as production authentication.
+- Tests may override this setting for Phase 1F-style API tests.
+- Document the temporary nature of this mechanism in README/PLANS.
+
+Acceptance criteria:
+
+- Dev actor header cannot be accidentally treated as production auth.
+- Tests still have a controlled way to inject actor identity.
+- Healthcheck remains public and independent from database/auth.
+
+### Phase 1G.2: REST Workflow Completion For Existing Services
+
+Problem:
+
+- Phase 1F added foundation endpoints, but several existing service-layer workflows are not exposed through API.
+
+Required endpoints/workflows:
+
+- Organization list/tree endpoint.
+- Organization update endpoint.
+- Organization archive endpoint.
+- Registry read endpoint.
+- Registry schema read endpoint.
+- Block update/archive endpoints.
+- Field update/archive endpoints.
+- Reference list read/list endpoints.
+- Reference item read/list/update/archive endpoints.
+- Card list endpoint with registry, organization, archive, and query filters where supported.
+- Card update endpoint for system card properties such as `display_name`, `public_view_enabled`, and `public_edit_enabled`.
+- Card archive endpoint.
+- Card block instance create endpoint for repeatable blocks.
+- Public link list endpoint for a card.
+- Public link disable endpoint.
+
+Acceptance criteria:
+
+- API exposes the already-existing service-layer workflows without moving business rules into endpoints.
+- Endpoints enforce service-layer permissions.
+- Tests cover both allowed and denied access paths.
+
+### Phase 1G.3: Public Link API Hardening
+
+Problems:
+
+- `PublicLinkCreate.expires_in_days` needs validation.
+- Public edit currently risks revealing field existence before token validation.
+- Public endpoints need stricter response/error behavior.
+
+Required work:
+
+- Validate `expires_in_days`, recommended range `1..30` days.
+- Public edit path must validate token usability before revealing field-level errors.
+- Public edit must still enforce:
+  - link active;
+  - not expired;
+  - usage limit;
+  - `card.public_edit_enabled=true`;
+  - `block.public_editable=true`;
+  - `field.public_editable=true`;
+  - allowed block/field restrictions.
+- Add tests for invalid/expired/disabled tokens and invalid field IDs.
+
+Acceptance criteria:
+
+- Invalid public token receives a stable permission/error response without revealing internal field state.
+- Expiration and usage-limit behavior is tested.
+- No raw token is persisted.
+
+### Phase 1G.4: Reference Field Validation
+
+Problem:
+
+- Reference field API coercion parses UUIDs, but target object existence and active/visible state must be validated before database commit.
+
+Required work:
+
+- Validate `organization_ref` target exists and is active.
+- Validate `org_unit_ref` target exists and is active.
+- Validate `user_ref` target exists and is not archived.
+- Validate `card_ref` target exists and is readable/valid for the actor or public context as appropriate.
+- Validate `registry_ref` target exists and is active/not archived.
+- Return stable API errors instead of late FK/IntegrityError failures.
+- Add service and API tests.
+
+Acceptance criteria:
+
+- Invalid reference UUIDs return controlled 4xx errors.
+- No uncontrolled database integrity error leaks to clients.
+- Tests cover all reference field types.
+
+### Phase 1G.5: Audit Request Metadata
+
+Problem:
+
+- `audit_events` has `ip_address`, `user_agent`, and `request_id` columns, but API/service writes do not currently pass request metadata.
+
+Required work:
+
+- Add request metadata extraction dependency.
+- Pass `request_id`, client IP, and user agent into `AuditService` for API writes.
+- Public-link writes must also include request metadata.
+- Add tests asserting metadata is recorded.
+
+Acceptance criteria:
+
+- API-created audit events include request metadata where available.
+- Existing service tests remain valid when metadata is absent.
+
+### Phase 1G.6: HTTP Error And IntegrityError Hardening
+
+Problem:
+
+- Some invalid operations may still surface as generic 500 errors, especially unique/FK violations.
+
+Required work:
+
+- Map SQLAlchemy `IntegrityError` to stable HTTP 409/422 responses where appropriate.
+- Keep permission errors as 403.
+- Keep missing objects as 404 where the service can identify them.
+- Add tests for duplicate organization code, duplicate registry code, duplicate reference list code, duplicate block/field code, and invalid FK-style references where applicable.
+
+Acceptance criteria:
+
+- Common client mistakes return stable 4xx errors.
+- No raw database error text is exposed in API responses.
+
+### Phase 1G.7: API Test Coverage Expansion
+
+Required tests:
+
+- Protected endpoints reject actor header when dev actor mode is disabled.
+- Organization list/tree/update/archive API tests.
+- Registry schema read/update/archive API tests.
+- Card list/update/archive/block-instance API tests.
+- Public link list/disable/hardening API tests.
+- Reference read/list/update/archive API tests.
+- Reference field validation tests.
+- Audit request metadata tests.
+- IntegrityError mapping tests.
+
+Verification commands:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+```
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
+```
+
+Acceptance criteria for Phase 1G:
+
+1. Current API/service bugs and gaps listed above are closed or explicitly deferred with reason.
+2. No production auth/session flow is introduced yet.
+3. No frontend implementation is added.
+4. No import/export, documents, MCP, MDB migration, or service desk integration is added.
+5. No hardcoded employee table or HR-specific fixed business columns are introduced.
+6. No database migration is added unless a specific Phase 1G subtask proves it is required and the migration follows the standing migration approval rule.
+7. Local checks pass.
+8. PostgreSQL-backed tests pass against disposable `reg_engine_test`.
+9. README and PLANS.md reflect the final Phase 1G result.
+
+## Planned Phases After Phase 1G
+
+The following phases must not start until Phase 1G is completed and verified.
+
+### Phase 1H: Bootstrap And Seed
+
+Purpose: make the system bootstrappable without manual SQL.
+
+Required work:
+
+- Seed permissions.
+- Seed roles:
+  - `system_admin`;
+  - `registry_admin`;
+  - `org_admin`;
+  - `auditor`.
+- CLI/script for creating the first superadmin.
+- Safe repeatable bootstrap behavior.
+- Tests for idempotency and no duplicate seed data.
+
+### Phase 1I: Auth And Session Flow
+
+Purpose: replace temporary actor context with production authentication.
+
+Required work:
+
+- Password hashing.
+- Login endpoint.
+- Current user dependency.
+- Session/token strategy.
+- `GET /api/v1/auth/me`.
+- Logout/session invalidation placeholder or implementation.
+- Disable `X-Actor-User-Id` outside controlled dev/test mode.
+- Tests for auth and protected endpoints.
+
+### Phase 1J: User And Access Management API
+
+Purpose: let admins manage users, roles, permissions, and grants through API.
+
+Required work:
+
+- Users API.
+- Roles read API.
+- Permissions read API.
+- Access grants API.
+- Grant archive/revoke API.
+- Organization-scoped admin assignment workflows.
+- Tests for system admin and org admin boundaries.
+
+### Phase 1K: Production Frontend Workflows
+
+Purpose: build the first usable web UI on top of the hardened API and auth/session flow.
+
+Required work:
+
+- Login screen.
+- Organization tree/list pages.
+- Registry list and schema view.
+- Card list.
+- Card read/edit shell.
+- Dynamic card form renderer for existing block/field schema.
+- Public-link edit page.
+- Audit list for allowed actors.
+
+### Phase 2: Documents
+
+Purpose: add documents and attachments.
+
+Required work:
+
+- File upload.
+- Attachment metadata.
+- Card/block/field attachment links.
+- File permissions.
+- File access audit.
+- Storage abstraction.
+
+### Phase 3: Import And Export
+
+Purpose: add controlled data exchange.
+
+Required work:
+
+- XLSX/CSV import.
+- Column mapping.
+- Preview and validation.
+- Background import jobs.
+- XLSX/CSV/JSON/PDF export.
+- Export permission checks.
+
+### Phase 4: Reports
+
+Purpose: add report generation.
+
+Required work:
+
+- Report templates.
+- Card PDF.
+- Registry reports.
+- Period reports.
+- DOCX/PDF generation.
+
+### Phase 5: MCP Over API Only
+
+Purpose: add MCP after API, auth, and audit boundaries are stable.
+
+Required work:
+
+- Read-only MCP tools first.
+- MCP tools call API only.
+- No direct DB access.
+- Audit source `mcp`.
+- Write tools only after explicit approval.
 
 ## Verification Commands
 
-Documentation-only checks for this planning task:
+Documentation-only checks:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine
@@ -657,17 +590,23 @@ git diff --check -- PLANS.md
 powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1 -Check
 ```
 
-Backend checks for future implementation phases:
+Backend checks:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 ```
 
+PostgreSQL-backed backend checks:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
+```
+
 ## Implementation Guardrail
 
-- Phase 1B.2 added schema models and migration only.
-- Future service/API work must be implemented in the phase order above.
-- Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
+- Phase 1G must fix current API/service issues before auth, frontend, import/export, documents, or MCP.
+- Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex only when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
 - After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
 - Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.
