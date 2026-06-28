@@ -42,9 +42,9 @@ Target system:
 - Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, and user/access management API.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, and card-level attachment backend/API foundation.
 - Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, audit reads, and public-link card editing.
-- Phase 2 documents/attachments scope is approved for card-level attachments first. Phase 2A records the storage architecture only; no attachment models, migrations, upload endpoints, download endpoints, public-link file flows, generated documents, or attachment UI are implemented yet.
+- Phase 2 documents/attachments scope is approved for card-level attachments first. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Public-link file flows, generated documents, `file_ref`, and attachment UI are not implemented yet.
 - Import/export, documents, and MCP are later phases.
 
 ## Local Setup
@@ -217,9 +217,30 @@ The current logout flow clears browser storage in the frontend and validates the
 
 ## Phase 2 Attachment Storage Decision
 
-Phase 2 starts with card-level attachments. Generated `.docx`/`.pdf` documents, `file_ref`, public-link upload/download, and attachment UI are deferred until the attachment metadata and service layer are proven.
+Phase 2 starts with card-level attachments. Generated `.docx`/`.pdf` documents, `file_ref`, public-link upload/download, and attachment UI are deferred until the attachment backend is accepted.
 
 The approved storage direction is a backend storage abstraction with a local filesystem backend configured outside Git. Runtime storage roots and limits must be set through environment variables or external runtime env files, never committed defaults.
+
+Attachment runtime settings:
+
+```powershell
+$env:REG_ENGINE_STORAGE_BACKEND = "local_filesystem"
+$env:REG_ENGINE_STORAGE_ROOT = "C:\path\outside\repo\attachments"
+$env:REG_ENGINE_MAX_ATTACHMENT_BYTES = "10485760"
+$env:REG_ENGINE_MALWARE_SCANNER = "deferred"
+```
+
+Authenticated attachment API:
+
+```powershell
+POST   /api/v1/cards/{card_id}/attachments
+GET    /api/v1/cards/{card_id}/attachments
+GET    /api/v1/attachments/{attachment_id}
+GET    /api/v1/attachments/{attachment_id}/content
+DELETE /api/v1/attachments/{attachment_id}
+```
+
+Upload uses multipart form data with `file` and optional `title` / `description`. Backend access checks follow card scope: create/archive require editable card access, and metadata/download require readable card access. Public links intentionally have no attachment upload or download endpoints in this slice.
 
 Architecture references:
 

@@ -1,0 +1,379 @@
+import hashlib
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path, PurePosixPath
+from typing import Protocol
+from uuid import UUID, uuid4
+
+from sqlalchemy import desc, select
+from sqlalchemy.orm import Session
+
+from app.models import Card, CardAttachment, StoredFile
+from app.services.audit import AuditService
+from app.services.permissions import PermissionDeniedError, PermissionService
+
+
+class AttachmentServiceError(ValueError):
+    """Raised when an attachment operation references invalid attachment state."""
+
+
+class AttachmentStorageError(ValueError):
+    """Raised when storage receives an unsafe key or cannot access content."""
+
+
+@dataclass(frozen=True)
+class StoredObjectInfo:
+    storage_key: str
+    content_length_bytes: int
+    checksum_sha256: str
+
+
+@dataclass(frozen=True)
+class MalwareScanResult:
+    scanner_status: str
+    scanner_checked_at: datetime | None = None
+    scanner_details_json: dict[str, str] | None = None
+
+
+class AttachmentStorage(Protocol):
+    backend_name: str
+
+    def write_bytes(self, content: bytes) -> StoredObjectInfo:
+        """Store bytes and return metadata needed for database rows."""
+        ...
+
+    def read_bytes(self, storage_key: str) -> bytes:
+        """Read bytes for an already-authorized storage key."""
+        ...
+
+    def exists(self, storage_key: str) -> bool:
+        """Return whether the backend has an object for the key."""
+        ...
+
+
+class MalwareScanner(Protocol):
+    def scan(self, *, storage: AttachmentStorage, storage_key: str) -> MalwareScanResult:
+        """Scan a stored object and return a persisted scanner status."""
+        ...
+
+
+class DeferredMalwareScanner:
+    def scan(self, *, storage: AttachmentStorage, storage_key: str) -> MalwareScanResult:
+        return MalwareScanResult(scanner_status="deferred")
+
+
+class LocalFilesystemAttachmentStorage:
+    backend_name = "local_filesystem"
+
+    def __init__(self, root: Path | str) -> None:
+        self.root = Path(root).resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def write_bytes(self, content: bytes) -> StoredObjectInfo:
+        now = datetime.now(UTC)
+        storage_key = f"attachments/{now:%Y/%m}/{uuid4()}"
+        path = self._path_for_key(storage_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return StoredObjectInfo(
+            storage_key=storage_key,
+            content_length_bytes=len(content),
+            checksum_sha256=hashlib.sha256(content).hexdigest(),
+        )
+
+    def read_bytes(self, storage_key: str) -> bytes:
+        return self._path_for_key(storage_key).read_bytes()
+
+    def exists(self, storage_key: str) -> bool:
+        return self._path_for_key(storage_key).is_file()
+
+    def _path_for_key(self, storage_key: str) -> Path:
+        if "\\" in storage_key:
+            raise AttachmentStorageError("Storage keys must use forward slashes.")
+        parsed = PurePosixPath(storage_key)
+        if parsed.is_absolute() or any(part in {"", ".", ".."} for part in parsed.parts):
+            raise AttachmentStorageError("Unsafe attachment storage key.")
+
+        path = (self.root / Path(*parsed.parts)).resolve()
+        try:
+            path.relative_to(self.root)
+        except ValueError as exc:
+            raise AttachmentStorageError(
+                "Attachment storage key escapes the storage root."
+            ) from exc
+        return path
+
+
+class AttachmentService:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        storage: AttachmentStorage,
+        scanner: MalwareScanner | None = None,
+        max_attachment_bytes: int = 10 * 1024 * 1024,
+    ) -> None:
+        self.session = session
+        self.storage = storage
+        self.scanner = scanner or DeferredMalwareScanner()
+        self.max_attachment_bytes = max_attachment_bytes
+
+    def create_attachment_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> CardAttachment:
+        card = self._get_editable_card(card_id)
+        self._require_card_permission(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        )
+        self._validate_attachment_content(content)
+
+        stored_info = self.storage.write_bytes(content)
+        scan_result = self.scanner.scan(storage=self.storage, storage_key=stored_info.storage_key)
+        stored_file = StoredFile(
+            storage_backend=self.storage.backend_name,
+            storage_key=stored_info.storage_key,
+            original_filename=self._clean_required_text(original_filename, "original filename"),
+            content_type=self._clean_required_text(content_type, "content type"),
+            content_length_bytes=stored_info.content_length_bytes,
+            checksum_sha256=stored_info.checksum_sha256,
+            scanner_status=scan_result.scanner_status,
+            scanner_checked_at=scan_result.scanner_checked_at,
+            scanner_details_json=scan_result.scanner_details_json,
+            created_by=actor_user_id,
+        )
+        self.session.add(stored_file)
+        self.session.flush()
+
+        attachment = CardAttachment(
+            card_id=card.id,
+            stored_file_id=stored_file.id,
+            title=self._attachment_title(title, original_filename),
+            description=description,
+            position=self._next_position(card.id),
+            created_by=actor_user_id,
+        )
+        self.session.add(attachment)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="attachment_create",
+            object_type="card_attachment",
+            object_id=attachment.id,
+            new_data_json={
+                "card_id": str(card.id),
+                "stored_file_id": str(stored_file.id),
+                "content_length_bytes": stored_file.content_length_bytes,
+                "checksum_sha256": stored_file.checksum_sha256,
+                "scanner_status": stored_file.scanner_status,
+            },
+        )
+        return attachment
+
+    def list_attachments_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        include_archive: bool = False,
+    ) -> list[CardAttachment]:
+        card = self._get_readable_card(card_id, include_archive=include_archive)
+        self._require_card_read(actor_user_id, card)
+
+        criteria = [CardAttachment.card_id == card.id]
+        if not include_archive:
+            criteria.append(CardAttachment.archived_at.is_(None))
+
+        return list(
+            self.session.scalars(
+                select(CardAttachment)
+                .where(*criteria)
+                .order_by(CardAttachment.position, CardAttachment.id)
+            ).all()
+        )
+
+    def read_attachment_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        attachment_id: UUID,
+        include_archive: bool = False,
+    ) -> CardAttachment:
+        attachment = self._get_attachment(attachment_id)
+        if attachment.archived_at is not None and not include_archive:
+            raise AttachmentServiceError("Attachment is only readable in archive scope.")
+        card = self._get_readable_card(attachment.card_id, include_archive=include_archive)
+        self._require_card_read(actor_user_id, card)
+        return attachment
+
+    def read_attachment_content_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        attachment_id: UUID,
+        include_archive: bool = False,
+    ) -> bytes:
+        attachment = self.read_attachment_for_actor(
+            actor_user_id=actor_user_id,
+            attachment_id=attachment_id,
+            include_archive=include_archive,
+        )
+        stored_file = self._get_stored_file(attachment.stored_file_id)
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="attachment_download",
+            object_type="card_attachment",
+            object_id=attachment.id,
+            new_data_json={
+                "stored_file_id": str(stored_file.id),
+                "content_length_bytes": stored_file.content_length_bytes,
+            },
+        )
+        return self.storage.read_bytes(stored_file.storage_key)
+
+    def archive_attachment_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        attachment_id: UUID,
+        archive_reason: str | None = None,
+    ) -> CardAttachment:
+        attachment = self._get_attachment(attachment_id)
+        if attachment.archived_at is not None:
+            return attachment
+
+        card = self._get_editable_card(attachment.card_id)
+        self._require_card_permission(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        )
+        attachment.archived_at = datetime.now(UTC)
+        attachment.archived_by = actor_user_id
+        attachment.archive_reason = archive_reason
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="attachment_archive",
+            object_type="card_attachment",
+            object_id=attachment.id,
+            old_data_json={"archived_at": None},
+            new_data_json={
+                "card_id": str(card.id),
+                "stored_file_id": str(attachment.stored_file_id),
+                "archive_reason": archive_reason,
+            },
+        )
+        return attachment
+
+    def create_attachment_from_public_link(
+        self,
+        *,
+        actor_public_link_id: UUID,
+        card_id: UUID,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+    ) -> CardAttachment:
+        raise PermissionDeniedError("Public links cannot upload attachments.")
+
+    def read_attachment_content_from_public_link(
+        self,
+        *,
+        actor_public_link_id: UUID,
+        attachment_id: UUID,
+    ) -> bytes:
+        raise PermissionDeniedError("Public links cannot download attachments.")
+
+    def get_stored_file_for_attachment(self, attachment: CardAttachment) -> StoredFile:
+        return self._get_stored_file(attachment.stored_file_id)
+
+    def _validate_attachment_content(self, content: bytes) -> None:
+        if not content:
+            raise AttachmentServiceError("Attachment content must not be empty.")
+        if len(content) > self.max_attachment_bytes:
+            raise AttachmentServiceError("Attachment content exceeds the configured size limit.")
+
+    def _get_attachment(self, attachment_id: UUID) -> CardAttachment:
+        attachment = self.session.get(CardAttachment, attachment_id)
+        if attachment is None:
+            raise AttachmentServiceError("Attachment was not found.")
+        return attachment
+
+    def _get_stored_file(self, stored_file_id: UUID) -> StoredFile:
+        stored_file = self.session.get(StoredFile, stored_file_id)
+        if stored_file is None:
+            raise AttachmentServiceError("Stored file was not found.")
+        return stored_file
+
+    def _get_editable_card(self, card_id: UUID) -> Card:
+        card = self.session.get(Card, card_id)
+        if (
+            card is None
+            or card.archived_at is not None
+            or card.lifecycle_status in {"archived", "superseded"}
+        ):
+            raise AttachmentServiceError("Card was not found.")
+        return card
+
+    def _get_readable_card(self, card_id: UUID, *, include_archive: bool) -> Card:
+        card = self.session.get(Card, card_id)
+        if card is None:
+            raise AttachmentServiceError("Card was not found.")
+        if card.lifecycle_status in {"archived", "superseded"} and not include_archive:
+            raise AttachmentServiceError("Card is only readable in archive scope.")
+        if card.archived_at is not None and not include_archive:
+            raise AttachmentServiceError("Card is only readable in archive scope.")
+        return card
+
+    def _require_card_permission(
+        self,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        *,
+        registry_id: UUID,
+    ) -> None:
+        if not PermissionService(self.session).has_permission(
+            actor_user_id,
+            "cards.manage",
+            organization_id=organization_id,
+            registry_id=registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot manage attachments in this card scope.")
+
+    def _require_card_read(self, actor_user_id: UUID, card: Card) -> None:
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read attachments in this card scope.")
+
+    def _next_position(self, card_id: UUID) -> int:
+        latest_position = self.session.scalar(
+            select(CardAttachment.position)
+            .where(CardAttachment.card_id == card_id)
+            .order_by(desc(CardAttachment.position))
+            .limit(1)
+        )
+        return 0 if latest_position is None else latest_position + 1
+
+    def _attachment_title(self, title: str | None, original_filename: str) -> str:
+        if title is not None and title.strip():
+            return title.strip()
+        return self._clean_required_text(original_filename, "original filename")
+
+    def _clean_required_text(self, value: str, label: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise AttachmentServiceError(f"Attachment {label} must not be empty.")
+        return cleaned

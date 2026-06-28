@@ -2,6 +2,7 @@ import os
 from functools import lru_cache
 from typing import Any
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEVELOPMENT_AUTH_TOKEN_SECRET = "change-me-development-auth-secret"
@@ -17,6 +18,26 @@ class Settings(BaseSettings):
     auth_token_secret: str = DEVELOPMENT_AUTH_TOKEN_SECRET
     auth_access_token_minutes: int = 480
     cors_allowed_origins: str = ""
+    storage_backend: str = Field(
+        default="local_filesystem",
+        validation_alias="REG_ENGINE_STORAGE_BACKEND",
+    )
+    storage_root: str | None = Field(
+        default=None,
+        validation_alias="REG_ENGINE_STORAGE_ROOT",
+    )
+    max_attachment_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        validation_alias="REG_ENGINE_MAX_ATTACHMENT_BYTES",
+    )
+    attachment_allowed_types: str = Field(
+        default="",
+        validation_alias="REG_ENGINE_ATTACHMENT_ALLOWED_TYPES",
+    )
+    malware_scanner: str = Field(
+        default="deferred",
+        validation_alias="REG_ENGINE_MALWARE_SCANNER",
+    )
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

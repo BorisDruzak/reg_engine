@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_session
 from app.models import User
+from app.services.attachments import AttachmentServiceError
 from app.services.auth import AuthError, AuthService
 from app.services.cards import CardServiceError, InvalidFieldValueError
 from app.services.organizations import OrganizationNotFoundError
@@ -127,6 +128,7 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         exc,
         (
             CardServiceError,
+            AttachmentServiceError,
             InvalidFieldValueError,
             PublicLinkError,
             ReferenceListError,

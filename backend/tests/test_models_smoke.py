@@ -4,6 +4,7 @@ EXPECTED_TABLES = {
     "access_grants",
     "audit_events",
     "card_block_instances",
+    "card_attachments",
     "card_public_links",
     "card_relations",
     "cards",
@@ -20,6 +21,7 @@ EXPECTED_TABLES = {
     "registries",
     "role_permissions",
     "roles",
+    "stored_files",
     "users",
 }
 
@@ -62,3 +64,36 @@ def test_dynamic_values_use_typed_columns() -> None:
         "value_reference_item_id",
     }:
         assert column_name in field_values.c
+
+
+def test_attachment_metadata_tables_use_required_columns() -> None:
+    stored_files = Base.metadata.tables["stored_files"]
+    card_attachments = Base.metadata.tables["card_attachments"]
+
+    for column_name in {
+        "storage_backend",
+        "storage_key",
+        "original_filename",
+        "content_type",
+        "content_length_bytes",
+        "checksum_sha256",
+        "scanner_status",
+        "created_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in stored_files.c
+
+    for column_name in {
+        "card_id",
+        "stored_file_id",
+        "title",
+        "description",
+        "position",
+        "created_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in card_attachments.c

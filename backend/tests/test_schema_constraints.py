@@ -31,6 +31,7 @@ def test_important_unique_constraints_exist() -> None:
         "reference_lists": {"uq_reference_lists_registry_owner_code"},
         "reference_items": {"uq_reference_items_list_id_code"},
         "card_block_instances": {"uq_card_block_instances_card_id_block_id_ordinal"},
+        "stored_files": {"uq_stored_files_storage_key"},
         "field_value_items": {"uq_field_value_items_value_item"},
         "card_relations": {"uq_card_relations_source_target_type"},
         "card_public_links": {"uq_card_public_links_token_hash"},
@@ -46,6 +47,11 @@ def test_important_check_constraints_exist() -> None:
         "registries": {"ck_registries_status"},
         "form_fields": {"ck_form_fields_field_type", "ck_form_fields_required_mode"},
         "cards": {"ck_cards_lifecycle_status"},
+        "stored_files": {
+            "ck_stored_files_content_length_positive",
+            "ck_stored_files_scanner_status",
+        },
+        "card_attachments": {"ck_card_attachments_position_non_negative"},
         "card_public_links": {"ck_card_public_links_status"},
         "audit_events": {"ck_audit_events_actor_type", "ck_audit_events_source"},
     }
@@ -77,6 +83,15 @@ def test_important_indexes_exist() -> None:
         "field_value_items": {
             "ix_field_value_items_field_value_id",
             "ix_field_value_items_reference_item_id",
+        },
+        "stored_files": {
+            "ix_stored_files_checksum_sha256",
+            "ix_stored_files_created_by",
+        },
+        "card_attachments": {
+            "ix_card_attachments_card_id",
+            "ix_card_attachments_stored_file_id",
+            "ix_card_attachments_card_archive",
         },
         "card_relations": {
             "ix_card_relations_source_card_id",

@@ -1,3 +1,4 @@
+from app.models.attachment import CardAttachment, StoredFile
 from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.card import Card, CardBlockInstance, CardRelation, FieldValue, FieldValueItem
@@ -12,6 +13,7 @@ __all__ = [
     "AuditEvent",
     "Base",
     "Card",
+    "CardAttachment",
     "CardBlockInstance",
     "CardPublicLink",
     "CardRelation",
@@ -27,6 +29,7 @@ __all__ = [
     "ReferenceList",
     "Registry",
     "Role",
+    "StoredFile",
     "User",
     "role_permissions",
 ]

@@ -19,6 +19,7 @@ EXPECTED_TABLES = {
     "access_grants",
     "audit_events",
     "card_block_instances",
+    "card_attachments",
     "card_public_links",
     "card_relations",
     "cards",
@@ -35,6 +36,7 @@ EXPECTED_TABLES = {
     "registries",
     "role_permissions",
     "roles",
+    "stored_files",
     "users",
 }
 
@@ -54,3 +56,14 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     for table_name in EXPECTED_TABLES:
         assert f"CREATE TABLE {table_name}" in sql
     assert "CREATE TABLE employees" not in sql
+
+
+def test_alembic_revision_ids_fit_version_table_limit() -> None:
+    versions_dir = Path(__file__).resolve().parents[1] / "migrations" / "versions"
+
+    for migration_path in versions_dir.glob("*.py"):
+        namespace: dict[str, object] = {}
+        exec(migration_path.read_text(encoding="utf-8"), namespace)
+        revision = namespace["revision"]
+        assert isinstance(revision, str)
+        assert len(revision) <= 32

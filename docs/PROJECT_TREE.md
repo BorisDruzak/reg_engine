@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 21:42:13 +05:00
+- Generated: 2026-06-28 22:10:11 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -34,6 +34,7 @@
 - `backend/app/api/v1/endpoints/__init__.py`
 - `backend/app/api/v1/endpoints/_field_values.py`
 - `backend/app/api/v1/endpoints/access_management.py`
+- `backend/app/api/v1/endpoints/attachments.py`
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
 - `backend/app/api/v1/endpoints/cards.py`
@@ -52,6 +53,7 @@
 - `backend/app/domain/constants.py`
 - `backend/app/main.py`
 - `backend/app/models/__init__.py`
+- `backend/app/models/attachment.py`
 - `backend/app/models/audit.py`
 - `backend/app/models/base.py`
 - `backend/app/models/card.py`
@@ -63,6 +65,7 @@
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/schemas/access_management.py`
+- `backend/app/schemas/attachments.py`
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
 - `backend/app/schemas/cards.py`
@@ -70,6 +73,7 @@
 - `backend/app/schemas/public_links.py`
 - `backend/app/schemas/registries.py`
 - `backend/app/services/__init__.py`
+- `backend/app/services/attachments.py`
 - `backend/app/services/audit.py`
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
@@ -86,12 +90,15 @@
 - `backend/migrations/versions/0002_core_schema_v1.py`
 - `backend/migrations/versions/0003_reconcile_core_schema_v1.py`
 - `backend/migrations/versions/0004_core_service_hardening.py`
+- `backend/migrations/versions/0005_attachment_backend_foundation.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
 - `backend/tests/test_access_management_phase_1j.py`
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
+- `backend/tests/test_api_phase_2b_attachments.py`
+- `backend/tests/test_attachment_services.py`
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`

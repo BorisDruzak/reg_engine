@@ -101,6 +101,18 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 
 ---
 
+## Attachment Rules
+
+- Keep Phase 2 attachment-first until generated documents are explicitly approved.
+- Keep attachment storage behind the backend storage abstraction.
+- Configure storage roots and limits outside Git, for example through `REG_ENGINE_STORAGE_ROOT`.
+- Do not commit uploaded files, storage roots, bucket names, endpoints, credentials, or malware scanner secrets.
+- Public links must not upload or download attachments until a later explicit phase approves that behavior.
+- Do not add `file_ref` dynamic values until attachment metadata is accepted as stable.
+- Malware scanning enforcement is deferred, but scanner status must be recorded through the scanner hook before uploaded files are exposed.
+
+---
+
 ## Phase 1 Scope
 
 Implement gradually:
@@ -374,7 +386,7 @@ Runtime commands must be executed on the configured runtime server, not from the
 - PostgreSQL runs on the configured runtime server.
 - Project database and role are configured by local environment or ignored script config.
 - PostgreSQL listens on localhost and the server LAN address.
-- Remote PostgreSQL access is limited to the LAN subnet `192.168.100.0/24`.
+- Remote PostgreSQL access is limited to the configured allowed LAN subnet.
 - Use password authentication over TCP. Do not use `trust` authentication for remote connections.
 - Do not store the PostgreSQL password in this file or commit it to Git.
 - DB smoke tests that set `TEST_DATABASE_URL` must use a disposable database whose name ends with `_test`, for example `reg_engine_test`.
@@ -422,7 +434,7 @@ password_encryption = scram-sha-256
 - Required `pg_hba.conf` LAN rule:
 
 ```text
-host    all             all             192.168.100.0/24          scram-sha-256
+host    all             all             <allowed-lan-subnet>       scram-sha-256
 ```
 
 After config changes:

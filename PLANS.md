@@ -34,8 +34,9 @@ Completed phases:
 - Phase 1L.8: Repository visibility and infrastructure exposure.
 - Phase 2.0: Documents product scope decision.
 - Phase 2A: Document storage architecture.
+- Phase 2B: Attachment backend foundation.
 
-Phase 1L is complete. Phase 2 has started with card-level attachments first. Phase 2.0 is complete, and Phase 2A is the current architecture checkpoint. Phase 2B attachment backend foundation starts only after the user accepts Phase 2A artifacts.
+Phase 1L is complete. Phase 2 has started with card-level attachments first. Phase 2.0, Phase 2A, and Phase 2B are complete. The next phase must be selected explicitly because generated documents, `file_ref`, public-link file flows, and frontend attachment UI remain deferred.
 
 ## Core Rules
 
@@ -303,8 +304,9 @@ Verification:
 
 ## Planned Phases After Phase 1L
 
-- Phase 2: Documents. Requires explicit approval before implementation.
-- Phase 2B: Attachment backend foundation.
+- Phase 2: Documents and attachments.
+- Phase 2C: Generated document templates. Requires explicit approval before implementation.
+- Phase 2D: Frontend document workflows. Requires explicit approval before implementation.
 - Phase 3: Import and export.
 - Phase 4: Reports.
 - Phase 5: MCP over API only.
@@ -382,7 +384,7 @@ Delivered:
 
 ### Phase 2A: Document Storage Architecture
 
-Status: ready for user acceptance.
+Status: completed.
 
 Planned work after approval:
 
@@ -412,7 +414,7 @@ Verification:
 
 ### Phase 2B: Attachment Backend Foundation
 
-Status: next after user accepts Phase 2A.
+Status: completed.
 
 Planned work after approval:
 
@@ -427,6 +429,32 @@ Acceptance criteria:
 - Users can read/download files only for cards they can view.
 - Archive preserves metadata and audit history.
 - Tests cover denied parent/sibling branch access.
+
+Delivered:
+
+- Added `stored_files` and `card_attachments` SQLAlchemy models.
+- Added Alembic revision `0005_attachments` through `backend/migrations/versions/0005_attachment_backend_foundation.py`.
+- Added `AttachmentStorage`, `LocalFilesystemAttachmentStorage`, `DeferredMalwareScanner`, and `AttachmentService`.
+- Added authenticated attachment endpoints for create/list/read/download/archive.
+- Added external runtime settings for `REG_ENGINE_STORAGE_BACKEND`, `REG_ENGINE_STORAGE_ROOT`, `REG_ENGINE_MAX_ATTACHMENT_BYTES`, `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`, and `REG_ENGINE_MALWARE_SCANNER`.
+- Added `python-multipart` for FastAPI multipart upload handling.
+- Added audit events for `attachment_create`, `attachment_download`, and `attachment_archive`.
+- Added metadata, migration, service, and authenticated API tests.
+
+Still deferred:
+
+- No frontend attachment UI.
+- No public-link upload/download.
+- No generated `.docx` / `.pdf` documents.
+- No `file_ref` field type or dynamic file values.
+- Malware scanner enforcement remains deferred; scanner status is recorded as `deferred` by the MVP scanner hook.
+
+Verification:
+
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_models_smoke.py backend\tests\test_migrations.py backend\tests\test_schema_constraints.py backend\tests\test_attachment_services.py -q` -> passed locally, PostgreSQL service tests skipped without `TEST_DATABASE_URL`.
+- PostgreSQL-backed `backend\tests\test_attachment_services.py` against disposable `_test` database -> 14 passed.
+- PostgreSQL-backed `backend\tests\test_api_phase_2b_attachments.py` against disposable `_test` database -> 2 passed.
+- Production migration status: pending until commit/push/deploy, backup, production preflight, `alembic upgrade head`, and post-checks complete.
 
 ### Phase 2C: Generated Document Templates
 
