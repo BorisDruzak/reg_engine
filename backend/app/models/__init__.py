@@ -2,6 +2,7 @@ from app.models.attachment import CardAttachment, StoredFile
 from app.models.audit import AuditEvent
 from app.models.base import Base
 from app.models.card import Card, CardBlockInstance, CardRelation, FieldValue, FieldValueItem
+from app.models.document import DocumentTemplate, GeneratedDocument
 from app.models.identity import Permission, Role, User, role_permissions
 from app.models.organization import AccessGrant, Organization, OrganizationClosure, OrgUnit
 from app.models.public_link import CardPublicLink
@@ -17,10 +18,12 @@ __all__ = [
     "CardBlockInstance",
     "CardPublicLink",
     "CardRelation",
+    "DocumentTemplate",
     "FieldValue",
     "FieldValueItem",
     "FormBlock",
     "FormField",
+    "GeneratedDocument",
     "Organization",
     "OrganizationClosure",
     "OrgUnit",

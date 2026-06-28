@@ -71,13 +71,14 @@ class DeferredMalwareScanner:
 class LocalFilesystemAttachmentStorage:
     backend_name = "local_filesystem"
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(self, root: Path | str, *, key_prefix: str = "attachments") -> None:
         self.root = Path(root).resolve()
+        self.key_prefix = self._clean_key_prefix(key_prefix)
         self.root.mkdir(parents=True, exist_ok=True)
 
     def write_bytes(self, content: bytes) -> StoredObjectInfo:
         now = datetime.now(UTC)
-        storage_key = f"attachments/{now:%Y/%m}/{uuid4()}"
+        storage_key = f"{self.key_prefix}/{now:%Y/%m}/{uuid4()}"
         path = self._path_for_key(storage_key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
@@ -114,6 +115,15 @@ class LocalFilesystemAttachmentStorage:
                 "Attachment storage key escapes the storage root."
             ) from exc
         return path
+
+    def _clean_key_prefix(self, key_prefix: str) -> str:
+        cleaned = key_prefix.strip().strip("/")
+        if not cleaned:
+            raise AttachmentStorageError("Attachment storage key prefix must not be empty.")
+        parsed = PurePosixPath(cleaned)
+        if parsed.is_absolute() or any(part in {"", ".", ".."} for part in parsed.parts):
+            raise AttachmentStorageError("Unsafe attachment storage key prefix.")
+        return str(parsed)
 
 
 class AttachmentService:

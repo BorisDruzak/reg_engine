@@ -8,10 +8,12 @@ EXPECTED_TABLES = {
     "card_public_links",
     "card_relations",
     "cards",
+    "document_templates",
     "field_value_items",
     "field_values",
     "form_blocks",
     "form_fields",
+    "generated_documents",
     "org_units",
     "organization_closure",
     "organizations",
@@ -97,3 +99,41 @@ def test_attachment_metadata_tables_use_required_columns() -> None:
         "archive_reason",
     }:
         assert column_name in card_attachments.c
+
+
+def test_generated_document_metadata_tables_use_required_columns() -> None:
+    document_templates = Base.metadata.tables["document_templates"]
+    generated_documents = Base.metadata.tables["generated_documents"]
+
+    for column_name in {
+        "registry_id",
+        "code",
+        "name",
+        "description",
+        "template_format",
+        "template_body",
+        "output_filename_template",
+        "output_content_type",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in document_templates.c
+
+    for column_name in {
+        "card_id",
+        "template_id",
+        "stored_file_id",
+        "title",
+        "output_filename",
+        "content_type",
+        "render_status",
+        "generated_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in generated_documents.c

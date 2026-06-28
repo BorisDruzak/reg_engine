@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 22:10:11 +05:00
+- Generated: 2026-06-28 23:45:41 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -57,6 +57,7 @@
 - `backend/app/models/audit.py`
 - `backend/app/models/base.py`
 - `backend/app/models/card.py`
+- `backend/app/models/document.py`
 - `backend/app/models/identity.py`
 - `backend/app/models/organization.py`
 - `backend/app/models/public_link.py`
@@ -78,6 +79,7 @@
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
 - `backend/app/services/cards.py`
+- `backend/app/services/documents.py`
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
 - `backend/app/services/public_links.py`
@@ -91,6 +93,7 @@
 - `backend/migrations/versions/0003_reconcile_core_schema_v1.py`
 - `backend/migrations/versions/0004_core_service_hardening.py`
 - `backend/migrations/versions/0005_attachment_backend_foundation.py`
+- `backend/migrations/versions/0006_generated_documents.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -105,11 +108,13 @@
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
+- `backend/tests/test_document_generation_services.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
 - `backend/tests/test_organization_permission_services.py`
 - `backend/tests/test_phase_2a_document_architecture.py`
+- `backend/tests/test_phase_2c_generated_documents_architecture.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
 - `backend/tests/test_schema_constraints.py`
@@ -118,6 +123,7 @@
 - `docs/ADR/0003-repository-visibility.md`
 - `docs/ADR/0004-phase-2-documents-scope.md`
 - `docs/ADR/0005-attachment-storage-architecture.md`
+- `docs/ADR/0006-generated-document-templates.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
@@ -126,6 +132,7 @@
 - `docs/CONVENTIONS.md`
 - `docs/PHASE_2_APPROVAL_CHECKLIST.md`
 - `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
+- `docs/PHASE_2C_GENERATED_DOCUMENT_TEMPLATES.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_TREE.md`
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`
