@@ -42,8 +42,8 @@ Target system:
 - Server: `/opt/reg_engine` on `registoryengine`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, and audit reads.
-- Auth flow, production frontend workflows, import/export, documents, and MCP are later phases.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, and bearer-token authentication.
+- Production frontend workflows, import/export, documents, and MCP are later phases.
 
 ## Local Setup
 
@@ -175,7 +175,24 @@ Temporary API actor injection is controlled by:
 $env:ALLOW_DEV_ACTOR_HEADER = "true"
 ```
 
-When absent or false, protected API endpoints reject `X-Actor-User-Id`. This header is only for tests and local development until the production auth/session phase replaces it.
+Protected API endpoints prefer `Authorization: Bearer <token>`. When `ALLOW_DEV_ACTOR_HEADER` is absent or false, protected API endpoints reject `X-Actor-User-Id`. This header is only for controlled tests and local development.
+
+Auth token signing is controlled by:
+
+```powershell
+$env:AUTH_TOKEN_SECRET = "<strong-secret>"
+$env:AUTH_ACCESS_TOKEN_MINUTES = "480"
+```
+
+Auth API:
+
+```powershell
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+POST /api/v1/auth/logout
+```
+
+`POST /api/v1/auth/logout` validates the bearer token and returns `{"status":"ok"}`. Server-side token revocation storage is intentionally deferred until the session persistence phase.
 
 ## Bootstrap Commands
 
@@ -231,12 +248,11 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 
 ## Known Remaining Non-Goals After Core Schema v1 API Foundation
 
-- No auth flow yet.
-- No production session/login flow yet.
+- No server-side token revocation table yet.
 - No production frontend workflows yet.
 - No import/export.
 - No document generation.
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1H completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, and bootstrap seed tooling. Authentication, production UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1I completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, and bearer-token authentication. User/access management API, production UI, import/export, documents, and MCP remain later phases.

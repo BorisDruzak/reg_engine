@@ -9,9 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Phase 1B through Phase 1H backend foundation, API hardening, and bootstrap tooling is completed.
-- Current next checkpoint is **Phase 1I: Auth And Session Flow**.
-- Phase 1I must not start until Phase 1H code is synchronized and verified on the server checkout.
+- Phase 1B through Phase 1I backend foundation, API hardening, bootstrap tooling, and auth flow is completed.
+- Current next checkpoint is **Phase 1J: User And Access Management API**.
+- Phase 1J must not start until Phase 1I code is synchronized and verified on the server checkout.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -27,12 +27,14 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1F REST API Foundation And Service Wiring is completed and verified against server test database `reg_engine_test`.
 - Phase 1G Current API/Service Bugfix And Hardening is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1H Bootstrap And Seed is completed and verified against disposable PostgreSQL database `reg_engine_test`.
-- Phase 1I Auth And Session Flow is the next planned implementation phase.
+- Phase 1I Auth And Session Flow is completed and verified against disposable PostgreSQL database `reg_engine_test`.
+- Phase 1J User And Access Management API is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
 - Phase 1G did not require a database migration.
 - Phase 1H did not require a database migration.
+- Phase 1I did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -373,6 +375,43 @@ Known limitations after Phase 1H:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1H.
 
+### Phase 1I: Auth And Session Flow
+
+Status: completed.
+
+Delivered:
+
+- Password hashing with stdlib PBKDF2-SHA256 hashes.
+- Login endpoint: `POST /api/v1/auth/login`.
+- Bearer-token current user dependency.
+- Signed token strategy controlled by `AUTH_TOKEN_SECRET` and `AUTH_ACCESS_TOKEN_MINUTES`.
+- Current-user endpoint: `GET /api/v1/auth/me`.
+- Logout placeholder endpoint: `POST /api/v1/auth/logout`.
+- Protected endpoints prefer `Authorization: Bearer <token>`.
+- `X-Actor-User-Id` remains disabled by default and works only when `ALLOW_DEV_ACTOR_HEADER=true`.
+- Phase 1I auth regression tests.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@192.168.100.12:5432/reg_engine_test"
+backend\.venv\Scripts\python.exe -m pytest backend\tests\test_auth_phase_1i.py -q
+backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_1f.py backend\tests\test_api_phase_1g.py -q
+backend\.venv\Scripts\python.exe -m pytest backend -q
+backend\.venv\Scripts\ruff.exe check backend
+backend\.venv\Scripts\ruff.exe format --check backend
+backend\.venv\Scripts\mypy.exe backend\app
+```
+
+Known limitations after Phase 1I:
+
+- Logout validates the token and returns `{"status":"ok"}`, but server-side token revocation storage is deferred.
+- User, role, permission, and access-grant management APIs are still Phase 1J.
+- No production frontend implementation has been added.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1I.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -563,9 +602,9 @@ Acceptance criteria for Phase 1G:
 8. PostgreSQL-backed tests pass against disposable `reg_engine_test`.
 9. README and PLANS.md reflect the final Phase 1G result.
 
-## Planned Phases After Phase 1H
+## Planned Phases After Phase 1I
 
-The following phases must not start until Phase 1H is synchronized to GitHub/server and verified there.
+The following phases must not start until Phase 1I is synchronized to GitHub/server and verified there.
 
 ### Phase 1H: Bootstrap And Seed
 
@@ -588,6 +627,8 @@ Required work:
 ### Phase 1I: Auth And Session Flow
 
 Purpose: replace temporary actor context with production authentication.
+
+Status: completed.
 
 Required work:
 
@@ -705,7 +746,8 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 
 ## Implementation Guardrail
 
-- Phase 1I must replace temporary actor context with production auth before frontend, import/export, documents, or MCP.
+- Phase 1I replaced temporary actor context with bearer auth for protected endpoints; the dev actor header remains available only when explicitly enabled for controlled tests/local development.
+- Phase 1J must complete admin user/access workflows before production frontend, import/export, documents, or MCP.
 - Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex only when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
 - After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
 - Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.

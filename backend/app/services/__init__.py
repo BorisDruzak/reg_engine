@@ -1,6 +1,7 @@
 """Service layer package for Registry Engine business workflows."""
 
 from app.services.audit import AuditService
+from app.services.auth import AuthError, AuthService, AuthToken, hash_password, verify_password
 from app.services.bootstrap import BootstrapSeedResult, BootstrapService
 from app.services.cards import (
     CardFieldRead,
@@ -17,6 +18,9 @@ from app.services.registry_schema import RegistrySchemaError, RegistrySchemaServ
 
 __all__ = [
     "AuditService",
+    "AuthError",
+    "AuthService",
+    "AuthToken",
     "BootstrapSeedResult",
     "BootstrapService",
     "CardFieldRead",
@@ -35,4 +39,6 @@ __all__ = [
     "ReferenceListService",
     "RegistrySchemaError",
     "RegistrySchemaService",
+    "hash_password",
+    "verify_password",
 ]

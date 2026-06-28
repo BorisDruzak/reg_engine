@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str | None = None
     allow_dev_actor_header: bool = False
+    auth_token_secret: str = "change-me-development-auth-secret"
+    auth_access_token_minutes: int = 480
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

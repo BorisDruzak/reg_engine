@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_session
+from app.models import User
+from app.services.auth import AuthError, AuthService
 from app.services.cards import CardServiceError, InvalidFieldValueError
 from app.services.organizations import OrganizationNotFoundError
 from app.services.permissions import PermissionDeniedError
@@ -54,19 +56,55 @@ def get_db_session(
 
 
 def get_actor_user_id(
+    session: Annotated[Session, Depends(get_db_session)],
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_actor_user_id: Annotated[UUID | None, Header(alias="X-Actor-User-Id")] = None,
 ) -> UUID:
-    if not get_settings().allow_dev_actor_header:
+    if authorization is not None:
+        return _current_user_from_authorization(session, authorization).id
+
+    if get_settings().allow_dev_actor_header:
+        if x_actor_user_id is None:
+            raise HTTPException(
+                status_code=401,
+                detail="X-Actor-User-Id header is required for temporary local API actor context.",
+            )
+        return x_actor_user_id
+
+    raise HTTPException(
+        status_code=401,
+        detail="Temporary dev actor header is disabled. Use production auth when available.",
+    )
+
+
+def get_current_user(
+    session: Annotated[Session, Depends(get_db_session)],
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> User:
+    if authorization is None:
         raise HTTPException(
             status_code=401,
-            detail="Temporary dev actor header is disabled. Use production auth when available.",
+            detail="Bearer token is required.",
         )
-    if x_actor_user_id is None:
+    return _current_user_from_authorization(session, authorization)
+
+
+def _current_user_from_authorization(session: Session, authorization: str) -> User:
+    token = _bearer_token_from_authorization(authorization)
+    try:
+        return AuthService(session).get_user_from_token(token)
+    except AuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def _bearer_token_from_authorization(authorization: str) -> str:
+    scheme, separator, token = authorization.partition(" ")
+    if not separator or scheme.lower() != "bearer" or not token.strip():
         raise HTTPException(
             status_code=401,
-            detail="X-Actor-User-Id header is required for temporary local API actor context.",
+            detail="Bearer token is required.",
         )
-    return x_actor_user_id
+    return token.strip()
 
 
 def raise_service_http_error(exc: Exception) -> NoReturn:
