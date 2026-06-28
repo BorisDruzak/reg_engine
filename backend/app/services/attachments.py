@@ -112,11 +112,17 @@ class AttachmentService:
         storage: AttachmentStorage,
         scanner: MalwareScanner | None = None,
         max_attachment_bytes: int = 10 * 1024 * 1024,
+        allowed_content_types: set[str] | None = None,
     ) -> None:
         self.session = session
         self.storage = storage
         self.scanner = scanner or DeferredMalwareScanner()
         self.max_attachment_bytes = max_attachment_bytes
+        self.allowed_content_types = {
+            content_type.strip().lower()
+            for content_type in (allowed_content_types or set())
+            if content_type.strip()
+        }
 
     def create_attachment_for_actor(
         self,
@@ -135,15 +141,21 @@ class AttachmentService:
             card.organization_id,
             registry_id=card.registry_id,
         )
+        clean_original_filename = self._clean_required_text(
+            original_filename,
+            "original filename",
+        )
+        clean_content_type = self._clean_required_text(content_type, "content type")
         self._validate_attachment_content(content)
+        self._validate_content_type(clean_content_type)
 
         stored_info = self.storage.write_bytes(content)
         scan_result = self.scanner.scan(storage=self.storage, storage_key=stored_info.storage_key)
         stored_file = StoredFile(
             storage_backend=self.storage.backend_name,
             storage_key=stored_info.storage_key,
-            original_filename=self._clean_required_text(original_filename, "original filename"),
-            content_type=self._clean_required_text(content_type, "content type"),
+            original_filename=clean_original_filename,
+            content_type=clean_content_type,
             content_length_bytes=stored_info.content_length_bytes,
             checksum_sha256=stored_info.checksum_sha256,
             scanner_status=scan_result.scanner_status,
@@ -157,7 +169,7 @@ class AttachmentService:
         attachment = CardAttachment(
             card_id=card.id,
             stored_file_id=stored_file.id,
-            title=self._attachment_title(title, original_filename),
+            title=self._attachment_title(title, clean_original_filename),
             description=description,
             position=self._next_position(card.id),
             created_by=actor_user_id,
@@ -302,6 +314,12 @@ class AttachmentService:
             raise AttachmentServiceError("Attachment content must not be empty.")
         if len(content) > self.max_attachment_bytes:
             raise AttachmentServiceError("Attachment content exceeds the configured size limit.")
+
+    def _validate_content_type(self, content_type: str) -> None:
+        if not self.allowed_content_types:
+            return
+        if content_type.lower() not in self.allowed_content_types:
+            raise AttachmentServiceError("Attachment content type is not allowed.")
 
     def _get_attachment(self, attachment_id: UUID) -> CardAttachment:
         attachment = self.session.get(CardAttachment, attachment_id)

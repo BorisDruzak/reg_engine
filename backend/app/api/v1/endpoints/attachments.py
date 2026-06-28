@@ -147,7 +147,12 @@ def _attachment_service(session: Session) -> AttachmentService:
         session,
         storage=LocalFilesystemAttachmentStorage(settings.storage_root),
         max_attachment_bytes=settings.max_attachment_bytes,
+        allowed_content_types=_parse_allowed_content_types(settings.attachment_allowed_types),
     )
+
+
+def _parse_allowed_content_types(raw_value: str) -> set[str]:
+    return {item.strip().lower() for item in raw_value.split(",") if item.strip()}
 
 
 def _attachment_to_read(service: AttachmentService, attachment: CardAttachment) -> AttachmentRead:

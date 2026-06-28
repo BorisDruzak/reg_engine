@@ -462,6 +462,7 @@ Verification:
 - Production post-checks verified Alembic head `0005_attachments`, both attachment tables, and registered attachment API paths.
 - Runtime attachment storage is configured outside Git, and `scripts/server-check.ps1` now verifies storage backend/root readiness.
 - Live HTTP smoke on the runtime server used disposable database `reg_engine_phase2b_live_test` and temporary storage to verify authenticated attachment upload, list, download, archive, archive-scope read, and cleanup. Production data was not mutated.
+- Phase 2B hardening added PostgreSQL-backed tests for parent-without-descendants attachment denial, MIME allow-list enforcement through `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`, and pre-storage rejection of blank filename metadata. The service now rejects disallowed MIME types and invalid metadata before writing bytes to storage.
 
 ### Phase 2C: Generated Document Templates
 

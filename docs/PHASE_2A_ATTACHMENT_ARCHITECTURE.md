@@ -184,6 +184,11 @@ Expected future settings:
 | `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` | Optional comma-separated allow-list for MIME types. |
 | `REG_ENGINE_MALWARE_SCANNER` | First value may be `deferred`; future values can select a scanner implementation. |
 
+When the MIME allow-list is configured, rejected uploads must fail before bytes are
+written to the storage backend. Empty filename and content-type metadata must also
+be rejected before storage writes, so invalid requests do not leave orphaned
+binary objects.
+
 The configured root should be backed up with the database metadata. It should not live under the Git checkout.
 
 ## Required Phase 2B Tests Before Upload Endpoints

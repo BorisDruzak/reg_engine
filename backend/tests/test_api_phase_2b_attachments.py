@@ -92,9 +92,11 @@ def api_client(db_session: Session, tmp_path: Path) -> Iterator[TestClient]:
     previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
     previous_storage_root = os.environ.get("REG_ENGINE_STORAGE_ROOT")
     previous_max_bytes = os.environ.get("REG_ENGINE_MAX_ATTACHMENT_BYTES")
+    previous_allowed_types = os.environ.get("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES")
     os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
     os.environ["REG_ENGINE_STORAGE_ROOT"] = str(tmp_path)
     os.environ["REG_ENGINE_MAX_ATTACHMENT_BYTES"] = "64"
+    os.environ.pop("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", None)
     get_settings.cache_clear()
     app = create_app()
 
@@ -109,6 +111,7 @@ def api_client(db_session: Session, tmp_path: Path) -> Iterator[TestClient]:
         _restore_env("ALLOW_DEV_ACTOR_HEADER", previous_allow_dev_actor)
         _restore_env("REG_ENGINE_STORAGE_ROOT", previous_storage_root)
         _restore_env("REG_ENGINE_MAX_ATTACHMENT_BYTES", previous_max_bytes)
+        _restore_env("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", previous_allowed_types)
         get_settings.cache_clear()
 
 
@@ -189,6 +192,10 @@ def _attachment_api_context(db_session: Session) -> dict[str, Any]:
         is_superuser=True,
     )
     card_admin = _create_user(db_session, "api-attachments-card-admin@example.test")
+    root_limited_admin = _create_user(
+        db_session,
+        "api-attachments-root-limited-admin@example.test",
+    )
     sibling_admin = _create_user(db_session, "api-attachments-sibling-admin@example.test")
     card_role = _create_role_with_permissions(
         db_session,
@@ -229,6 +236,15 @@ def _attachment_api_context(db_session: Session) -> dict[str, Any]:
     )
     _grant_access(
         db_session,
+        user_id=root_limited_admin.id,
+        role_id=card_role.id,
+        organization_id=root.id,
+        registry_id=registry.id,
+        include_descendants=False,
+        created_by=system_admin.id,
+    )
+    _grant_access(
+        db_session,
         user_id=sibling_admin.id,
         role_id=card_role.id,
         organization_id=sibling.id,
@@ -245,6 +261,7 @@ def _attachment_api_context(db_session: Session) -> dict[str, Any]:
     return {
         "system_admin": system_admin,
         "card_admin": card_admin,
+        "root_limited_admin": root_limited_admin,
         "sibling_admin": sibling_admin,
         "card": card,
     }
@@ -277,6 +294,12 @@ def test_api_attachment_upload_list_read_download_and_archive_use_card_scope(
         headers=_actor_headers(context["sibling_admin"].id),
     )
     assert sibling_read.status_code == 403, sibling_read.text
+
+    parent_without_descendants_read = api_client.get(
+        f"/api/v1/attachments/{upload_payload['id']}",
+        headers=_actor_headers(context["root_limited_admin"].id),
+    )
+    assert parent_without_descendants_read.status_code == 403, parent_without_descendants_read.text
 
     list_response = api_client.get(
         f"/api/v1/cards/{context['card'].id}/attachments",
@@ -351,3 +374,40 @@ def test_api_attachment_upload_rejects_unconfigured_storage(
     os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
     os.environ["REG_ENGINE_STORAGE_ROOT"] = str(tmp_path)
     get_settings.cache_clear()
+
+
+def test_api_attachment_upload_rejects_disallowed_content_type(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    from app.api.dependencies import get_db_session
+    from app.core.config import get_settings
+
+    context = _attachment_api_context(db_session)
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    previous_storage_root = os.environ.get("REG_ENGINE_STORAGE_ROOT")
+    previous_allowed_types = os.environ.get("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    os.environ["REG_ENGINE_STORAGE_ROOT"] = str(tmp_path)
+    os.environ["REG_ENGINE_ATTACHMENT_ALLOWED_TYPES"] = "text/plain"
+    get_settings.cache_clear()
+    app = create_app()
+
+    def override_session() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/v1/cards/{context['card'].id}/attachments",
+                headers=_actor_headers(context["card_admin"].id),
+                files={"file": ("blocked.pdf", b"blocked", "application/pdf")},
+            )
+    finally:
+        _restore_env("ALLOW_DEV_ACTOR_HEADER", previous_allow_dev_actor)
+        _restore_env("REG_ENGINE_STORAGE_ROOT", previous_storage_root)
+        _restore_env("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", previous_allowed_types)
+        get_settings.cache_clear()
+
+    assert response.status_code == 400, response.text

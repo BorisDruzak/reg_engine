@@ -230,6 +230,10 @@ $env:REG_ENGINE_MAX_ATTACHMENT_BYTES = "10485760"
 $env:REG_ENGINE_MALWARE_SCANNER = "deferred"
 ```
 
+When `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` is non-empty, the attachment service
+rejects uploads whose MIME type is outside the comma-separated allow-list before
+writing bytes to storage.
+
 Authenticated attachment API:
 
 ```powershell

@@ -18,6 +18,7 @@ from app.services.attachments import (
     AttachmentServiceError,
     AttachmentStorageError,
     LocalFilesystemAttachmentStorage,
+    StoredObjectInfo,
 )
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
@@ -154,6 +155,7 @@ def _attachment_context(db_session: Session) -> dict[str, Any]:
     system_admin = _create_user(db_session, "attachments-system@example.test", is_superuser=True)
     child_admin = _create_user(db_session, "attachments-child-admin@example.test")
     root_admin = _create_user(db_session, "attachments-root-admin@example.test")
+    root_limited_admin = _create_user(db_session, "attachments-root-limited-admin@example.test")
     sibling_admin = _create_user(db_session, "attachments-sibling-admin@example.test")
     no_access_user = _create_user(db_session, "attachments-no-access@example.test")
     card_role = _create_role_with_permissions(
@@ -206,6 +208,15 @@ def _attachment_context(db_session: Session) -> dict[str, Any]:
     )
     _grant_access(
         db_session,
+        user_id=root_limited_admin.id,
+        role_id=card_role.id,
+        organization_id=root.id,
+        registry_id=registry.id,
+        include_descendants=False,
+        created_by=system_admin.id,
+    )
+    _grant_access(
+        db_session,
         user_id=sibling_admin.id,
         role_id=card_role.id,
         organization_id=sibling.id,
@@ -225,6 +236,7 @@ def _attachment_context(db_session: Session) -> dict[str, Any]:
         "system_admin": system_admin,
         "child_admin": child_admin,
         "root_admin": root_admin,
+        "root_limited_admin": root_limited_admin,
         "sibling_admin": sibling_admin,
         "no_access_user": no_access_user,
         "root": root,
@@ -282,6 +294,64 @@ def test_attachment_metadata_rejects_oversized_file(
             content_type="text/plain",
             content=b"x" * 33,
         )
+
+
+def test_attachment_metadata_rejects_disallowed_content_type(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    context = _attachment_context(db_session)
+    attachment_service = AttachmentService(
+        db_session,
+        storage=LocalFilesystemAttachmentStorage(tmp_path),
+        allowed_content_types={"text/plain"},
+    )
+
+    with pytest.raises(AttachmentServiceError):
+        attachment_service.create_attachment_for_actor(
+            actor_user_id=context["child_admin"].id,
+            card_id=context["card"].id,
+            original_filename="blocked.pdf",
+            content_type="application/pdf",
+            content=b"blocked",
+        )
+
+
+def test_attachment_rejects_blank_metadata_before_storage_write(
+    db_session: Session,
+) -> None:
+    class RecordingStorage(LocalFilesystemAttachmentStorage):
+        def __init__(self) -> None:
+            self.write_count = 0
+
+        def write_bytes(self, content: bytes) -> StoredObjectInfo:
+            self.write_count += 1
+            return StoredObjectInfo(
+                storage_key="attachments/test/blank-metadata",
+                content_length_bytes=len(content),
+                checksum_sha256=hashlib.sha256(content).hexdigest(),
+            )
+
+        def read_bytes(self, storage_key: str) -> bytes:
+            return b""
+
+        def exists(self, storage_key: str) -> bool:
+            return False
+
+    context = _attachment_context(db_session)
+    storage = RecordingStorage()
+    attachment_service = AttachmentService(db_session, storage=storage)
+
+    with pytest.raises(AttachmentServiceError):
+        attachment_service.create_attachment_for_actor(
+            actor_user_id=context["child_admin"].id,
+            card_id=context["card"].id,
+            original_filename="   ",
+            content_type="text/plain",
+            content=b"content",
+        )
+
+    assert storage.write_count == 0
 
 
 def test_attachment_metadata_records_checksum_sha256(
@@ -398,6 +468,42 @@ def test_sibling_admin_cannot_read_card_attachment(
         attachment_service.read_attachment_for_actor(
             actor_user_id=context["sibling_admin"].id,
             attachment_id=attachment.id,
+        )
+
+
+def test_parent_admin_without_descendants_cannot_read_child_card_attachment(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="parent.txt",
+        content_type="text/plain",
+        content=b"parent",
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.read_attachment_for_actor(
+            actor_user_id=context["root_limited_admin"].id,
+            attachment_id=attachment.id,
+        )
+
+
+def test_parent_admin_without_descendants_cannot_create_child_card_attachment(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.create_attachment_for_actor(
+            actor_user_id=context["root_limited_admin"].id,
+            card_id=context["card"].id,
+            original_filename="parent-create.txt",
+            content_type="text/plain",
+            content=b"parent-create",
         )
 
 
