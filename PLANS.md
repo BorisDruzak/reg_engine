@@ -461,6 +461,7 @@ Verification:
 - Production migration `0005_attachments` completed after fresh backup and preflight verified production was at `0004_core_service_hardening` and did not yet have `stored_files` / `card_attachments`.
 - Production post-checks verified Alembic head `0005_attachments`, both attachment tables, and registered attachment API paths.
 - Runtime attachment storage is configured outside Git, and `scripts/server-check.ps1` now verifies storage backend/root readiness.
+- Live HTTP smoke on the runtime server used disposable database `reg_engine_phase2b_live_test` and temporary storage to verify authenticated attachment upload, list, download, archive, archive-scope read, and cleanup. Production data was not mutated.
 
 ### Phase 2C: Generated Document Templates
 
