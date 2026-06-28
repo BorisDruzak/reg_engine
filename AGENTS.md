@@ -270,7 +270,17 @@ After a verified implementation checkpoint, synchronize in this order unless the
 3. Update the server checkout in `/opt/reg_engine` from `origin/main`.
 4. Run server checks that do not mutate production data.
 
-Do not run production PostgreSQL migrations automatically. Any schema-changing `alembic upgrade head` against the production `reg_engine` database requires a separate explicit approval.
+Production PostgreSQL migrations are allowed without an additional per-run question when all of these are true:
+
+- the migration is explicitly included in the active `PLANS.md` phase or checkpoint;
+- the migration has already passed against a disposable PostgreSQL database whose name ends with `_test`;
+- the server checkout is synchronized to `origin/main`;
+- a fresh production backup is created before applying the migration;
+- duplicate/data preflight checks relevant to the migration pass;
+- the migration command targets production `reg_engine` intentionally, not through `TEST_DATABASE_URL`;
+- post-migration schema/status checks are run and recorded in `PLANS.md`.
+
+This is the standing user approval for planned migrations. If any condition is missing or the migration is outside the active plan, stop and ask before changing production schema.
 
 Use local-only checks when remote SSH/GitHub reachability is not part of the current task:
 

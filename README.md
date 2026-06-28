@@ -88,7 +88,7 @@ pnpm -C frontend exec playwright install chromium
 | Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
 | Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
 
-This project uses one long-lived branch: `main`. After a verified implementation checkpoint, commit the scoped local changes, push `main` to GitHub, update `/opt/reg_engine` from `origin/main`, and run non-mutating server checks. Production PostgreSQL schema migrations require separate explicit approval.
+This project uses one long-lived branch: `main`. After a verified implementation checkpoint, commit the scoped local changes, push `main` to GitHub, update `/opt/reg_engine` from `origin/main`, and run server checks. Planned production PostgreSQL migrations may be applied by Codex after disposable PostgreSQL verification, fresh backup, data preflight, and post-migration checks.
 
 ## Direct Backend Commands
 
@@ -143,7 +143,7 @@ $env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg
 python -m pytest tests/test_database_smoke.py -q
 ```
 
-Do not commit real database passwords. Server schema migration is a separate explicit approval step.
+Do not commit real database passwords. Planned server schema migrations are covered by the standing project approval when the active plan requires them, disposable PostgreSQL tests have passed, and backup/preflight/post-checks are completed.
 
 ## Env Loading Strategy
 

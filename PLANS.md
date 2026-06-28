@@ -28,10 +28,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1F REST API Foundation And Service Wiring is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
-- Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
-- Production migration `0004_core_service_hardening` must not be run without separate explicit approval.
-- Production backup before migration: `/var/backups/reg_engine/reg_engine_before_alembic_head_20260627_191407.dump`, sha256 `9b7e6d0f5870f6da5f7da72f9fa77fa1856b3e1454030afe4350347824826152`.
-- Production live schema compare against SQLAlchemy metadata passed after migration: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, and no `employees` table.
+- Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
+- Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
+- Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
 ## Core Architecture Decisions
 
@@ -520,7 +519,7 @@ Safe migration plan:
 - `0002_core_schema_v1.py` is treated as the fixed baseline Core Schema v1 migration and must not call live model metadata at migration runtime.
 - `0004_core_service_hardening.py` drops obsolete uniqueness constraints if present and creates the new scope-aware constraints/indexes idempotently.
 - Fresh disposable PostgreSQL verification must run with `TEST_DATABASE_URL` against a database ending in `_test`.
-- Production `reg_engine` requires a separate approval, a fresh backup, duplicate-data preflight, and an explicit `alembic upgrade head` command before applying `0004`.
+- Production `reg_engine` was upgraded to `0004` after explicit approval, a fresh backup, duplicate-data preflight, and an explicit `alembic upgrade head` command.
 
 Verification:
 
@@ -543,10 +542,19 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 
 Result: `42` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
 
+Production migration completed:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env DATABASE_URL='postgresql+psycopg:///reg_engine' .venv/bin/python -m alembic upgrade head
+```
+
+Result: production `alembic_version` is `0004_core_service_hardening`; post-migration schema compare passed.
+
 Known limitations:
 
 - No REST API endpoints, frontend, auth flow, import/export, documents, or MCP are implemented in Phase 1E.1.
-- `0004_core_service_hardening` is not applied to production in this phase.
+- `0004_core_service_hardening` is applied to production; future migrations follow the standing planned-migration rule in `AGENTS.md`.
 - Public editing remains service-layer behavior; HTTP public endpoints remain Phase 1F work.
 
 Next phase:
@@ -630,6 +638,6 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 
 - Phase 1B.2 added schema models and migration only.
 - Future service/API work must be implemented in the phase order above.
-- Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` require a separate explicit approval step.
+- Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
 - After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
 - Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.
