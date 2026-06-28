@@ -1,9 +1,11 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.models import AuditEvent
+from app.services.permissions import PermissionDeniedError, PermissionService
 
 
 class AuditService:
@@ -74,6 +76,30 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source="system",
+        )
+
+    def list_events_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        object_type: str | None = None,
+        limit: int = 50,
+    ) -> list[AuditEvent]:
+        if not PermissionService(self.session).is_superuser(actor_user_id):
+            raise PermissionDeniedError("Only a system admin can read audit events.")
+
+        bounded_limit = max(1, min(limit, 100))
+        criteria = []
+        if object_type is not None:
+            criteria.append(AuditEvent.object_type == object_type)
+
+        return list(
+            self.session.scalars(
+                select(AuditEvent)
+                .where(*criteria)
+                .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
+                .limit(bounded_limit)
+            ).all()
         )
 
     def _record(

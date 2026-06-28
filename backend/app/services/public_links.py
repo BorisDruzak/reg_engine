@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Card, CardPublicLink, FormBlock, FormField
+from app.models import Card, CardPublicLink, FieldValue, FormBlock, FormField
 from app.services.audit import AuditService
 from app.services.cards import CardService, CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
@@ -95,7 +95,7 @@ class PublicLinkService:
         raw_token: str,
         field_id: UUID,
         value: object,
-    ) -> object:
+    ) -> FieldValue:
         public_link = self._get_usable_public_link(raw_token)
         card = self._get_active_card(public_link.card_id)
         field = self._get_active_public_field(field_id)

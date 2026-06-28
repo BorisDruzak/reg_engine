@@ -202,6 +202,21 @@ class OrganizationService:
         )
         return organization
 
+    def get_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+    ) -> Organization:
+        organization = self._get_active_organization(organization_id)
+        permissions = PermissionService(self.session)
+        if not permissions.is_superuser(actor_user_id) and not permissions.can_see_organization(
+            actor_user_id,
+            organization.id,
+        ):
+            raise PermissionDeniedError("Actor cannot read this organization.")
+        return organization
+
     def get_descendant_ids(
         self,
         organization_id: UUID,
