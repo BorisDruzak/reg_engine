@@ -44,6 +44,7 @@ Target system:
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, and user/access management API.
 - Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, audit reads, and public-link card editing.
+- Phase 2 documents/attachments scope is approved for card-level attachments first. Phase 2A records the storage architecture only; no attachment models, migrations, upload endpoints, download endpoints, public-link file flows, generated documents, or attachment UI are implemented yet.
 - Import/export, documents, and MCP are later phases.
 
 ## Local Setup
@@ -213,6 +214,18 @@ The MVP frontend currently stores the bearer token and current-user snapshot in 
 Do not treat browser `localStorage` bearer-token persistence as production-ready. Before production frontend hosting, replace it with server-side session or refresh-token persistence, hashed stored tokens, explicit logout revocation, httpOnly `Secure` `SameSite` cookies, short-lived access tokens, CSRF protection for cookie-authenticated unsafe methods, and session audit events.
 
 The current logout flow clears browser storage in the frontend and validates the bearer token on the backend, but it does not revoke already issued tokens server-side. See `docs/ADR/0002-browser-session-storage.md`.
+
+## Phase 2 Attachment Storage Decision
+
+Phase 2 starts with card-level attachments. Generated `.docx`/`.pdf` documents, `file_ref`, public-link upload/download, and attachment UI are deferred until the attachment metadata and service layer are proven.
+
+The approved storage direction is a backend storage abstraction with a local filesystem backend configured outside Git. Runtime storage roots and limits must be set through environment variables or external runtime env files, never committed defaults.
+
+Architecture references:
+
+- `docs/ADR/0004-phase-2-documents-scope.md`
+- `docs/ADR/0005-attachment-storage-architecture.md`
+- `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
 
 ## Remote Infrastructure Configuration
 

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 20:59:51 +05:00
+- Generated: 2026-06-28 21:42:13 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -102,13 +102,15 @@
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
 - `backend/tests/test_organization_permission_services.py`
+- `backend/tests/test_phase_2a_document_architecture.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ADR/0002-browser-session-storage.md`
 - `docs/ADR/0003-repository-visibility.md`
-- `docs/ADR/0004-phase-2-documents-scope-proposal.md`
+- `docs/ADR/0004-phase-2-documents-scope.md`
+- `docs/ADR/0005-attachment-storage-architecture.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
@@ -116,6 +118,7 @@
 - `docs/CODEX_WORKFLOW.md`
 - `docs/CONVENTIONS.md`
 - `docs/PHASE_2_APPROVAL_CHECKLIST.md`
+- `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_TREE.md`
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`

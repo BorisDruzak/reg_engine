@@ -32,8 +32,10 @@ Completed phases:
 - Phase 1L.6: Frontend structure refactor and full Russian UI naming.
 - Phase 1L.7: Browser storage risk decision.
 - Phase 1L.8: Repository visibility and infrastructure exposure.
+- Phase 2.0: Documents product scope decision.
+- Phase 2A: Document storage architecture.
 
-Phase 1L is complete. The next planned product phase is Phase 2, but document-generation implementation requires explicit approval before starting.
+Phase 1L is complete. Phase 2 has started with card-level attachments first. Phase 2.0 is complete, and Phase 2A is the current architecture checkpoint. Phase 2B attachment backend foundation starts only after the user accepts Phase 2A artifacts.
 
 ## Core Rules
 
@@ -52,6 +54,9 @@ Phase 1L is complete. The next planned product phase is Phase 2, but document-ge
 - Keep technical role/permission/field/registry codes secondary in UI, under the Russian label `Технический код`, when they must be visible.
 - Keep visible demo/test names Russian unless a test intentionally verifies legacy stored text.
 - Keep browser `localStorage` bearer-token persistence limited to MVP/internal staging until a production session persistence phase replaces it.
+- Keep Phase 2 document work attachment-first until generated documents are explicitly started in Phase 2C.
+- Keep Phase 2 storage roots and operational values outside Git.
+- Keep public-link upload/download and `file_ref` deferred until their later approved phases.
 
 Phase 1K.6 delivered:
 
@@ -299,19 +304,25 @@ Verification:
 ## Planned Phases After Phase 1L
 
 - Phase 2: Documents. Requires explicit approval before implementation.
+- Phase 2B: Attachment backend foundation.
 - Phase 3: Import and export.
 - Phase 4: Reports.
 - Phase 5: MCP over API only.
 
 ## Phase 2: Documents And Attachments
 
-Status: not started; blocked by approval gate.
+Status: in progress.
 
-Approval gate:
+Approval captured:
 
-- Do not implement Phase 2 code, models, migrations, endpoints, services, frontend UI, storage buckets, document generation, or file upload flows until the user explicitly approves Phase 2 implementation.
-- Before implementation, confirm whether Phase 2 covers attachments only, generated documents only, or both.
-- Before implementation, confirm storage target: local filesystem, PostgreSQL large object/bytea, S3-compatible object storage, or another approved storage layer.
+- Date: 2026-06-28.
+- Scope: card-level attachments first; generated documents deferred.
+- Storage: local filesystem backend through a storage abstraction, configured outside Git.
+- Public links: no upload/download support in the first Phase 2 slice.
+- `file_ref`: deferred until attachment metadata is stable.
+- Archive/retention: archived attachments are hidden from normal active lists, preserved, and readable only as read-only archive records by actors who can read the card in the relevant scope.
+- Malware scanning: enforcement deferred in Phase 2A; future scanner hook must be designed before upload endpoints are exposed.
+- Implementation order: Phase 2A first, then Phase 2B; no upload endpoints or UI until Phase 2A is accepted.
 
 Purpose:
 
@@ -322,7 +333,9 @@ Known inputs:
 - `docs/BASE.md` reserves `file_ref` for the future documents phase.
 - README identifies documents and attachments as later phases.
 - Current Core Schema v1 has dynamic card fields but no document/file storage tables.
-- `docs/ADR/0004-phase-2-documents-scope-proposal.md` records a proposed, not yet accepted, starting scope and storage direction.
+- `docs/ADR/0004-phase-2-documents-scope.md` records the accepted starting scope and storage direction.
+- `docs/ADR/0005-attachment-storage-architecture.md` records the accepted attachment storage architecture.
+- `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md` records metadata schema, service boundary, access-control rules, scanner hook, and required Phase 2B tests.
 - `docs/PHASE_2_APPROVAL_CHECKLIST.md` records the exact approval text and decisions needed to start implementation.
 
 Non-goals until explicitly approved:
@@ -336,6 +349,8 @@ Non-goals until explicitly approved:
 
 ### Phase 2.0: Documents Product Scope Decision
 
+Status: completed.
+
 Required decisions:
 
 - Attachments: whether users can upload files to cards.
@@ -343,7 +358,7 @@ Required decisions:
 - Templates: whether templates are managed in UI, stored as files, or deferred.
 - `file_ref`: whether dynamic fields should support file references in Phase 2.
 - Public links: whether public-link users can upload or download documents.
-- Retention: whether archive hides files, disables access, or keeps read-only access.
+- Retention: archived attachments are hidden from normal active lists, preserved, and readable only as read-only archive records by actors who can read the card in the relevant scope.
 
 Proposed default if the user approves:
 
@@ -359,12 +374,21 @@ Acceptance criteria:
 - No implementation starts while these decisions are open.
 - Approval text or equivalent user instruction is captured before Phase 2A starts.
 
+Delivered:
+
+- User approval captured on 2026-06-28.
+- ADR 0004 converted to accepted.
+- Attachment-first scope, local filesystem storage abstraction, public-link deferral, generated-document deferral, `file_ref` deferral, archive/retention behavior, and malware scanning deferral are recorded.
+
 ### Phase 2A: Document Storage Architecture
+
+Status: ready for user acceptance.
 
 Planned work after approval:
 
 - Design storage abstraction for binary files and metadata.
-- Decide database tables for stored files, card-file links, generated documents, and template metadata.
+- Decide future database tables for stored files and card attachment links.
+- Explicitly defer generated-document and template metadata tables to Phase 2C.
 - Define checksum, MIME type, file size, original filename, storage key, created_by, archived_at, and audit fields.
 - Define access rules through card visibility and organization scope.
 - Define malware scanning or explicitly defer it with risk notes.
@@ -375,7 +399,20 @@ Acceptance criteria:
 - No secrets or concrete storage endpoints are committed.
 - Tests cover metadata validation and access boundaries before upload endpoints are exposed.
 
+Delivered:
+
+- Added ADR 0005 for attachment storage architecture.
+- Added `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md` with metadata schema for future `stored_files` and `card_attachments`, service boundaries, access rules, scanner hook, audit rules, storage configuration, and required Phase 2B tests.
+- Added `backend/tests/test_phase_2a_document_architecture.py` doc-guard coverage for the accepted decisions and required Phase 2B test matrix.
+- No backend models, migrations, endpoints, upload flows, download flows, public-link file flows, generated-document code, or frontend attachment UI were added.
+
+Verification:
+
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_phase_2a_document_architecture.py -q` -> 2 passed.
+
 ### Phase 2B: Attachment Backend Foundation
+
+Status: next after user accepts Phase 2A.
 
 Planned work after approval:
 

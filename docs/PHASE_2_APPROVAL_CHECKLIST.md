@@ -1,10 +1,10 @@
 # Phase 2 Approval Checklist
 
-Phase 2 is blocked until the user explicitly approves implementation. This checklist is the handoff artifact for that approval.
+Phase 2 approval was captured on 2026-06-28. This checklist is retained as the approval audit artifact.
 
 ## Recommended Approval
 
-Use this approval if the proposed MVP direction is acceptable:
+Captured approval:
 
 ```text
 Approve Phase 2 implementation.
@@ -14,7 +14,7 @@ Public links: no upload/download support in the first Phase 2 slice.
 file_ref: defer until attachment metadata is stable.
 ```
 
-With this approval, the first implementation checkpoint becomes Phase 2A: storage architecture and metadata schema design. Code still starts with tests and an accepted storage ADR before endpoints or UI.
+With this approval, the first implementation checkpoint is Phase 2A: storage architecture and metadata schema design. Code still starts with tests and an accepted storage ADR before endpoints or UI.
 
 ## Decisions To Change Before Approval
 
