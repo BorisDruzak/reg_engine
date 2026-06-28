@@ -85,6 +85,7 @@ pnpm -C frontend exec playwright install chromium
 | Frontend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-frontend.ps1` |
 | Project map | `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1` |
 | Server check | `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` |
+| Bootstrap | `powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Command seed` |
 | Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
 | Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
 
@@ -176,6 +177,28 @@ $env:ALLOW_DEV_ACTOR_HEADER = "true"
 
 When absent or false, protected API endpoints reject `X-Actor-User-Id`. This header is only for tests and local development until the production auth/session phase replaces it.
 
+## Bootstrap Commands
+
+Seed core permissions and roles:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Command seed
+```
+
+Create or update the first superadmin user:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 `
+  -Command create-superadmin `
+  -Email "<admin@example.com>" `
+  -DisplayName "<Admin Name>" `
+  -PasswordHash "<hash-from-auth-phase-or-temporary-admin-hash>"
+```
+
+The bootstrap commands use `DATABASE_URL` unless `-DatabaseUrl` is supplied. They are idempotent and must not be pointed at production unless the intended database target is explicit.
+
 ## Direct Frontend Commands
 
 ```powershell
@@ -216,4 +239,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1G completed the Core Schema v1 database, backend service layer, REST API foundation, and current API hardening checkpoint. Authentication, production UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1H completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, and bootstrap seed tooling. Authentication, production UI, import/export, documents, and MCP remain later phases.

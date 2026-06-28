@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 16:21:29 +05:00
+- Generated: 2026-06-28 16:34:34 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -40,6 +40,8 @@
 - `backend/app/api/v1/endpoints/public_links.py`
 - `backend/app/api/v1/endpoints/registries.py`
 - `backend/app/api/v1/router.py`
+- `backend/app/cli/__init__.py`
+- `backend/app/cli/bootstrap.py`
 - `backend/app/core/__init__.py`
 - `backend/app/core/config.py`
 - `backend/app/core/database.py`
@@ -65,6 +67,7 @@
 - `backend/app/schemas/registries.py`
 - `backend/app/services/__init__.py`
 - `backend/app/services/audit.py`
+- `backend/app/services/bootstrap.py`
 - `backend/app/services/cards.py`
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
@@ -82,6 +85,7 @@
 - `backend/tests/conftest.py`
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
+- `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
@@ -135,6 +139,7 @@
 - `pnpm-lock.yaml`
 - `pnpm-workspace.yaml`
 - `README.md`
+- `scripts/bootstrap.ps1`
 - `scripts/check.ps1`
 - `scripts/deploy.ps1`
 - `scripts/dev-backend.ps1`

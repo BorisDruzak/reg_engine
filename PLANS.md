@@ -9,9 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Phase 1B through Phase 1G backend foundation and API hardening work is completed.
-- Current next checkpoint is **Phase 1H: Bootstrap And Seed**.
-- Phase 1H must not start until Phase 1G code is synchronized and verified on the server checkout.
+- Phase 1B through Phase 1H backend foundation, API hardening, and bootstrap tooling is completed.
+- Current next checkpoint is **Phase 1I: Auth And Session Flow**.
+- Phase 1I must not start until Phase 1H code is synchronized and verified on the server checkout.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -26,11 +26,13 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1E.1 Core Service Hardening Before API is completed and verified against server test database `reg_engine_test`.
 - Phase 1F REST API Foundation And Service Wiring is completed and verified against server test database `reg_engine_test`.
 - Phase 1G Current API/Service Bugfix And Hardening is completed and verified against disposable PostgreSQL database `reg_engine_test`.
-- Phase 1H Bootstrap And Seed is the next planned implementation phase.
+- Phase 1H Bootstrap And Seed is completed and verified against disposable PostgreSQL database `reg_engine_test`.
+- Phase 1I Auth And Session Flow is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
 - Phase 1G did not require a database migration.
+- Phase 1H did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -323,6 +325,54 @@ Known limitations after Phase 1G:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1G.
 
+### Phase 1H: Bootstrap And Seed
+
+Status: completed.
+
+Delivered:
+
+- Idempotent bootstrap service for core permissions and roles.
+- Seed roles:
+  - `system_admin`;
+  - `registry_admin`;
+  - `org_admin`;
+  - `auditor`.
+- Seed permissions:
+  - `organizations.manage`;
+  - `registry.schema.manage`;
+  - `cards.manage`;
+  - `audit.read`;
+  - `users.manage`;
+  - `roles.read`;
+  - `permissions.read`;
+  - `access_grants.manage`.
+- Missing `role_permissions` links are repaired by repeat seed runs.
+- Repeatable first superadmin creation/update by email.
+- Python CLI entrypoint: `python -m app.cli.bootstrap`.
+- PowerShell wrapper: `scripts/bootstrap.ps1`.
+- No database schema changes.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@192.168.100.12:5432/reg_engine_test"
+backend\.venv\Scripts\python.exe -m pytest backend\tests\test_bootstrap_seed.py -q
+backend\.venv\Scripts\python.exe -m pytest backend -q
+backend\.venv\Scripts\ruff.exe check backend
+backend\.venv\Scripts\ruff.exe format --check backend
+backend\.venv\Scripts\mypy.exe backend\app
+```
+
+Known limitations after Phase 1H:
+
+- Password hashing is not implemented here; Phase 1I owns production auth/password flow.
+- `audit.read`, `users.manage`, `roles.read`, `permissions.read`, and `access_grants.manage` are seeded for upcoming phases, but API enforcement for those workflows is still later.
+- No production auth/session flow has been added.
+- No frontend implementation has been added.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1H.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -513,13 +563,15 @@ Acceptance criteria for Phase 1G:
 8. PostgreSQL-backed tests pass against disposable `reg_engine_test`.
 9. README and PLANS.md reflect the final Phase 1G result.
 
-## Planned Phases After Phase 1G
+## Planned Phases After Phase 1H
 
-The following phases must not start until Phase 1G is synchronized to GitHub/server and verified there.
+The following phases must not start until Phase 1H is synchronized to GitHub/server and verified there.
 
 ### Phase 1H: Bootstrap And Seed
 
 Purpose: make the system bootstrappable without manual SQL.
+
+Status: completed.
 
 Required work:
 
@@ -653,7 +705,7 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 
 ## Implementation Guardrail
 
-- Phase 1G must fix current API/service issues before auth, frontend, import/export, documents, or MCP.
+- Phase 1I must replace temporary actor context with production auth before frontend, import/export, documents, or MCP.
 - Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex only when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
 - After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
 - Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.

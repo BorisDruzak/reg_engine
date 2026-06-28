@@ -1,6 +1,7 @@
 """Service layer package for Registry Engine business workflows."""
 
 from app.services.audit import AuditService
+from app.services.bootstrap import BootstrapSeedResult, BootstrapService
 from app.services.cards import (
     CardFieldRead,
     CardRead,
@@ -16,6 +17,8 @@ from app.services.registry_schema import RegistrySchemaError, RegistrySchemaServ
 
 __all__ = [
     "AuditService",
+    "BootstrapSeedResult",
+    "BootstrapService",
     "CardFieldRead",
     "CardRead",
     "CardService",
