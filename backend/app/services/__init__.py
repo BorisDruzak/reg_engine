@@ -15,6 +15,12 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.public_links import PublicLinkError, PublicLinkService, PublicLinkToken
 from app.services.references import ReferenceListError, ReferenceListService
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
+from app.services.user_access import (
+    UserAccessConflictError,
+    UserAccessError,
+    UserAccessNotFoundError,
+    UserAccessService,
+)
 
 __all__ = [
     "AuditService",
@@ -39,6 +45,10 @@ __all__ = [
     "ReferenceListService",
     "RegistrySchemaError",
     "RegistrySchemaService",
+    "UserAccessConflictError",
+    "UserAccessError",
+    "UserAccessNotFoundError",
+    "UserAccessService",
     "hash_password",
     "verify_password",
 ]

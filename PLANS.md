@@ -9,9 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Phase 1B through Phase 1I backend foundation, API hardening, bootstrap tooling, and auth flow is completed.
-- Current next checkpoint is **Phase 1J: User And Access Management API**.
-- Phase 1J must not start until Phase 1I code is synchronized and verified on the server checkout.
+- Phase 1B through Phase 1J backend foundation, API hardening, bootstrap tooling, auth flow, and user/access management API is completed.
+- Current next checkpoint is **Phase 1K: Production Frontend Workflows**.
+- Phase 1K must not start until Phase 1J code is synchronized and verified on the server checkout.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -28,13 +28,15 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1G Current API/Service Bugfix And Hardening is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1H Bootstrap And Seed is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1I Auth And Session Flow is completed and verified against disposable PostgreSQL database `reg_engine_test`.
-- Phase 1J User And Access Management API is the next planned implementation phase.
+- Phase 1J User And Access Management API is completed and verified against disposable PostgreSQL database `reg_engine_test`.
+- Phase 1K Production Frontend Workflows is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
 - Phase 1G did not require a database migration.
 - Phase 1H did not require a database migration.
 - Phase 1I did not require a database migration.
+- Phase 1J did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -412,6 +414,45 @@ Known limitations after Phase 1I:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1I.
 
+### Phase 1J: User And Access Management API
+
+Status: completed.
+
+Delivered:
+
+- `UserAccessService` for user, role, permission, and access-grant workflows.
+- Users API: list, create, read, update, archive.
+- Roles read API.
+- Permissions read API.
+- Access grants API: list, create, archive/revoke.
+- System admin user management through `users.is_superuser=true`.
+- Scoped user/access admin behavior through `users.manage`, `roles.read`, `permissions.read`, and `access_grants.manage`.
+- Scoped admins can create users and grants inside their organization branch.
+- Scoped admins cannot create superusers, global grants, sibling grants, or parent-branch grants.
+- User responses do not expose `password_hash`.
+- User and access-grant changes write `audit_events`.
+- Phase 1J API regression tests.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@192.168.100.12:5432/reg_engine_test"
+backend\.venv\Scripts\python.exe -m pytest backend\tests\test_access_management_phase_1j.py -q
+backend\.venv\Scripts\python.exe -m pytest backend -q
+backend\.venv\Scripts\ruff.exe check backend
+backend\.venv\Scripts\ruff.exe format --check backend
+backend\.venv\Scripts\mypy.exe backend\app
+```
+
+Known limitations after Phase 1J:
+
+- There is no dedicated user membership table; scoped user visibility is derived from active access grants.
+- Access-grant uniqueness still includes archived grants, so the service reactivates matching archived grants instead of inserting duplicates.
+- No production frontend implementation has been added.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1J.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -602,9 +643,9 @@ Acceptance criteria for Phase 1G:
 8. PostgreSQL-backed tests pass against disposable `reg_engine_test`.
 9. README and PLANS.md reflect the final Phase 1G result.
 
-## Planned Phases After Phase 1I
+## Planned Phases After Phase 1J
 
-The following phases must not start until Phase 1I is synchronized to GitHub/server and verified there.
+The following phases must not start until Phase 1J is synchronized to GitHub/server and verified there.
 
 ### Phase 1H: Bootstrap And Seed
 
@@ -644,6 +685,8 @@ Required work:
 ### Phase 1J: User And Access Management API
 
 Purpose: let admins manage users, roles, permissions, and grants through API.
+
+Status: completed.
 
 Required work:
 
@@ -747,7 +790,8 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 ## Implementation Guardrail
 
 - Phase 1I replaced temporary actor context with bearer auth for protected endpoints; the dev actor header remains available only when explicitly enabled for controlled tests/local development.
-- Phase 1J must complete admin user/access workflows before production frontend, import/export, documents, or MCP.
+- Phase 1J completed admin user/access workflows needed before production frontend, import/export, documents, or MCP.
+- Phase 1K must build frontend workflows on top of bearer auth and the backend API; frontend checks remain UX hints, not the security boundary.
 - Future PostgreSQL schema migrations or schema-changing deployments to `/opt/reg_engine` may be run by Codex only when they are part of the active plan and pass the standing planned-migration rule in `AGENTS.md`: disposable DB verification, fresh backup, data preflight, intentional production target, and post-migration checks.
 - After each verified implementation checkpoint, synchronize the scoped commit to GitHub `origin/main` and update the server checkout from `origin/main` before continuing to the next phase, unless the user explicitly requests local-only work.
 - Temporary branches are not part of the normal workflow; if one is explicitly used, merge or fast-forward it into `main` and delete it locally and on GitHub after synchronization.

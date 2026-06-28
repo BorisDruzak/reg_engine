@@ -42,7 +42,7 @@ Target system:
 - Server: `/opt/reg_engine` on `registoryengine`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, and bearer-token authentication.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, and user/access management API.
 - Production frontend workflows, import/export, documents, and MCP are later phases.
 
 ## Local Setup
@@ -194,6 +194,24 @@ POST /api/v1/auth/logout
 
 `POST /api/v1/auth/logout` validates the bearer token and returns `{"status":"ok"}`. Server-side token revocation storage is intentionally deferred until the session persistence phase.
 
+Access management API:
+
+```powershell
+GET    /api/v1/users
+POST   /api/v1/users
+GET    /api/v1/users/{user_id}
+PATCH  /api/v1/users/{user_id}
+DELETE /api/v1/users/{user_id}
+GET    /api/v1/roles
+GET    /api/v1/roles/{role_id}
+GET    /api/v1/permissions
+GET    /api/v1/access-grants
+POST   /api/v1/access-grants
+DELETE /api/v1/access-grants/{grant_id}
+```
+
+User/access endpoints require bearer auth. `system_admin` is represented by `users.is_superuser=true`; scoped admins use `users.manage`, `roles.read`, `permissions.read`, and `access_grants.manage` grants inside organization scope.
+
 ## Bootstrap Commands
 
 Seed core permissions and roles:
@@ -255,4 +273,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1I completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, and bearer-token authentication. User/access management API, production UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Production UI, import/export, documents, and MCP remain later phases.

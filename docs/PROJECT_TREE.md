@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 16:43:53 +05:00
+- Generated: 2026-06-28 16:57:21 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -33,6 +33,7 @@
 - `backend/app/api/v1/__init__.py`
 - `backend/app/api/v1/endpoints/__init__.py`
 - `backend/app/api/v1/endpoints/_field_values.py`
+- `backend/app/api/v1/endpoints/access_management.py`
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
 - `backend/app/api/v1/endpoints/cards.py`
@@ -61,6 +62,7 @@
 - `backend/app/models/registry_schema.py`
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
+- `backend/app/schemas/access_management.py`
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
 - `backend/app/schemas/cards.py`
@@ -77,6 +79,7 @@
 - `backend/app/services/public_links.py`
 - `backend/app/services/references.py`
 - `backend/app/services/registry_schema.py`
+- `backend/app/services/user_access.py`
 - `backend/migrations/env.py`
 - `backend/migrations/script.py.mako`
 - `backend/migrations/versions/0001_database_foundation.py`
@@ -86,6 +89,7 @@
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
+- `backend/tests/test_access_management_phase_1j.py`
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
 - `backend/tests/test_auth_phase_1i.py`

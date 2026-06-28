@@ -18,6 +18,11 @@ from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkError
 from app.services.references import ReferenceListError
 from app.services.registry_schema import RegistrySchemaError
+from app.services.user_access import (
+    UserAccessConflictError,
+    UserAccessError,
+    UserAccessNotFoundError,
+)
 
 
 @dataclass(frozen=True)
@@ -114,6 +119,10 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if isinstance(exc, OrganizationNotFoundError):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if isinstance(exc, UserAccessNotFoundError):
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if isinstance(exc, UserAccessConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if isinstance(
         exc,
         (
@@ -122,6 +131,7 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             PublicLinkError,
             ReferenceListError,
             RegistrySchemaError,
+            UserAccessError,
         ),
     ):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
