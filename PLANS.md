@@ -10,12 +10,13 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 
 - This document is the active plan for Phase 1 Core Schema v1.
 - Phase 1B through Phase 1J backend foundation, API hardening, bootstrap tooling, auth flow, and user/access management API is completed.
-- Phase 1K Production Frontend Workflows is in progress.
+- Phase 1K Production Frontend Workflows is completed.
 - Phase 1K.1 Authenticated Admin Shell is completed.
 - Phase 1K.2 Registry And Card Frontend Workflows is completed.
 - Phase 1K.3 Dynamic Card Form Editing is completed.
 - Phase 1K.4 Public-Link Edit Page is completed.
-- Current next checkpoint is **Phase 1K.5: Frontend Browser/Live Validation Pass**.
+- Phase 1K.5 Frontend Browser/Live Validation Pass is completed.
+- Phase 1 Core Schema v1 frontend foundation is complete; later phases require an explicit request before implementation.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -37,6 +38,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.2 Registry And Card Frontend Workflows is completed and verified locally.
 - Phase 1K.3 Dynamic Card Form Editing is completed and verified locally.
 - Phase 1K.4 Public-Link Edit Page is completed and verified locally.
+- Phase 1K.5 Frontend Browser/Live Validation Pass is completed and verified locally.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -48,6 +50,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.2 did not require a database migration.
 - Phase 1K.3 did not require a database migration.
 - Phase 1K.4 did not require a database migration.
+- Phase 1K.5 did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -608,6 +611,48 @@ Known limitations after Phase 1K.4:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1K.4.
 
+### Phase 1K.5: Frontend Browser/Live Validation Pass
+
+Status: completed.
+
+Delivered:
+
+- In-app Browser validation against a local Vite frontend target.
+- Temporary mock API validation target outside the repository to avoid production database mutation.
+- Desktop validation for login, admin workspace, card list/read, text field edit, bool field edit, and public-link edit.
+- Mobile viewport validation for admin workspace and public-link edit page.
+- Console health check with no relevant browser warnings or errors.
+- Horizontal overflow checks for desktop and mobile rendered surfaces.
+- Screenshot evidence captured outside the repository.
+- No database schema changes and no production database writes.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+python C:\Users\admin-2\AppData\Local\Temp\reg_engine_phase_1k5_mock_api.py
+pnpm -C frontend dev --host 127.0.0.1 --port 5174
+```
+
+Browser flow verified:
+
+- `http://127.0.0.1:5174/` renders the login page.
+- Login renders the authenticated admin workspace.
+- `Cards` renders `Asset Card` and dynamic field editors.
+- Saving `Status Field` renders `Saved Status Field`.
+- Saving `Approved Field` renders `Saved Approved Field`.
+- `http://127.0.0.1:5174/public/edit/public-token` renders without bearer auth.
+- Saving `Public Status` renders `Saved Public Status`.
+- Desktop and mobile probes showed no horizontal overflow.
+- Browser console warnings/errors were empty after validation.
+
+Known limitations after Phase 1K.5:
+
+- Browser validation used a local mock API to avoid mutating production data.
+- No production frontend hosting/service has been created yet.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1K.5.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -857,7 +902,7 @@ Required work:
 
 Purpose: build the first usable web UI on top of the hardened API and auth/session flow.
 
-Status: in progress.
+Status: completed.
 
 Required work:
 
@@ -876,10 +921,11 @@ Completed subphases:
 - Phase 1K.2 Registry and schema frontend workflows plus card list/read shell.
 - Phase 1K.3 Dynamic card form renderer and card field editing.
 - Phase 1K.4 Public-link edit page.
+- Phase 1K.5 Frontend browser/live validation pass.
 
 Remaining subphases:
 
-- Phase 1K.5 Frontend browser/live validation pass.
+- None for Phase 1K.
 
 ### Phase 2: Documents
 
