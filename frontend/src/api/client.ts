@@ -8,6 +8,7 @@ import type {
   LoginResponse,
   OrganizationListRead,
   PermissionListRead,
+  PublicLinkPreviewRead,
   ReferenceItemListRead,
   RegistryListRead,
   RegistrySchemaRead,
@@ -80,6 +81,30 @@ export async function updateCardFieldValue(
 
 export async function listReferenceItems(token: string, listId: string) {
   return apiRequest<ReferenceItemListRead>(`/api/v1/reference-lists/${listId}/items`, { token });
+}
+
+export async function readPublicLinkPreview(rawToken: string) {
+  return apiRequest<PublicLinkPreviewRead>("/api/v1/public-links/preview", {
+    method: "POST",
+    body: { raw_token: rawToken },
+  });
+}
+
+export async function updatePublicLinkFieldValue(
+  rawToken: string,
+  fieldId: string,
+  value: unknown,
+  blockInstanceId: string | null,
+) {
+  return apiRequest<FieldValueRead>("/api/v1/public-links/edit", {
+    method: "POST",
+    body: {
+      raw_token: rawToken,
+      field_id: fieldId,
+      value,
+      block_instance_id: blockInstanceId,
+    },
+  });
 }
 
 export async function listUsers(token: string) {

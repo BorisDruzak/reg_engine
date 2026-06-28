@@ -214,6 +214,7 @@ def test_phase_1f_api_routes_are_registered_without_database() -> None:
     assert "/api/v1/registries/{registry_id}/cards" in paths
     assert "/api/v1/cards/{card_id}" in paths
     assert "/api/v1/cards/{card_id}/public-links" in paths
+    assert "/api/v1/public-links/preview" in paths
     assert "/api/v1/public-links/edit" in paths
     assert "/api/v1/audit-events" in paths
 
@@ -588,3 +589,108 @@ def test_api_public_link_respects_card_public_edit_enabled(
     )
 
     assert public_edit.status_code == 403, public_edit.text
+
+
+def test_api_public_link_preview_returns_public_edit_schema(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-public-preview-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="api-public-preview-root",
+        name="API Public Preview Root",
+    )
+    registry = RegistrySchemaService(db_session).create_registry_for_actor(
+        actor_user_id=system_admin.id,
+        code="api-public-preview-registry",
+        name="API Public Preview Registry",
+    )
+    public_block = RegistrySchemaService(db_session).create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="public",
+        title="Public",
+        public_editable=True,
+    )
+    private_block = RegistrySchemaService(db_session).create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="private",
+        title="Private",
+        public_editable=False,
+    )
+    status_field = RegistrySchemaService(db_session).create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=public_block.id,
+        code="status",
+        label="Status",
+        field_type="text",
+        public_editable=True,
+    )
+    RegistrySchemaService(db_session).create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=private_block.id,
+        code="secret",
+        label="Secret",
+        field_type="text",
+        public_editable=True,
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        organization_id=organization.id,
+        display_name="Public Preview Card",
+        public_edit_enabled=True,
+    )
+    CardService(db_session).set_field_value_for_actor(
+        actor_user_id=system_admin.id,
+        card_id=card.id,
+        field_id=status_field.id,
+        value="drafted",
+    )
+
+    public_link = _post_json(
+        api_client,
+        f"/api/v1/cards/{card.id}/public-links",
+        {},
+        actor_id=system_admin.id,
+    )
+    preview = api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": public_link["raw_token"]},
+    )
+
+    assert preview.status_code == 200, preview.text
+    payload = preview.json()
+    assert payload["card_id"] == str(card.id)
+    assert payload["display_name"] == "Public Preview Card"
+    assert "raw_token" not in payload
+    assert "token_hash" not in payload
+    assert [block["code"] for block in payload["blocks"]] == ["public"]
+    assert payload["blocks"][0]["instances"][0]["fields"][0]["field_id"] == str(status_field.id)
+    assert payload["blocks"][0]["instances"][0]["fields"][0]["value"] == "drafted"
+    assert "secret" not in str(payload)
+
+    disabled_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        organization_id=organization.id,
+        display_name="Public Preview Disabled",
+        public_edit_enabled=False,
+    )
+    disabled_link = _post_json(
+        api_client,
+        f"/api/v1/cards/{disabled_card.id}/public-links",
+        {},
+        actor_id=system_admin.id,
+    )
+    disabled_preview = api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": disabled_link["raw_token"]},
+    )
+    assert disabled_preview.status_code == 403, disabled_preview.text

@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -8,7 +8,16 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Card, CardPublicLink, FieldValue, FormBlock, FormField
+from app.models import (
+    Card,
+    CardBlockInstance,
+    CardPublicLink,
+    FieldValue,
+    FieldValueItem,
+    FormBlock,
+    FormField,
+    ReferenceItem,
+)
 from app.services.audit import AuditService
 from app.services.cards import CardService, CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
@@ -24,6 +33,49 @@ class PublicLinkError(ValueError):
 class PublicLinkToken:
     raw_token: str
     public_link: CardPublicLink
+
+
+@dataclass(frozen=True)
+class PublicPreviewOption:
+    id: UUID
+    code: str
+    label: str
+
+
+@dataclass(frozen=True)
+class PublicPreviewField:
+    field_id: UUID
+    code: str
+    label: str
+    field_type: str
+    value: object | None
+    options_source_type: str | None
+    options_source_id: UUID | None
+    options: list[PublicPreviewOption] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PublicPreviewBlockInstance:
+    block_instance_id: UUID | None
+    ordinal: int
+    fields: list[PublicPreviewField] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PublicPreviewBlock:
+    block_id: UUID
+    code: str
+    title: str
+    instances: list[PublicPreviewBlockInstance] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PublicLinkPreview:
+    card_id: UUID
+    display_name: str
+    expires_at: datetime
+    can_edit: bool
+    blocks: list[PublicPreviewBlock] = field(default_factory=list)
 
 
 def hash_public_token(raw_token: str) -> str:
@@ -110,12 +162,77 @@ class PublicLinkService:
     def validate_public_edit_token(self, *, raw_token: str) -> CardPublicLink:
         return self._get_usable_public_link(raw_token)
 
+    def preview_public_link(self, *, raw_token: str) -> PublicLinkPreview:
+        public_link = self._get_usable_public_link(raw_token)
+        card = self._get_active_card(public_link.card_id)
+        if not public_link.can_edit or not card.public_edit_enabled:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+
+        schema_rows = self._public_schema_rows(
+            registry_id=card.registry_id,
+            public_link=public_link,
+        )
+        field_ids = [field_model.id for _, field_model in schema_rows]
+        values_by_instance_field = self._field_values_by_instance(
+            card_id=card.id,
+            field_ids=field_ids,
+        )
+        item_ids_by_value_id = self._multi_select_item_ids(list(values_by_instance_field.values()))
+        instances_by_block = self._block_instances_for_card(card.id)
+        blocks: list[PublicPreviewBlock] = []
+
+        for block in self._ordered_public_blocks(schema_rows):
+            instances = instances_by_block.get(block.id) or [
+                CardBlockInstance(card_id=card.id, block_id=block.id, ordinal=0)
+            ]
+            block_fields = [
+                field_model for row_block, field_model in schema_rows if row_block.id == block.id
+            ]
+            preview_instances: list[PublicPreviewBlockInstance] = []
+            for instance in instances:
+                preview_fields = [
+                    self._field_preview(
+                        field_model=field_model,
+                        field_value=(
+                            values_by_instance_field.get((instance.id, field_model.id))
+                            if instance.id is not None
+                            else None
+                        ),
+                        item_ids_by_value_id=item_ids_by_value_id,
+                    )
+                    for field_model in block_fields
+                ]
+                preview_instances.append(
+                    PublicPreviewBlockInstance(
+                        block_instance_id=instance.id,
+                        ordinal=instance.ordinal,
+                        fields=preview_fields,
+                    )
+                )
+            blocks.append(
+                PublicPreviewBlock(
+                    block_id=block.id,
+                    code=block.code,
+                    title=block.title,
+                    instances=preview_instances,
+                )
+            )
+
+        return PublicLinkPreview(
+            card_id=card.id,
+            display_name=card.display_name,
+            expires_at=public_link.expires_at,
+            can_edit=public_link.can_edit and card.public_edit_enabled,
+            blocks=blocks,
+        )
+
     def edit_card_field_with_token(
         self,
         *,
         raw_token: str,
         field_id: UUID,
         value: object,
+        block_instance_id: UUID | None = None,
     ) -> FieldValue:
         public_link = self._get_usable_public_link(raw_token)
         card = self._get_active_card(public_link.card_id)
@@ -138,6 +255,7 @@ class PublicLinkService:
             card_id=card.id,
             field_id=field.id,
             value=value,
+            block_instance_id=block_instance_id,
         )
         public_link.used_count += 1
         self.session.flush()
@@ -206,3 +324,163 @@ class PublicLinkService:
         if not isinstance(allowed_ids, list):
             return True
         return str(object_id) in allowed_ids
+
+    def _public_schema_rows(
+        self,
+        *,
+        registry_id: UUID,
+        public_link: CardPublicLink,
+    ) -> list[tuple[FormBlock, FormField]]:
+        rows = self.session.execute(
+            select(FormBlock, FormField)
+            .join(FormField, FormField.block_id == FormBlock.id)
+            .where(
+                FormBlock.registry_id == registry_id,
+                FormBlock.archived_at.is_(None),
+                FormBlock.is_active.is_(True),
+                FormBlock.public_editable.is_(True),
+                FormField.archived_at.is_(None),
+                FormField.is_active.is_(True),
+                FormField.public_editable.is_(True),
+            )
+            .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
+        )
+        return [
+            (block, field_model)
+            for block, field_model in rows
+            if self._public_link_allows(public_link.allowed_blocks_json, block.id)
+            and self._public_link_allows(public_link.allowed_fields_json, field_model.id)
+        ]
+
+    def _ordered_public_blocks(
+        self,
+        schema_rows: list[tuple[FormBlock, FormField]],
+    ) -> list[FormBlock]:
+        blocks_by_id: dict[UUID, FormBlock] = {}
+        for block, _ in schema_rows:
+            blocks_by_id.setdefault(block.id, block)
+        return list(blocks_by_id.values())
+
+    def _field_values_by_instance(
+        self,
+        *,
+        card_id: UUID,
+        field_ids: list[UUID],
+    ) -> dict[tuple[UUID, UUID], FieldValue]:
+        if not field_ids:
+            return {}
+        return {
+            (value.block_instance_id, value.field_id): value
+            for value in self.session.scalars(
+                select(FieldValue).where(
+                    FieldValue.card_id == card_id,
+                    FieldValue.field_id.in_(field_ids),
+                )
+            ).all()
+        }
+
+    def _block_instances_for_card(self, card_id: UUID) -> dict[UUID, list[CardBlockInstance]]:
+        instances: dict[UUID, list[CardBlockInstance]] = {}
+        for instance in self.session.scalars(
+            select(CardBlockInstance)
+            .where(
+                CardBlockInstance.card_id == card_id,
+                CardBlockInstance.archived_at.is_(None),
+            )
+            .order_by(CardBlockInstance.block_id, CardBlockInstance.ordinal)
+        ):
+            instances.setdefault(instance.block_id, []).append(instance)
+        return instances
+
+    def _multi_select_item_ids(
+        self,
+        field_values: list[FieldValue],
+    ) -> dict[UUID, list[UUID]]:
+        value_ids = [field_value.id for field_value in field_values]
+        if not value_ids:
+            return {}
+
+        result: dict[UUID, list[UUID]] = {}
+        rows = self.session.execute(
+            select(FieldValueItem.field_value_id, FieldValueItem.reference_item_id)
+            .where(FieldValueItem.field_value_id.in_(value_ids))
+            .order_by(FieldValueItem.position, FieldValueItem.id)
+        ).all()
+        for value_id, item_id in rows:
+            result.setdefault(value_id, []).append(item_id)
+        return result
+
+    def _field_preview(
+        self,
+        *,
+        field_model: FormField,
+        field_value: FieldValue | None,
+        item_ids_by_value_id: dict[UUID, list[UUID]],
+    ) -> PublicPreviewField:
+        return PublicPreviewField(
+            field_id=field_model.id,
+            code=field_model.code,
+            label=field_model.label,
+            field_type=field_model.field_type,
+            value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
+            options_source_type=field_model.options_source_type,
+            options_source_id=field_model.options_source_id,
+            options=self._reference_options(field_model),
+        )
+
+    def _reference_options(self, field_model: FormField) -> list[PublicPreviewOption]:
+        if (
+            field_model.field_type not in {"select", "multi_select"}
+            or field_model.options_source_type != "reference_list"
+            or field_model.options_source_id is None
+        ):
+            return []
+
+        return [
+            PublicPreviewOption(id=item.id, code=item.code, label=item.label)
+            for item in self.session.scalars(
+                select(ReferenceItem)
+                .where(
+                    ReferenceItem.list_id == field_model.options_source_id,
+                    ReferenceItem.archived_at.is_(None),
+                    ReferenceItem.is_active.is_(True),
+                )
+                .order_by(ReferenceItem.position, ReferenceItem.code, ReferenceItem.id)
+            ).all()
+        ]
+
+    def _read_field_value(
+        self,
+        field_model: FormField,
+        field_value: FieldValue | None,
+        item_ids_by_value_id: dict[UUID, list[UUID]],
+    ) -> object | None:
+        if field_value is None:
+            return None
+        if field_model.field_type == "text":
+            return field_value.value_text
+        if field_model.field_type == "number":
+            return field_value.value_number
+        if field_model.field_type == "date":
+            return field_value.value_date
+        if field_model.field_type == "datetime":
+            return field_value.value_datetime
+        if field_model.field_type == "bool":
+            return field_value.value_bool
+        if field_model.field_type == "json":
+            return field_value.value_json
+        if field_model.field_type == "select":
+            return field_value.value_reference_item_id
+        if field_model.field_type == "multi_select":
+            return item_ids_by_value_id.get(field_value.id, [])
+        if field_model.field_type == "organization_ref":
+            return field_value.value_organization_id
+        if field_model.field_type == "org_unit_ref":
+            return field_value.value_org_unit_id
+        if field_model.field_type == "user_ref":
+            return field_value.value_user_id
+        if field_model.field_type == "card_ref":
+            return field_value.value_card_id
+        if field_model.field_type == "registry_ref":
+            return field_value.value_registry_id
+        return None

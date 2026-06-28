@@ -28,12 +28,18 @@ import type {
   FormFieldRead,
   OrganizationRead,
   PermissionRead,
-  ReferenceItemRead,
   RegistryRead,
   RegistrySchemaRead,
   RoleRead,
   UserRead,
 } from "@/api/types";
+import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
+import {
+  type FieldEditorState,
+  coerceEditorValue,
+  formatValue,
+  initialEditorValue,
+} from "@/features/cards/fieldEditorUtils";
 
 const SESSION_STORAGE_KEY = "reg_engine.session.v1";
 const visibleSections = [
@@ -552,8 +558,6 @@ function CardsWorkspace({
   );
 }
 
-type FieldEditorState = string | boolean | string[];
-
 type EditableCardField = {
   key: string;
   blockLabel: string;
@@ -638,86 +642,6 @@ function CardFieldEditor({
       )}
       {saved && <p className="inline-success">Saved {field.label}</p>}
     </form>
-  );
-}
-
-function FieldEditorControl({
-  fieldType,
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  fieldType: string;
-  label: string;
-  options: ReferenceItemRead[];
-  value: FieldEditorState;
-  onChange: (value: FieldEditorState) => void;
-}) {
-  if (fieldType === "bool") {
-    return (
-      <input
-        aria-label={label}
-        checked={Boolean(value)}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        type="checkbox"
-      />
-    );
-  }
-
-  if (fieldType === "json") {
-    return (
-      <textarea
-        aria-label={label}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        value={typeof value === "string" ? value : "{}"}
-      />
-    );
-  }
-
-  if (fieldType === "multi_select") {
-    return (
-      <select
-        aria-label={label}
-        multiple
-        onChange={(event) =>
-          onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
-        }
-        value={Array.isArray(value) ? value : []}
-      >
-        {options.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  if (fieldType === "select") {
-    return (
-      <select
-        aria-label={label}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        value={typeof value === "string" ? value : ""}
-      >
-        <option value="">empty</option>
-        {options.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      aria-label={label}
-      onChange={(event) => onChange(event.currentTarget.value)}
-      type={inputTypeForField(fieldType)}
-      value={typeof value === "string" ? value : ""}
-    />
   );
 }
 
@@ -976,81 +900,6 @@ function buildEditableCardFields(
       }),
     ),
   );
-}
-
-function initialEditorValue(field: CardRead["fields"][string]): FieldEditorState {
-  if (field.field_type === "bool") {
-    return Boolean(field.value);
-  }
-  if (field.field_type === "multi_select") {
-    return Array.isArray(field.value) ? field.value.map(String) : [];
-  }
-  if (field.field_type === "json") {
-    return field.value ? JSON.stringify(field.value, null, 2) : "{}";
-  }
-  if (field.value === null || field.value === undefined) {
-    return "";
-  }
-  if (field.field_type === "datetime") {
-    return String(field.value).slice(0, 16);
-  }
-  return String(field.value);
-}
-
-function coerceEditorValue(fieldType: string, value: FieldEditorState): unknown {
-  if (fieldType === "bool") {
-    return Boolean(value);
-  }
-  if (fieldType === "multi_select") {
-    return Array.isArray(value) ? value : [];
-  }
-  if (fieldType === "json") {
-    if (typeof value !== "string") {
-      throw new Error("JSON fields require an object value.");
-    }
-    const parsed = JSON.parse(value) as unknown;
-    if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
-      throw new Error("JSON fields require an object value.");
-    }
-    return parsed;
-  }
-  if (fieldType === "number") {
-    if (typeof value !== "string" || value.trim() === "") {
-      throw new Error("Number fields require a numeric value.");
-    }
-    const numberValue = Number(value);
-    if (!Number.isFinite(numberValue)) {
-      throw new Error("Number fields require a numeric value.");
-    }
-    return numberValue;
-  }
-  return typeof value === "string" ? value : "";
-}
-
-function inputTypeForField(fieldType: string) {
-  if (fieldType === "number") {
-    return "number";
-  }
-  if (fieldType === "date") {
-    return "date";
-  }
-  if (fieldType === "datetime") {
-    return "datetime-local";
-  }
-  return "text";
-}
-
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
-    return "empty";
-  }
-  if (Array.isArray(value)) {
-    return value.map(formatValue).join(", ");
-  }
-  if (typeof value === "object") {
-    return JSON.stringify(value);
-  }
-  return String(value);
 }
 
 function shortId(value: string) {

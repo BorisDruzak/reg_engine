@@ -14,7 +14,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.1 Authenticated Admin Shell is completed.
 - Phase 1K.2 Registry And Card Frontend Workflows is completed.
 - Phase 1K.3 Dynamic Card Form Editing is completed.
-- Current next checkpoint is **Phase 1K.4: Public-Link Edit Page**.
+- Phase 1K.4 Public-Link Edit Page is completed.
+- Current next checkpoint is **Phase 1K.5: Frontend Browser/Live Validation Pass**.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -35,6 +36,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.1 Authenticated Admin Shell is completed and verified locally.
 - Phase 1K.2 Registry And Card Frontend Workflows is completed and verified locally.
 - Phase 1K.3 Dynamic Card Form Editing is completed and verified locally.
+- Phase 1K.4 Public-Link Edit Page is completed and verified locally.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -45,6 +47,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.1 did not require a database migration.
 - Phase 1K.2 did not require a database migration.
 - Phase 1K.3 did not require a database migration.
+- Phase 1K.4 did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -569,6 +572,42 @@ Known limitations after Phase 1K.3:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1K.3.
 
+### Phase 1K.4: Public-Link Edit Page
+
+Status: completed.
+
+Delivered:
+
+- Public preview API endpoint: `POST /api/v1/public-links/preview`.
+- Preview responses expose only backend-approved public-editable blocks and fields.
+- Preview responses do not expose raw token, token hash, private blocks, or private fields.
+- Public edit request supports `block_instance_id` for repeatable block instances.
+- Public edit route: `/public/edit/:rawToken`.
+- Public-link page reads schema/data from preview and saves field values through `POST /api/v1/public-links/edit`.
+- Public-link page does not require bearer authentication.
+- Shared frontend field editor helpers are used by authenticated card editing and public-link editing.
+- Vitest coverage for public-link preview/edit frontend workflow.
+- Playwright smoke coverage for public-link edit route.
+- No database schema changes.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+pnpm -C frontend test:run -- App.test.tsx
+pnpm -C frontend typecheck
+pnpm -C frontend e2e
+backend\.venv\Scripts\python.exe -m ruff check backend\app\api\v1\endpoints\public_links.py backend\app\services\public_links.py backend\app\services\cards.py backend\tests\test_api_phase_1f.py backend\tests\test_api_phase_1g.py
+backend\.venv\Scripts\python.exe -m mypy backend\app
+```
+
+Known limitations after Phase 1K.4:
+
+- Full browser/live validation against the deployed server is still Phase 1K.5.
+- Public-link page uses existing field controls; advanced public UX polish remains later work.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1K.4.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -836,10 +875,10 @@ Completed subphases:
 - Phase 1K.1 Authenticated Admin Shell.
 - Phase 1K.2 Registry and schema frontend workflows plus card list/read shell.
 - Phase 1K.3 Dynamic card form renderer and card field editing.
+- Phase 1K.4 Public-link edit page.
 
 Remaining subphases:
 
-- Phase 1K.4 Public-link edit page.
 - Phase 1K.5 Frontend browser/live validation pass.
 
 ### Phase 2: Documents

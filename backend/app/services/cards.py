@@ -238,6 +238,7 @@ class CardService:
         card_id: UUID,
         field_id: UUID,
         value: object,
+        block_instance_id: UUID | None = None,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -253,7 +254,7 @@ class CardService:
         block_instance = self._resolve_block_instance_for_value(
             card=card,
             block=block,
-            block_instance_id=None,
+            block_instance_id=block_instance_id,
             actor_user_id=None,
         )
         field_value = self._get_or_create_field_value(

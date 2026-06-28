@@ -220,19 +220,72 @@ const apiPayloads = {
       },
     },
   },
+  publicPreview: {
+    card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    display_name: "Public Link Card",
+    expires_at: "2026-06-29T12:00:00Z",
+    can_edit: true,
+    blocks: [
+      {
+        block_id: "88888888-8888-4888-8888-888888888888",
+        code: "public",
+        title: "Public Block",
+        instances: [
+          {
+            block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            ordinal: 0,
+            fields: [
+              {
+                field_id: "99999999-9999-4999-8999-999999999997",
+                code: "public_status",
+                label: "Public Status",
+                field_type: "text",
+                value: "drafted",
+                options_source_type: null,
+                options_source_id: null,
+                options: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 };
 
 let cardStatusValue = "drafted";
 let cardApprovedValue = false;
+let publicStatusValue = "drafted";
 
 beforeEach(() => {
   localStorage.clear();
+  window.history.pushState({}, "", "/");
   cardStatusValue = "drafted";
   cardApprovedValue = false;
+  publicStatusValue = "drafted";
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/api/v1/public-links/preview")) {
+        return jsonResponse(currentPublicPreview());
+      }
+      if (url.endsWith("/api/v1/public-links/edit")) {
+        const payload = JSON.parse(String(init?.body)) as {
+          raw_token: string;
+          field_id: string;
+          value: string;
+          block_instance_id: string | null;
+        };
+        publicStatusValue = payload.value;
+        return jsonResponse({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbd",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: payload.block_instance_id,
+          field_id: payload.field_id,
+          value: publicStatusValue,
+        });
+      }
       if (url.endsWith("/api/v1/auth/login")) {
         return jsonResponse(apiPayloads.login);
       }
@@ -360,6 +413,28 @@ function currentCardRead() {
   };
 }
 
+function currentPublicPreview() {
+  return {
+    ...apiPayloads.publicPreview,
+    blocks: [
+      {
+        ...apiPayloads.publicPreview.blocks[0],
+        instances: [
+          {
+            ...apiPayloads.publicPreview.blocks[0].instances[0],
+            fields: [
+              {
+                ...apiPayloads.publicPreview.blocks[0].instances[0].fields[0],
+                value: publicStatusValue,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 test("renders login screen before authentication", () => {
   render(<App />);
 
@@ -441,6 +516,47 @@ test("logs in and renders authenticated admin workspace", async () => {
           init?.method === "PATCH" &&
           body.value === true &&
           body.block_instance_id === null
+        );
+      }),
+    ).toBe(true);
+  });
+});
+
+test("edits a public-link card without authentication", async () => {
+  const user = userEvent.setup();
+  window.history.pushState({}, "", "/public/edit/public-token");
+  render(<App />);
+
+  expect(await screen.findByRole("heading", { name: "Public Link Card" })).toBeInTheDocument();
+  expect(screen.getByText("Public Block")).toBeInTheDocument();
+
+  const statusInput = await screen.findByLabelText("Public Status");
+  expect(statusInput).toHaveValue("drafted");
+  await user.clear(statusInput);
+  await user.type(statusInput, "submitted");
+  await user.click(screen.getByRole("button", { name: "Save Public Status" }));
+
+  expect(await screen.findByText("Saved Public Status")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          raw_token?: string;
+          field_id?: string;
+          value?: unknown;
+          block_instance_id?: unknown;
+        };
+        return (
+          url.endsWith("/api/v1/public-links/edit") &&
+          init?.method === "POST" &&
+          headers?.Authorization === undefined &&
+          body.raw_token === "public-token" &&
+          body.field_id === "99999999-9999-4999-8999-999999999997" &&
+          body.value === "submitted" &&
+          body.block_instance_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         );
       }),
     ).toBe(true);

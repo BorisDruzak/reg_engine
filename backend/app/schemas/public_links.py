@@ -34,7 +34,50 @@ class PublicLinkListRead(BaseModel):
     items: list[PublicLinkRead]
 
 
+class PublicLinkPreviewRequest(BaseModel):
+    raw_token: str
+
+
+class PublicLinkPreviewOptionRead(BaseModel):
+    id: UUID
+    code: str
+    label: str
+
+
+class PublicLinkPreviewFieldRead(BaseModel):
+    field_id: UUID
+    code: str
+    label: str
+    field_type: str
+    value: Any
+    options_source_type: str | None
+    options_source_id: UUID | None
+    options: list[PublicLinkPreviewOptionRead]
+
+
+class PublicLinkPreviewBlockInstanceRead(BaseModel):
+    block_instance_id: UUID | None
+    ordinal: int
+    fields: list[PublicLinkPreviewFieldRead]
+
+
+class PublicLinkPreviewBlockRead(BaseModel):
+    block_id: UUID
+    code: str
+    title: str
+    instances: list[PublicLinkPreviewBlockInstanceRead]
+
+
+class PublicLinkPreviewRead(BaseModel):
+    card_id: UUID
+    display_name: str
+    expires_at: datetime
+    can_edit: bool
+    blocks: list[PublicLinkPreviewBlockRead]
+
+
 class PublicLinkEditRequest(BaseModel):
     raw_token: str
     field_id: UUID
     value: Any
+    block_instance_id: UUID | None = None

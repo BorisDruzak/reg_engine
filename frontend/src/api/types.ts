@@ -144,6 +144,44 @@ export type FieldValueRead = {
   value: unknown;
 };
 
+export type PublicLinkPreviewOptionRead = {
+  id: string;
+  code: string;
+  label: string;
+};
+
+export type PublicLinkPreviewFieldRead = {
+  field_id: string;
+  code: string;
+  label: string;
+  field_type: string;
+  value: unknown;
+  options_source_type: string | null;
+  options_source_id: string | null;
+  options: PublicLinkPreviewOptionRead[];
+};
+
+export type PublicLinkPreviewBlockInstanceRead = {
+  block_instance_id: string | null;
+  ordinal: number;
+  fields: PublicLinkPreviewFieldRead[];
+};
+
+export type PublicLinkPreviewBlockRead = {
+  block_id: string;
+  code: string;
+  title: string;
+  instances: PublicLinkPreviewBlockInstanceRead[];
+};
+
+export type PublicLinkPreviewRead = {
+  card_id: string;
+  display_name: string;
+  expires_at: string;
+  can_edit: boolean;
+  blocks: PublicLinkPreviewBlockRead[];
+};
+
 export type UserRead = {
   id: string;
   email: string;

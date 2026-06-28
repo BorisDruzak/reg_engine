@@ -277,6 +277,7 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
         "/api/v1/cards/{card_id}/blocks/{block_id}/instances",
         "/api/v1/cards/{card_id}/public-links",
         "/api/v1/public-links/{public_link_id}",
+        "/api/v1/public-links/preview",
     }
 
     assert expected_paths <= paths

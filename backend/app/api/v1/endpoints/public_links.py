@@ -12,10 +12,16 @@ from app.schemas.public_links import (
     PublicLinkCreate,
     PublicLinkEditRequest,
     PublicLinkListRead,
+    PublicLinkPreviewBlockInstanceRead,
+    PublicLinkPreviewBlockRead,
+    PublicLinkPreviewFieldRead,
+    PublicLinkPreviewOptionRead,
+    PublicLinkPreviewRead,
+    PublicLinkPreviewRequest,
     PublicLinkRead,
     PublicLinkTokenRead,
 )
-from app.services.public_links import PublicLinkService
+from app.services.public_links import PublicLinkPreview, PublicLinkService
 
 router = APIRouter(tags=["public-links"])
 
@@ -81,6 +87,18 @@ def disable_public_link(
     return _public_link_to_read(public_link)
 
 
+@router.post("/public-links/preview", response_model=PublicLinkPreviewRead)
+def preview_public_link(
+    payload: PublicLinkPreviewRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PublicLinkPreviewRead:
+    try:
+        preview = PublicLinkService(session).preview_public_link(raw_token=payload.raw_token)
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_preview_to_read(preview)
+
+
 @router.post("/public-links/edit", response_model=FieldValueRead)
 def edit_card_field_with_public_link(
     payload: PublicLinkEditRequest,
@@ -97,6 +115,7 @@ def edit_card_field_with_public_link(
             raw_token=payload.raw_token,
             field_id=payload.field_id,
             value=value,
+            block_instance_id=payload.block_instance_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -114,4 +133,48 @@ def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
         max_uses=public_link.max_uses,
         used_count=public_link.used_count,
         disabled_at=public_link.disabled_at,
+    )
+
+
+def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPreviewRead:
+    return PublicLinkPreviewRead(
+        card_id=preview.card_id,
+        display_name=preview.display_name,
+        expires_at=preview.expires_at,
+        can_edit=preview.can_edit,
+        blocks=[
+            PublicLinkPreviewBlockRead(
+                block_id=block.block_id,
+                code=block.code,
+                title=block.title,
+                instances=[
+                    PublicLinkPreviewBlockInstanceRead(
+                        block_instance_id=instance.block_instance_id,
+                        ordinal=instance.ordinal,
+                        fields=[
+                            PublicLinkPreviewFieldRead(
+                                field_id=field.field_id,
+                                code=field.code,
+                                label=field.label,
+                                field_type=field.field_type,
+                                value=field.value,
+                                options_source_type=field.options_source_type,
+                                options_source_id=field.options_source_id,
+                                options=[
+                                    PublicLinkPreviewOptionRead(
+                                        id=option.id,
+                                        code=option.code,
+                                        label=option.label,
+                                    )
+                                    for option in field.options
+                                ],
+                            )
+                            for field in instance.fields
+                        ],
+                    )
+                    for instance in block.instances
+                ],
+            )
+            for block in preview.blocks
+        ],
     )

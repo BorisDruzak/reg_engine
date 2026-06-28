@@ -185,6 +185,46 @@ button {
   padding: 22px;
 }
 
+.public-shell {
+  min-height: 100vh;
+  background: #f5f6f8;
+}
+
+.public-header {
+  min-height: 70px;
+  padding: 18px 24px;
+  border-bottom: 1px solid #d9dee7;
+  background: #ffffff;
+}
+
+.public-main {
+  width: min(940px, 100%);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.public-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.public-title h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 1.7rem;
+  line-height: 1.16;
+  letter-spacing: 0;
+}
+
+.public-title span,
+.public-muted {
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .workspace-topbar {
   display: flex;
   align-items: center;
@@ -547,13 +587,15 @@ tr:last-child td {
 
 @media (max-width: 620px) {
   .login-shell,
+  .public-main,
   .workspace-main,
   .workspace-sidebar {
     padding: 16px;
   }
 
   .workspace-topbar,
-  .account-strip {
+  .account-strip,
+  .public-title {
     align-items: flex-start;
     flex-direction: column;
   }

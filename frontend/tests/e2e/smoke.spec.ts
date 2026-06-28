@@ -208,6 +208,37 @@ const apiPayloads = {
       },
     },
   },
+  publicPreview: {
+    card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    display_name: "Public Link Card",
+    expires_at: "2026-06-29T12:00:00Z",
+    can_edit: true,
+    blocks: [
+      {
+        block_id: "88888888-8888-4888-8888-888888888888",
+        code: "public",
+        title: "Public Block",
+        instances: [
+          {
+            block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            ordinal: 0,
+            fields: [
+              {
+                field_id: "99999999-9999-4999-8999-999999999997",
+                code: "public_status",
+                label: "Public Status",
+                field_type: "text",
+                value: "drafted",
+                options_source_type: null,
+                options_source_id: null,
+                options: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 };
 
 test("renders login shell and authenticated admin workspace", async ({ page }) => {
@@ -296,6 +327,65 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("create")).toBeVisible();
 });
 
+test("renders public-link edit page and saves a field", async ({ page }) => {
+  let publicStatusValue = "drafted";
+  let editRequestBody: {
+    raw_token?: string;
+    field_id?: string;
+    value?: unknown;
+    block_instance_id?: string | null;
+  } | null = null;
+
+  await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/public-links/preview") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(currentPublicPreview(publicStatusValue)),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/public-links/edit") {
+      editRequestBody = route.request().postDataJSON() as typeof editRequestBody;
+      publicStatusValue = String(editRequestBody?.value ?? "");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbd",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: editRequestBody?.block_instance_id ?? null,
+          field_id: "99999999-9999-4999-8999-999999999997",
+          value: publicStatusValue,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Not Found" }),
+    });
+  });
+
+  await page.goto("/public/edit/public-token");
+  await expect(page.getByRole("heading", { name: "Public Link Card" })).toBeVisible();
+  await expect(page.getByText("Public Block")).toBeVisible();
+  await expect(page.getByLabel("Public Status")).toHaveValue("drafted");
+
+  await page.getByLabel("Public Status").fill("submitted");
+  await page.getByRole("button", { name: "Save Public Status" }).click();
+
+  await expect(page.getByText("Saved Public Status")).toBeVisible();
+  expect(editRequestBody).toEqual({
+    raw_token: "public-token",
+    field_id: "99999999-9999-4999-8999-999999999997",
+    value: "submitted",
+    block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  });
+});
+
 function responsePayload(
   pathname: string,
   search: string,
@@ -379,4 +469,26 @@ function responsePayload(
     return apiPayloads.audit;
   }
   return null;
+}
+
+function currentPublicPreview(statusValue: string) {
+  return {
+    ...apiPayloads.publicPreview,
+    blocks: [
+      {
+        ...apiPayloads.publicPreview.blocks[0],
+        instances: [
+          {
+            ...apiPayloads.publicPreview.blocks[0].instances[0],
+            fields: [
+              {
+                ...apiPayloads.publicPreview.blocks[0].instances[0].fields[0],
+                value: statusValue,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }

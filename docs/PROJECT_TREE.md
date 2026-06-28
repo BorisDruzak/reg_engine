@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 17:37:35 +05:00
+- Generated: 2026-06-28 17:56:40 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -130,10 +130,13 @@
 - `frontend/src/components/common/.gitkeep`
 - `frontend/src/components/layout/.gitkeep`
 - `frontend/src/features/cards/.gitkeep`
+- `frontend/src/features/cards/FieldEditorControl.tsx`
+- `frontend/src/features/cards/fieldEditorUtils.ts`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/registry/.gitkeep`
 - `frontend/src/main.tsx`
 - `frontend/src/pages/HomePage.tsx`
+- `frontend/src/pages/PublicLinkEditPage.tsx`
 - `frontend/src/styles/globals.css`
 - `frontend/src/test/setup.ts`
 - `frontend/src/vite-env.d.ts`
