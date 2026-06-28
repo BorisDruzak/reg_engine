@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -83,11 +84,13 @@ class OrgUnit(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class AccessGrant(UUIDPrimaryKeyMixin, CreatedAtMixin, ArchiveMixin, Base):
     __tablename__ = "access_grants"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_access_grants_user_role_registry_organization_scope",
             "user_id",
             "role_id",
-            "organization_id",
-            name="uq_access_grants_user_role_organization",
+            text("coalesce(registry_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("coalesce(organization_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
         ),
         Index("ix_access_grants_user_id", "user_id"),
         Index("ix_access_grants_role_id", "role_id"),

@@ -149,7 +149,11 @@ class PublicLinkService:
 
     def _get_active_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)
-        if card is None or card.archived_at is not None or card.lifecycle_status == "archived":
+        if (
+            card is None
+            or card.archived_at is not None
+            or card.lifecycle_status in {"archived", "superseded"}
+        ):
             raise CardServiceError("Card was not found.")
         return card
 

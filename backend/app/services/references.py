@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models import ReferenceItem, ReferenceList
+from app.models import OrganizationClosure, ReferenceItem, ReferenceList
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -26,8 +26,15 @@ class ReferenceListService:
         registry_id: UUID | None = None,
         owner_organization_id: UUID | None = None,
         description: str | None = None,
+        inherit_to_descendants: bool = True,
+        locked_for_descendants: bool = True,
+        managed_by_system_only: bool = False,
     ) -> ReferenceList:
-        self._require_reference_permission(actor_user_id, registry_id)
+        self._require_reference_create_permission(
+            actor_user_id,
+            registry_id=registry_id,
+            owner_organization_id=owner_organization_id,
+        )
 
         reference_list = ReferenceList(
             registry_id=registry_id,
@@ -35,6 +42,9 @@ class ReferenceListService:
             code=code,
             name=name,
             description=description,
+            inherit_to_descendants=inherit_to_descendants,
+            locked_for_descendants=locked_for_descendants,
+            managed_by_system_only=managed_by_system_only,
             created_by=actor_user_id,
         )
         self.session.add(reference_list)
@@ -57,7 +67,7 @@ class ReferenceListService:
         description: str | None = None,
     ) -> ReferenceList:
         reference_list = self._get_active_reference_list(list_id)
-        self._require_reference_permission(actor_user_id, reference_list.registry_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
         old_data = {"name": reference_list.name, "description": reference_list.description}
         if name is not None:
             reference_list.name = name
@@ -84,7 +94,7 @@ class ReferenceListService:
         list_id: UUID,
     ) -> ReferenceList:
         reference_list = self._get_active_reference_list(list_id)
-        self._require_reference_permission(actor_user_id, reference_list.registry_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
         reference_list.archived_at = datetime.now(UTC)
         reference_list.is_active = False
         self.session.flush()
@@ -108,7 +118,7 @@ class ReferenceListService:
         position: int = 0,
     ) -> ReferenceItem:
         reference_list = self._get_active_reference_list(list_id)
-        self._require_reference_permission(actor_user_id, reference_list.registry_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
 
         if parent_id is not None:
             parent = self._get_active_reference_item(parent_id)
@@ -146,7 +156,7 @@ class ReferenceListService:
     ) -> ReferenceItem:
         item = self._get_active_reference_item(item_id)
         reference_list = self._get_active_reference_list(item.list_id)
-        self._require_reference_permission(actor_user_id, reference_list.registry_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
         old_data = {
             "label": item.label,
             "description": item.description,
@@ -181,7 +191,7 @@ class ReferenceListService:
     ) -> ReferenceItem:
         item = self._get_active_reference_item(item_id)
         reference_list = self._get_active_reference_list(item.list_id)
-        self._require_reference_permission(actor_user_id, reference_list.registry_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
         item.archived_at = datetime.now(UTC)
         item.is_active = False
         self.session.flush()
@@ -212,15 +222,73 @@ class ReferenceListService:
             raise ReferenceListError("Reference item does not belong to the configured list.")
         return item
 
-    def _require_reference_permission(
+    def list_available_reference_lists_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        organization_id: UUID,
+    ) -> list[ReferenceList]:
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            organization_id,
+            registry_id=registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot use references in this organization scope.")
+
+        inherited_owner_ids = self.session.scalars(
+            select(OrganizationClosure.ancestor_id).where(
+                OrganizationClosure.descendant_id == organization_id,
+                OrganizationClosure.ancestor_id != organization_id,
+            )
+        ).all()
+
+        return list(
+            self.session.scalars(
+                select(ReferenceList)
+                .where(
+                    ReferenceList.archived_at.is_(None),
+                    ReferenceList.is_active.is_(True),
+                    or_(
+                        ReferenceList.registry_id.is_(None),
+                        ReferenceList.registry_id == registry_id,
+                    ),
+                    or_(
+                        ReferenceList.owner_organization_id.is_(None),
+                        ReferenceList.owner_organization_id == organization_id,
+                        ReferenceList.owner_organization_id.in_(inherited_owner_ids),
+                    ),
+                    or_(
+                        ReferenceList.owner_organization_id.is_(None),
+                        ReferenceList.owner_organization_id == organization_id,
+                        ReferenceList.inherit_to_descendants.is_(True),
+                    ),
+                )
+                .order_by(ReferenceList.code, ReferenceList.id)
+            ).all()
+        )
+
+    def _require_reference_create_permission(
         self,
         actor_user_id: UUID,
+        *,
         registry_id: UUID | None,
+        owner_organization_id: UUID | None,
     ) -> None:
         permissions = PermissionService(self.session)
         if registry_id is None:
             if not permissions.is_superuser(actor_user_id):
                 raise PermissionDeniedError("Only a system admin can manage global references.")
+            return
+
+        if owner_organization_id is not None:
+            if not permissions.has_permission(
+                actor_user_id,
+                "registry.schema.manage",
+                organization_id=owner_organization_id,
+                registry_id=registry_id,
+            ):
+                raise PermissionDeniedError("Actor cannot manage this reference list owner scope.")
             return
 
         if not permissions.has_permission(
@@ -229,6 +297,56 @@ class ReferenceListService:
             registry_id=registry_id,
         ):
             raise PermissionDeniedError("Actor cannot manage reference lists.")
+
+    def _require_reference_edit_permission(
+        self,
+        actor_user_id: UUID,
+        reference_list: ReferenceList,
+    ) -> None:
+        permissions = PermissionService(self.session)
+        if reference_list.managed_by_system_only and not permissions.is_superuser(actor_user_id):
+            raise PermissionDeniedError("Only a system admin can manage this reference list.")
+
+        registry_id = reference_list.registry_id
+        owner_id = reference_list.owner_organization_id
+        if registry_id is None:
+            if not permissions.is_superuser(actor_user_id):
+                raise PermissionDeniedError("Only a system admin can manage global references.")
+            return
+
+        if owner_id is None:
+            if not permissions.has_permission(
+                actor_user_id,
+                "registry.schema.manage",
+                registry_id=registry_id,
+            ):
+                raise PermissionDeniedError("Actor cannot manage reference lists.")
+            return
+
+        if permissions.has_permission(
+            actor_user_id,
+            "registry.schema.manage",
+            organization_id=owner_id,
+            registry_id=registry_id,
+        ):
+            return
+
+        if reference_list.locked_for_descendants:
+            raise PermissionDeniedError("Inherited locked reference lists cannot be edited here.")
+
+        actor_scope = permissions.get_organization_scope_ids(actor_user_id, registry_id=registry_id)
+        descendant_ids = set(
+            self.session.scalars(
+                select(OrganizationClosure.descendant_id).where(
+                    OrganizationClosure.ancestor_id == owner_id,
+                    OrganizationClosure.depth > 0,
+                )
+            ).all()
+        )
+        if actor_scope & descendant_ids:
+            return
+
+        raise PermissionDeniedError("Actor cannot manage this reference list owner scope.")
 
     def _get_active_reference_list(self, list_id: UUID) -> ReferenceList:
         reference_list = self.session.get(ReferenceList, list_id)

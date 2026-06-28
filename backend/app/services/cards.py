@@ -39,11 +39,26 @@ class CardFieldRead:
 
 
 @dataclass(frozen=True)
+class CardBlockInstanceRead:
+    block_instance_id: UUID | None
+    ordinal: int
+    fields: dict[str, CardFieldRead] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CardBlockRead:
+    block_id: UUID
+    code: str
+    instances: list[CardBlockInstanceRead] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class CardRead:
     card_id: UUID
     registry_id: UUID
     organization_id: UUID
     display_name: str
+    blocks: dict[str, CardBlockRead] = field(default_factory=dict)
     fields: dict[str, CardFieldRead] = field(default_factory=dict)
 
 
@@ -56,6 +71,11 @@ class _FieldAssignment:
     value_bool: bool | None = None
     value_json: dict[str, Any] | None = None
     value_reference_item_id: UUID | None = None
+    value_card_id: UUID | None = None
+    value_user_id: UUID | None = None
+    value_organization_id: UUID | None = None
+    value_org_unit_id: UUID | None = None
+    value_registry_id: UUID | None = None
     item_ids: list[UUID] = field(default_factory=list)
 
 
@@ -158,8 +178,9 @@ class CardService:
         card_id: UUID,
         field_id: UUID,
         value: object,
+        block_instance_id: UUID | None = None,
     ) -> FieldValue:
-        card = self._get_active_card(card_id)
+        card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
         block = self._get_active_block(field_model.block_id)
         if block.registry_id != card.registry_id:
@@ -171,10 +192,11 @@ class CardService:
             registry_id=card.registry_id,
         )
         assignment = self._coerce_field_assignment(field_model, value)
-        block_instance = self._get_or_create_block_instance(
-            card_id=card.id,
-            block_id=block.id,
-            created_by=actor_user_id,
+        block_instance = self._resolve_block_instance_for_value(
+            card=card,
+            block=block,
+            block_instance_id=block_instance_id,
+            actor_user_id=actor_user_id,
         )
         field_value = self._get_or_create_field_value(
             card_id=card.id,
@@ -201,17 +223,18 @@ class CardService:
         field_id: UUID,
         value: object,
     ) -> FieldValue:
-        card = self._get_active_card(card_id)
+        card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
         block = self._get_active_block(field_model.block_id)
         if block.registry_id != card.registry_id:
             raise CardServiceError("Field does not belong to the card registry.")
 
         assignment = self._coerce_field_assignment(field_model, value)
-        block_instance = self._get_or_create_block_instance(
-            card_id=card.id,
-            block_id=block.id,
-            created_by=None,
+        block_instance = self._resolve_block_instance_for_value(
+            card=card,
+            block=block,
+            block_instance_id=None,
+            actor_user_id=None,
         )
         field_value = self._get_or_create_field_value(
             card_id=card.id,
@@ -232,7 +255,7 @@ class CardService:
         public_view_enabled: bool | None = None,
         public_edit_enabled: bool | None = None,
     ) -> Card:
-        card = self._get_active_card(card_id)
+        card = self._get_editable_card(card_id)
         self._require_card_permission(
             actor_user_id,
             card.organization_id,
@@ -265,8 +288,14 @@ class CardService:
         )
         return card
 
-    def read_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> CardRead:
-        card = self._get_active_card(card_id)
+    def read_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        include_archive: bool = False,
+    ) -> CardRead:
+        card = self._get_readable_card(card_id, include_archive=include_archive)
         if not PermissionService(self.session).can_see_organization(
             actor_user_id,
             card.organization_id,
@@ -274,42 +303,84 @@ class CardService:
         ):
             raise PermissionDeniedError("Actor cannot read this card.")
 
-        fields = self._active_fields_for_registry(card.registry_id)
-        values_by_field_id = {
-            value.field_id: value
+        schema_rows = self._active_schema_rows_for_registry(card.registry_id)
+        field_ids = [field_model.id for _, field_model in schema_rows]
+        values_by_instance_field = {
+            (value.block_instance_id, value.field_id): value
             for value in self.session.scalars(
                 select(FieldValue).where(
                     FieldValue.card_id == card.id,
-                    FieldValue.field_id.in_([schema_field.id for schema_field in fields]),
+                    FieldValue.field_id.in_(field_ids),
                 )
             ).all()
         }
-        item_ids_by_value_id = self._multi_select_item_ids(list(values_by_field_id.values()))
+        item_ids_by_value_id = self._multi_select_item_ids(list(values_by_instance_field.values()))
+        block_instances = self._block_instances_for_card(card.id)
+        field_code_counts: dict[str, int] = {}
+        for _, schema_field in schema_rows:
+            field_code_counts[schema_field.code] = field_code_counts.get(schema_field.code, 0) + 1
 
+        read_blocks: dict[str, CardBlockRead] = {}
         read_fields: dict[str, CardFieldRead] = {}
-        for schema_field in fields:
-            field_value = values_by_field_id.get(schema_field.id)
-            read_fields[schema_field.code] = CardFieldRead(
-                field_id=schema_field.id,
-                code=schema_field.code,
-                field_type=schema_field.field_type,
-                value=self._read_field_value(
-                    schema_field,
-                    field_value,
-                    item_ids_by_value_id,
-                ),
-            )
+        for block, _ in schema_rows:
+            if block.code not in read_blocks:
+                instances = block_instances.get(block.id, [])
+                if not instances:
+                    instances = [
+                        CardBlockInstance(
+                            card_id=card.id,
+                            block_id=block.id,
+                            ordinal=0,
+                        )
+                    ]
+                read_blocks[block.code] = CardBlockRead(
+                    block_id=block.id,
+                    code=block.code,
+                    instances=[
+                        CardBlockInstanceRead(
+                            block_instance_id=instance.id,
+                            ordinal=instance.ordinal,
+                            fields={},
+                        )
+                        for instance in instances
+                    ],
+                )
+
+        for block, schema_field in schema_rows:
+            block_read = read_blocks[block.code]
+            for instance_read in block_read.instances:
+                field_value = None
+                if instance_read.block_instance_id is not None:
+                    field_value = values_by_instance_field.get(
+                        (instance_read.block_instance_id, schema_field.id)
+                    )
+                field_read = CardFieldRead(
+                    field_id=schema_field.id,
+                    code=schema_field.code,
+                    field_type=schema_field.field_type,
+                    value=self._read_field_value(
+                        schema_field,
+                        field_value,
+                        item_ids_by_value_id,
+                    ),
+                )
+                instance_read.fields[schema_field.code] = field_read
+                path = f"{block.code}.{schema_field.code}"
+                read_fields[path] = field_read
+                if field_code_counts[schema_field.code] == 1:
+                    read_fields[schema_field.code] = field_read
 
         return CardRead(
             card_id=card.id,
             registry_id=card.registry_id,
             organization_id=card.organization_id,
             display_name=card.display_name,
+            blocks=read_blocks,
             fields=read_fields,
         )
 
     def archive_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> Card:
-        card = self._get_active_card(card_id)
+        card = self._get_editable_card(card_id)
         self._require_card_permission(
             actor_user_id,
             card.organization_id,
@@ -334,7 +405,7 @@ class CardService:
         card_id: UUID,
         target_organization_id: UUID,
     ) -> Card:
-        old_card = self._get_active_card(card_id)
+        old_card = self._get_editable_card(card_id)
         if not PermissionService(self.session).is_superuser(actor_user_id):
             self._require_card_permission(
                 actor_user_id,
@@ -365,6 +436,11 @@ class CardService:
             created_by=actor_user_id,
         )
         self.session.add(relation)
+        self._copy_card_values(
+            source_card_id=old_card.id,
+            target_card_id=new_card.id,
+            actor_user_id=actor_user_id,
+        )
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -377,6 +453,36 @@ class CardService:
             },
         )
         return new_card
+
+    def create_block_instance_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        block_id: UUID,
+    ) -> CardBlockInstance:
+        card = self._get_editable_card(card_id)
+        block = self._get_active_block(block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Block does not belong to the card registry.")
+        self._require_card_permission(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        )
+        existing = self._existing_block_instances(card.id, block.id)
+        if existing and not block.is_repeatable:
+            raise CardServiceError("Non-repeatable block already has an instance.")
+        next_ordinal = max((instance.ordinal for instance in existing), default=-1) + 1
+        block_instance = CardBlockInstance(
+            card_id=card.id,
+            block_id=block.id,
+            ordinal=next_ordinal,
+            created_by=actor_user_id,
+        )
+        self.session.add(block_instance)
+        self.session.flush()
+        return block_instance
 
     def _require_card_permission(
         self,
@@ -393,10 +499,24 @@ class CardService:
         ):
             raise PermissionDeniedError("Actor cannot manage cards in this organization scope.")
 
-    def _get_active_card(self, card_id: UUID) -> Card:
+    def _get_editable_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)
-        if card is None or card.archived_at is not None or card.lifecycle_status == "archived":
+        if (
+            card is None
+            or card.archived_at is not None
+            or card.lifecycle_status in {"archived", "superseded"}
+        ):
             raise CardServiceError("Card was not found.")
+        return card
+
+    def _get_readable_card(self, card_id: UUID, *, include_archive: bool) -> Card:
+        card = self.session.get(Card, card_id)
+        if card is None:
+            raise CardServiceError("Card was not found.")
+        if card.lifecycle_status in {"archived", "superseded"} and not include_archive:
+            raise CardServiceError("Card is only readable in archive scope.")
+        if card.archived_at is not None and not include_archive:
+            raise CardServiceError("Card is only readable in archive scope.")
         return card
 
     def _get_active_block(self, block_id: UUID) -> FormBlock:
@@ -419,12 +539,14 @@ class CardService:
         created_by: UUID | None,
     ) -> CardBlockInstance:
         block_instance = self.session.scalars(
-            select(CardBlockInstance).where(
+            select(CardBlockInstance)
+            .where(
                 CardBlockInstance.card_id == card_id,
                 CardBlockInstance.block_id == block_id,
                 CardBlockInstance.archived_at.is_(None),
             )
-        ).one_or_none()
+            .order_by(CardBlockInstance.ordinal)
+        ).first()
         if block_instance is not None:
             return block_instance
 
@@ -436,6 +558,31 @@ class CardService:
         self.session.add(block_instance)
         self.session.flush()
         return block_instance
+
+    def _resolve_block_instance_for_value(
+        self,
+        *,
+        card: Card,
+        block: FormBlock,
+        block_instance_id: UUID | None,
+        actor_user_id: UUID | None,
+    ) -> CardBlockInstance:
+        if block_instance_id is not None:
+            block_instance = self.session.get(CardBlockInstance, block_instance_id)
+            if (
+                block_instance is None
+                or block_instance.card_id != card.id
+                or block_instance.block_id != block.id
+                or block_instance.archived_at is not None
+            ):
+                raise CardServiceError("Block instance was not found.")
+            return block_instance
+
+        return self._get_or_create_block_instance(
+            card_id=card.id,
+            block_id=block.id,
+            created_by=actor_user_id,
+        )
 
     def _get_or_create_field_value(
         self,
@@ -512,6 +659,40 @@ class CardService:
                 self._ensure_reference_item_for_field(field_model, item_id)
             return _FieldAssignment(item_ids=item_ids)
 
+        if field_model.field_type == "organization_ref":
+            return _FieldAssignment(
+                value_organization_id=self._ensure_uuid(
+                    value,
+                    "Organization reference fields require an organization id.",
+                )
+            )
+
+        if field_model.field_type == "org_unit_ref":
+            return _FieldAssignment(
+                value_org_unit_id=self._ensure_uuid(
+                    value,
+                    "Org unit reference fields require an org unit id.",
+                )
+            )
+
+        if field_model.field_type == "user_ref":
+            return _FieldAssignment(
+                value_user_id=self._ensure_uuid(value, "User reference fields require a user id.")
+            )
+
+        if field_model.field_type == "card_ref":
+            return _FieldAssignment(
+                value_card_id=self._ensure_uuid(value, "Card reference fields require a card id.")
+            )
+
+        if field_model.field_type == "registry_ref":
+            return _FieldAssignment(
+                value_registry_id=self._ensure_uuid(
+                    value,
+                    "Registry reference fields require a registry id.",
+                )
+            )
+
         raise InvalidFieldValueError(f"Unsupported field type: {field_model.field_type}")
 
     def _ensure_uuid(self, value: object, message: str) -> UUID:
@@ -559,11 +740,11 @@ class CardService:
         field_value.value_bool = assignment.value_bool
         field_value.value_json = assignment.value_json
         field_value.value_reference_item_id = assignment.value_reference_item_id
-        field_value.value_card_id = None
-        field_value.value_user_id = None
-        field_value.value_organization_id = None
-        field_value.value_org_unit_id = None
-        field_value.value_registry_id = None
+        field_value.value_card_id = assignment.value_card_id
+        field_value.value_user_id = assignment.value_user_id
+        field_value.value_organization_id = assignment.value_organization_id
+        field_value.value_org_unit_id = assignment.value_org_unit_id
+        field_value.value_registry_id = assignment.value_registry_id
         field_value.updated_by = actor_user_id
 
         self.session.execute(
@@ -578,21 +759,48 @@ class CardService:
                 )
             )
 
-    def _active_fields_for_registry(self, registry_id: UUID) -> list[FormField]:
+    def _active_schema_rows_for_registry(
+        self, registry_id: UUID
+    ) -> list[tuple[FormBlock, FormField]]:
+        rows = self.session.execute(
+            select(FormBlock, FormField)
+            .join(FormBlock, FormBlock.id == FormField.block_id)
+            .where(
+                FormBlock.registry_id == registry_id,
+                FormBlock.archived_at.is_(None),
+                FormBlock.is_active.is_(True),
+                FormField.archived_at.is_(None),
+                FormField.is_active.is_(True),
+            )
+            .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
+        )
+        return [(block, field_model) for block, field_model in rows]
+
+    def _existing_block_instances(self, card_id: UUID, block_id: UUID) -> list[CardBlockInstance]:
         return list(
             self.session.scalars(
-                select(FormField)
-                .join(FormBlock, FormBlock.id == FormField.block_id)
+                select(CardBlockInstance)
                 .where(
-                    FormBlock.registry_id == registry_id,
-                    FormBlock.archived_at.is_(None),
-                    FormBlock.is_active.is_(True),
-                    FormField.archived_at.is_(None),
-                    FormField.is_active.is_(True),
+                    CardBlockInstance.card_id == card_id,
+                    CardBlockInstance.block_id == block_id,
+                    CardBlockInstance.archived_at.is_(None),
                 )
-                .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
+                .order_by(CardBlockInstance.ordinal)
             ).all()
         )
+
+    def _block_instances_for_card(self, card_id: UUID) -> dict[UUID, list[CardBlockInstance]]:
+        instances: dict[UUID, list[CardBlockInstance]] = {}
+        for instance in self.session.scalars(
+            select(CardBlockInstance)
+            .where(
+                CardBlockInstance.card_id == card_id,
+                CardBlockInstance.archived_at.is_(None),
+            )
+            .order_by(CardBlockInstance.block_id, CardBlockInstance.ordinal)
+        ):
+            instances.setdefault(instance.block_id, []).append(instance)
+        return instances
 
     def _multi_select_item_ids(
         self,
@@ -637,4 +845,72 @@ class CardService:
             return field_value.value_reference_item_id
         if field_model.field_type == "multi_select":
             return item_ids_by_value_id.get(field_value.id, [])
+        if field_model.field_type == "organization_ref":
+            return field_value.value_organization_id
+        if field_model.field_type == "org_unit_ref":
+            return field_value.value_org_unit_id
+        if field_model.field_type == "user_ref":
+            return field_value.value_user_id
+        if field_model.field_type == "card_ref":
+            return field_value.value_card_id
+        if field_model.field_type == "registry_ref":
+            return field_value.value_registry_id
         return None
+
+    def _copy_card_values(
+        self,
+        *,
+        source_card_id: UUID,
+        target_card_id: UUID,
+        actor_user_id: UUID,
+    ) -> None:
+        source_instances = self._block_instances_for_card(source_card_id)
+        instance_map: dict[UUID, UUID] = {}
+        for instances in source_instances.values():
+            for source_instance in instances:
+                target_instance = CardBlockInstance(
+                    card_id=target_card_id,
+                    block_id=source_instance.block_id,
+                    ordinal=source_instance.ordinal,
+                    created_by=actor_user_id,
+                )
+                self.session.add(target_instance)
+                self.session.flush()
+                instance_map[source_instance.id] = target_instance.id
+
+        for source_value in self.session.scalars(
+            select(FieldValue).where(FieldValue.card_id == source_card_id)
+        ):
+            copied_value = FieldValue(
+                card_id=target_card_id,
+                block_instance_id=instance_map[source_value.block_instance_id],
+                field_id=source_value.field_id,
+                value_text=source_value.value_text,
+                value_number=source_value.value_number,
+                value_date=source_value.value_date,
+                value_datetime=source_value.value_datetime,
+                value_bool=source_value.value_bool,
+                value_json=source_value.value_json,
+                value_reference_item_id=source_value.value_reference_item_id,
+                value_card_id=source_value.value_card_id,
+                value_user_id=source_value.value_user_id,
+                value_organization_id=source_value.value_organization_id,
+                value_org_unit_id=source_value.value_org_unit_id,
+                value_registry_id=source_value.value_registry_id,
+                created_by=actor_user_id,
+                updated_by=actor_user_id,
+            )
+            self.session.add(copied_value)
+            self.session.flush()
+            for item in self.session.scalars(
+                select(FieldValueItem)
+                .where(FieldValueItem.field_value_id == source_value.id)
+                .order_by(FieldValueItem.position)
+            ):
+                self.session.add(
+                    FieldValueItem(
+                        field_value_id=copied_value.id,
+                        reference_item_id=item.reference_item_id,
+                        position=item.position,
+                    )
+                )

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 02:19:32 +05:00
+- Generated: 2026-06-28 13:50:09 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -64,10 +64,12 @@
 - `backend/migrations/versions/0001_database_foundation.py`
 - `backend/migrations/versions/0002_core_schema_v1.py`
 - `backend/migrations/versions/0003_reconcile_core_schema_v1.py`
+- `backend/migrations/versions/0004_core_service_hardening.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
 - `backend/tests/test_config.py`
+- `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`

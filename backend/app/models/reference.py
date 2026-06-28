@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,6 +15,13 @@ class ReferenceList(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
             "owner_organization_id",
             "code",
             name="uq_reference_lists_registry_owner_code",
+        ),
+        Index(
+            "uq_reference_lists_registry_owner_code_scope",
+            text("coalesce(registry_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            text("coalesce(owner_organization_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            "code",
+            unique=True,
         ),
         Index("ix_reference_lists_registry_id", "registry_id"),
         Index("ix_reference_lists_owner_organization_id", "owner_organization_id"),

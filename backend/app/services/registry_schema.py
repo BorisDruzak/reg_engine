@@ -55,6 +55,8 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int = 0,
         is_repeatable: bool = False,
+        is_system: bool = False,
+        is_locked: bool = False,
         public_visible: bool = True,
         public_editable: bool = False,
     ) -> FormBlock:
@@ -68,6 +70,8 @@ class RegistrySchemaService:
             description=description,
             position=position,
             is_repeatable=is_repeatable,
+            is_system=is_system,
+            is_locked=is_locked,
             public_visible=public_visible,
             public_editable=public_editable,
             created_by=actor_user_id,
@@ -93,6 +97,7 @@ class RegistrySchemaService:
         position: int | None = None,
     ) -> FormBlock:
         block = self._get_active_block(block_id)
+        self._ensure_mutable_block(block)
         self._require_schema_permission(actor_user_id, block.registry_id)
         old_data = {
             "title": block.title,
@@ -128,6 +133,7 @@ class RegistrySchemaService:
         block_id: UUID,
     ) -> FormBlock:
         block = self._get_active_block(block_id)
+        self._ensure_mutable_block(block)
         self._require_schema_permission(actor_user_id, block.registry_id)
 
         block.archived_at = datetime.now(UTC)
@@ -153,6 +159,8 @@ class RegistrySchemaService:
         position: int = 0,
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
+        is_system: bool = False,
+        is_locked: bool = False,
         public_visible: bool = True,
         public_editable: bool = False,
     ) -> FormField:
@@ -169,6 +177,8 @@ class RegistrySchemaService:
             position=position,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
+            is_system=is_system,
+            is_locked=is_locked,
             public_visible=public_visible,
             public_editable=public_editable,
             created_by=actor_user_id,
@@ -196,6 +206,7 @@ class RegistrySchemaService:
     ) -> FormField:
         field = self._get_active_field(field_id)
         block = self._get_active_block(field.block_id)
+        self._ensure_mutable_field(field)
         self._require_schema_permission(actor_user_id, block.registry_id)
         old_data = {
             "label": field.label,
@@ -236,6 +247,7 @@ class RegistrySchemaService:
     ) -> FormField:
         field = self._get_active_field(field_id)
         block = self._get_active_block(field.block_id)
+        self._ensure_mutable_field(field)
         self._require_schema_permission(actor_user_id, block.registry_id)
 
         field.archived_at = datetime.now(UTC)
@@ -279,6 +291,14 @@ class RegistrySchemaService:
         if field is None or field.archived_at is not None or not field.is_active:
             raise RegistrySchemaError("Form field was not found.")
         return field
+
+    def _ensure_mutable_block(self, block: FormBlock) -> None:
+        if block.is_locked or block.is_system:
+            raise RegistrySchemaError("Locked or system form blocks cannot be changed here.")
+
+    def _ensure_mutable_field(self, field: FormField) -> None:
+        if field.is_locked or field.is_system:
+            raise RegistrySchemaError("Locked or system form fields cannot be changed here.")
 
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:

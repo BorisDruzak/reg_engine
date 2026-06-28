@@ -65,16 +65,6 @@ def _create_check_constraint_if_missing(
 
 def upgrade() -> None:
     _create_unique_constraint_if_missing(
-        "access_grants",
-        "uq_access_grants_user_role_organization",
-        "user_id, role_id, organization_id",
-    )
-    _create_unique_constraint_if_missing(
-        "card_block_instances",
-        "uq_card_block_instances_card_id_block_id",
-        "card_id, block_id",
-    )
-    _create_unique_constraint_if_missing(
         "card_relations",
         "uq_card_relations_source_target_type",
         "source_card_id, target_card_id, relation_type",

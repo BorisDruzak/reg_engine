@@ -9,8 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1F REST API Foundation planning.
+- Current checkpoint scope is Phase 1E.1 Core Service Hardening Before API.
 - Phase 1B through Phase 1E service-layer work is completed and synchronized.
+- Phase 1E.1 hardens the existing service layer before any REST API work.
 - Do not implement frontend, auth flow, import/export, documents, or MCP in the next checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -23,10 +24,12 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
+- Phase 1E.1 Core Service Hardening Before API is completed locally in this checkpoint; server disposable PostgreSQL verification is required before synchronization is closed.
 - Phase 1F REST API Foundation And Service Wiring is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0003_reconcile_core_schema_v1`.
+- Production migration `0004_core_service_hardening` must not be run without separate explicit approval.
 - Production backup before migration: `/var/backups/reg_engine/reg_engine_before_alembic_head_20260627_191407.dump`, sha256 `9b7e6d0f5870f6da5f7da72f9fa77fa1856b3e1454030afe4350347824826152`.
 - Production live schema compare against SQLAlchemy metadata passed after migration: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, and no `employees` table.
 
@@ -470,7 +473,76 @@ Known limitations:
 
 Next phase:
 
-- Phase 1F should expose the completed service layer through REST API endpoints while keeping auth flow, frontend UI, import/export, documents, and MCP out of scope.
+- Phase 1E.1 should harden the completed service layer before exposing it through REST API endpoints.
+
+## Phase 1E.1: Core Service Hardening Before API
+
+Purpose: close critical Core Schema v1 service and migration gaps before Phase 1F REST API Foundation.
+
+Status: completed locally in this checkpoint; server disposable PostgreSQL verification remains required before production migration approval can be discussed.
+
+Required work:
+
+- [x] Replace `Base.metadata.create_all/drop_all` in `0002_core_schema_v1.py` with a fixed static DDL migration strategy.
+- [x] Add `0004_core_service_hardening.py` for constraint/index hardening.
+- [x] Keep production `reg_engine` untouched; run hardening migration only against disposable PostgreSQL test database unless separately approved.
+- [x] Fix field type persistence for `organization_ref`, `org_unit_ref`, `user_ref`, `card_ref`, and `registry_ref`.
+- [x] Keep field type names as `number` and `bool`; do not introduce `decimal` or `boolean` aliases in v1.
+- [x] Allow repeatable blocks to have multiple `card_block_instances`.
+- [x] Keep non-repeatable blocks single-instance.
+- [x] Change card read structure to nested `blocks -> instances -> fields`; keep compatibility field paths where unambiguous.
+- [x] Split readable and editable card lookup.
+- [x] Allow `superseded` cards to be read only through archive scope.
+- [x] Block edit, transfer, and public-edit for `superseded` cards.
+- [x] Transfer cards by copying active dynamic `field_values` and `field_value_items` into the new card.
+- [x] Enforce reference list inheritance: descendants can use inherited lists, but locked inherited lists cannot be edited from descendants.
+- [x] Harden nullable uniqueness for `access_grants` using registry and organization scope.
+- [x] Harden nullable uniqueness for `reference_lists` using registry and owner organization scope.
+- [x] Block normal service update/archive of locked or system blocks and fields.
+- [x] Cache database engine and sessionmaker instances; healthcheck remains independent from `DATABASE_URL`.
+
+Required tests:
+
+- [x] Migration file no longer uses runtime `Base.metadata.create_all/drop_all`.
+- [x] Database engine and sessionmaker factories are cached.
+- [x] `number`/`bool` naming is fixed.
+- [x] Ref field types save to dedicated typed FK columns.
+- [x] Repeatable blocks support multiple instances, non-repeatable blocks remain single-instance.
+- [x] Card read supports duplicate field codes in different blocks through nested structure.
+- [x] `superseded` cards are archive-readable and not editable/transferable.
+- [x] Transfer copies dynamic values and multi-select items.
+- [x] Inherited locked reference lists are usable by descendants but not editable by descendants.
+- [x] Nullable unique index behavior is covered for access grants and reference lists.
+- [x] Locked/system schema blocks and fields cannot be changed by normal methods.
+
+Safe migration plan:
+
+- `0002_core_schema_v1.py` is treated as the fixed baseline Core Schema v1 migration and must not call live model metadata at migration runtime.
+- `0004_core_service_hardening.py` drops obsolete uniqueness constraints if present and creates the new scope-aware constraints/indexes idempotently.
+- Fresh disposable PostgreSQL verification must run with `TEST_DATABASE_URL` against a database ending in `_test`.
+- Production `reg_engine` requires a separate approval, a fresh backup, duplicate-data preflight, and an explicit `alembic upgrade head` command before applying `0004`.
+
+Verification:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine\backend
+python -m pytest
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy app
+$env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
+python -m pytest tests\test_core_service_hardening.py tests\test_database_smoke.py -q
+```
+
+Known limitations:
+
+- No REST API endpoints, frontend, auth flow, import/export, documents, or MCP are implemented in Phase 1E.1.
+- `0004_core_service_hardening` is not applied to production in this phase.
+- Public editing remains service-layer behavior; HTTP public endpoints remain Phase 1F work.
+
+Next phase:
+
+- Phase 1F should expose the hardened service layer through REST API endpoints while keeping auth flow, frontend UI, import/export, documents, and MCP out of scope.
 
 ## Phase 1F: REST API Foundation And Service Wiring
 

@@ -68,7 +68,12 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class CardBlockInstance(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "card_block_instances"
     __table_args__ = (
-        UniqueConstraint("card_id", "block_id", name="uq_card_block_instances_card_id_block_id"),
+        UniqueConstraint(
+            "card_id",
+            "block_id",
+            "ordinal",
+            name="uq_card_block_instances_card_id_block_id_ordinal",
+        ),
         Index("ix_card_block_instances_card_id", "card_id"),
         Index("ix_card_block_instances_block_id", "block_id"),
         Index("ix_card_block_instances_card_block", "card_id", "block_id"),

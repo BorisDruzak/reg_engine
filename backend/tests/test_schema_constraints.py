@@ -25,13 +25,12 @@ def test_important_unique_constraints_exist() -> None:
         "roles": {"uq_roles_code"},
         "permissions": {"uq_permissions_code"},
         "org_units": {"uq_org_units_organization_id_code"},
-        "access_grants": {"uq_access_grants_user_role_organization"},
         "registries": {"uq_registries_code"},
         "form_blocks": {"uq_form_blocks_registry_id_code"},
         "form_fields": {"uq_form_fields_block_id_code"},
         "reference_lists": {"uq_reference_lists_registry_owner_code"},
         "reference_items": {"uq_reference_items_list_id_code"},
-        "card_block_instances": {"uq_card_block_instances_card_id_block_id"},
+        "card_block_instances": {"uq_card_block_instances_card_id_block_id_ordinal"},
         "field_value_items": {"uq_field_value_items_value_item"},
         "card_relations": {"uq_card_relations_source_target_type"},
         "card_public_links": {"uq_card_public_links_token_hash"},
@@ -65,6 +64,7 @@ def test_important_indexes_exist() -> None:
         "reference_lists": {
             "ix_reference_lists_registry_id",
             "ix_reference_lists_owner_organization_id",
+            "uq_reference_lists_registry_owner_code_scope",
         },
         "reference_items": {"ix_reference_items_list_id", "ix_reference_items_parent_id"},
         "cards": {
@@ -92,6 +92,8 @@ def test_important_indexes_exist() -> None:
             "ix_audit_events_created_at",
         },
     }
+
+    expected_indexes["access_grants"].add("uq_access_grants_user_role_registry_organization_scope")
 
     for table_name, names in expected_indexes.items():
         assert names <= _index_names(table_name)
