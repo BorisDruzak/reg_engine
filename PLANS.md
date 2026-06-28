@@ -10,8 +10,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 
 - This document is the active plan for Phase 1 Core Schema v1.
 - Phase 1B through Phase 1J backend foundation, API hardening, bootstrap tooling, auth flow, and user/access management API is completed.
-- Current next checkpoint is **Phase 1K: Production Frontend Workflows**.
-- Phase 1K must not start until Phase 1J code is synchronized and verified on the server checkout.
+- Phase 1K Production Frontend Workflows is in progress.
+- Phase 1K.1 Authenticated Admin Shell is completed.
+- Current next checkpoint is **Phase 1K.2: Registry And Card Frontend Workflows**.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
 
@@ -29,7 +30,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1H Bootstrap And Seed is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1I Auth And Session Flow is completed and verified against disposable PostgreSQL database `reg_engine_test`.
 - Phase 1J User And Access Management API is completed and verified against disposable PostgreSQL database `reg_engine_test`.
-- Phase 1K Production Frontend Workflows is the next planned implementation phase.
+- Phase 1K.1 Authenticated Admin Shell is completed and verified locally.
+- Phase 1K.2 Registry And Card Frontend Workflows is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -37,6 +39,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1H did not require a database migration.
 - Phase 1I did not require a database migration.
 - Phase 1J did not require a database migration.
+- Phase 1K.1 did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -453,6 +456,41 @@ Known limitations after Phase 1J:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1J.
 
+### Phase 1K.1: Authenticated Admin Shell
+
+Status: completed.
+
+Delivered:
+
+- Login screen using `POST /api/v1/auth/login`.
+- Bearer session persistence in versioned local storage.
+- Authenticated app shell with sign-out.
+- Organization overview using `GET /api/v1/organizations`.
+- User, role, and permission views using Phase 1J endpoints.
+- Access grant table using `GET /api/v1/access-grants`.
+- Audit table using `GET /api/v1/audit-events`.
+- Responsive operational layout for desktop and mobile widths.
+- Frontend tests for unauthenticated login state and authenticated data rendering.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+pnpm -C frontend lint
+pnpm -C frontend typecheck
+pnpm -C frontend test:run
+pnpm -C frontend build
+```
+
+Known limitations after Phase 1K.1:
+
+- Registry list/schema frontend workflow is not implemented yet.
+- Card list/read/edit frontend workflow is not implemented yet.
+- Dynamic card form renderer is not implemented yet.
+- Public-link frontend edit page is not implemented yet.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1K.1.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -645,7 +683,7 @@ Acceptance criteria for Phase 1G:
 
 ## Planned Phases After Phase 1J
 
-The following phases must not start until Phase 1J is synchronized to GitHub/server and verified there.
+The following Phase 1K subphases must stay synchronized to GitHub/server after each verified checkpoint.
 
 ### Phase 1H: Bootstrap And Seed
 
@@ -702,6 +740,8 @@ Required work:
 
 Purpose: build the first usable web UI on top of the hardened API and auth/session flow.
 
+Status: in progress.
+
 Required work:
 
 - Login screen.
@@ -712,6 +752,17 @@ Required work:
 - Dynamic card form renderer for existing block/field schema.
 - Public-link edit page.
 - Audit list for allowed actors.
+
+Completed subphases:
+
+- Phase 1K.1 Authenticated Admin Shell.
+
+Remaining subphases:
+
+- Phase 1K.2 Registry and schema frontend workflows.
+- Phase 1K.3 Card list/read/edit shell and dynamic form renderer.
+- Phase 1K.4 Public-link edit page.
+- Phase 1K.5 Frontend browser/live validation pass.
 
 ### Phase 2: Documents
 
