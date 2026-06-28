@@ -33,6 +33,26 @@ import type {
   RoleRead,
   UserRead,
 } from "@/api/types";
+import {
+  activityLabel,
+  auditActionLabel,
+  auditObjectTypeLabel,
+  auditSourceLabel,
+  booleanLabel,
+  fieldTypeLabel,
+  formatUiDateTime,
+  grantScopeLabel,
+  instanceLabel,
+  lifecycleStatusLabel,
+  optionsSourceLabel,
+  organizationTypeLabel,
+  saveLabel,
+  savedLabel,
+  sectionLabel,
+  uiText,
+  visibleSections,
+  type VisibleSection,
+} from "@/app/uiText";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import {
   type FieldEditorState,
@@ -42,17 +62,6 @@ import {
 } from "@/features/cards/fieldEditorUtils";
 
 const SESSION_STORAGE_KEY = "reg_engine.session.v1";
-const visibleSections = [
-  "Overview",
-  "Organizations",
-  "Registries",
-  "Cards",
-  "Users",
-  "Access",
-  "Audit",
-] as const;
-
-type VisibleSection = (typeof visibleSections)[number];
 
 type SessionState = {
   token: string;
@@ -62,7 +71,7 @@ type SessionState = {
 export function HomePage() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SessionState | null>(() => loadSession());
-  const [activeSection, setActiveSection] = useState<VisibleSection>("Overview");
+  const [activeSection, setActiveSection] = useState<VisibleSection>("overview");
   const [selectedRegistryId, setSelectedRegistryId] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
@@ -128,10 +137,10 @@ export function HomePage() {
   const currentUser = currentUserQuery.data ?? session?.user ?? null;
   const metrics = useMemo(
     () => [
-      { label: "Organizations", value: organizationsQuery.data?.items.length ?? 0 },
-      { label: "Registries", value: registriesQuery.data?.items.length ?? 0 },
-      { label: "Cards", value: cardsQuery.data?.items.length ?? 0 },
-      { label: "Users", value: usersQuery.data?.items.length ?? 0 },
+      { label: uiText.organizations, value: organizationsQuery.data?.items.length ?? 0 },
+      { label: uiText.registries, value: registriesQuery.data?.items.length ?? 0 },
+      { label: uiText.cards, value: cardsQuery.data?.items.length ?? 0 },
+      { label: uiText.users, value: usersQuery.data?.items.length ?? 0 },
     ],
     [
       cardsQuery.data?.items.length,
@@ -150,7 +159,7 @@ export function HomePage() {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     queryClient.clear();
     setSession(null);
-    setActiveSection("Overview");
+    setActiveSection("overview");
     setSelectedRegistryId(null);
     setSelectedCardId(null);
   }
@@ -161,23 +170,23 @@ export function HomePage() {
 
   return (
     <main className="workspace-shell">
-      <aside className="workspace-sidebar" aria-label="Primary">
+      <aside className="workspace-sidebar" aria-label={uiText.primaryNavigation}>
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>Registry Engine</h1>
-            <span>Core Schema v1</span>
+            <span>{uiText.brandSubtitle}</span>
           </div>
         </div>
         <nav className="workspace-nav">
           {visibleSections.map((section) => (
             <button
               type="button"
-              key={section}
-              className={section === activeSection ? "nav-item is-active" : "nav-item"}
-              onClick={() => setActiveSection(section)}
+              key={section.id}
+              className={section.id === activeSection ? "nav-item is-active" : "nav-item"}
+              onClick={() => setActiveSection(section.id)}
             >
-              {section}
+              {section.label}
             </button>
           ))}
         </nav>
@@ -186,16 +195,16 @@ export function HomePage() {
       <section className="workspace-main">
         <header className="workspace-topbar">
           <div>
-            <p className="section-kicker">Admin workspace</p>
-            <h2>{activeSection}</h2>
+            <p className="section-kicker">{uiText.adminWorkspace}</p>
+            <h2>{sectionLabel(activeSection)}</h2>
           </div>
           <div className="account-strip">
             <div>
-              <strong>{currentUser?.display_name ?? "Signed in"}</strong>
+              <strong>{currentUser?.display_name ?? uiText.signedIn}</strong>
               <span>{currentUser?.email}</span>
             </div>
             <button type="button" className="ghost-button" onClick={handleLogout}>
-              Sign out
+              {uiText.signOut}
             </button>
           </div>
         </header>
@@ -216,7 +225,7 @@ export function HomePage() {
           ].find(Boolean)}
         />
 
-        {activeSection === "Overview" && (
+        {activeSection === "overview" && (
           <Overview
             metrics={metrics}
             organizations={organizationsQuery.data?.items ?? []}
@@ -224,10 +233,10 @@ export function HomePage() {
             auditEvents={auditQuery.data?.items ?? []}
           />
         )}
-        {activeSection === "Organizations" && (
+        {activeSection === "organizations" && (
           <OrganizationsTable organizations={organizationsQuery.data?.items ?? []} />
         )}
-        {activeSection === "Registries" && (
+        {activeSection === "registries" && (
           <RegistriesAndSchema
             registries={registriesQuery.data?.items ?? []}
             schema={registrySchemaQuery.data ?? null}
@@ -238,7 +247,7 @@ export function HomePage() {
             }}
           />
         )}
-        {activeSection === "Cards" && (
+        {activeSection === "cards" && (
           <CardsWorkspace
             cards={cardsQuery.data?.items ?? []}
             card={cardReadQuery.data ?? null}
@@ -249,14 +258,14 @@ export function HomePage() {
             onSelectCard={setSelectedCardId}
           />
         )}
-        {activeSection === "Users" && (
+        {activeSection === "users" && (
           <UsersAndRoles
             users={usersQuery.data?.items ?? []}
             roles={rolesQuery.data?.items ?? []}
             permissions={permissionsQuery.data?.items ?? []}
           />
         )}
-        {activeSection === "Access" && (
+        {activeSection === "access" && (
           <AccessGrantsTable
             grants={grantsQuery.data?.items ?? []}
             users={usersQuery.data?.items ?? []}
@@ -264,7 +273,7 @@ export function HomePage() {
             organizations={organizationsQuery.data?.items ?? []}
           />
         )}
-        {activeSection === "Audit" && <AuditTable auditEvents={auditQuery.data?.items ?? []} />}
+        {activeSection === "audit" && <AuditTable auditEvents={auditQuery.data?.items ?? []} />}
       </section>
     </main>
   );
@@ -292,12 +301,12 @@ function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => void }) 
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>Registry Engine</h1>
-            <span>Admin workspace</span>
+            <span>{uiText.adminWorkspace}</span>
           </div>
         </div>
         <form className="login-form" onSubmit={handleSubmit}>
           <label>
-            Email
+            {uiText.email}
             <input
               autoComplete="email"
               name="email"
@@ -308,7 +317,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => void }) 
             />
           </label>
           <label>
-            Password
+            {uiText.password}
             <input
               autoComplete="current-password"
               name="password"
@@ -320,7 +329,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => void }) 
           </label>
           {loginMutation.error && <p className="form-error">{errorText(loginMutation.error)}</p>}
           <button type="submit" className="primary-button" disabled={loginMutation.isPending}>
-            {loginMutation.isPending ? "Signing in" : "Sign in"}
+            {loginMutation.isPending ? uiText.signingIn : uiText.signIn}
           </button>
         </form>
       </section>
@@ -341,7 +350,7 @@ function Overview({
 }) {
   return (
     <div className="stack">
-      <section className="summary-grid" aria-label="Summary">
+      <section className="summary-grid" aria-label={uiText.summary}>
         {metrics.map((metric) => (
           <div className="metric-card" key={metric.label}>
             <span>{metric.label}</span>
@@ -350,7 +359,7 @@ function Overview({
         ))}
       </section>
       <div className="split-grid">
-        <Panel title="Organizations">
+        <Panel title={uiText.organizations}>
           <CompactList
             items={organizations.slice(0, 5).map((item) => ({
               id: item.id,
@@ -359,7 +368,7 @@ function Overview({
             }))}
           />
         </Panel>
-        <Panel title="Users">
+        <Panel title={uiText.users}>
           <CompactList
             items={users.slice(0, 5).map((item) => ({
               id: item.id,
@@ -376,15 +385,15 @@ function Overview({
 
 function OrganizationsTable({ organizations }: { organizations: OrganizationRead[] }) {
   return (
-    <Panel title="Organizations">
+    <Panel title={uiText.organizations}>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Code</th>
-              <th>Type</th>
-              <th>Status</th>
+              <th>{uiText.organizationName}</th>
+              <th>{uiText.code}</th>
+              <th>{uiText.type}</th>
+              <th>{uiText.status}</th>
             </tr>
           </thead>
           <tbody>
@@ -392,8 +401,8 @@ function OrganizationsTable({ organizations }: { organizations: OrganizationRead
               <tr key={organization.id}>
                 <td>{organization.name}</td>
                 <td>{organization.code}</td>
-                <td>{organization.type}</td>
-                <td>{organization.is_active ? "active" : "inactive"}</td>
+                <td>{organizationTypeLabel(organization.type)}</td>
+                <td>{activityLabel(organization.is_active)}</td>
               </tr>
             ))}
           </tbody>
@@ -422,22 +431,24 @@ function RegistriesAndSchema({
   return (
     <div className="stack">
       <div className="split-grid">
-        <Panel title="Registries">
+        <Panel title={uiText.registries}>
           <SelectableList
             items={registries.map((registry) => ({
               id: registry.id,
               title: registry.name,
-              detail: `${registry.code} / v${registry.schema_version} / ${registry.lifecycle_status}`,
+              detail: `${registry.code} / v${registry.schema_version} / ${lifecycleStatusLabel(
+                registry.lifecycle_status,
+              )}`,
             }))}
             selectedId={selectedRegistryId}
             onSelect={onSelectRegistry}
           />
         </Panel>
-        <Panel title="Schema blocks">
+        <Panel title={uiText.schemaBlocks}>
           <BlocksTable blocks={schema?.blocks ?? []} />
         </Panel>
       </div>
-      <Panel title="Schema fields">
+      <Panel title={uiText.schemaFields}>
         <FieldsTable fields={schema?.fields ?? []} blocksById={blocksById} />
       </Panel>
     </div>
@@ -450,10 +461,10 @@ function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
       <table>
         <thead>
           <tr>
-            <th>Title</th>
-            <th>Code</th>
-            <th>Repeatable</th>
-            <th>Status</th>
+            <th>{uiText.title}</th>
+            <th>{uiText.code}</th>
+            <th>{uiText.repeatable}</th>
+            <th>{uiText.status}</th>
           </tr>
         </thead>
         <tbody>
@@ -461,8 +472,8 @@ function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
             <tr key={block.id}>
               <td>{block.title}</td>
               <td>{block.code}</td>
-              <td>{block.is_repeatable ? "yes" : "no"}</td>
-              <td>{block.is_active ? "active" : "inactive"}</td>
+              <td>{booleanLabel(block.is_repeatable)}</td>
+              <td>{activityLabel(block.is_active)}</td>
             </tr>
           ))}
         </tbody>
@@ -483,11 +494,11 @@ function FieldsTable({
       <table>
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Code</th>
-            <th>Block</th>
-            <th>Type</th>
-            <th>Options</th>
+            <th>{uiText.field}</th>
+            <th>{uiText.code}</th>
+            <th>{uiText.block}</th>
+            <th>{uiText.type}</th>
+            <th>{uiText.options}</th>
           </tr>
         </thead>
         <tbody>
@@ -496,8 +507,8 @@ function FieldsTable({
               <td>{field.label}</td>
               <td>{field.code}</td>
               <td>{blocksById.get(field.block_id)?.title ?? shortId(field.block_id)}</td>
-              <td>{field.field_type}</td>
-              <td>{field.options_source_type ?? "none"}</td>
+              <td>{fieldTypeLabel(field.field_type)}</td>
+              <td>{optionsSourceLabel(field.options_source_type)}</td>
             </tr>
           ))}
         </tbody>
@@ -532,20 +543,20 @@ function CardsWorkspace({
   return (
     <div className="stack">
       <div className="split-grid">
-        <Panel title="Cards">
+        <Panel title={uiText.cards}>
           <SelectableList
             items={cards.map((item) => ({
               id: item.id,
               title: item.display_name,
-              detail: `${organizationsById.get(item.organization_id)?.name ?? shortId(item.organization_id)} / ${
-                item.lifecycle_status
-              }`,
+              detail: `${organizationsById.get(item.organization_id)?.name ?? shortId(item.organization_id)} / ${lifecycleStatusLabel(
+                item.lifecycle_status,
+              )}`,
             }))}
             selectedId={selectedCardId}
             onSelect={onSelectCard}
           />
         </Panel>
-        <Panel title="Card fields">
+        <Panel title={uiText.cardFields}>
           <div className="field-editor-list">
             {card &&
               fieldRows.map((field) => (
@@ -620,9 +631,11 @@ function CardFieldEditor({
       <div className="field-editor-meta">
         <strong>{field.label}</strong>
         <span>
-          {field.blockLabel} / {field.instanceLabel} / {field.field.field_type}
+          {field.blockLabel} / {field.instanceLabel} / {fieldTypeLabel(field.field.field_type)}
         </span>
-        <span>Current: {formatValue(field.field.value)}</span>
+        <span>
+          {uiText.currentValue}: {formatValue(field.field.value)}
+        </span>
       </div>
       <label className="field-editor-control">
         <span>{field.label}</span>
@@ -635,12 +648,12 @@ function CardFieldEditor({
         />
       </label>
       <button type="submit" className="primary-button" disabled={mutation.isPending}>
-        Save {field.label}
+        {saveLabel(field.label)}
       </button>
       {(localError || mutation.error) && (
         <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
       )}
-      {saved && <p className="inline-success">Saved {field.label}</p>}
+      {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
 }
@@ -656,15 +669,15 @@ function UsersAndRoles({
 }) {
   return (
     <div className="stack">
-      <Panel title="Users">
+      <Panel title={uiText.users}>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th>Superuser</th>
+                <th>{uiText.displayName}</th>
+                <th>{uiText.email}</th>
+                <th>{uiText.status}</th>
+                <th>{uiText.superuser}</th>
               </tr>
             </thead>
             <tbody>
@@ -672,8 +685,8 @@ function UsersAndRoles({
                 <tr key={user.id}>
                   <td>{user.display_name}</td>
                   <td>{user.email}</td>
-                  <td>{user.status}</td>
-                  <td>{user.is_superuser ? "yes" : "no"}</td>
+                  <td>{lifecycleStatusLabel(user.status)}</td>
+                  <td>{booleanLabel(user.is_superuser)}</td>
                 </tr>
               ))}
             </tbody>
@@ -681,7 +694,7 @@ function UsersAndRoles({
         </div>
       </Panel>
       <div className="split-grid">
-        <Panel title="Roles">
+        <Panel title={uiText.roles}>
           <CompactList
             items={roles.map((role) => ({
               id: role.id,
@@ -690,7 +703,7 @@ function UsersAndRoles({
             }))}
           />
         </Panel>
-        <Panel title="Permissions">
+        <Panel title={uiText.permissions}>
           <CompactList
             items={permissions.map((permission) => ({
               id: permission.id,
@@ -723,15 +736,15 @@ function AccessGrantsTable({
   );
 
   return (
-    <Panel title="Access grants">
+    <Panel title={uiText.accessGrants}>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>User</th>
-              <th>Role</th>
-              <th>Organization</th>
-              <th>Scope</th>
+              <th>{uiText.user}</th>
+              <th>{uiText.role}</th>
+              <th>{uiText.organization}</th>
+              <th>{uiText.scope}</th>
             </tr>
           </thead>
           <tbody>
@@ -743,9 +756,9 @@ function AccessGrantsTable({
                   {grant.organization_id
                     ? (organizationsById.get(grant.organization_id)?.name ??
                       shortId(grant.organization_id))
-                    : "global"}
+                    : uiText.global}
                 </td>
-                <td>{grant.include_descendants ? "descendants" : "exact"}</td>
+                <td>{grantScopeLabel(grant.include_descendants)}</td>
               </tr>
             ))}
           </tbody>
@@ -757,23 +770,23 @@ function AccessGrantsTable({
 
 function AuditTable({ auditEvents }: { auditEvents: AuditEventRead[] }) {
   return (
-    <Panel title="Audit">
+    <Panel title={uiText.audit}>
       <div className="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Action</th>
-              <th>Object</th>
-              <th>Source</th>
-              <th>Time</th>
+              <th>{uiText.action}</th>
+              <th>{uiText.object}</th>
+              <th>{uiText.source}</th>
+              <th>{uiText.time}</th>
             </tr>
           </thead>
           <tbody>
             {auditEvents.map((event) => (
               <tr key={event.id}>
-                <td>{event.action}</td>
-                <td>{event.object_type}</td>
-                <td>{event.source}</td>
+                <td>{auditActionLabel(event.action)}</td>
+                <td>{auditObjectTypeLabel(event.object_type)}</td>
+                <td>{auditSourceLabel(event.source)}</td>
                 <td>{formatDate(event.created_at)}</td>
               </tr>
             ))}
@@ -869,7 +882,7 @@ function errorText(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-  return "Request failed";
+  return uiText.requestFailed;
 }
 
 function buildEditableCardFields(
@@ -891,7 +904,7 @@ function buildEditableCardFields(
         return {
           key: `${card.id}:${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
           blockLabel: blockSchema?.title ?? block.code,
-          instanceLabel: `instance ${instance.ordinal + 1}`,
+          instanceLabel: instanceLabel(instance.ordinal),
           label: fieldSchema?.label ?? field.code,
           field,
           schema: fieldSchema,
@@ -907,10 +920,5 @@ function shortId(value: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatUiDateTime(value);
 }

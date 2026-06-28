@@ -16,6 +16,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.3 Dynamic Card Form Editing is completed.
 - Phase 1K.4 Public-Link Edit Page is completed.
 - Phase 1K.5 Frontend Browser/Live Validation Pass is completed.
+- Phase 1K.6 Russian UI Localization is completed.
 - Phase 1 Core Schema v1 frontend foundation is complete; later phases require an explicit request before implementation.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 - Do not add service desk integration or MDB migration until explicitly requested.
@@ -39,6 +40,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.3 Dynamic Card Form Editing is completed and verified locally.
 - Phase 1K.4 Public-Link Edit Page is completed and verified locally.
 - Phase 1K.5 Frontend Browser/Live Validation Pass is completed and verified locally.
+- Phase 1K.6 Russian UI Localization is completed and verified locally.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -51,6 +53,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1K.3 did not require a database migration.
 - Phase 1K.4 did not require a database migration.
 - Phase 1K.5 did not require a database migration.
+- Phase 1K.6 did not require a database migration.
 - Production backup before `0004`: `/var/backups/reg_engine/reg_engine_before_0004_20260628_085627.dump`, sha256 `60cee20a0343bdc96df6d0c7e247bd95789861f0277935eca6cbcf4f5a7fa288`.
 - Production live schema compare against SQLAlchemy metadata passed after `0004`: 20/20 Core Schema v1 tables exist, no missing columns, no missing unique/check constraints, no missing indexes, no `employees` table, new scope-aware indexes exist, and obsolete constraints were removed.
 
@@ -653,6 +656,50 @@ Known limitations after Phase 1K.5:
 - No import/export, documents, MCP, MDB migration, or service desk integration has been added.
 - No database migration was required for Phase 1K.5.
 
+### Phase 1K.6: Russian UI Localization
+
+Status: completed.
+
+Delivered:
+
+- Russian-first UI text for the login screen, admin shell, navigation, panels, tables, field editors, validation messages, audit display, and public-link edit page.
+- Shared frontend UI text module for reusable labels and enum display names.
+- Required navigation labels: `Обзор`, `Организации`, `Реестры`, `Карточки`, `Пользователи`, `Доступ`, `Аудит`.
+- Common UI actions: `Войти`, `Выйти`, `Сохранить`, `Сохранено`.
+- UI language rules recorded in `AGENTS.md`.
+- Existing API-provided names, field labels, registry names, permission codes, role codes, and user-entered values remain in their stored language.
+- No database schema changes and no production database writes.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+pnpm -C frontend test:run -- App.test.tsx
+pnpm -C frontend e2e
+pnpm -C frontend lint
+pnpm -C frontend typecheck
+pnpm -C frontend format:check
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+```
+
+Browser flow verified against local Vite plus mock API:
+
+- Login renders Russian labels `Электронная почта`, `Пароль`, and `Войти`.
+- Authenticated admin navigation renders the required Russian labels.
+- Card field saves render `Сохранено: <field label>`.
+- Audit action/object/source display names render in Russian where known.
+- Public-link edit page renders Russian public edit, expiry, current value, save, and saved labels.
+- Desktop and mobile probes showed no horizontal overflow.
+- Browser console warnings/errors were empty after validation.
+
+Known limitations after Phase 1K.6:
+
+- Product/brand name `Registry Engine` remains unchanged.
+- API-provided schema labels and existing data can remain non-Russian until the data itself is edited.
+- No production frontend hosting/service has been created yet.
+- No import/export, documents, MCP, MDB migration, or service desk integration has been added.
+- No database migration was required for Phase 1K.6.
+
 ## Phase 1G: Current API/Service Bugfix And Hardening
 
 Purpose: fix the current API/service correctness and security gaps before adding new product capabilities.
@@ -922,6 +969,7 @@ Completed subphases:
 - Phase 1K.3 Dynamic card form renderer and card field editing.
 - Phase 1K.4 Public-link edit page.
 - Phase 1K.5 Frontend browser/live validation pass.
+- Phase 1K.6 Russian UI localization.
 
 Remaining subphases:
 

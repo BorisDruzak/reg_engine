@@ -298,33 +298,33 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Registry Engine" })).toBeVisible();
-  await page.getByLabel("Email").fill("admin@example.test");
-  await page.getByLabel("Password").fill("secret-pass");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("Электронная почта").fill("admin@example.test");
+  await page.getByLabel("Пароль").fill("secret-pass");
+  await page.getByRole("button", { name: "Войти" }).click();
 
   await expect(page.getByText("System Admin").first()).toBeVisible();
   await expect(page.getByText("Root Org")).toBeVisible();
 
-  await page.getByRole("button", { name: "Users" }).click();
+  await page.getByRole("button", { name: "Пользователи" }).click();
   await expect(page.getByText("users.manage")).toBeVisible();
   await expect(page.getByText("system_admin")).toBeVisible();
 
-  await page.getByRole("button", { name: "Registries" }).click();
+  await page.getByRole("button", { name: "Реестры" }).click();
   await expect(page.getByText("Asset Registry")).toBeVisible();
   await expect(page.getByText("Status Field")).toBeVisible();
 
-  await page.getByRole("button", { name: "Cards" }).click();
+  await page.getByRole("button", { name: "Карточки" }).click();
   await expect(page.getByText("Asset Card")).toBeVisible();
   await expect(page.getByLabel("Status Field")).toHaveValue("drafted");
   await page.getByLabel("Status Field").fill("published");
-  await page.getByRole("button", { name: "Save Status Field" }).click();
-  await expect(page.getByText("Saved Status Field")).toBeVisible();
+  await page.getByRole("button", { name: "Сохранить Status Field" }).click();
+  await expect(page.getByText("Сохранено: Status Field")).toBeVisible();
   await page.getByLabel("Approved Field").check();
-  await page.getByRole("button", { name: "Save Approved Field" }).click();
-  await expect(page.getByText("Saved Approved Field")).toBeVisible();
+  await page.getByRole("button", { name: "Сохранить Approved Field" }).click();
+  await expect(page.getByText("Сохранено: Approved Field")).toBeVisible();
 
-  await page.getByRole("button", { name: "Audit" }).click();
-  await expect(page.getByText("create")).toBeVisible();
+  await page.getByRole("button", { name: "Аудит" }).click();
+  await expect(page.getByText("Создание")).toBeVisible();
 });
 
 test("renders public-link edit page and saves a field", async ({ page }) => {
@@ -372,12 +372,13 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
   await page.goto("/public/edit/public-token");
   await expect(page.getByRole("heading", { name: "Public Link Card" })).toBeVisible();
   await expect(page.getByText("Public Block")).toBeVisible();
+  await expect(page.getByText("Публичное редактирование карточки")).toBeVisible();
   await expect(page.getByLabel("Public Status")).toHaveValue("drafted");
 
   await page.getByLabel("Public Status").fill("submitted");
-  await page.getByRole("button", { name: "Save Public Status" }).click();
+  await page.getByRole("button", { name: "Сохранить Public Status" }).click();
 
-  await expect(page.getByText("Saved Public Status")).toBeVisible();
+  await expect(page.getByText("Сохранено: Public Status")).toBeVisible();
   expect(editRequestBody).toEqual({
     raw_token: "public-token",
     field_id: "99999999-9999-4999-8999-999999999997",

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 17:56:40 +05:00
+- Generated: 2026-06-28 18:20:18 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -127,6 +127,7 @@
 - `frontend/src/App.tsx`
 - `frontend/src/app/AppProviders.tsx`
 - `frontend/src/app/router.tsx`
+- `frontend/src/app/uiText.ts`
 - `frontend/src/components/common/.gitkeep`
 - `frontend/src/components/layout/.gitkeep`
 - `frontend/src/features/cards/.gitkeep`

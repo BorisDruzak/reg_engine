@@ -1,3 +1,5 @@
+import { booleanLabel, uiText } from "@/app/uiText";
+
 export type FieldEditorState = string | boolean | string[];
 
 export type EditableFieldValue = {
@@ -38,21 +40,21 @@ export function coerceEditorValue(fieldType: string, value: FieldEditorState): u
   }
   if (fieldType === "json") {
     if (typeof value !== "string") {
-      throw new Error("JSON fields require an object value.");
+      throw new Error(uiText.jsonObjectRequired);
     }
     const parsed = JSON.parse(value) as unknown;
     if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
-      throw new Error("JSON fields require an object value.");
+      throw new Error(uiText.jsonObjectRequired);
     }
     return parsed;
   }
   if (fieldType === "number") {
     if (typeof value !== "string" || value.trim() === "") {
-      throw new Error("Number fields require a numeric value.");
+      throw new Error(uiText.numberRequired);
     }
     const numberValue = Number(value);
     if (!Number.isFinite(numberValue)) {
-      throw new Error("Number fields require a numeric value.");
+      throw new Error(uiText.numberRequired);
     }
     return numberValue;
   }
@@ -74,13 +76,16 @@ export function inputTypeForField(fieldType: string) {
 
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === "") {
-    return "empty";
+    return uiText.empty;
   }
   if (Array.isArray(value)) {
     return value.map(formatValue).join(", ");
   }
   if (typeof value === "object") {
     return JSON.stringify(value);
+  }
+  if (typeof value === "boolean") {
+    return booleanLabel(value);
   }
   return String(value);
 }

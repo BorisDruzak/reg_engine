@@ -4,6 +4,14 @@ import { useParams } from "react-router-dom";
 
 import { ApiError, readPublicLinkPreview, updatePublicLinkFieldValue } from "@/api/client";
 import type { PublicLinkPreviewFieldRead } from "@/api/types";
+import {
+  fieldTypeLabel,
+  formatUiDateTime,
+  instanceLabel,
+  saveLabel,
+  savedLabel,
+  uiText,
+} from "@/app/uiText";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import {
   type FieldEditorState,
@@ -27,28 +35,30 @@ export function PublicLinkEditPage() {
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>Registry Engine</h1>
-            <span>Public card edit</span>
+            <span>{uiText.publicCardEdit}</span>
           </div>
         </div>
       </header>
 
       <section className="public-main">
-        {!rawToken && <p className="data-alert">Public link token is missing.</p>}
+        {!rawToken && <p className="data-alert">{uiText.publicTokenMissing}</p>}
         {previewQuery.error && <p className="data-alert">{errorText(previewQuery.error)}</p>}
-        {previewQuery.isLoading && <p className="public-muted">Loading card</p>}
+        {previewQuery.isLoading && <p className="public-muted">{uiText.loadingCard}</p>}
 
         {previewQuery.data && (
           <div className="stack">
             <header className="public-title">
               <div>
-                <p className="section-kicker">Public edit</p>
+                <p className="section-kicker">{uiText.publicEdit}</p>
                 <h2>{previewQuery.data.display_name}</h2>
               </div>
-              <span>Expires {formatDateTime(previewQuery.data.expires_at)}</span>
+              <span>
+                {uiText.expires} {formatUiDateTime(previewQuery.data.expires_at)}
+              </span>
             </header>
 
             {previewQuery.data.blocks.length === 0 ? (
-              <p className="data-alert">This public link has no editable fields.</p>
+              <p className="data-alert">{uiText.noEditablePublicFields}</p>
             ) : (
               previewQuery.data.blocks.map((block) => (
                 <section className="data-panel" key={block.block_id}>
@@ -122,9 +132,11 @@ function PublicFieldEditor({
       <div className="field-editor-meta">
         <strong>{field.label}</strong>
         <span>
-          instance {instanceOrdinal + 1} / {field.field_type}
+          {instanceLabel(instanceOrdinal)} / {fieldTypeLabel(field.field_type)}
         </span>
-        <span>Current: {formatValue(field.value)}</span>
+        <span>
+          {uiText.currentValue}: {formatValue(field.value)}
+        </span>
       </div>
       <label className="field-editor-control">
         <span>{field.label}</span>
@@ -137,12 +149,12 @@ function PublicFieldEditor({
         />
       </label>
       <button type="submit" className="primary-button" disabled={mutation.isPending}>
-        Save {field.label}
+        {saveLabel(field.label)}
       </button>
       {(localError || mutation.error) && (
         <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
       )}
-      {saved && <p className="inline-success">Saved {field.label}</p>}
+      {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
 }
@@ -154,14 +166,5 @@ function errorText(error: unknown) {
   if (error instanceof Error) {
     return error.message;
   }
-  return "Request failed";
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return uiText.requestFailed;
 }

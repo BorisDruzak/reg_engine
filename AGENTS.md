@@ -49,6 +49,24 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 
 ---
 
+## UI Language Rules
+
+- User-facing UI chrome must be Russian-first.
+- Navigation labels must use these Russian names:
+  - `Обзор`
+  - `Организации`
+  - `Реестры`
+  - `Карточки`
+  - `Пользователи`
+  - `Доступ`
+  - `Аудит`
+- Common UI actions must use Russian labels, for example `Войти`, `Выйти`, `Сохранить`, `Сохранено`.
+- Tables, panels, empty states, loading states, validation messages, and public-link screens must use Russian text.
+- Technical identifiers, permission codes, role codes, field codes, registry codes, API-provided names, and user-entered data may remain in their stored language.
+- Do not hardcode business-specific Russian labels that imply a fixed HR/employee registry. Keep labels generic and schema-driven.
+
+---
+
 ## Phase 1 Scope
 
 Implement gradually:

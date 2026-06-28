@@ -1,3 +1,5 @@
+import { uiText } from "@/app/uiText";
+
 import type { FieldEditorOption, FieldEditorState } from "./fieldEditorUtils";
 import { inputTypeForField } from "./fieldEditorUtils";
 
@@ -61,7 +63,7 @@ export function FieldEditorControl({
         onChange={(event) => onChange(event.currentTarget.value)}
         value={typeof value === "string" ? value : ""}
       >
-        <option value="">empty</option>
+        <option value="">{uiText.empty}</option>
         {options.map((item) => (
           <option key={item.id} value={item.id}>
             {item.label}

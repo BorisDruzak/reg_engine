@@ -439,43 +439,46 @@ test("renders login screen before authentication", () => {
   render(<App />);
 
   expect(screen.getByRole("heading", { name: "Registry Engine" })).toBeInTheDocument();
-  expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-  expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/электронная почта/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/пароль/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
 });
 
 test("logs in and renders authenticated admin workspace", async () => {
   const user = userEvent.setup();
   render(<App />);
 
-  await user.type(screen.getByLabelText(/email/i), "admin@example.test");
-  await user.type(screen.getByLabelText(/password/i), "secret-pass");
-  await user.click(screen.getByRole("button", { name: /sign in/i }));
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
 
   expect(await screen.findByText("System Admin")).toBeInTheDocument();
   expect(await screen.findByText("Root Org")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Users" }));
+  expect(screen.getByText("Панель администратора")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Пользователи" }));
   expect(screen.getByText("users.manage")).toBeInTheDocument();
   expect(screen.getByText("system_admin")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Registries" }));
+  await user.click(screen.getByRole("button", { name: "Реестры" }));
   expect(await screen.findByText("Asset Registry")).toBeInTheDocument();
   expect(screen.getAllByText("Main Block").length).toBeGreaterThan(0);
   expect(screen.getByText("Status Field")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Cards" }));
+  await user.click(screen.getByRole("button", { name: "Карточки" }));
   expect(await screen.findByText("Asset Card")).toBeInTheDocument();
   expect(screen.getByDisplayValue("drafted")).toBeInTheDocument();
   const statusInput = await screen.findByLabelText("Status Field");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(screen.getByRole("button", { name: "Save Status Field" }));
-  expect(await screen.findByText("Saved Status Field")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сохранить Status Field" }));
+  expect(await screen.findByText("Сохранено: Status Field")).toBeInTheDocument();
 
   const approvedInput = await screen.findByLabelText("Approved Field");
   await user.click(approvedInput);
-  await user.click(screen.getByRole("button", { name: "Save Approved Field" }));
-  expect(await screen.findByText("Saved Approved Field")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сохранить Approved Field" }));
+  expect(await screen.findByText("Сохранено: Approved Field")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Audit" }));
-  expect(screen.getByText("create")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Аудит" }));
+  expect(screen.getByText("Создание")).toBeInTheDocument();
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -529,14 +532,15 @@ test("edits a public-link card without authentication", async () => {
 
   expect(await screen.findByRole("heading", { name: "Public Link Card" })).toBeInTheDocument();
   expect(screen.getByText("Public Block")).toBeInTheDocument();
+  expect(screen.getByText("Публичное редактирование карточки")).toBeInTheDocument();
 
   const statusInput = await screen.findByLabelText("Public Status");
   expect(statusInput).toHaveValue("drafted");
   await user.clear(statusInput);
   await user.type(statusInput, "submitted");
-  await user.click(screen.getByRole("button", { name: "Save Public Status" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить Public Status" }));
 
-  expect(await screen.findByText("Saved Public Status")).toBeInTheDocument();
+  expect(await screen.findByText("Сохранено: Public Status")).toBeInTheDocument();
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
     expect(

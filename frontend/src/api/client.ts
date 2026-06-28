@@ -15,6 +15,7 @@ import type {
   RoleListRead,
   UserListRead,
 } from "./types";
+import { uiText } from "../app/uiText";
 
 export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -155,8 +156,8 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}) {
 async function errorMessage(response: Response) {
   try {
     const body = (await response.json()) as { detail?: string };
-    return body.detail ?? `Request failed with status ${response.status}`;
+    return body.detail ?? `${uiText.requestFailed}: ${response.status}`;
   } catch {
-    return `Request failed with status ${response.status}`;
+    return `${uiText.requestFailed}: ${response.status}`;
   }
 }
