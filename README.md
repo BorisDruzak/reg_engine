@@ -242,6 +242,8 @@ DELETE /api/v1/attachments/{attachment_id}
 
 Upload uses multipart form data with `file` and optional `title` / `description`. Backend access checks follow card scope: create/archive require editable card access, and metadata/download require readable card access. Public links intentionally have no attachment upload or download endpoints in this slice.
 
+`scripts/server-check.ps1` verifies the configured attachment storage backend and confirms that `REG_ENGINE_STORAGE_ROOT` exists outside the Git checkout.
+
 Architecture references:
 
 - `docs/ADR/0004-phase-2-documents-scope.md`

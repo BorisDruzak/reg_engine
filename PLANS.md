@@ -460,6 +460,7 @@ Verification:
 - Runtime dependency sync installed `python-multipart` on the server backend environment.
 - Production migration `0005_attachments` completed after fresh backup and preflight verified production was at `0004_core_service_hardening` and did not yet have `stored_files` / `card_attachments`.
 - Production post-checks verified Alembic head `0005_attachments`, both attachment tables, and registered attachment API paths.
+- Runtime attachment storage is configured outside Git, and `scripts/server-check.ps1` now verifies storage backend/root readiness.
 
 ### Phase 2C: Generated Document Templates
 
