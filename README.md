@@ -188,6 +188,14 @@ $env:AUTH_ACCESS_TOKEN_MINUTES = "480"
 
 `APP_ENV=production`, `APP_ENV=prod`, `APP_ENV=staging`, and `APP_ENV=stage` are treated as production-like runtimes. Production-like app startup rejects the built-in development `AUTH_TOKEN_SECRET`; set a deployment-specific secret outside Git through the environment or `REG_ENGINE_ENV_FILE`.
 
+Browser frontend deployments that call the API from another origin must explicitly configure allowed origins:
+
+```powershell
+$env:CORS_ALLOWED_ORIGINS = "http://127.0.0.1:5173,https://registry.example.test"
+```
+
+Leave `CORS_ALLOWED_ORIGINS` empty when the frontend and API are served from the same origin. Do not use wildcard origins for authenticated deployments.
+
 Auth API:
 
 ```powershell

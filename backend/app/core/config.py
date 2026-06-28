@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     allow_dev_actor_header: bool = False
     auth_token_secret: str = DEVELOPMENT_AUTH_TOKEN_SECRET
     auth_access_token_minutes: int = 480
+    cors_allowed_origins: str = ""
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
@@ -43,3 +44,7 @@ def validate_runtime_configuration(settings: Settings) -> None:
             "AUTH_TOKEN_SECRET must be set to a non-development value when APP_ENV is "
             f"production-like ({settings.app_env})."
         )
+
+
+def get_cors_allowed_origins(settings: Settings) -> list[str]:
+    return [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
