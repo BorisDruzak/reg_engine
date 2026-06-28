@@ -9,9 +9,9 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 ## Current Planning Scope
 
 - This document is the active plan for Phase 1 Core Schema v1.
-- Current checkpoint scope is Phase 1E.1 Core Service Hardening Before API.
-- Phase 1B through Phase 1E service-layer work is completed and synchronized.
-- Phase 1E.1 hardens the existing service layer before any REST API work.
+- Current checkpoint scope is Phase 1F REST API Foundation And Service Wiring.
+- Phase 1B through Phase 1F backend foundation work is completed and synchronized.
+- Phase 1F exposes the hardened service layer through REST API endpoints.
 - Do not implement frontend, auth flow, import/export, documents, or MCP in the next checkpoint.
 - Core Schema v1 must remain generic and schema-driven. Do not add fixed HR/business fields.
 
@@ -25,7 +25,8 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
 - Phase 1E.1 Core Service Hardening Before API is completed and verified against server test database `reg_engine_test`.
-- Phase 1F REST API Foundation And Service Wiring is the next planned implementation phase.
+- Phase 1F REST API Foundation And Service Wiring is completed and verified against server test database `reg_engine_test`.
+- The next phase is not detailed enough for implementation yet; define Phase 1G before adding auth flow, frontend workflows, import/export, documents, or MCP.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
 - Production PostgreSQL schema migration is completed through `0004_core_service_hardening`.
@@ -551,11 +552,11 @@ sudo -u postgres env DATABASE_URL='postgresql+psycopg:///reg_engine' .venv/bin/p
 
 Result: production `alembic_version` is `0004_core_service_hardening`; post-migration schema compare passed.
 
-Known limitations:
+Known limitations at Phase 1E.1 closeout:
 
-- No REST API endpoints, frontend, auth flow, import/export, documents, or MCP are implemented in Phase 1E.1.
+- No REST API endpoints, frontend, auth flow, import/export, documents, or MCP were implemented in Phase 1E.1.
 - `0004_core_service_hardening` is applied to production; future migrations follow the standing planned-migration rule in `AGENTS.md`.
-- Public editing remains service-layer behavior; HTTP public endpoints remain Phase 1F work.
+- Public editing remained service-layer behavior until Phase 1F added the HTTP public-link edit path.
 
 Next phase:
 
@@ -565,22 +566,23 @@ Next phase:
 
 Purpose: expose the completed Core Schema v1 service layer through FastAPI endpoints without adding auth flow, frontend UI, import/export, documents, or MCP.
 
-Status: planned next.
+Status: completed and verified in this checkpoint.
 
 Required work:
 
-- Add API session dependency that reuses `backend/app/core/database.py`.
-- Add temporary actor context dependency for tests and local development only; do not implement auth flow yet.
-- Add API schemas for organizations, registries, blocks, fields, reference lists/items, cards, public links, transfers, and audit event reads.
-- Add REST endpoints that call existing services instead of duplicating business rules.
-- Map service exceptions to stable HTTP errors.
-- Keep backend access control in service/API layer; frontend remains out of scope.
-- Keep public-link raw token return one-time in the create-link response only.
-- Do not add database schema changes unless a separate migration phase is explicitly approved.
+- [x] Add API session dependency that reuses `backend/app/core/database.py`.
+- [x] Add temporary actor context dependency for tests and local development only; do not implement auth flow yet.
+- [x] Add API schemas for organizations, registries, blocks, fields, reference lists/items, cards, public links, transfers, and audit event reads.
+- [x] Add REST endpoints that call existing services instead of duplicating business rules.
+- [x] Map service exceptions to stable HTTP errors.
+- [x] Keep backend access control in service/API layer; frontend remains out of scope.
+- [x] Keep public-link raw token return one-time in the create-link response only.
+- [x] Do not add database schema changes in Phase 1F.
 
 Expected files:
 
 - `backend/app/api/dependencies.py`
+- `backend/app/api/v1/endpoints/_field_values.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/registries.py`
 - `backend/app/api/v1/endpoints/cards.py`
@@ -591,31 +593,59 @@ Expected files:
 - `backend/app/schemas/cards.py`
 - `backend/app/schemas/public_links.py`
 - `backend/app/schemas/audit.py`
-- `backend/tests/test_api_*.py`
+- `backend/tests/test_api_phase_1f.py`
 
 Required tests:
 
-- Healthcheck remains independent from PostgreSQL.
-- API can create and read organizations through `OrganizationService`.
-- API can create registry, blocks, fields, reference lists, and reference items through services.
-- API can create cards and update typed dynamic values through `CardService`.
-- API card visibility follows organization scope.
-- API rejects out-of-scope card reads/writes.
-- API public link create response returns the raw token once and stores only the token hash.
-- API public-link edit path respects `card.public_edit_enabled` and public-editable field/block flags.
-- API transfer path creates the new card, supersedes the old card, and writes `card_relations`.
-- API writes or exposes audit events for create/update/archive/transfer/public-link actions.
+- [x] Healthcheck remains independent from PostgreSQL.
+- [x] API routes are registered without requiring PostgreSQL.
+- [x] API can create and read organizations through `OrganizationService`.
+- [x] API can create registry, blocks, fields, reference lists, and reference items through services.
+- [x] API can create cards and update typed dynamic values through `CardService`.
+- [x] API card visibility follows organization scope.
+- [x] API rejects out-of-scope card reads/writes.
+- [x] API public link create response returns the raw token once and stores only the token hash.
+- [x] API public-link edit path respects `card.public_edit_enabled` and public-editable field/block flags.
+- [x] API transfer path creates the new card, supersedes the old card, and writes `card_relations`.
+- [x] API writes or exposes audit events for create/update/archive/transfer/public-link actions.
 
 Acceptance criteria:
 
-1. API endpoints use the service layer as the business logic boundary.
-2. No hardcoded employee table or HR-specific fields are introduced.
-3. No frontend implementation is added.
-4. No auth flow is added; test/local actor context is clearly documented as temporary.
-5. No import/export, documents, or MCP implementation is added.
-6. No production database migration is run without separate explicit approval.
-7. Local `scripts/check.ps1` passes.
-8. PostgreSQL-backed API tests pass against disposable `reg_engine_test`.
+1. [x] API endpoints use the service layer as the business logic boundary.
+2. [x] No hardcoded employee table or HR-specific fields are introduced.
+3. [x] No frontend implementation is added.
+4. [x] No auth flow is added; test/local actor context is clearly documented as temporary.
+5. [x] No import/export, documents, or MCP implementation is added.
+6. [x] No production database migration is introduced or run in Phase 1F.
+7. [x] Local `scripts/check.ps1 -SkipRemote` passes.
+8. [x] PostgreSQL-backed API tests pass against disposable `reg_engine_test`.
+
+Verification completed:
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+```
+
+Result: local backend, frontend, and project-map checks passed.
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
+```
+
+Result: `47` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
+
+Known limitations:
+
+- Temporary API actor context uses `X-Actor-User-Id`; this is not a production auth flow.
+- API coverage is foundation-level service wiring for Core Schema v1 workflows; production auth/session behavior remains future work.
+- No frontend implementation, import/export, documents, or MCP implementation is added in Phase 1F.
+- No database migration is required for Phase 1F.
+
+Next phase:
+
+- Define Phase 1G before implementation. Candidate directions are auth/session flow, API seed/role bootstrap, production frontend workflows, or deeper API hardening; the current plan does not choose between them.
 
 ## Verification Commands
 

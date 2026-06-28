@@ -42,8 +42,8 @@ Target system:
 - Server: `/opt/reg_engine` on `registoryengine`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, and service-layer behavior for organization/RBAC, registry schema, dynamic cards, public links, transfer, and audit.
-- REST API endpoints, auth flow, production frontend workflows, import/export, documents, and MCP are later phases.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, and REST API foundation endpoints for organizations, registries, dynamic cards, public links, transfer, and audit reads.
+- Auth flow, production frontend workflows, import/export, documents, and MCP are later phases.
 
 ## Local Setup
 
@@ -198,14 +198,14 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - GitHub remote: `git@github.com:BorisDruzak/reg_engine.git`
 - PostgreSQL: `192.168.100.12:5432`, database `reg_engine`, role `reg_engine_admin`
 
-## Known Remaining Non-Goals After Core Schema v1 Service Layer
+## Known Remaining Non-Goals After Core Schema v1 API Foundation
 
 - No auth flow yet.
-- No REST API CRUD endpoints yet.
+- No production session/login flow yet.
 - No production frontend workflows yet.
 - No import/export.
 - No document generation.
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1E completed the Core Schema v1 database and backend service layer. REST API endpoints, authentication, production UI, import/export, documents, and MCP remain later phases.
+Phase 1B through Phase 1F completed the Core Schema v1 database, backend service layer, and REST API foundation. Authentication, production UI, import/export, documents, and MCP remain later phases.
