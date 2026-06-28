@@ -297,6 +297,129 @@ Verification:
 - Phase 4: Reports.
 - Phase 5: MCP over API only.
 
+## Phase 2: Documents And Attachments
+
+Status: not started; blocked by approval gate.
+
+Approval gate:
+
+- Do not implement Phase 2 code, models, migrations, endpoints, services, frontend UI, storage buckets, document generation, or file upload flows until the user explicitly approves Phase 2 implementation.
+- Before implementation, confirm whether Phase 2 covers attachments only, generated documents only, or both.
+- Before implementation, confirm storage target: local filesystem, PostgreSQL large object/bytea, S3-compatible object storage, or another approved storage layer.
+
+Purpose:
+
+- Add document and attachment capabilities without breaking schema-driven cards, organization-scoped access, audit logging, public-link rules, or the public-repository exposure rules.
+
+Known inputs:
+
+- `docs/BASE.md` reserves `file_ref` for the future documents phase.
+- README identifies documents and attachments as later phases.
+- Current Core Schema v1 has dynamic card fields but no document/file storage tables.
+
+Non-goals until explicitly approved:
+
+- No MDB migration.
+- No import/export.
+- No MCP.
+- No hardcoded HR document templates.
+- No committed binary document templates containing real personal data.
+- No public operational storage credentials or bucket details in Git.
+
+### Phase 2.0: Documents Product Scope Decision
+
+Required decisions:
+
+- Attachments: whether users can upload files to cards.
+- Generated documents: whether the system produces `.docx`, `.pdf`, or both from card data.
+- Templates: whether templates are managed in UI, stored as files, or deferred.
+- `file_ref`: whether dynamic fields should support file references in Phase 2.
+- Public links: whether public-link users can upload or download documents.
+- Retention: whether archive hides files, disables access, or keeps read-only access.
+
+Acceptance criteria:
+
+- Scope is written in `PLANS.md` before code starts.
+- Storage target and security assumptions are explicit.
+- No implementation starts while these decisions are open.
+
+### Phase 2A: Document Storage Architecture
+
+Planned work after approval:
+
+- Design storage abstraction for binary files and metadata.
+- Decide database tables for stored files, card-file links, generated documents, and template metadata.
+- Define checksum, MIME type, file size, original filename, storage key, created_by, archived_at, and audit fields.
+- Define access rules through card visibility and organization scope.
+- Define malware scanning or explicitly defer it with risk notes.
+
+Acceptance criteria:
+
+- ADR records the storage decision.
+- No secrets or concrete storage endpoints are committed.
+- Tests cover metadata validation and access boundaries before upload endpoints are exposed.
+
+### Phase 2B: Attachment Backend Foundation
+
+Planned work after approval:
+
+- Add migrations and SQLAlchemy models for attachment metadata.
+- Add service methods for upload metadata creation, read authorization, archive, and audit events.
+- Add REST endpoints only after services and permission tests exist.
+- Keep physical delete outside normal workflow.
+
+Acceptance criteria:
+
+- Users can attach files only to cards they can edit.
+- Users can read/download files only for cards they can view.
+- Archive preserves metadata and audit history.
+- Tests cover denied parent/sibling branch access.
+
+### Phase 2C: Generated Document Templates
+
+Planned work after approval:
+
+- Decide template format and rendering engine.
+- Store templates without real personal data.
+- Render documents from schema-driven card data, not hardcoded employee columns.
+- Record generated document metadata and audit events.
+
+Acceptance criteria:
+
+- Generated documents use registry schema and card values.
+- Old cards with missing new fields render empty values safely.
+- Template rendering errors are deterministic and localized in UI.
+
+### Phase 2D: Frontend Document Workflows
+
+Planned work after approval:
+
+- Add Russian-first UI for attachments and generated documents.
+- Keep document UI inside feature modules, not a monolithic route.
+- Add upload/download/archive states and localized errors.
+- Keep public-link document behavior aligned with approved Phase 2.0 scope.
+
+Acceptance criteria:
+
+- UI uses `Реестровая система` naming and Russian labels.
+- No browser-visible raw English service errors.
+- Frontend tests cover upload/download/archive or generated-document flows approved for Phase 2.
+
+### Phase 2E: Document Security And Live Validation
+
+Planned work after approval:
+
+- Verify authorization on metadata, upload, download, archive, and generated-document reads.
+- Run backend tests, frontend tests, project-map check, and storage smoke tests.
+- If server storage is configured, validate against non-production or explicitly approved staging storage first.
+
+Acceptance criteria:
+
+- No production personal data is used in tests.
+- No storage credentials are committed.
+- Audit events exist for create/read-sensitive where required, archive, and generated-document operations.
+- Deployment and server checks pass after implementation.
+
 ## Verification
 
 Required checks for each implementation checkpoint:
