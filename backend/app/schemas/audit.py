@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class AuditEventRead(BaseModel):
@@ -22,6 +22,13 @@ class AuditEventRead(BaseModel):
     user_agent: str | None
     request_id: str | None
     created_at: datetime
+
+    @field_validator("ip_address", mode="before")
+    @classmethod
+    def serialize_ip_address(cls, value: object) -> str | None:
+        if value is None or isinstance(value, str):
+            return value
+        return str(value)
 
 
 class AuditEventListRead(BaseModel):

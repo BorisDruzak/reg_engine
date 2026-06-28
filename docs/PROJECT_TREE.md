@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 18:20:18 +05:00
+- Generated: 2026-06-28 20:08:43 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -92,6 +92,7 @@
 - `backend/tests/test_access_management_phase_1j.py`
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
+- `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_config.py`
