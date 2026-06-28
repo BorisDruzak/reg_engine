@@ -458,8 +458,8 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.getByText("Панель администратора")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Пользователи" }));
-  expect(screen.getByText("users.manage")).toBeInTheDocument();
-  expect(screen.getByText("system_admin")).toBeInTheDocument();
+  expect(screen.getByText("Технический код: users.manage")).toBeInTheDocument();
+  expect(screen.getByText("Технический код: system_admin")).toBeInTheDocument();
   expect(screen.getAllByText("Системный администратор").length).toBeGreaterThan(0);
   expect(screen.getByText("Управление пользователями.")).toBeInTheDocument();
   expect(screen.queryByText("System admin")).not.toBeInTheDocument();

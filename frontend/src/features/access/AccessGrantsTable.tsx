@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { AccessGrantRead, OrganizationRead, RoleRead, UserRead } from "@/api/types";
-import { grantScopeLabel, uiText } from "@/app/uiText";
+import { grantScopeLabel, roleDisplayNameLabel, uiText } from "@/app/uiText";
 import { Panel } from "@/components/common/DataSurfaces";
 import { shortId } from "@/components/common/dataUtils";
 
@@ -39,7 +39,14 @@ export function AccessGrantsTable({
             {grants.map((grant) => (
               <tr key={grant.id}>
                 <td>{usersById.get(grant.user_id)?.email ?? shortId(grant.user_id)}</td>
-                <td>{rolesById.get(grant.role_id)?.code ?? shortId(grant.role_id)}</td>
+                <td>
+                  {rolesById.has(grant.role_id)
+                    ? roleDisplayNameLabel(
+                        rolesById.get(grant.role_id)?.code ?? "",
+                        rolesById.get(grant.role_id)?.name ?? "",
+                      )
+                    : shortId(grant.role_id)}
+                </td>
                 <td>
                   {grant.organization_id
                     ? (organizationsById.get(grant.organization_id)?.name ??

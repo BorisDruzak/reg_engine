@@ -1,5 +1,5 @@
 import type { AuditEventRead, OrganizationRead, UserRead } from "@/api/types";
-import { uiText } from "@/app/uiText";
+import { uiText, userDisplayNameLabel } from "@/app/uiText";
 import { CompactList, Panel } from "@/components/common/DataSurfaces";
 import { AuditTable } from "@/features/audit/AuditTable";
 
@@ -38,7 +38,7 @@ export function Overview({
           <CompactList
             items={users.slice(0, 5).map((item) => ({
               id: item.id,
-              title: item.display_name,
+              title: userDisplayNameLabel(item.display_name),
               detail: item.email,
             }))}
           />

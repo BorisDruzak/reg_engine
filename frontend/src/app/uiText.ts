@@ -25,6 +25,7 @@ export const uiText = {
   status: "Статус",
   schemaBlocks: "Блоки формы",
   schemaFields: "Поля формы",
+  technicalCode: "Технический код",
   title: "Название",
   repeatable: "Повторяемый",
   field: "Поле",
@@ -180,6 +181,14 @@ export function roleDisplayNameLabel(code: string, fallbackName: string) {
   return labels[code] ?? fallbackName;
 }
 
+export function userDisplayNameLabel(value: string) {
+  const labels: Record<string, string> = {
+    "System Admin": "Системный администратор",
+    "System admin": "Системный администратор",
+  };
+  return labels[value] ?? value;
+}
+
 export function roleDescriptionLabel(code: string, fallbackDescription: string | null | undefined) {
   const labels: Record<string, string> = {
     auditor: "Роль только для чтения аудита.",
@@ -269,6 +278,11 @@ export function apiErrorMessageLabel(message: string) {
     return "Неподдерживаемый тип поля.";
   }
   return labels[message] ?? uiText.requestFailed;
+}
+
+export function runtimeErrorMessageLabel(message: string) {
+  const localMessages = new Set<string>([uiText.jsonObjectRequired, uiText.numberRequired]);
+  return localMessages.has(message) ? message : apiErrorMessageLabel(message);
 }
 
 export function formatUiDateTime(value: string) {

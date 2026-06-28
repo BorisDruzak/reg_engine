@@ -5,6 +5,7 @@ import {
   permissionDescriptionLabel,
   roleDisplayNameLabel,
   uiText,
+  userDisplayNameLabel,
 } from "@/app/uiText";
 import { CompactList, Panel } from "@/components/common/DataSurfaces";
 
@@ -33,7 +34,7 @@ export function UsersAndRoles({
             <tbody>
               {users.map((user) => (
                 <tr key={user.id}>
-                  <td>{user.display_name}</td>
+                  <td>{userDisplayNameLabel(user.display_name)}</td>
                   <td>{user.email}</td>
                   <td>{lifecycleStatusLabel(user.status)}</td>
                   <td>{booleanLabel(user.is_superuser)}</td>
@@ -48,8 +49,8 @@ export function UsersAndRoles({
           <CompactList
             items={roles.map((role) => ({
               id: role.id,
-              title: role.code,
-              detail: roleDisplayNameLabel(role.code, role.name),
+              title: roleDisplayNameLabel(role.code, role.name),
+              detail: `${uiText.technicalCode}: ${role.code}`,
             }))}
           />
         </Panel>
@@ -57,8 +58,8 @@ export function UsersAndRoles({
           <CompactList
             items={permissions.map((permission) => ({
               id: permission.id,
-              title: permission.code,
-              detail: permissionDescriptionLabel(permission.code, permission.description),
+              title: permissionDescriptionLabel(permission.code, permission.description),
+              detail: `${uiText.technicalCode}: ${permission.code}`,
             }))}
           />
         </Panel>

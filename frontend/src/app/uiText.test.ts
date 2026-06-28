@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 
-import { apiErrorMessageLabel, uiText, visibleSections } from "./uiText";
+import {
+  apiErrorMessageLabel,
+  runtimeErrorMessageLabel,
+  uiText,
+  userDisplayNameLabel,
+  visibleSections,
+} from "./uiText";
 
 describe("uiText", () => {
   test("uses Russian product and navigation labels", () => {
@@ -18,5 +24,12 @@ describe("uiText", () => {
 
   test("does not expose unknown English API errors as UI text", () => {
     expect(apiErrorMessageLabel("Unexpected service failure.")).toBe("Запрос не выполнен");
+    expect(runtimeErrorMessageLabel("Unexpected local failure.")).toBe("Запрос не выполнен");
+    expect(runtimeErrorMessageLabel(uiText.jsonObjectRequired)).toBe(uiText.jsonObjectRequired);
+  });
+
+  test("localizes known built-in user display names", () => {
+    expect(userDisplayNameLabel("System Admin")).toBe("Системный администратор");
+    expect(userDisplayNameLabel("Пользователь")).toBe("Пользователь");
   });
 });

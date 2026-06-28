@@ -297,6 +297,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   });
 
   await page.goto("/");
+  await expect(page).toHaveTitle("Реестровая система");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
   await expect(page.getByRole("heading", { name: "Реестровая система" })).toBeVisible();
   await expect(page.getByText("Registry Engine", { exact: true })).toHaveCount(0);
   await page.getByLabel("Электронная почта").fill("admin@example.test");
@@ -307,8 +309,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Главная организация")).toBeVisible();
 
   await page.getByRole("button", { name: "Пользователи" }).click();
-  await expect(page.getByText("users.manage")).toBeVisible();
-  await expect(page.getByText("system_admin")).toBeVisible();
+  await expect(page.getByText("Технический код: users.manage")).toBeVisible();
+  await expect(page.getByText("Технический код: system_admin")).toBeVisible();
   await expect(page.getByText("Системный администратор").first()).toBeVisible();
   await expect(page.getByText("Управление пользователями.")).toBeVisible();
   await expect(page.getByText("System admin", { exact: true })).toHaveCount(0);

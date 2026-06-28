@@ -14,7 +14,13 @@ import {
   listUsers,
   readCard,
 } from "@/api/client";
-import { sectionLabel, uiText, visibleSections, type VisibleSection } from "@/app/uiText";
+import {
+  sectionLabel,
+  uiText,
+  userDisplayNameLabel,
+  visibleSections,
+  type VisibleSection,
+} from "@/app/uiText";
 import { DataAlert } from "@/components/common/DataSurfaces";
 import { AccessGrantsTable } from "@/features/access/AccessGrantsTable";
 import { AuditTable } from "@/features/audit/AuditTable";
@@ -158,7 +164,11 @@ export function HomePage() {
           </div>
           <div className="account-strip">
             <div>
-              <strong>{currentUser?.display_name ?? uiText.signedIn}</strong>
+              <strong>
+                {currentUser?.display_name
+                  ? userDisplayNameLabel(currentUser.display_name)
+                  : uiText.signedIn}
+              </strong>
               <span>{currentUser?.email}</span>
             </div>
             <button type="button" className="ghost-button" onClick={handleLogout}>

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 20:49:58 +05:00
+- Generated: 2026-06-28 20:59:51 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -115,6 +115,7 @@
 - `docs/CODEX_PROJECT_FOUNDATION_PROMPT.md`
 - `docs/CODEX_WORKFLOW.md`
 - `docs/CONVENTIONS.md`
+- `docs/PHASE_2_APPROVAL_CHECKLIST.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_TREE.md`
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`

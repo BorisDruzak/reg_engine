@@ -46,7 +46,10 @@ Phase 1L is complete. The next planned product phase is Phase 2, but document-ge
 - Keep normal deletes as archive behavior.
 - Keep the frontend Russian-first for user-facing text.
 - Keep the visible product name in UI as `Реестровая система`; keep `Registry Engine` only for technical project/repository context.
+- Keep browser-visible metadata Russian: `html lang="ru"` and page title `Реестровая система`.
 - Keep built-in UI display names for roles, permissions, statuses, validation, and API errors Russian-first.
+- Keep known built-in system user names localized in UI, for example `System Admin` -> `Системный администратор`.
+- Keep technical role/permission/field/registry codes secondary in UI, under the Russian label `Технический код`, when they must be visible.
 - Keep visible demo/test names Russian unless a test intentionally verifies legacy stored text.
 - Keep browser `localStorage` bearer-token persistence limited to MVP/internal staging until a production session persistence phase replaces it.
 
@@ -55,6 +58,9 @@ Phase 1K.6 delivered:
 - Navigation, tables, panels, loading states, validation messages, and public-link screens use Russian text.
 - The visible product name in UI is `Реестровая система`.
 - Built-in role names and permission descriptions are Russian in seed data and in the frontend display layer.
+- Browser metadata uses Russian language and title.
+- Technical codes remain available as secondary diagnostic text under `Технический код`.
+- Known built-in system user names are localized in the frontend display layer.
 - Frontend maps known backend/API error details to Russian browser messages.
 - Technical codes such as `system_admin`, `users.manage`, field codes, registry codes, and route/API names remain unchanged.
 
@@ -317,6 +323,7 @@ Known inputs:
 - README identifies documents and attachments as later phases.
 - Current Core Schema v1 has dynamic card fields but no document/file storage tables.
 - `docs/ADR/0004-phase-2-documents-scope-proposal.md` records a proposed, not yet accepted, starting scope and storage direction.
+- `docs/PHASE_2_APPROVAL_CHECKLIST.md` records the exact approval text and decisions needed to start implementation.
 
 Non-goals until explicitly approved:
 
@@ -350,6 +357,7 @@ Acceptance criteria:
 - Scope is written in `PLANS.md` before code starts.
 - Storage target and security assumptions are explicit.
 - No implementation starts while these decisions are open.
+- Approval text or equivalent user instruction is captured before Phase 2A starts.
 
 ### Phase 2A: Document Storage Architecture
 

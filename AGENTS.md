@@ -53,6 +53,7 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 
 - User-facing UI chrome must be Russian-first.
 - The visible product name in UI must be `Реестровая система`; keep `Registry Engine` only for repository, code, API, and technical documentation context.
+- Browser-visible metadata must be Russian: `html lang="ru"` and page title `Реестровая система`.
 - Navigation labels must use these Russian names:
   - `Обзор`
   - `Организации`
@@ -62,8 +63,26 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
   - `Доступ`
   - `Аудит`
 - Common UI actions must use Russian labels, for example `Войти`, `Выйти`, `Сохранить`, `Сохранено`.
+- User-facing entity names must use these Russian names:
+  - Product: `Реестровая система`
+  - Admin workspace: `Панель администратора`
+  - Public card edit: `Публичное редактирование карточки`
+  - Organization: `Организация`
+  - Registry: `Реестр`
+  - Card: `Карточка`
+  - Form block: `Блок формы`
+  - Form field: `Поле формы`
+  - User: `Пользователь`
+  - Role: `Роль`
+  - Permission: `Право`
+  - Access grant: `Право доступа`
+  - Audit: `Аудит`
+  - Public link: `Публичная ссылка`
+  - Reference list: `Справочник`
 - Tables, panels, empty states, loading states, validation messages, and public-link screens must use Russian text.
 - Built-in user-facing role names, permission descriptions, status labels, and system display names must use Russian text in UI.
+- Known built-in system user display names such as `System Admin` must be shown as `Системный администратор`; arbitrary user-entered names remain unchanged.
+- When technical codes are visible for diagnostics, show the Russian label first and put codes under `Технический код`.
 - Empty states must use Russian text, for example `Нет данных`.
 - Frontend tests and demo fixtures must use Russian visible organization, registry, block, field, card, and user names unless the test intentionally checks legacy or user-entered foreign-language data.
 - Backend/API error details shown in the browser must be mapped to Russian user-facing text; raw English service messages are not UI copy.

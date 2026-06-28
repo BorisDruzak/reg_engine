@@ -1,12 +1,17 @@
 import { ApiError } from "@/api/client";
-import { apiErrorMessageLabel, formatUiDateTime, uiText } from "@/app/uiText";
+import {
+  apiErrorMessageLabel,
+  formatUiDateTime,
+  runtimeErrorMessageLabel,
+  uiText,
+} from "@/app/uiText";
 
 export function errorText(error: unknown) {
   if (error instanceof ApiError) {
     return apiErrorMessageLabel(error.message);
   }
   if (error instanceof Error) {
-    return error.message;
+    return runtimeErrorMessageLabel(error.message);
   }
   return uiText.requestFailed;
 }
