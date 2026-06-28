@@ -24,7 +24,7 @@ The system keeps card structure in registry metadata and dynamic typed values. B
 - Phase 1C Organization Tree And RBAC Services is completed and verified against server test database `reg_engine_test`.
 - Phase 1D Registry Schema And Dynamic Cards is completed and verified against server test database `reg_engine_test`.
 - Phase 1E Public Links, Transfer, Audit is completed and verified against server test database `reg_engine_test`.
-- Phase 1E.1 Core Service Hardening Before API is completed locally in this checkpoint; server disposable PostgreSQL verification is required before synchronization is closed.
+- Phase 1E.1 Core Service Hardening Before API is completed and verified against server test database `reg_engine_test`.
 - Phase 1F REST API Foundation And Service Wiring is the next planned implementation phase.
 - Single-branch workflow is active: `main` is the only long-lived local, GitHub, and server branch.
 - Synchronization checkpoint is carried on `main`: local `main`, GitHub `origin/main`, and server checkout `/opt/reg_engine` must stay aligned.
@@ -479,7 +479,7 @@ Next phase:
 
 Purpose: close critical Core Schema v1 service and migration gaps before Phase 1F REST API Foundation.
 
-Status: completed locally in this checkpoint; server disposable PostgreSQL verification remains required before production migration approval can be discussed.
+Status: completed and verified in this checkpoint.
 
 Required work:
 
@@ -533,6 +533,15 @@ python -m mypy app
 $env:TEST_DATABASE_URL = "postgresql+psycopg://<user>:<password>@<host>:5432/reg_engine_test"
 python -m pytest tests\test_core_service_hardening.py tests\test_database_smoke.py -q
 ```
+
+Verification completed:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
+```
+
+Result: `42` PostgreSQL-backed backend tests passed against disposable database `reg_engine_test`.
 
 Known limitations:
 
