@@ -630,11 +630,18 @@ def test_phase_1g_denied_paths_enforce_service_permissions(
         created_by=system_admin.id,
     )
 
-    denied_schema = api_client.get(
+    allowed_schema = api_client.get(
         f"/api/v1/registries/{registry['id']}/schema",
         headers=_actor_headers(outsider.id),
     )
-    assert denied_schema.status_code == 403, denied_schema.text
+    assert allowed_schema.status_code == 200, allowed_schema.text
+
+    denied_schema_mutation = api_client.post(
+        f"/api/v1/registries/{registry['id']}/blocks",
+        json={"code": "blocked", "title": "Blocked"},
+        headers=_actor_headers(outsider.id),
+    )
+    assert denied_schema_mutation.status_code == 403, denied_schema_mutation.text
 
     denied_update = api_client.patch(
         f"/api/v1/organizations/{root['id']}",
