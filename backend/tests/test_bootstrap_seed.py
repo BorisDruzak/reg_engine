@@ -31,6 +31,76 @@ EXPECTED_ROLE_PERMISSIONS = {
 }
 
 
+def test_bootstrap_password_hash_argument_resolves_environment_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.cli.bootstrap import build_parser, resolve_superadmin_password_hash
+
+    monkeypatch.setenv("REG_ENGINE_TEST_SUPERADMIN_HASH", "env-cli-hash")
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "create-superadmin",
+            "--email",
+            "env-cli-admin@example.test",
+            "--display-name",
+            "Env CLI Admin",
+            "--password-hash-env",
+            "REG_ENGINE_TEST_SUPERADMIN_HASH",
+        ]
+    )
+
+    assert resolve_superadmin_password_hash(args, parser) == "env-cli-hash"
+
+
+def test_bootstrap_password_hash_argument_rejects_missing_environment_variable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.cli.bootstrap import build_parser, resolve_superadmin_password_hash
+
+    monkeypatch.delenv("REG_ENGINE_TEST_MISSING_HASH", raising=False)
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "create-superadmin",
+            "--email",
+            "missing-env-cli-admin@example.test",
+            "--display-name",
+            "Missing Env CLI Admin",
+            "--password-hash-env",
+            "REG_ENGINE_TEST_MISSING_HASH",
+        ]
+    )
+
+    with pytest.raises(SystemExit):
+        resolve_superadmin_password_hash(args, parser)
+
+
+def test_bootstrap_password_hash_argument_rejects_ambiguous_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.cli.bootstrap import build_parser, resolve_superadmin_password_hash
+
+    monkeypatch.setenv("REG_ENGINE_TEST_SUPERADMIN_HASH", "env-cli-hash")
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "create-superadmin",
+            "--email",
+            "ambiguous-cli-admin@example.test",
+            "--display-name",
+            "Ambiguous CLI Admin",
+            "--password-hash",
+            "direct-cli-hash",
+            "--password-hash-env",
+            "REG_ENGINE_TEST_SUPERADMIN_HASH",
+        ]
+    )
+
+    with pytest.raises(SystemExit):
+        resolve_superadmin_password_hash(args, parser)
+
+
 def _require_test_database_url() -> str:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
@@ -225,3 +295,58 @@ def test_bootstrap_cli_seeds_and_creates_superadmin(migrated_test_engine: Engine
     assert permission_count == len(EXPECTED_PERMISSIONS)
     assert user.is_superuser is True
     assert user.password_hash == "cli-hash"
+
+
+def test_bootstrap_cli_reads_superadmin_password_hash_from_environment(
+    migrated_test_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.cli.bootstrap import main
+
+    database_url = migrated_test_engine.url.render_as_string(hide_password=False)
+    monkeypatch.setenv("REG_ENGINE_TEST_SUPERADMIN_HASH", "env-cli-hash")
+
+    superadmin_status = main(
+        [
+            "create-superadmin",
+            "--database-url",
+            database_url,
+            "--email",
+            "env-cli-admin@example.test",
+            "--display-name",
+            "Env CLI Admin",
+            "--password-hash-env",
+            "REG_ENGINE_TEST_SUPERADMIN_HASH",
+        ]
+    )
+
+    with Session(migrated_test_engine, expire_on_commit=False) as session:
+        user = session.scalars(select(User).where(User.email == "env-cli-admin@example.test")).one()
+
+    assert superadmin_status == 0
+    assert user.password_hash == "env-cli-hash"
+
+
+def test_bootstrap_cli_rejects_missing_password_hash_environment(
+    migrated_test_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.cli.bootstrap import main
+
+    database_url = migrated_test_engine.url.render_as_string(hide_password=False)
+    monkeypatch.delenv("REG_ENGINE_TEST_MISSING_HASH", raising=False)
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "create-superadmin",
+                "--database-url",
+                database_url,
+                "--email",
+                "missing-env-cli-admin@example.test",
+                "--display-name",
+                "Missing Env CLI Admin",
+                "--password-hash-env",
+                "REG_ENGINE_TEST_MISSING_HASH",
+            ]
+        )

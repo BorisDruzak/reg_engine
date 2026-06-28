@@ -1,4 +1,7 @@
+import pytest
+
 from app.core.config import Settings, get_settings
+from app.main import create_app
 
 
 def test_settings_can_be_created_without_database_url(monkeypatch) -> None:
@@ -22,3 +25,30 @@ def test_database_url_is_read_when_provided(monkeypatch) -> None:
         get_settings.cache_clear()
 
     assert settings.database_url == database_url
+
+
+def test_production_like_app_rejects_default_auth_secret(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        with pytest.raises(RuntimeError, match="AUTH_TOKEN_SECRET"):
+            create_app()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_development_app_allows_default_auth_secret(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        app = create_app()
+    finally:
+        get_settings.cache_clear()
+
+    assert app.title == "Registry Engine"

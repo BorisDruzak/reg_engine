@@ -1,21 +1,23 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db_session
-from app.core.config import get_settings
+from app.api.dependencies import _bearer_token_from_authorization, get_db_session
+from app.core.config import Settings, get_settings
 from app.main import create_app
 from app.models import User
-from app.services.auth import hash_password
+from app.services.auth import AuthService, hash_password
 
 
 def _require_test_database_url() -> str:
@@ -139,6 +141,88 @@ def test_password_hashing_uses_non_plaintext_verifiable_hash() -> None:
     assert password_hash.startswith("pbkdf2_sha256$")
 
 
+class _FakeSession:
+    def __init__(self, user: User | None) -> None:
+        self.user = user
+
+    def get(self, model: type[Any], identity: object) -> User | None:
+        _ = model
+        if self.user is not None and self.user.id == identity:
+            return self.user
+        return None
+
+
+def _auth_unit_settings(*, minutes: int = 480) -> Settings:
+    return Settings(
+        _env_file=None,
+        auth_token_secret="unit-test-auth-secret-that-is-not-default",
+        auth_access_token_minutes=minutes,
+    )
+
+
+def _unit_user(*, status: str = "active") -> User:
+    return User(
+        id=uuid4(),
+        email=f"{uuid4()}@example.test",
+        display_name="Unit Auth User",
+        password_hash=hash_password("secret-pass"),
+        status=status,
+    )
+
+
+def test_modified_session_payload_is_rejected_without_database() -> None:
+    user = _unit_user()
+    token = AuthService(_FakeSession(user), settings=_auth_unit_settings()).create_access_token(
+        user
+    )
+    encoded_payload, signature = token.access_token.split(".", maxsplit=1)
+    tampered_token = f"{encoded_payload[:-1]}x.{signature}"
+
+    with pytest.raises(ValueError, match="Invalid bearer token"):
+        AuthService(_FakeSession(user), settings=_auth_unit_settings()).get_user_from_token(
+            tampered_token,
+        )
+
+
+def test_expired_session_is_rejected_without_database() -> None:
+    user = _unit_user()
+    settings = _auth_unit_settings(minutes=-1)
+    token = AuthService(_FakeSession(user), settings=settings).create_access_token(user)
+
+    with pytest.raises(ValueError, match="expired"):
+        AuthService(_FakeSession(user), settings=settings).get_user_from_token(token.access_token)
+
+
+def test_session_for_inactive_user_is_rejected_without_database() -> None:
+    user = _unit_user()
+    settings = _auth_unit_settings()
+    token = AuthService(_FakeSession(user), settings=settings).create_access_token(user)
+    user.status = "disabled"
+
+    with pytest.raises(ValueError, match="not active"):
+        AuthService(_FakeSession(user), settings=settings).get_user_from_token(token.access_token)
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        "",
+        "Basic token",
+        "Bearer",
+        "Bearer   ",
+        "bearer",
+    ],
+)
+def test_malformed_authorization_header_is_rejected_without_database(
+    authorization: str,
+) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        _bearer_token_from_authorization(authorization)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "Bearer token is required."
+
+
 def test_login_me_and_protected_endpoint_use_bearer_token_without_dev_header(
     api_client: TestClient,
     db_session: Session,
@@ -189,6 +273,85 @@ def test_invalid_login_disabled_user_and_bad_token_are_rejected(
     assert wrong_password.status_code == 401, wrong_password.text
     assert disabled.status_code == 401, disabled.text
     assert bad_token.status_code == 401, bad_token.text
+
+
+def test_tampered_token_payload_is_rejected(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    _create_user(db_session, "auth-tampered@example.test", "secret-pass")
+    login = api_client.post(
+        "/api/v1/auth/login",
+        json={"email": "auth-tampered@example.test", "password": "secret-pass"},
+    )
+    token = login.json()["access_token"]
+    encoded_payload, signature = token.split(".", maxsplit=1)
+    tampered_token = f"{encoded_payload[:-1]}x.{signature}"
+
+    response = api_client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {tampered_token}"}
+    )
+
+    assert response.status_code == 401, response.text
+    assert "invalid bearer token" in response.json()["detail"].lower()
+
+
+def test_expired_session_token_is_rejected(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    user = _create_user(db_session, "auth-expired@example.test", "secret-pass")
+    expired_settings = Settings(
+        _env_file=None,
+        auth_token_secret="phase-1i-test-secret",
+        auth_access_token_minutes=-1,
+    )
+    expired_token = (
+        AuthService(db_session, settings=expired_settings).create_access_token(user).access_token
+    )
+
+    response = api_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401, response.text
+    assert "expired" in response.json()["detail"].lower()
+
+
+def test_token_for_inactive_user_is_rejected(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    user = _create_user(db_session, "auth-token-inactive@example.test", "secret-pass")
+    token = AuthService(db_session).create_access_token(user).access_token
+    user.status = "disabled"
+    db_session.flush()
+
+    response = api_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401, response.text
+    assert "not active" in response.json()["detail"].lower()
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        "",
+        "Basic token",
+        "Bearer",
+        "Bearer   ",
+        "bearer",
+    ],
+)
+def test_malformed_authorization_header_is_rejected(
+    api_client: TestClient,
+    authorization: str,
+) -> None:
+    response = api_client.get("/api/v1/auth/me", headers={"Authorization": authorization})
+
+    assert response.status_code == 401, response.text
+    assert response.json()["detail"] == "Bearer token is required."
 
 
 def test_logout_requires_bearer_token_and_returns_placeholder_status(

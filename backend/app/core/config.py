@@ -4,6 +4,9 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEVELOPMENT_AUTH_TOKEN_SECRET = "change-me-development-auth-secret"
+PRODUCTION_LIKE_ENVS = {"prod", "production", "stage", "staging"}
+
 
 class Settings(BaseSettings):
     app_env: str = "development"
@@ -11,7 +14,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str | None = None
     allow_dev_actor_header: bool = False
-    auth_token_secret: str = "change-me-development-auth-secret"
+    auth_token_secret: str = DEVELOPMENT_AUTH_TOKEN_SECRET
     auth_access_token_minutes: int = 480
     log_level: str = "INFO"
 
@@ -28,3 +31,15 @@ def get_settings() -> Settings:
     if env_file := os.environ.get("REG_ENGINE_ENV_FILE"):
         settings_kwargs["_env_file"] = env_file
     return Settings(**settings_kwargs)
+
+
+def validate_runtime_configuration(settings: Settings) -> None:
+    app_env = settings.app_env.strip().lower()
+    if app_env not in PRODUCTION_LIKE_ENVS:
+        return
+
+    if settings.auth_token_secret == DEVELOPMENT_AUTH_TOKEN_SECRET:
+        raise RuntimeError(
+            "AUTH_TOKEN_SECRET must be set to a non-development value when APP_ENV is "
+            f"production-like ({settings.app_env})."
+        )

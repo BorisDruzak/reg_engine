@@ -181,9 +181,12 @@ Protected API endpoints prefer `Authorization: Bearer <token>`. When `ALLOW_DEV_
 Auth token signing is controlled by:
 
 ```powershell
+$env:APP_ENV = "development"
 $env:AUTH_TOKEN_SECRET = "<strong-secret>"
 $env:AUTH_ACCESS_TOKEN_MINUTES = "480"
 ```
+
+`APP_ENV=production`, `APP_ENV=prod`, `APP_ENV=staging`, and `APP_ENV=stage` are treated as production-like runtimes. Production-like app startup rejects the built-in development `AUTH_TOKEN_SECRET`; set a deployment-specific secret outside Git through the environment or `REG_ENGINE_ENV_FILE`.
 
 Auth API:
 
@@ -226,14 +229,16 @@ Create or update the first superadmin user:
 
 ```powershell
 cd C:\Users\admin-2\Documents\reg_engine
+$env:REG_ENGINE_SUPERADMIN_PASSWORD_HASH = Read-Host "Superadmin password hash"
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 `
   -Command create-superadmin `
   -Email "<admin@example.com>" `
   -DisplayName "<Admin Name>" `
-  -PasswordHash "<hash-from-auth-phase-or-temporary-admin-hash>"
+  -PasswordHashEnvVar REG_ENGINE_SUPERADMIN_PASSWORD_HASH
+Remove-Item Env:\REG_ENGINE_SUPERADMIN_PASSWORD_HASH
 ```
 
-The bootstrap commands use `DATABASE_URL` unless `-DatabaseUrl` is supplied. They are idempotent and must not be pointed at production unless the intended database target is explicit.
+The bootstrap commands use `DATABASE_URL` unless `-DatabaseUrl` is supplied. They are idempotent and must not be pointed at production unless the intended database target is explicit. Prefer `-PasswordHashEnvVar` over `-PasswordHash` so private operator input is not written into shell history, process arguments, or command logs.
 
 ## Direct Frontend Commands
 

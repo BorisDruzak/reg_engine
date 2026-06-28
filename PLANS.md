@@ -24,8 +24,12 @@ Completed phases:
 - Phase 1K.4: Public-link edit page.
 - Phase 1K.5: Frontend browser validation pass.
 - Phase 1K.6: Russian UI localization.
+- Phase 1L.1: Plan and status cleanup.
+- Phase 1L.2: Runtime configuration guardrails.
+- Phase 1L.3: Login and session hardening.
+- Phase 1L.4: Bootstrap UX hardening.
 
-The next phase is Phase 1L.
+The next active checkpoint is Phase 1L.5.
 
 ## Core Rules
 
@@ -42,7 +46,7 @@ The next phase is Phase 1L.
 
 Purpose: stabilize the current backend and frontend implementation before starting new product capabilities.
 
-Status: planned next.
+Status: in progress.
 
 Phase 1L must not implement:
 
@@ -54,6 +58,8 @@ Phase 1L must not implement:
 - large new frontend product modules beyond refactoring and stabilization.
 
 ### Phase 1L.1: Plan And Status Cleanup
+
+Status: completed.
 
 Required work:
 
@@ -68,6 +74,8 @@ Acceptance criteria:
 
 ### Phase 1L.2: Runtime Configuration Guardrails
 
+Status: completed.
+
 Required work:
 
 - Reject production-like runtime when development login/session configuration is still in use.
@@ -79,7 +87,16 @@ Acceptance criteria:
 - Production-like startup cannot use development-only login/session configuration.
 - Development and test workflows remain convenient.
 
+Delivered:
+
+- Production-like `APP_ENV` values reject the built-in development `AUTH_TOKEN_SECRET` during app startup.
+- Development and test startup still allow the default secret for local workflows.
+- README documents the required runtime configuration.
+- Tests cover both production-like rejection and development allowance.
+
 ### Phase 1L.3: Login And Session Hardening
+
+Status: completed.
 
 Required work:
 
@@ -93,7 +110,15 @@ Acceptance criteria:
 - Login/session failure modes are deterministic and tested.
 - Current logout limitation is visible.
 
+Delivered:
+
+- Added tests for modified session payloads, expired tokens, inactive token users, malformed authorization headers, and wrong runtime configuration.
+- Existing disabled-user login and bad-token API behavior remains covered.
+- README documents the current logout limitation: logout validates the bearer token and returns `{"status":"ok"}`, but server-side token revocation remains deferred.
+
 ### Phase 1L.4: Bootstrap UX Hardening
+
+Status: completed.
 
 Required work:
 
@@ -105,7 +130,17 @@ Acceptance criteria:
 
 - A new deployment can create the first admin without manual SQL and without a fragile manual pre-step.
 
+Delivered:
+
+- Python bootstrap CLI supports `--password-hash-env` so the first-admin password hash can be read from an environment variable instead of process arguments.
+- PowerShell bootstrap wrapper supports `-PasswordHashEnvVar`.
+- CLI rejects missing env-var values and ambiguous direct/env-var password-hash sources.
+- README documents the env-var flow and cleanup step.
+- Existing bootstrap idempotency and first-admin update behavior remain covered; new CLI argument-resolution tests run without requiring PostgreSQL.
+
 ### Phase 1L.5: Frontend Live Integration Validation
+
+Status: planned next.
 
 Required work:
 

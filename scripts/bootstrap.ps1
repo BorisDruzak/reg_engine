@@ -7,7 +7,8 @@ param(
     [string]$DatabaseUrl,
     [string]$Email,
     [string]$DisplayName,
-    [string]$PasswordHash
+    [string]$PasswordHash,
+    [string]$PasswordHashEnvVar
 )
 
 . "$PSScriptRoot\lib\RegEngine.ps1"
@@ -21,9 +22,15 @@ if ($Command -eq "create-superadmin") {
     if (-not $DisplayName) {
         throw "-DisplayName is required for create-superadmin."
     }
+    if ($PasswordHash -and $PasswordHashEnvVar) {
+        throw "Use either -PasswordHash or -PasswordHashEnvVar, not both."
+    }
     $arguments += @("--email", $Email, "--display-name", $DisplayName)
     if ($PasswordHash) {
         $arguments += @("--password-hash", $PasswordHash)
+    }
+    if ($PasswordHashEnvVar) {
+        $arguments += @("--password-hash-env", $PasswordHashEnvVar)
     }
 }
 
