@@ -454,7 +454,12 @@ Verification:
 - `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_models_smoke.py backend\tests\test_migrations.py backend\tests\test_schema_constraints.py backend\tests\test_attachment_services.py -q` -> passed locally, PostgreSQL service tests skipped without `TEST_DATABASE_URL`.
 - PostgreSQL-backed `backend\tests\test_attachment_services.py` against disposable `_test` database -> 14 passed.
 - PostgreSQL-backed `backend\tests\test_api_phase_2b_attachments.py` against disposable `_test` database -> 2 passed.
-- Production migration status: pending until commit/push/deploy, backup, production preflight, `alembic upgrade head`, and post-checks complete.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` -> passed.
+- `pnpm -C frontend e2e` -> 2 passed.
+- Commit `5f03bc51` was pushed to `origin/main` and deployed to the runtime checkout.
+- Runtime dependency sync installed `python-multipart` on the server backend environment.
+- Production migration `0005_attachments` completed after fresh backup and preflight verified production was at `0004_core_service_hardening` and did not yet have `stored_files` / `card_attachments`.
+- Production post-checks verified Alembic head `0005_attachments`, both attachment tables, and registered attachment API paths.
 
 ### Phase 2C: Generated Document Templates
 
