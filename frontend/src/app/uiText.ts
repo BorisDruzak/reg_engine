@@ -1,4 +1,5 @@
 export const uiText = {
+  productName: "Реестровая система",
   brandSubtitle: "Базовая схема v1",
   adminWorkspace: "Панель администратора",
   publicCardEdit: "Публичное редактирование карточки",
@@ -51,6 +52,7 @@ export const uiText = {
   expires: "Действует до",
   noEditablePublicFields: "В этой публичной ссылке нет редактируемых полей.",
   requestFailed: "Запрос не выполнен",
+  noData: "Нет данных",
   invalidEmailOrPassword: "Неверная электронная почта или пароль.",
   bearerTokenRequired: "Нужен действующий сеанс. Войдите снова.",
   bearerTokenExpired: "Срок действия сеанса истек. Войдите снова.",
@@ -266,7 +268,7 @@ export function apiErrorMessageLabel(message: string) {
   if (message.startsWith("Unsupported field type:")) {
     return "Неподдерживаемый тип поля.";
   }
-  return labels[message] ?? message;
+  return labels[message] ?? uiText.requestFailed;
 }
 
 export function formatUiDateTime(value: string) {

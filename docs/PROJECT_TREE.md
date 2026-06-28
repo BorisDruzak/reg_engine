@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 20:08:43 +05:00
+- Generated: 2026-06-28 20:29:48 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -128,14 +128,26 @@
 - `frontend/src/App.tsx`
 - `frontend/src/app/AppProviders.tsx`
 - `frontend/src/app/router.tsx`
+- `frontend/src/app/uiText.test.ts`
 - `frontend/src/app/uiText.ts`
 - `frontend/src/components/common/.gitkeep`
+- `frontend/src/components/common/DataSurfaces.tsx`
+- `frontend/src/components/common/dataUtils.ts`
 - `frontend/src/components/layout/.gitkeep`
+- `frontend/src/features/access/AccessGrantsTable.tsx`
+- `frontend/src/features/audit/AuditTable.tsx`
+- `frontend/src/features/auth/LoginScreen.tsx`
+- `frontend/src/features/auth/session.ts`
 - `frontend/src/features/cards/.gitkeep`
+- `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.ts`
 - `frontend/src/features/organizations/.gitkeep`
+- `frontend/src/features/organizations/OrganizationsTable.tsx`
+- `frontend/src/features/overview/Overview.tsx`
 - `frontend/src/features/registry/.gitkeep`
+- `frontend/src/features/registry/RegistriesAndSchema.tsx`
+- `frontend/src/features/users/UsersAndRoles.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/pages/HomePage.tsx`
 - `frontend/src/pages/PublicLinkEditPage.tsx`

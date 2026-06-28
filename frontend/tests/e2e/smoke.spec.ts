@@ -297,7 +297,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Registry Engine" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Реестровая система" })).toBeVisible();
+  await expect(page.getByText("Registry Engine", { exact: true })).toHaveCount(0);
   await page.getByLabel("Электронная почта").fill("admin@example.test");
   await page.getByLabel("Пароль").fill("secret-pass");
   await page.getByRole("button", { name: "Войти" }).click();

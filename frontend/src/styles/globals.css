@@ -414,6 +414,14 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.data-empty {
+  margin: 0;
+  padding: 12px 14px;
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .selectable-list {
   display: grid;
   margin: 0;

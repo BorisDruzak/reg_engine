@@ -29,8 +29,9 @@ Completed phases:
 - Phase 1L.3: Login and session hardening.
 - Phase 1L.4: Bootstrap UX hardening.
 - Phase 1L.5: Frontend live integration validation.
+- Phase 1L.6: Frontend structure refactor and full Russian UI naming.
 
-The next active checkpoint is Phase 1L.6.
+The next active checkpoint is Phase 1L.7.
 
 ## Core Rules
 
@@ -42,12 +43,14 @@ The next active checkpoint is Phase 1L.6.
 - Keep public-link editing backend-validated.
 - Keep normal deletes as archive behavior.
 - Keep the frontend Russian-first for user-facing text.
+- Keep the visible product name in UI as `Реестровая система`; keep `Registry Engine` only for technical project/repository context.
 - Keep built-in UI display names for roles, permissions, statuses, validation, and API errors Russian-first.
 - Keep visible demo/test names Russian unless a test intentionally verifies legacy stored text.
 
 Phase 1K.6 delivered:
 
 - Navigation, tables, panels, loading states, validation messages, and public-link screens use Russian text.
+- The visible product name in UI is `Реестровая система`.
 - Built-in role names and permission descriptions are Russian in seed data and in the frontend display layer.
 - Frontend maps known backend/API error details to Russian browser messages.
 - Technical codes such as `system_admin`, `users.manage`, field codes, registry codes, and route/API names remain unchanged.
@@ -186,6 +189,8 @@ Verification:
 
 ### Phase 1L.6: Frontend Structure Refactor
 
+Status: completed.
+
 Required work:
 
 - Split large frontend code into feature modules for login, organizations, registries, cards, users, access, and audit.
@@ -197,6 +202,24 @@ Acceptance criteria:
 
 - No single frontend page owns all feature workflows.
 - Unit, e2e, lint, typecheck, and format checks continue to pass.
+
+Delivered:
+
+- Split the authenticated admin UI into feature modules for auth/session, overview, organizations, registries/schema, cards/dynamic fields, users/roles, access grants, and audit.
+- Kept `HomePage` as a shell for session state, active section state, and query orchestration only.
+- Added a shared Russian UI product name: `Реестровая система`.
+- Added shared Russian empty state text and hid unknown English API errors behind the localized generic request failure message.
+- Kept dynamic card editing schema-driven through registry schema, blocks, block instances, fields, typed values, and reference-list options.
+- Updated frontend unit and e2e coverage for Russian UI naming.
+
+Verification:
+
+- `pnpm -C frontend lint` -> passed.
+- `pnpm -C frontend typecheck` -> passed.
+- `pnpm -C frontend test:run` -> 6 passed.
+- `pnpm -C frontend format:check` -> passed.
+- `pnpm -C frontend e2e` -> 2 passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote` -> passed.
 
 ### Phase 1L.7: Browser Storage Risk Decision
 

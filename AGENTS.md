@@ -52,6 +52,7 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 ## UI Language Rules
 
 - User-facing UI chrome must be Russian-first.
+- The visible product name in UI must be `Реестровая система`; keep `Registry Engine` only for repository, code, API, and technical documentation context.
 - Navigation labels must use these Russian names:
   - `Обзор`
   - `Организации`
@@ -63,6 +64,7 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 - Common UI actions must use Russian labels, for example `Войти`, `Выйти`, `Сохранить`, `Сохранено`.
 - Tables, panels, empty states, loading states, validation messages, and public-link screens must use Russian text.
 - Built-in user-facing role names, permission descriptions, status labels, and system display names must use Russian text in UI.
+- Empty states must use Russian text, for example `Нет данных`.
 - Frontend tests and demo fixtures must use Russian visible organization, registry, block, field, card, and user names unless the test intentionally checks legacy or user-entered foreign-language data.
 - Backend/API error details shown in the browser must be mapped to Russian user-facing text; raw English service messages are not UI copy.
 - Technical identifiers, permission codes, role codes, field codes, registry codes, API-provided names, and user-entered data may remain in their stored language.

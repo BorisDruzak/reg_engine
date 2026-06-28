@@ -2,10 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
-import { ApiError, readPublicLinkPreview, updatePublicLinkFieldValue } from "@/api/client";
+import { readPublicLinkPreview, updatePublicLinkFieldValue } from "@/api/client";
 import type { PublicLinkPreviewFieldRead } from "@/api/types";
 import {
-  apiErrorMessageLabel,
   fieldTypeLabel,
   formatUiDateTime,
   instanceLabel,
@@ -13,6 +12,7 @@ import {
   savedLabel,
   uiText,
 } from "@/app/uiText";
+import { errorText } from "@/components/common/dataUtils";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import {
   type FieldEditorState,
@@ -35,7 +35,7 @@ export function PublicLinkEditPage() {
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true" />
           <div>
-            <h1>Registry Engine</h1>
+            <h1>{uiText.productName}</h1>
             <span>{uiText.publicCardEdit}</span>
           </div>
         </div>
@@ -158,14 +158,4 @@ function PublicFieldEditor({
       {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
-}
-
-function errorText(error: unknown) {
-  if (error instanceof ApiError) {
-    return apiErrorMessageLabel(error.message);
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return uiText.requestFailed;
 }

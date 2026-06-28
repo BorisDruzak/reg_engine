@@ -438,7 +438,8 @@ function currentPublicPreview() {
 test("renders login screen before authentication", () => {
   render(<App />);
 
-  expect(screen.getByRole("heading", { name: "Registry Engine" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Реестровая система" })).toBeInTheDocument();
+  expect(screen.queryByText("Registry Engine")).not.toBeInTheDocument();
   expect(screen.getByLabelText(/электронная почта/i)).toBeInTheDocument();
   expect(screen.getByLabelText(/пароль/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();

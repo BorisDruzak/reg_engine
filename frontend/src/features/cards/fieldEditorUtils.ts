@@ -42,7 +42,12 @@ export function coerceEditorValue(fieldType: string, value: FieldEditorState): u
     if (typeof value !== "string") {
       throw new Error(uiText.jsonObjectRequired);
     }
-    const parsed = JSON.parse(value) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      throw new Error(uiText.jsonObjectRequired);
+    }
     if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
       throw new Error(uiText.jsonObjectRequired);
     }
