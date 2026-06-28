@@ -318,6 +318,39 @@ beforeEach(() => {
           value: publicStatusValue,
         });
       }
+      if (url.endsWith("/api/v1/public-links/attachments")) {
+        return jsonResponse({ items: attachmentItems });
+      }
+      if (url.endsWith("/api/v1/public-links/attachments/upload")) {
+        const created = {
+          id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          title: "Публичный акт",
+          description: null,
+          position: 0,
+          original_filename: "public.txt",
+          content_type: "text/plain",
+          content_length_bytes: 12,
+          scanner_status: "deferred",
+          created_at: "2026-06-28T12:05:00Z",
+          archived_at: null,
+        };
+        attachmentItems = [created as (typeof apiPayloads.attachments.items)[number]];
+        return jsonResponse(created, { status: 201 });
+      }
+      if (
+        url.endsWith(
+          "/api/v1/public-links/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content",
+        )
+      ) {
+        return new Response("public-bytes", {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain",
+            "X-Attachment-Filename": "public.txt",
+          },
+        });
+      }
       if (url.endsWith("/api/v1/auth/login")) {
         return jsonResponse(apiPayloads.login);
       }
@@ -863,6 +896,24 @@ test("edits a public-link card without authentication", async () => {
   await user.click(screen.getByRole("button", { name: "Сохранить Публичный статус" }));
 
   expect(await screen.findByText("Сохранено: Публичный статус")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
+  expect(screen.getByText("Нет файлов")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Документы" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Шаблоны документов" })).not.toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Название файла"), "Публичный акт");
+  await user.upload(
+    screen.getByLabelText("Файл"),
+    new File(["public bytes"], "public.txt", { type: "text/plain" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Загрузить файл" }));
+
+  expect(await screen.findByText("Файл загружен")).toBeInTheDocument();
+  expect(screen.getByText("Публичный акт")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Архивировать файл/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать файл Публичный акт" }));
+  expect(await screen.findByText("Файл скачан")).toBeInTheDocument();
+
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
     expect(
@@ -884,6 +935,35 @@ test("edits a public-link card without authentication", async () => {
           body.value === "submitted" &&
           body.block_instance_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith("/api/v1/public-links/attachments/upload") &&
+          init?.method === "POST" &&
+          init.body instanceof FormData &&
+          headers?.Authorization === undefined &&
+          headers?.["Content-Type"] === undefined
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        if (
+          !url.endsWith(
+            "/api/v1/public-links/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init?.body ?? "{}")) as { raw_token?: string };
+        return headers?.Authorization === undefined && body.raw_token === "public-token";
       }),
     ).toBe(true);
   });

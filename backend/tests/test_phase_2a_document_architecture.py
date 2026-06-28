@@ -19,6 +19,9 @@ def test_phase_2a_storage_adr_records_approved_decisions() -> None:
         "local filesystem backend",
         "configured outside Git",
         "public links do not upload or download attachments",
+        "Phase 2H follow-up",
+        "public-link attachment list/upload/download",
+        "`actor_type=public_link`",
         "`file_ref` is deferred",
         "scanner hook",
         "hide archived attachments from normal active lists",
@@ -47,6 +50,8 @@ def test_phase_2a_architecture_defines_metadata_access_and_tests() -> None:
         "Users can read or download attachments only for cards they can read.",
         "Public links cannot upload attachments in the first Phase 2 slice.",
         "Public links cannot download attachments in the first Phase 2 slice.",
+        "Phase 2H public-link attachment rules",
+        "public-link attachment responses omit `stored_file_id`, `checksum_sha256`",
         "## Required Phase 2B Tests Before Upload Endpoints",
         "test_create_attachment_metadata_requires_editable_card",
         "test_read_attachment_metadata_requires_readable_card",
@@ -62,6 +67,9 @@ def test_phase_2a_architecture_defines_metadata_access_and_tests() -> None:
         "test_descendant_admin_can_read_child_card_attachment",
         "test_sibling_admin_cannot_read_card_attachment",
         "test_superseded_card_attachment_is_read_only",
+        "## Required Phase 2H Public-Link Attachment Tests",
+        "public-link upload, list, and download succeed",
+        "wrong-card states",
     ]
     for fragment in required_fragments:
         assert fragment in text

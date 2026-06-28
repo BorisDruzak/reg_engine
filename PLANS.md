@@ -33,12 +33,12 @@ Completed phases:
 - Phase 2C: Generated document templates backend foundation.
 - Phase 2D: Frontend document workflows.
 - Phase 2G: Document template management UI.
+- Phase 2H: Public-link attachment workflows.
 
 Current stop point:
 
-- Phase 2G authenticated frontend attachment/document workflows are complete.
+- Phase 2H public-link attachment workflows are completed.
 - PDF conversion remains deferred.
-- Public-link upload/download remains deferred.
 - `file_ref` remains deferred.
 - Binary `.docx` template upload and template versioning remain deferred.
 
@@ -54,7 +54,7 @@ Current stop point:
 - Keep the frontend Russian-first for user-facing text.
 - Keep Phase 2 document work attachment-first; generated document work starts only from the Phase 2C backend foundation.
 - Keep Phase 2 storage roots and operational values outside Git.
-- Keep public-link upload/download and `file_ref` deferred until their later approved phases.
+- Keep `file_ref` deferred until its later approved phase.
 
 ## Phase 2: Documents And Attachments
 
@@ -79,6 +79,14 @@ Completed Phase 2 work:
 - Phase 2C added `document_templates`, `generated_documents`, backend-only `docx_text_v1` rendering, generated file storage, audit, and archive behavior.
 - Phase 2D added authenticated Russian-first card-workspace panels for attachments and generated documents, plus generated-document API endpoints needed by the UI.
 - Phase 2G added authenticated Russian-first template creation and archive controls for existing `docx_text_v1` document templates.
+- Phase 2H added public-link attachment list/upload/download for active public
+  edit links without adding public archive/delete, generated-document controls,
+  `file_ref`, PDF conversion, import/export, MCP, or a new migration.
+
+Active Phase 2 work:
+
+- No active Phase 2 implementation slice is open. Next work requires an explicit
+  approved phase.
 
 ## Review Findings After Phase 2E
 
@@ -291,11 +299,91 @@ Phase 2G did not implement:
 - MCP;
 - MDB migration.
 
+### Phase 2H: Public-Link Attachment Workflows
+
+Status: completed.
+
+Purpose: allow an active public edit link to list, upload, and download active
+card attachments without adding public archive, generated-document controls,
+`file_ref`, PDF conversion, import/export, MCP, or a new migration.
+
+Scope decisions:
+
+- Public-link file workflows use the existing card-level attachment metadata and
+  storage abstraction.
+- Public-link upload requires an active public link, `public_link.can_edit=true`,
+  and `card.public_edit_enabled=true`.
+- Public-link list/download require the same active public edit link in this
+  slice; public view-only file pages remain future work.
+- Public-link upload stores `created_by` as the user that created the public
+  link, while audit events use `actor_type=public_link`.
+- Public-link upload increments public-link `used_count`; list/download do not.
+- Public-link archive/delete is not exposed in this phase.
+- Archived and superseded cards remain blocked for public-link upload/download.
+
+Required work:
+
+1. Add service tests for public-link attachment list/upload/download. Completed.
+2. Add API tests for unauthenticated public-link attachment endpoints. Completed.
+3. Reuse bounded upload reading, MIME allow-list, filename normalization,
+   scanner hook, storage cleanup, and safe download headers. Completed.
+4. Add Russian-first public-link UI controls for file upload/download. Completed.
+5. Keep public-link generated documents, template management, archive/delete,
+   `file_ref`, PDF, import/export, MCP, and migrations out of scope. Completed.
+6. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs.
+   Completed.
+7. Run local backend/frontend checks and e2e tests. Completed.
+
+Delivered:
+
+- Added public-link attachment service workflows for list, upload, metadata
+  read, and content download.
+- Added unauthenticated public-link attachment REST endpoints that use
+  `raw_token` and never expose storage internals.
+- Kept public-link uploads behind active edit-link checks:
+  `public_link.can_edit=true`, `card.public_edit_enabled=true`, non-expired,
+  non-disabled, non-usage-exhausted, non-archived, non-superseded card.
+- Reused authenticated attachment hardening: bounded multipart reads, MIME
+  allow-list enforcement, filename normalization, scanner hook, storage cleanup,
+  and safe download headers.
+- Recorded public-link upload/download audit events with
+  `actor_type=public_link`; upload increments `used_count`, while list and
+  download do not.
+- Added Russian-first public-link attachment UI for upload/list/download.
+
+Verification evidence:
+
+- Backend service/API tests cover public-link upload, list, download, audit,
+  edit-link/card-state denial, cross-card denial, disabled/expired link denial,
+  archived attachment denial, and superseded card denial.
+- Frontend unit tests cover public-link upload/download without Authorization
+  headers and without generated-document/template controls.
+- Frontend e2e smoke covers public-link attachment upload/download and verifies
+  no generated-document/template endpoint calls.
+- Local full backend pytest runs still skip broader PostgreSQL-backed tests when
+  `TEST_DATABASE_URL` is not set.
+- Targeted attachment service/API PostgreSQL-backed tests passed against a
+  disposable `reg_engine_phase2h_test` database, which was deleted after the
+  run.
+
+Acceptance criteria:
+
+- Active public edit links can list active card attachments.
+- Active public edit links can upload card attachments with scanner status
+  recorded.
+- Active public edit links can download active attachment content with safe
+  download headers.
+- Disabled, expired, usage-exhausted, non-editable, archived, and superseded
+  public-link/card states cannot upload or download.
+- Public-link upload/download write `audit_events` with `actor_type=public_link`.
+- Public-link screens still do not expose generated document, template,
+  archive/delete, `file_ref`, PDF, import/export, or MCP controls.
+- No new database migration is added.
+
 ## Future Directions
 
 ### Later deferred items
 
-- Public-link file upload/download.
 - `file_ref` dynamic field type.
 - Binary `.docx` template upload and template versioning.
 - PDF conversion.

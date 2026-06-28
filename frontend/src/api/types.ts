@@ -182,6 +182,24 @@ export type PublicLinkPreviewRead = {
   blocks: PublicLinkPreviewBlockRead[];
 };
 
+export type PublicLinkAttachmentRead = {
+  id: string;
+  card_id: string;
+  title: string;
+  description: string | null;
+  position: number;
+  original_filename: string;
+  content_type: string;
+  content_length_bytes: number;
+  scanner_status: string;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type PublicLinkAttachmentListRead = {
+  items: PublicLinkAttachmentRead[];
+};
+
 export type UserRead = {
   id: string;
   email: string;

@@ -14,6 +14,8 @@ import type {
   GeneratedDocumentRead,
   LoginResponse,
   OrganizationListRead,
+  PublicLinkAttachmentListRead,
+  PublicLinkAttachmentRead,
   PermissionListRead,
   PublicLinkPreviewRead,
   ReferenceItemListRead,
@@ -113,6 +115,37 @@ export async function updatePublicLinkFieldValue(
       block_instance_id: blockInstanceId,
     },
   });
+}
+
+export async function listPublicLinkAttachments(rawToken: string) {
+  return apiRequest<PublicLinkAttachmentListRead>("/api/v1/public-links/attachments", {
+    method: "POST",
+    body: { raw_token: rawToken },
+  });
+}
+
+export async function uploadPublicLinkAttachment(
+  rawToken: string,
+  payload: { file: File; title?: string },
+) {
+  const formData = new FormData();
+  formData.append("raw_token", rawToken);
+  formData.append("file", payload.file);
+  if (payload.title?.trim()) {
+    formData.append("title", payload.title.trim());
+  }
+  return apiRequest<PublicLinkAttachmentRead>("/api/v1/public-links/attachments/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function downloadPublicLinkAttachmentContent(rawToken: string, attachmentId: string) {
+  return downloadPublicFile(
+    `/api/v1/public-links/attachments/${attachmentId}/content`,
+    rawToken,
+    "X-Attachment-Filename",
+  );
 }
 
 export async function listUsers(token: string) {
@@ -269,6 +302,27 @@ async function downloadFile(path: string, token: string, filenameHeader: string)
     headers: {
       Authorization: `Bearer ${token}`,
     },
+  });
+
+  if (!response.ok) {
+    const message = await errorMessage(response);
+    throw new ApiError(message, response.status);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: response.headers.get(filenameHeader) ?? "download",
+  };
+}
+
+async function downloadPublicFile(path: string, rawToken: string, filenameHeader: string) {
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/octet-stream",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ raw_token: rawToken }),
   });
 
   if (!response.ok) {

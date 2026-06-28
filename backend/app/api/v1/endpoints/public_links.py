@@ -1,14 +1,24 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
 from app.api.v1.endpoints._field_values import coerce_api_field_value, field_value_to_read
-from app.models import CardPublicLink
+from app.api.v1.endpoints.attachments import (
+    AttachmentUploadTooLargeError,
+    _attachment_service,
+    _download_headers_for_filename,
+    _read_upload_bytes_with_limit,
+)
+from app.core.config import get_settings
+from app.models import CardAttachment, CardPublicLink
 from app.schemas.cards import FieldValueRead
 from app.schemas.public_links import (
+    PublicLinkAttachmentListRead,
+    PublicLinkAttachmentRead,
+    PublicLinkAttachmentRequest,
     PublicLinkCreate,
     PublicLinkEditRequest,
     PublicLinkListRead,
@@ -21,6 +31,7 @@ from app.schemas.public_links import (
     PublicLinkRead,
     PublicLinkTokenRead,
 )
+from app.services.attachments import AttachmentService
 from app.services.public_links import PublicLinkPreview, PublicLinkService
 
 router = APIRouter(tags=["public-links"])
@@ -122,6 +133,91 @@ def edit_card_field_with_public_link(
     return field_value_to_read(session, field_value)
 
 
+@router.post("/public-links/attachments", response_model=PublicLinkAttachmentListRead)
+def list_public_link_attachments(
+    payload: PublicLinkAttachmentRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PublicLinkAttachmentListRead:
+    try:
+        public_link = PublicLinkService(session).validate_public_edit_token(
+            raw_token=payload.raw_token,
+        )
+        service = _attachment_service(session)
+        attachments = service.list_attachments_from_public_link(
+            actor_public_link_id=public_link.id,
+            card_id=public_link.card_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return PublicLinkAttachmentListRead(
+        items=[_public_attachment_to_read(service, attachment) for attachment in attachments]
+    )
+
+
+@router.post(
+    "/public-links/attachments/upload",
+    response_model=PublicLinkAttachmentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_public_link_attachment(
+    session: Annotated[Session, Depends(get_db_session)],
+    file: Annotated[UploadFile, File()],
+    raw_token: Annotated[str, Form()],
+    title: Annotated[str | None, Form()] = None,
+    description: Annotated[str | None, Form()] = None,
+) -> PublicLinkAttachmentRead:
+    try:
+        public_link = PublicLinkService(session).validate_public_edit_token(raw_token=raw_token)
+        service = _attachment_service(session)
+        content = await _read_upload_bytes_with_limit(
+            file,
+            max_bytes=get_settings().max_attachment_bytes,
+        )
+        attachment = service.create_attachment_from_public_link(
+            actor_public_link_id=public_link.id,
+            card_id=public_link.card_id,
+            original_filename=file.filename or "attachment",
+            content_type=file.content_type or "application/octet-stream",
+            content=content,
+            title=title,
+            description=description,
+        )
+    except AttachmentUploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_attachment_to_read(service, attachment)
+
+
+@router.post("/public-links/attachments/{attachment_id}/content")
+def read_public_link_attachment_content(
+    attachment_id: UUID,
+    payload: PublicLinkAttachmentRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> Response:
+    try:
+        public_link = PublicLinkService(session).validate_public_edit_token(
+            raw_token=payload.raw_token,
+        )
+        service = _attachment_service(session)
+        attachment = service.read_attachment_from_public_link(
+            actor_public_link_id=public_link.id,
+            attachment_id=attachment_id,
+        )
+        stored_file = service.get_stored_file_for_attachment(attachment)
+        content = service.read_attachment_content_from_public_link(
+            actor_public_link_id=public_link.id,
+            attachment_id=attachment_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return Response(
+        content=content,
+        media_type=stored_file.content_type,
+        headers=_download_headers_for_filename(stored_file.original_filename),
+    )
+
+
 def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
     return PublicLinkRead(
         id=public_link.id,
@@ -177,4 +273,24 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
             )
             for block in preview.blocks
         ],
+    )
+
+
+def _public_attachment_to_read(
+    service: AttachmentService,
+    attachment: CardAttachment,
+) -> PublicLinkAttachmentRead:
+    stored_file = service.get_stored_file_for_attachment(attachment)
+    return PublicLinkAttachmentRead(
+        id=attachment.id,
+        card_id=attachment.card_id,
+        title=attachment.title,
+        description=attachment.description,
+        position=attachment.position,
+        original_filename=stored_file.original_filename,
+        content_type=stored_file.content_type,
+        content_length_bytes=stored_file.content_length_bytes,
+        scanner_status=stored_file.scanner_status,
+        created_at=attachment.created_at,
+        archived_at=attachment.archived_at,
     )

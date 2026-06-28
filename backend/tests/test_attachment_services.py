@@ -1,9 +1,10 @@
 import hashlib
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -24,6 +25,7 @@ from app.services.attachments import (
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
+from app.services.public_links import PublicLinkService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -665,31 +667,179 @@ def test_archived_attachment_is_readable_in_archive_scope_for_card_reader(
     assert archived.id == attachment.id
 
 
-def test_public_link_cannot_upload_or_download_attachment(
+def test_public_link_can_upload_list_and_download_attachment_with_audit(
     db_session: Session,
     attachment_service: AttachmentService,
 ) -> None:
     context = _attachment_context(db_session)
-    attachment = attachment_service.create_attachment_for_actor(
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
         actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    attachment = attachment_service.create_attachment_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
         card_id=context["card"].id,
         original_filename="public.txt",
         content_type="text/plain",
         content=b"public",
+        title="Public evidence",
+    )
+
+    listed = attachment_service.list_attachments_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        card_id=context["card"].id,
+    )
+    content = attachment_service.read_attachment_content_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        attachment_id=attachment.id,
+    )
+    stored_file = db_session.get(StoredFile, attachment.stored_file_id)
+    audit_rows = db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.actor_public_link_id == public_token.public_link.id,
+            AuditEvent.object_type == "card_attachment",
+        )
+    ).all()
+
+    assert [item.id for item in listed] == [attachment.id]
+    assert content == b"public"
+    assert stored_file is not None
+    assert stored_file.created_by == context["child_admin"].id
+    assert attachment.created_by == context["child_admin"].id
+    assert public_token.public_link.used_count == 1
+    assert {row.action for row in audit_rows} == {
+        "attachment_create",
+        "attachment_download",
+    }
+    assert {row.actor_type for row in audit_rows} == {"public_link"}
+
+
+def test_public_link_attachment_workflow_respects_edit_link_state(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
     )
 
     with pytest.raises(PermissionDeniedError):
         attachment_service.create_attachment_from_public_link(
-            actor_public_link_id=uuid4(),
+            actor_public_link_id=public_token.public_link.id,
             card_id=context["card"].id,
             original_filename="blocked.txt",
             content_type="text/plain",
             content=b"blocked",
         )
+
+
+def test_public_link_attachment_workflow_rejects_inactive_links_and_wrong_cards(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    other_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["child_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Other public attachment card",
+        public_edit_enabled=True,
+    )
+    other_attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=other_card.id,
+        original_filename="other.txt",
+        content_type="text/plain",
+        content=b"other",
+    )
+
     with pytest.raises(PermissionDeniedError):
         attachment_service.read_attachment_content_from_public_link(
-            actor_public_link_id=uuid4(),
+            actor_public_link_id=public_token.public_link.id,
+            attachment_id=other_attachment.id,
+        )
+
+    public_token.public_link.status = "disabled"
+    db_session.flush()
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.list_attachments_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
+            card_id=context["card"].id,
+        )
+
+    public_token.public_link.status = "active"
+    public_token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.flush()
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
+            card_id=context["card"].id,
+            original_filename="expired.txt",
+            content_type="text/plain",
+            content=b"expired",
+        )
+
+
+def test_public_link_attachment_workflow_rejects_archived_and_superseded_cards(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="archive-public.txt",
+        content_type="text/plain",
+        content=b"archive-public",
+    )
+    attachment_service.archive_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        attachment_id=attachment.id,
+    )
+
+    with pytest.raises(AttachmentServiceError):
+        attachment_service.read_attachment_content_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
             attachment_id=attachment.id,
+        )
+
+    CardService(db_session).transfer_card_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=context["card"].id,
+        target_organization_id=context["sibling"].id,
+    )
+    with pytest.raises(AttachmentServiceError):
+        attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
+            card_id=context["card"].id,
+            original_filename="superseded-public.txt",
+            content_type="text/plain",
+            content=b"superseded-public",
+        )
+
+    context["card"].public_edit_enabled = True
+    public_token.public_link.can_edit = False
+    db_session.flush()
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
+            card_id=context["card"].id,
+            original_filename="blocked.txt",
+            content_type="text/plain",
+            content=b"blocked",
         )
 
 

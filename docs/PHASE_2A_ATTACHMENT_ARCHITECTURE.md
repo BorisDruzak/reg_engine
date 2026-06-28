@@ -2,6 +2,12 @@
 
 Phase 2A defines the storage architecture for card-level attachments. It does not add backend models, migrations, upload endpoints, download endpoints, public-link file behavior, or frontend UI.
 
+Phase 2H follow-up: public-link attachment list/upload/download is now approved
+and implemented as a later slice for active public edit links. The Phase 2A
+first-slice constraints below remain as historical approval evidence; current
+runtime behavior is documented in the Phase 2H notes in this file, `README.md`,
+and `PLANS.md`.
+
 ## Approved Scope
 
 - Card-level attachments first.
@@ -151,6 +157,30 @@ Public links cannot download attachments in the first Phase 2 slice.
 
 Public-link edit remains limited to direct field editing already allowed by the public-link card rules.
 
+Phase 2H public-link attachment rules:
+
+- public-link list/upload/download require an active public link that is not
+  expired, not disabled, not usage-exhausted, and has `can_edit=true`;
+- the linked card must have `public_edit_enabled=true`;
+- archived and superseded cards are blocked for public-link upload/download;
+- public-link list/download only return active attachments for the linked card;
+- public-link upload uses the existing `stored_files` and `card_attachments`
+  metadata, storage abstraction, bounded upload reads, MIME allow-list, filename
+  normalization, scanner hook, and storage cleanup;
+- public-link download uses the same safe `Content-Disposition` header behavior
+  as authenticated downloads;
+- public-link attachment responses omit `stored_file_id`, `checksum_sha256`,
+  storage keys, storage roots, and filesystem paths;
+- public-link upload records `scanner_status`, writes an `attachment_create`
+  audit event with `actor_type=public_link`, and increments public-link
+  `used_count` only after successful attachment creation;
+- public-link download writes an `attachment_download` audit event with
+  `actor_type=public_link`;
+- public-link list/download do not increment `used_count`;
+- public-link archive/delete, generated-document workflows, template
+  management, `file_ref`, PDF conversion, import/export, MCP, and new migrations
+  remain outside Phase 2H.
+
 ## Audit Rules
 
 Future attachment services must write `audit_events` for:
@@ -234,6 +264,23 @@ Phase 2B must add automated tests with these behaviors before any upload endpoin
 - `test_descendant_admin_can_read_child_card_attachment`;
 - `test_sibling_admin_cannot_read_card_attachment`;
 - `test_superseded_card_attachment_is_read_only`.
+
+## Required Phase 2H Public-Link Attachment Tests
+
+Phase 2H must add automated tests with these behaviors:
+
+- public-link upload, list, and download succeed for an active public edit link;
+- public-link upload writes `scanner_status`, creates attachment metadata, and
+  increments `used_count`;
+- public-link download writes an audit event with `actor_type=public_link`;
+- public-link list/download do not increment `used_count`;
+- public-link responses do not expose `stored_file_id`, `checksum_sha256`,
+  storage keys, storage roots, or filesystem paths;
+- public-link workflows reject disabled, expired, usage-exhausted, non-editable,
+  archived, superseded, and wrong-card states;
+- public-link UI exposes Russian-first attachment upload/list/download controls;
+- public-link UI does not expose archive/delete, generated-document, template,
+  `file_ref`, PDF, import/export, or MCP controls.
 
 ## Phase 2A Acceptance Evidence
 

@@ -565,7 +565,20 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
 test("renders public-link edit page and saves a field", async ({ page }) => {
   let publicStatusValue = "drafted";
-  let fileEndpointCalls = 0;
+  let forbiddenDocumentEndpointCalls = 0;
+  let publicAttachmentItems: Array<{
+    id: string;
+    card_id: string;
+    title: string;
+    description: string | null;
+    position: number;
+    original_filename: string;
+    content_type: string;
+    content_length_bytes: number;
+    scanner_status: string;
+    created_at: string;
+    archived_at: string | null;
+  }> = [];
   let editRequestBody: {
     raw_token?: string;
     field_id?: string;
@@ -575,12 +588,56 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
 
   await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    const request = route.request();
     if (
-      url.pathname.includes("attachments") ||
       url.pathname.includes("generated-documents") ||
       url.pathname.includes("document-templates")
     ) {
-      fileEndpointCalls += 1;
+      forbiddenDocumentEndpointCalls += 1;
+    }
+    if (url.pathname === "/api/v1/public-links/attachments") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: publicAttachmentItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/public-links/attachments/upload") {
+      const created = {
+        id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        title: "Публичный акт",
+        description: null,
+        position: 0,
+        original_filename: "public.txt",
+        content_type: "text/plain",
+        content_length_bytes: 12,
+        scanner_status: "deferred",
+        created_at: "2026-06-28T12:05:00Z",
+        archived_at: null,
+      };
+      publicAttachmentItems = [created];
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(created),
+      });
+      return;
+    }
+    if (
+      url.pathname ===
+      "/api/v1/public-links/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content"
+    ) {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain",
+          "X-Attachment-Filename": "public.txt",
+        },
+        body: "public-bytes",
+      });
+      return;
     }
     if (url.pathname === "/api/v1/public-links/preview") {
       await route.fulfill({
@@ -591,7 +648,7 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
       return;
     }
     if (url.pathname === "/api/v1/public-links/edit") {
-      editRequestBody = route.request().postDataJSON() as typeof editRequestBody;
+      editRequestBody = request.postDataJSON() as typeof editRequestBody;
       publicStatusValue = String(editRequestBody?.value ?? "");
       await route.fulfill({
         status: 200,
@@ -618,9 +675,10 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
   await expect(page.getByText("Публичный блок")).toBeVisible();
   await expect(page.getByText("Публичное редактирование карточки")).toBeVisible();
   await expect(page.getByLabel("Публичный статус")).toHaveValue("drafted");
-  await expect(page.getByRole("heading", { name: "Вложения" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Загрузить файл" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toHaveCount(0);
+  await expect(page.getByText("Нет файлов")).toBeVisible();
 
   await page.getByLabel("Публичный статус").fill("submitted");
   await page.getByRole("button", { name: "Сохранить Публичный статус" }).click();
@@ -632,7 +690,21 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
     value: "submitted",
     block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   });
-  expect(fileEndpointCalls).toBe(0);
+
+  await page.getByLabel("Название файла").fill("Публичный акт");
+  await page.getByLabel("Файл", { exact: true }).setInputFiles({
+    name: "public.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("public bytes"),
+  });
+  await page.getByRole("button", { name: "Загрузить файл" }).click();
+  await expect(page.getByText("Файл загружен")).toBeVisible();
+  await expect(page.getByText("Публичный акт")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Архивировать файл/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Скачать файл Публичный акт" }).click();
+  await expect(page.getByText("Файл скачан")).toBeVisible();
+
+  expect(forbiddenDocumentEndpointCalls).toBe(0);
 });
 
 function responsePayload(

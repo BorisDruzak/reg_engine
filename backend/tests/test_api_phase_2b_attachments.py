@@ -18,6 +18,7 @@ from app.main import create_app
 from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_permissions
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
+from app.services.public_links import PublicLinkService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -446,6 +447,82 @@ def test_api_attachment_upload_rejects_oversized_file(
     )
 
     assert response.status_code == 413, response.text
+
+
+def test_api_public_link_attachment_upload_list_and_download(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _attachment_api_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    upload_response = api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": public_token.raw_token, "title": "Public evidence"},
+        files={"file": ("public.txt", b"public bytes", "text/plain")},
+    )
+    assert upload_response.status_code == 201, upload_response.text
+    upload_payload = upload_response.json()
+    assert upload_payload["card_id"] == str(context["card"].id)
+    assert upload_payload["title"] == "Public evidence"
+    assert upload_payload["original_filename"] == "public.txt"
+    assert upload_payload["content_length_bytes"] == len(b"public bytes")
+    assert upload_payload["scanner_status"] == "deferred"
+    assert "stored_file_id" not in upload_payload
+    assert "checksum_sha256" not in upload_payload
+
+    list_response = api_client.post(
+        "/api/v1/public-links/attachments",
+        json={"raw_token": public_token.raw_token},
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert [item["id"] for item in list_response.json()["items"]] == [upload_payload["id"]]
+
+    download_response = api_client.post(
+        f"/api/v1/public-links/attachments/{upload_payload['id']}/content",
+        json={"raw_token": public_token.raw_token},
+    )
+    assert download_response.status_code == 200, download_response.text
+    assert download_response.content == b"public bytes"
+    assert download_response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert "attachment;" in download_response.headers["content-disposition"]
+    assert "\r" not in download_response.headers["content-disposition"]
+    assert "\n" not in download_response.headers["content-disposition"]
+
+    audit_events = db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.actor_public_link_id == public_token.public_link.id,
+            AuditEvent.object_type == "card_attachment",
+        )
+    ).all()
+    assert {event.action for event in audit_events} == {
+        "attachment_create",
+        "attachment_download",
+    }
+    assert {event.actor_type for event in audit_events} == {"public_link"}
+
+
+def test_api_public_link_attachment_upload_respects_card_public_edit_toggle(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _attachment_api_context(db_session)
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    response = api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": public_token.raw_token},
+        files={"file": ("blocked.txt", b"blocked", "text/plain")},
+    )
+
+    assert response.status_code == 403, response.text
 
 
 def test_upload_reader_rejects_oversized_content_without_unbounded_read() -> None:

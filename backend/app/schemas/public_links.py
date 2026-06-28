@@ -38,6 +38,28 @@ class PublicLinkPreviewRequest(BaseModel):
     raw_token: str
 
 
+class PublicLinkAttachmentRequest(BaseModel):
+    raw_token: str
+
+
+class PublicLinkAttachmentRead(BaseModel):
+    id: UUID
+    card_id: UUID
+    title: str
+    description: str | None
+    position: int
+    original_filename: str
+    content_type: str
+    content_length_bytes: int
+    scanner_status: str
+    created_at: datetime
+    archived_at: datetime | None
+
+
+class PublicLinkAttachmentListRead(BaseModel):
+    items: list[PublicLinkAttachmentRead]
+
+
 class PublicLinkPreviewOptionRead(BaseModel):
     id: UUID
     code: str

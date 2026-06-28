@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.models import Card, CardAttachment, StoredFile
+from app.models import Card, CardAttachment, CardPublicLink, StoredFile
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -165,8 +165,33 @@ class AttachmentService:
         )
         clean_original_filename = normalize_attachment_filename(original_filename)
         clean_content_type = self._clean_required_text(content_type, "content type")
+        return self._create_attachment(
+            card=card,
+            created_by_user_id=actor_user_id,
+            original_filename=clean_original_filename,
+            content_type=clean_content_type,
+            content=content,
+            title=title,
+            description=description,
+            audit_actor_user_id=actor_user_id,
+            audit_public_link_id=None,
+        )
+
+    def _create_attachment(
+        self,
+        *,
+        card: Card,
+        created_by_user_id: UUID,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+        title: str | None,
+        description: str | None,
+        audit_actor_user_id: UUID | None,
+        audit_public_link_id: UUID | None,
+    ) -> CardAttachment:
         self._validate_attachment_content(content)
-        self._validate_content_type(clean_content_type)
+        self._validate_content_type(content_type)
 
         stored_info = self.storage.write_bytes(content)
         try:
@@ -177,14 +202,14 @@ class AttachmentService:
             stored_file = StoredFile(
                 storage_backend=self.storage.backend_name,
                 storage_key=stored_info.storage_key,
-                original_filename=clean_original_filename,
-                content_type=clean_content_type,
+                original_filename=original_filename,
+                content_type=content_type,
                 content_length_bytes=stored_info.content_length_bytes,
                 checksum_sha256=stored_info.checksum_sha256,
                 scanner_status=scan_result.scanner_status,
                 scanner_checked_at=scan_result.scanner_checked_at,
                 scanner_details_json=scan_result.scanner_details_json,
-                created_by=actor_user_id,
+                created_by=created_by_user_id,
             )
             self.session.add(stored_file)
             self.session.flush()
@@ -192,17 +217,17 @@ class AttachmentService:
             attachment = CardAttachment(
                 card_id=card.id,
                 stored_file_id=stored_file.id,
-                title=self._attachment_title(title, clean_original_filename),
+                title=self._attachment_title(title, original_filename),
                 description=description,
                 position=self._next_position(card.id),
-                created_by=actor_user_id,
+                created_by=created_by_user_id,
             )
             self.session.add(attachment)
             self.session.flush()
-            AuditService(self.session).record_user_event(
-                actor_user_id=actor_user_id,
+            self._record_attachment_audit(
+                actor_user_id=audit_actor_user_id,
+                actor_public_link_id=audit_public_link_id,
                 action="attachment_create",
-                object_type="card_attachment",
                 object_id=attachment.id,
                 new_data_json={
                     "card_id": str(card.id),
@@ -322,8 +347,60 @@ class AttachmentService:
         original_filename: str,
         content_type: str,
         content: bytes,
+        title: str | None = None,
+        description: str | None = None,
     ) -> CardAttachment:
-        raise PermissionDeniedError("Public links cannot upload attachments.")
+        public_link = self._get_public_attachment_link(actor_public_link_id)
+        card = self._get_public_attachment_card(public_link, card_id=card_id)
+        created_by_user_id = self._public_link_created_by(public_link)
+        clean_original_filename = normalize_attachment_filename(original_filename)
+        clean_content_type = self._clean_required_text(content_type, "content type")
+        attachment = self._create_attachment(
+            card=card,
+            created_by_user_id=created_by_user_id,
+            original_filename=clean_original_filename,
+            content_type=clean_content_type,
+            content=content,
+            title=title,
+            description=description,
+            audit_actor_user_id=None,
+            audit_public_link_id=public_link.id,
+        )
+        public_link.used_count += 1
+        self.session.flush()
+        return attachment
+
+    def list_attachments_from_public_link(
+        self,
+        *,
+        actor_public_link_id: UUID,
+        card_id: UUID,
+    ) -> list[CardAttachment]:
+        public_link = self._get_public_attachment_link(actor_public_link_id)
+        card = self._get_public_attachment_card(public_link, card_id=card_id)
+        return list(
+            self.session.scalars(
+                select(CardAttachment)
+                .where(
+                    CardAttachment.card_id == card.id,
+                    CardAttachment.archived_at.is_(None),
+                )
+                .order_by(CardAttachment.position, CardAttachment.id)
+            ).all()
+        )
+
+    def read_attachment_from_public_link(
+        self,
+        *,
+        actor_public_link_id: UUID,
+        attachment_id: UUID,
+    ) -> CardAttachment:
+        public_link = self._get_public_attachment_link(actor_public_link_id)
+        attachment = self._get_attachment(attachment_id)
+        if attachment.archived_at is not None:
+            raise AttachmentServiceError("Attachment was not found.")
+        self._get_public_attachment_card(public_link, card_id=attachment.card_id)
+        return attachment
 
     def read_attachment_content_from_public_link(
         self,
@@ -331,7 +408,22 @@ class AttachmentService:
         actor_public_link_id: UUID,
         attachment_id: UUID,
     ) -> bytes:
-        raise PermissionDeniedError("Public links cannot download attachments.")
+        attachment = self.read_attachment_from_public_link(
+            actor_public_link_id=actor_public_link_id,
+            attachment_id=attachment_id,
+        )
+        stored_file = self._get_stored_file(attachment.stored_file_id)
+        AuditService(self.session).record_public_link_event(
+            actor_public_link_id=actor_public_link_id,
+            action="attachment_download",
+            object_type="card_attachment",
+            object_id=attachment.id,
+            new_data_json={
+                "stored_file_id": str(stored_file.id),
+                "content_length_bytes": stored_file.content_length_bytes,
+            },
+        )
+        return self.storage.read_bytes(stored_file.storage_key)
 
     def get_stored_file_for_attachment(self, attachment: CardAttachment) -> StoredFile:
         return self._get_stored_file(attachment.stored_file_id)
@@ -359,6 +451,41 @@ class AttachmentService:
         if stored_file is None:
             raise AttachmentServiceError("Stored file was not found.")
         return stored_file
+
+    def _get_public_attachment_link(self, public_link_id: UUID) -> CardPublicLink:
+        public_link = self.session.get(CardPublicLink, public_link_id)
+        if public_link is None:
+            raise PermissionDeniedError("Public link is not active.")
+
+        now = datetime.now(UTC)
+        if public_link.status != "active" or public_link.expires_at <= now:
+            if public_link.expires_at <= now and public_link.status == "active":
+                public_link.status = "expired"
+                self.session.flush()
+            raise PermissionDeniedError("Public link is not active.")
+        if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
+            raise PermissionDeniedError("Public link usage limit is exhausted.")
+        if not public_link.can_edit:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+        return public_link
+
+    def _get_public_attachment_card(
+        self,
+        public_link: CardPublicLink,
+        *,
+        card_id: UUID,
+    ) -> Card:
+        if card_id != public_link.card_id:
+            raise PermissionDeniedError("Public link cannot access attachments for this card.")
+        card = self._get_editable_card(card_id)
+        if not card.public_edit_enabled:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+        return card
+
+    def _public_link_created_by(self, public_link: CardPublicLink) -> UUID:
+        if public_link.created_by is None:
+            raise PermissionDeniedError("Public link creator is required for file uploads.")
+        return public_link.created_by
 
     def _get_editable_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)
@@ -422,6 +549,35 @@ class AttachmentService:
         if not cleaned:
             raise AttachmentServiceError(f"Attachment {label} must not be empty.")
         return cleaned
+
+    def _record_attachment_audit(
+        self,
+        *,
+        actor_user_id: UUID | None,
+        actor_public_link_id: UUID | None,
+        action: str,
+        object_id: UUID,
+        new_data_json: dict[str, object],
+    ) -> None:
+        audit_service = AuditService(self.session)
+        if actor_public_link_id is not None:
+            audit_service.record_public_link_event(
+                actor_public_link_id=actor_public_link_id,
+                action=action,
+                object_type="card_attachment",
+                object_id=object_id,
+                new_data_json=new_data_json,
+            )
+            return
+        if actor_user_id is None:
+            raise AttachmentServiceError("Attachment audit actor is required.")
+        audit_service.record_user_event(
+            actor_user_id=actor_user_id,
+            action=action,
+            object_type="card_attachment",
+            object_id=object_id,
+            new_data_json=new_data_json,
+        )
 
 
 _UNSAFE_FILENAME_PATTERN = re.compile("[\\x00-\\x1f\\x7f\\\\/\"';]+")

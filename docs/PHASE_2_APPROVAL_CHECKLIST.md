@@ -3,8 +3,10 @@
 Phase 2 approval was captured on 2026-06-28. This checklist is retained as the approval audit artifact.
 
 Follow-up: Phase 2G later moved authenticated document-template management UI out
-of the deferred bucket. Public-link file flows, `file_ref`, binary `.docx`
-template upload, PDF conversion, import/export, and MCP remain deferred.
+of the deferred bucket. Phase 2H later moved public-link attachment
+list/upload/download for active public edit links out of the deferred bucket.
+`file_ref`, binary `.docx` template upload, PDF conversion, import/export, and
+MCP remain deferred.
 
 ## Recommended Approval
 

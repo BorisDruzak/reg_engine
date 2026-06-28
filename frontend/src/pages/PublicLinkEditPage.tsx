@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
-import { readPublicLinkPreview, updatePublicLinkFieldValue } from "@/api/client";
-import type { PublicLinkPreviewFieldRead } from "@/api/types";
+import {
+  downloadPublicLinkAttachmentContent,
+  listPublicLinkAttachments,
+  readPublicLinkPreview,
+  updatePublicLinkFieldValue,
+  uploadPublicLinkAttachment,
+} from "@/api/client";
+import type { PublicLinkAttachmentRead, PublicLinkPreviewFieldRead } from "@/api/types";
 import {
   fieldTypeLabel,
   formatUiDateTime,
@@ -82,10 +88,139 @@ export function PublicLinkEditPage() {
                 </section>
               ))
             )}
+            <PublicLinkAttachmentsPanel rawToken={rawToken} />
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
+  const queryClient = useQueryClient();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const attachmentsQuery = useQuery({
+    queryKey: ["public-link-attachments", rawToken],
+    queryFn: () => listPublicLinkAttachments(rawToken),
+    enabled: Boolean(rawToken),
+  });
+  const uploadMutation = useMutation({
+    mutationFn: () => {
+      if (!file) {
+        throw new Error(uiText.file);
+      }
+      return uploadPublicLinkAttachment(rawToken, { file, title });
+    },
+    onSuccess: async () => {
+      setMessage(uiText.fileUploaded);
+      setLocalError(null);
+      setTitle("");
+      setFile(null);
+      formRef.current?.reset();
+      await queryClient.invalidateQueries({ queryKey: ["public-link-attachments", rawToken] });
+    },
+    onError: (error) => setLocalError(errorText(error)),
+  });
+  const downloadMutation = useMutation({
+    mutationFn: (attachment: PublicLinkAttachmentRead) =>
+      downloadPublicLinkAttachmentContent(rawToken, attachment.id),
+    onSuccess: ({ blob, filename }) => {
+      triggerBrowserDownload(blob, filename);
+      setMessage(uiText.fileDownloaded);
+      setLocalError(null);
+    },
+    onError: (error) => setLocalError(errorText(error)),
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    uploadMutation.mutate();
+  }
+
+  return (
+    <section className="data-panel">
+      <header>
+        <h3>{uiText.attachments}</h3>
+      </header>
+      <form ref={formRef} className="attachment-form" onSubmit={handleSubmit}>
+        <label className="field-editor-control">
+          <span>{uiText.fileTitle}</span>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+        </label>
+        <label className="field-editor-control">
+          <span>{uiText.file}</span>
+          <input
+            aria-label={uiText.file}
+            type="file"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={!file || uploadMutation.isPending}
+        >
+          {uiText.uploadFile}
+        </button>
+      </form>
+      {message && <p className="inline-success attachment-status">{message}</p>}
+      {localError && <p className="inline-alert attachment-status">{localError}</p>}
+      {attachmentsQuery.error && <p className="data-alert">{errorText(attachmentsQuery.error)}</p>}
+      <PublicAttachmentList
+        items={attachmentsQuery.data?.items ?? []}
+        downloadingId={downloadMutation.isPending ? (downloadMutation.variables?.id ?? null) : null}
+        onDownload={(attachment) => downloadMutation.mutate(attachment)}
+      />
+    </section>
+  );
+}
+
+function PublicAttachmentList({
+  items,
+  downloadingId,
+  onDownload,
+}: {
+  items: PublicLinkAttachmentRead[];
+  downloadingId: string | null;
+  onDownload: (attachment: PublicLinkAttachmentRead) => void;
+}) {
+  if (items.length === 0) {
+    return <p className="data-empty">{uiText.noFiles}</p>;
+  }
+
+  return (
+    <ul className="file-action-list">
+      {items.map((attachment) => {
+        const title = attachment.title || attachment.original_filename;
+        return (
+          <li key={attachment.id}>
+            <div>
+              <strong>{title}</strong>
+              <span>
+                {attachment.original_filename} / {formatBytes(attachment.content_length_bytes)} /{" "}
+                {scannerStatusLabel(attachment.scanner_status)} /{" "}
+                {formatUiDateTime(attachment.created_at)}
+              </span>
+            </div>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                aria-label={`${uiText.download} файл ${title}`}
+                disabled={downloadingId === attachment.id}
+                onClick={() => onDownload(attachment)}
+              >
+                {uiText.download}
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -158,4 +293,40 @@ function PublicFieldEditor({
       {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} Б`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} КБ`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} МБ`;
+}
+
+function scannerStatusLabel(value: string) {
+  if (value === "deferred") {
+    return uiText.scannerDeferred;
+  }
+  return value;
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  if (typeof document === "undefined" || typeof window.URL.createObjectURL !== "function") {
+    return;
+  }
+  const href = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  try {
+    link.click();
+  } catch {
+    // Test and embedded browser environments can block programmatic downloads.
+  } finally {
+    if (typeof window.URL.revokeObjectURL === "function") {
+      window.URL.revokeObjectURL(href);
+    }
+  }
 }

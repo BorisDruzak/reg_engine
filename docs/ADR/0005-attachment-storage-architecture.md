@@ -30,6 +30,14 @@ Generated documents, templates, public-link upload/download, and `file_ref` fiel
 
 No upload endpoints or frontend UI are introduced by Phase 2A. Phase 2A records the storage decision, metadata schema, service boundary, access-control rules, scanner hook, and tests that must exist before upload endpoints are exposed.
 
+Phase 2H follow-up: public-link attachment list/upload/download is now an
+approved later slice for active public edit links. It reuses the same
+card-level attachment metadata, storage abstraction, scanner hook, bounded
+upload reads, filename normalization, storage cleanup, and safe download
+headers. It does not add public archive/delete, generated-document workflows,
+template management, `file_ref`, PDF conversion, import/export, MCP, or a new
+migration.
+
 ## Storage Boundary
 
 Future backend code should introduce an `AttachmentStorage` boundary with these responsibilities:
@@ -61,6 +69,15 @@ Attachment authorization follows card authorization:
 - archive only when the actor can edit the card;
 - hide archived attachments from normal active lists while preserving them as read-only archive records;
 - public links cannot upload or download attachments in the first Phase 2 slice.
+
+For Phase 2H, a public link may list, upload, and download active attachments
+only when the link is active, not expired, not usage-exhausted, `can_edit=true`,
+and the linked card has `public_edit_enabled=true`. Archived and superseded
+cards remain blocked. Public-link attachment responses must not expose
+`stored_file_id`, `checksum_sha256`, storage keys, storage roots, or filesystem
+paths. Public upload/download actions write `audit_events` with
+`actor_type=public_link`; successful upload increments public-link `used_count`,
+while list/download do not.
 
 Frontend visibility is only a UX hint. Backend services and API routes must enforce the rules.
 
