@@ -534,6 +534,71 @@ tr:last-child td {
   border-color: #0f766e;
 }
 
+.attachment-form,
+.document-generator {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.document-generator {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.attachment-status {
+  padding: 10px 14px 0;
+}
+
+.file-action-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-action-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.file-action-list li:last-child {
+  border-bottom: 0;
+}
+
+.file-action-list strong,
+.file-action-list span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.file-action-list strong {
+  color: #101828;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.file-action-list span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .inline-alert,
 .inline-success {
   grid-column: 1 / -1;
@@ -615,8 +680,15 @@ tr:last-child td {
   .workspace-nav,
   .summary-grid,
   .split-grid,
-  .field-editor-row {
+  .field-editor-row,
+  .attachment-form,
+  .document-generator,
+  .file-action-list li {
     grid-template-columns: 1fr;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
   }
 
   .workspace-topbar h2 {

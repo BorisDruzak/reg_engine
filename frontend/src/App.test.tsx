@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { App } from "@/App";
+import type { AttachmentRead, GeneratedDocumentRead } from "@/api/types";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -220,6 +221,30 @@ const apiPayloads = {
       },
     },
   },
+  attachments: {
+    items: [] as AttachmentRead[],
+  },
+  documentTemplates: {
+    items: [
+      {
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "summary",
+        name: "Сводка карточки",
+        description: null,
+        template_format: "docx_text_v1",
+        output_filename_template: "{{ card.display_name }}.docx",
+        output_content_type:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        is_active: true,
+        created_at: "2026-06-28T12:00:00Z",
+        archived_at: null,
+      },
+    ],
+  },
+  generatedDocuments: {
+    items: [] as GeneratedDocumentRead[],
+  },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     display_name: "Публичная карточка",
@@ -256,6 +281,8 @@ const apiPayloads = {
 let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
+let attachmentItems: typeof apiPayloads.attachments.items;
+let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
 
 beforeEach(() => {
   localStorage.clear();
@@ -263,6 +290,9 @@ beforeEach(() => {
   cardStatusValue = "drafted";
   cardApprovedValue = false;
   publicStatusValue = "drafted";
+  attachmentItems = [];
+  generatedDocumentItems = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -316,6 +346,97 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
         return jsonResponse(apiPayloads.cards);
       }
+      if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments")) {
+        if (init?.method === "POST") {
+          const headers = init.headers as Record<string, string> | undefined;
+          if (headers?.["Content-Type"]) {
+            return jsonResponse(
+              { detail: "multipart content type must be browser-managed" },
+              { status: 400 },
+            );
+          }
+          const created = {
+            id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            stored_file_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            title: "Акт проверки",
+            description: null,
+            position: 0,
+            original_filename: "akt.txt",
+            content_type: "text/plain",
+            content_length_bytes: 11,
+            checksum_sha256: "a".repeat(64),
+            scanner_status: "deferred",
+            created_at: "2026-06-28T12:01:00Z",
+            archived_at: null,
+          };
+          attachmentItems = [created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: attachmentItems });
+      }
+      if (url.endsWith("/api/v1/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content")) {
+        return new Response("attachment-bytes", {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain",
+            "X-Attachment-Filename": "akt.txt",
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")) {
+        const archived = { ...attachmentItems[0], archived_at: "2026-06-28T12:02:00Z" };
+        attachmentItems = [];
+        return jsonResponse(archived);
+      }
+      if (
+        url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates")
+      ) {
+        return jsonResponse(apiPayloads.documentTemplates);
+      }
+      if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents")) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            template_id: string;
+            title: string | null;
+          };
+          const created = {
+            id: "12121212-1212-4212-8212-121212121212",
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            template_id: payload.template_id,
+            stored_file_id: "34343434-3434-4343-8434-343434343434",
+            title: payload.title ?? "Сводка карточки",
+            output_filename: "Карточка актива.docx",
+            content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            render_status: "generated",
+            created_at: "2026-06-28T12:03:00Z",
+            archived_at: null,
+          };
+          generatedDocumentItems = [created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: generatedDocumentItems });
+      }
+      if (
+        url.endsWith("/api/v1/generated-documents/12121212-1212-4212-8212-121212121212/content")
+      ) {
+        return new Response("docx-bytes", {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "X-Document-Filename": "card.docx",
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/generated-documents/12121212-1212-4212-8212-121212121212")) {
+        const archived = {
+          ...generatedDocumentItems[0],
+          archived_at: "2026-06-28T12:04:00Z",
+        };
+        generatedDocumentItems = [];
+        return jsonResponse(archived);
+      }
       if (
         url.endsWith(
           "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999",
@@ -364,6 +485,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
 });
@@ -543,6 +665,76 @@ test("shows localized login error text", async () => {
 
   expect(await screen.findByText("Неверная электронная почта или пароль.")).toBeInTheDocument();
   expect(screen.queryByText("Invalid email or password.")).not.toBeInTheDocument();
+});
+
+test("manages card attachments and generated documents in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Документы" })).toBeInTheDocument();
+  expect(screen.getByText("Нет файлов")).toBeInTheDocument();
+  expect(screen.getByText("Нет документов")).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Название файла"), "Акт проверки");
+  await user.upload(
+    screen.getByLabelText("Файл"),
+    new File(["hello world"], "akt.txt", { type: "text/plain" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Загрузить файл" }));
+
+  expect(await screen.findByText("Файл загружен")).toBeInTheDocument();
+  expect(screen.getByText("Акт проверки")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать файл Акт проверки" }));
+  expect(await screen.findByText("Файл скачан")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Сформировать документ" }));
+  expect(await screen.findByText("Документ сформирован")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Скачать документ Сводка карточки" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать документ Сводка карточки" }));
+  expect(await screen.findByText("Документ скачан")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Архивировать файл Акт проверки" }));
+  expect(await screen.findByText("Файл архивирован")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать документ Сводка карточки" }));
+  expect(await screen.findByText("Документ архивирован")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments") &&
+          init?.method === "POST" &&
+          init.body instanceof FormData &&
+          headers?.Authorization === "Bearer test-token" &&
+          headers?.["Content-Type"] === undefined
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents") ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as { template_id?: string };
+        return body.template_id === "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      }),
+    ).toBe(true);
+  });
 });
 
 test("edits a public-link card without authentication", async () => {

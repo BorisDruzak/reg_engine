@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-28 23:45:41 +05:00
+- Generated: 2026-06-29 00:41:07 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -38,6 +38,7 @@
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
 - `backend/app/api/v1/endpoints/cards.py`
+- `backend/app/api/v1/endpoints/documents.py`
 - `backend/app/api/v1/endpoints/health.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/public_links.py`
@@ -70,6 +71,7 @@
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
 - `backend/app/schemas/cards.py`
+- `backend/app/schemas/documents.py`
 - `backend/app/schemas/organizations.py`
 - `backend/app/schemas/public_links.py`
 - `backend/app/schemas/registries.py`
@@ -101,6 +103,7 @@
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
 - `backend/tests/test_api_phase_2b_attachments.py`
+- `backend/tests/test_api_phase_2d_documents.py`
 - `backend/tests/test_attachment_services.py`
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`
@@ -160,9 +163,11 @@
 - `frontend/src/features/auth/LoginScreen.tsx`
 - `frontend/src/features/auth/session.ts`
 - `frontend/src/features/cards/.gitkeep`
+- `frontend/src/features/cards/CardAttachmentsPanel.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.ts`
+- `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
 - `frontend/src/features/overview/Overview.tsx`

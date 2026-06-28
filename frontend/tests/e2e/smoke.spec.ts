@@ -208,6 +208,30 @@ const apiPayloads = {
       },
     },
   },
+  attachments: {
+    items: [],
+  },
+  documentTemplates: {
+    items: [
+      {
+        id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "summary",
+        name: "Сводка карточки",
+        description: null,
+        template_format: "docx_text_v1",
+        output_filename_template: "{{ card.display_name }}.docx",
+        output_content_type:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        is_active: true,
+        created_at: "2026-06-28T12:00:00Z",
+        archived_at: null,
+      },
+    ],
+  },
+  generatedDocuments: {
+    items: [],
+  },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     display_name: "Публичная карточка",
@@ -244,9 +268,130 @@ const apiPayloads = {
 test("renders login shell and authenticated admin workspace", async ({ page }) => {
   let cardStatusValue = "drafted";
   let cardApprovedValue = false;
+  let attachmentItems = [...apiPayloads.attachments.items];
+  let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
   await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
+    if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments") {
+      if (request.method() === "POST") {
+        const created = {
+          id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          stored_file_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          title: "Акт проверки",
+          description: null,
+          position: 0,
+          original_filename: "akt.txt",
+          content_type: "text/plain",
+          content_length_bytes: 11,
+          checksum_sha256: "a".repeat(64),
+          scanner_status: "deferred",
+          created_at: "2026-06-28T12:01:00Z",
+          archived_at: null,
+        };
+        attachmentItems = [created];
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(created),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: attachmentItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content") {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain",
+          "X-Attachment-Filename": "akt.txt",
+        },
+        body: "attachment-bytes",
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee") {
+      const archived = { ...attachmentItems[0], archived_at: "2026-06-28T12:02:00Z" };
+      attachmentItems = [];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(archived),
+      });
+      return;
+    }
+    if (
+      url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiPayloads.documentTemplates),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents") {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as { template_id: string; title: string | null };
+        const created = {
+          id: "12121212-1212-4212-8212-121212121212",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          template_id: body.template_id,
+          stored_file_id: "34343434-3434-4343-8434-343434343434",
+          title: body.title ?? "Сводка карточки",
+          output_filename: "Карточка актива.docx",
+          content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          render_status: "generated",
+          created_at: "2026-06-28T12:03:00Z",
+          archived_at: null,
+        };
+        generatedDocumentItems = [created];
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(created),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: generatedDocumentItems }),
+      });
+      return;
+    }
+    if (
+      url.pathname === "/api/v1/generated-documents/12121212-1212-4212-8212-121212121212/content"
+    ) {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "X-Document-Filename": "card.docx",
+        },
+        body: "docx-bytes",
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/generated-documents/12121212-1212-4212-8212-121212121212") {
+      const archived = {
+        ...generatedDocumentItems[0],
+        archived_at: "2026-06-28T12:04:00Z",
+      };
+      generatedDocumentItems = [];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(archived),
+      });
+      return;
+    }
     const payload = responsePayload(url.pathname, url.search, {
       approvedValue: cardApprovedValue,
       statusValue: cardStatusValue,
@@ -329,6 +474,32 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByLabel("Подтверждено").check();
   await page.getByRole("button", { name: "Сохранить Подтверждено" }).click();
   await expect(page.getByText("Сохранено: Подтверждено")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
+  await expect(page.getByText("Нет файлов")).toBeVisible();
+  await expect(page.getByText("Нет документов")).toBeVisible();
+  await page.getByLabel("Название файла").fill("Акт проверки");
+  await page.getByLabel("Файл", { exact: true }).setInputFiles({
+    name: "akt.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello world"),
+  });
+  await page.getByRole("button", { name: "Загрузить файл" }).click();
+  await expect(page.getByText("Файл загружен")).toBeVisible();
+  await expect(page.getByText("Акт проверки")).toBeVisible();
+  await page.getByRole("button", { name: "Скачать файл Акт проверки" }).click();
+  await expect(page.getByText("Файл скачан")).toBeVisible();
+  await page.getByRole("button", { name: "Сформировать документ" }).click();
+  await expect(page.getByText("Документ сформирован")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Скачать документ Сводка карточки" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Скачать документ Сводка карточки" }).click();
+  await expect(page.getByText("Документ скачан")).toBeVisible();
+  await page.getByRole("button", { name: "Архивировать файл Акт проверки" }).click();
+  await expect(page.getByText("Файл архивирован")).toBeVisible();
+  await page.getByRole("button", { name: "Архивировать документ Сводка карточки" }).click();
+  await expect(page.getByText("Документ архивирован")).toBeVisible();
 
   await page.getByRole("button", { name: "Аудит" }).click();
   await expect(page.getByText("Создание")).toBeVisible();
@@ -336,6 +507,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
 test("renders public-link edit page and saves a field", async ({ page }) => {
   let publicStatusValue = "drafted";
+  let fileEndpointCalls = 0;
   let editRequestBody: {
     raw_token?: string;
     field_id?: string;
@@ -345,6 +517,13 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
 
   await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
+    if (
+      url.pathname.includes("attachments") ||
+      url.pathname.includes("generated-documents") ||
+      url.pathname.includes("document-templates")
+    ) {
+      fileEndpointCalls += 1;
+    }
     if (url.pathname === "/api/v1/public-links/preview") {
       await route.fulfill({
         status: 200,
@@ -381,6 +560,9 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
   await expect(page.getByText("Публичный блок")).toBeVisible();
   await expect(page.getByText("Публичное редактирование карточки")).toBeVisible();
   await expect(page.getByLabel("Публичный статус")).toHaveValue("drafted");
+  await expect(page.getByRole("heading", { name: "Вложения" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Документы" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Загрузить файл" })).toHaveCount(0);
 
   await page.getByLabel("Публичный статус").fill("submitted");
   await page.getByRole("button", { name: "Сохранить Публичный статус" }).click();
@@ -392,6 +574,7 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
     value: "submitted",
     block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   });
+  expect(fileEndpointCalls).toBe(0);
 });
 
 function responsePayload(

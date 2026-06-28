@@ -42,9 +42,9 @@ Target system:
 - Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, and backend-only generated `.docx` document foundation.
-- Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, audit reads, and public-link card editing.
-- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds backend-only generated `.docx` document metadata and service rendering from schema-driven card data. Public-link file flows, `file_ref`, PDF conversion, and attachment/document UI are not implemented yet.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, and authenticated generated `.docx` document APIs.
+- Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, card-level attachment upload/download/archive, generated-document generation/download/archive, audit reads, and public-link card editing.
+- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Public-link file flows, `file_ref`, and PDF conversion remain deferred.
 - Import/export, documents, and MCP are later phases.
 
 ## Local Setup
@@ -217,7 +217,7 @@ The current logout flow clears browser storage in the frontend and validates the
 
 ## Phase 2 Attachment Storage Decision
 
-Phase 2 starts with card-level attachments. Generated `.docx` documents now have a backend-only Phase 2C foundation. PDF conversion, `file_ref`, public-link upload/download, and attachment/document UI remain deferred.
+Phase 2 starts with card-level attachments. Generated `.docx` documents now have backend APIs and authenticated card-workspace UI. PDF conversion, `file_ref`, public-link upload/download, and document template management UI remain deferred.
 
 The approved storage direction is a backend storage abstraction with a local filesystem backend configured outside Git. Runtime storage roots and limits must be set through environment variables or external runtime env files, never committed defaults.
 
@@ -285,10 +285,11 @@ Architecture references:
 
 ## Phase 2C Generated Document Foundation
 
-Phase 2C generated documents are backend-only. The first template format is
-`docx_text_v1`: a constrained text-template renderer that resolves placeholders
-from schema-driven card reads and stores a generated `.docx` file through the
-same storage abstraction used by attachments.
+Phase 2C introduced the generated document backend foundation. The first
+template format is `docx_text_v1`: a constrained text-template renderer that
+resolves placeholders from schema-driven card reads and stores a generated
+`.docx` file through the same storage abstraction used by attachments. Phase 2D
+adds authenticated card-workspace UI for generating and managing those outputs.
 
 Supported placeholders:
 
@@ -308,6 +309,31 @@ Do not commit template files, generated documents, or real personal data.
 Generated outputs use storage prefix `generated_documents`. Public-link document
 generate/upload/download, PDF conversion, binary `.docx` template upload, and
 `file_ref` remain deferred.
+
+Authenticated generated document API:
+
+```powershell
+POST   /api/v1/registries/{registry_id}/document-templates
+GET    /api/v1/registries/{registry_id}/document-templates
+DELETE /api/v1/document-templates/{template_id}
+POST   /api/v1/cards/{card_id}/generated-documents
+GET    /api/v1/cards/{card_id}/generated-documents
+GET    /api/v1/generated-documents/{generated_document_id}
+GET    /api/v1/generated-documents/{generated_document_id}/content
+DELETE /api/v1/generated-documents/{generated_document_id}
+```
+
+## Phase 2D Frontend Document Workflows
+
+The authenticated card workspace now includes Russian-first `Вложения` and
+`Документы` panels. Attachments support upload, download, and archive. Generated
+documents support selecting an existing template, generating a document from the
+current card, downloading generated content, and archiving generated document
+records.
+
+The public-link edit page intentionally does not expose file upload, file
+download, document generation, or generated document download controls in this
+slice.
 
 ## Remote Infrastructure Configuration
 
@@ -410,7 +436,8 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 
 - No server-side token revocation table yet.
 - No import/export.
-- No frontend document UI.
+- No public-link file upload/download.
+- No document template management UI.
 - No PDF conversion.
 - No MCP.
 - No MDB migration.

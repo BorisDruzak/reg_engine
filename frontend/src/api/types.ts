@@ -253,3 +253,58 @@ export type AuditEventRead = {
 export type AuditEventListRead = {
   items: AuditEventRead[];
 };
+
+export type AttachmentRead = {
+  id: string;
+  card_id: string;
+  stored_file_id: string;
+  title: string | null;
+  description: string | null;
+  position: number;
+  original_filename: string;
+  content_type: string;
+  content_length_bytes: number;
+  checksum_sha256: string;
+  scanner_status: string;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type AttachmentListRead = {
+  items: AttachmentRead[];
+};
+
+export type DocumentTemplateRead = {
+  id: string;
+  registry_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  template_format: string;
+  output_filename_template: string;
+  output_content_type: string;
+  is_active: boolean;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type DocumentTemplateListRead = {
+  items: DocumentTemplateRead[];
+};
+
+export type GeneratedDocumentRead = {
+  id: string;
+  card_id: string;
+  template_id: string;
+  stored_file_id: string | null;
+  title: string;
+  output_filename: string;
+  content_type: string;
+  render_status: string;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type GeneratedDocumentListRead = {
+  items: GeneratedDocumentRead[];
+};

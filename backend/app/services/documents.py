@@ -9,10 +9,11 @@ from uuid import UUID
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS
-from app.models import Card, DocumentTemplate, GeneratedDocument, StoredFile
+from app.models import Card, DocumentTemplate, GeneratedDocument, Registry, StoredFile
 from app.services.attachments import AttachmentStorage, normalize_attachment_filename
 from app.services.audit import AuditService
 from app.services.cards import CardFieldRead, CardRead, CardService, CardServiceError
@@ -110,6 +111,25 @@ class DocumentService:
             new_data_json={"archive_reason": archive_reason},
         )
         return template
+
+    def list_templates_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        include_archive: bool = False,
+    ) -> list[DocumentTemplate]:
+        self._require_registry_read_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        criteria = [DocumentTemplate.registry_id == registry_id]
+        if not include_archive:
+            criteria.append(DocumentTemplate.archived_at.is_(None))
+            criteria.append(DocumentTemplate.is_active.is_(True))
+        return list(
+            self.session.scalars(
+                select(DocumentTemplate).where(*criteria).order_by(DocumentTemplate.name)
+            ).all()
+        )
 
     def generate_document_for_actor(
         self,
@@ -210,6 +230,56 @@ class DocumentService:
         if stored_file is None:
             raise DocumentServiceError("Generated document file was not found.")
         return self.storage.read_bytes(stored_file.storage_key)
+
+    def list_generated_documents_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        include_archive: bool = False,
+    ) -> list[GeneratedDocument]:
+        card = self._get_readable_card(card_id, include_archive=include_archive)
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read generated documents in this card scope.")
+        criteria = [GeneratedDocument.card_id == card.id]
+        if not include_archive:
+            criteria.append(GeneratedDocument.archived_at.is_(None))
+        return list(
+            self.session.scalars(
+                select(GeneratedDocument)
+                .where(*criteria)
+                .order_by(GeneratedDocument.created_at.desc(), GeneratedDocument.id)
+            ).all()
+        )
+
+    def read_generated_document_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        generated_document_id: UUID,
+        include_archive: bool = False,
+    ) -> GeneratedDocument:
+        generated = self._get_generated_document(generated_document_id)
+        if generated.archived_at is not None and not include_archive:
+            raise DocumentServiceError("Generated document is only readable in archive scope.")
+        card = self._get_readable_card(generated.card_id, include_archive=include_archive)
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read generated document in this card scope.")
+        return generated
+
+    def get_stored_file_for_generated_document(self, generated: GeneratedDocument) -> StoredFile:
+        stored_file = self.session.get(StoredFile, generated.stored_file_id)
+        if stored_file is None:
+            raise DocumentServiceError("Generated document file was not found.")
+        return stored_file
 
     def archive_generated_document_for_actor(
         self,
@@ -331,6 +401,16 @@ class DocumentService:
             raise DocumentServiceError("Document template was not found.")
         return template
 
+    def _get_active_registry(self, registry_id: UUID) -> Registry:
+        registry = self.session.get(Registry, registry_id)
+        if (
+            registry is None
+            or registry.archived_at is not None
+            or registry.lifecycle_status == "archived"
+        ):
+            raise DocumentServiceError("Registry was not found.")
+        return registry
+
     def _get_generated_document(self, generated_document_id: UUID) -> GeneratedDocument:
         generated = self.session.get(GeneratedDocument, generated_document_id)
         if generated is None:
@@ -354,6 +434,20 @@ class DocumentService:
             registry_id=registry_id,
         ):
             raise PermissionDeniedError("Actor cannot manage document templates.")
+
+    def _require_registry_read_permission(self, actor_user_id: UUID, registry_id: UUID) -> None:
+        permissions = PermissionService(self.session)
+        if permissions.has_permission(
+            actor_user_id,
+            "registry.schema.manage",
+            registry_id=registry_id,
+        ) or permissions.has_permission(
+            actor_user_id,
+            "cards.manage",
+            registry_id=registry_id,
+        ):
+            return
+        raise PermissionDeniedError("Actor cannot read document templates.")
 
     def _require_card_manage_permission(
         self,

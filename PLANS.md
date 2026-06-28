@@ -31,15 +31,16 @@ Completed phases:
 - Phase 2E: Attachment security and live validation slice for attachment-first backend.
 - Phase 2F: Attachment backend hardening before next document phases.
 - Phase 2C: Generated document templates backend foundation.
+- Phase 2D: Frontend document workflows.
 
 Current stop point:
 
-- Frontend attachment/document workflows remain deferred until Phase 2D.
+- Phase 2D authenticated frontend attachment/document workflows are complete.
 - PDF conversion remains deferred.
 - Public-link upload/download remains deferred.
 - `file_ref` remains deferred.
-- Phase 2C backend-only generated `.docx` foundation is complete. Phase 2D
-  frontend workflows remain next.
+- Generated document template management UI remains deferred; Phase 2D lists
+  existing templates and generates documents from the card workspace.
 
 ## Core Rules
 
@@ -62,7 +63,8 @@ Status: in progress.
 Approved scope:
 
 - Card-level attachments first.
-- Generated documents are backend-only in Phase 2C.
+- Generated documents started backend-only in Phase 2C and have authenticated
+  card-workspace UI in Phase 2D.
 - Local filesystem backend through a storage abstraction, configured outside Git.
 - No public-link upload/download in the first attachment slice.
 - `file_ref` deferred until attachment metadata is stable.
@@ -75,6 +77,7 @@ Completed Phase 2 work:
 - Phase 2E completed live security validation for the attachment-first backend slice using disposable data and temporary storage.
 - Phase 2F hardened upload bounds, storage cleanup, filename/download headers, runtime settings, scanner mode handling, and attachment lifecycle documentation.
 - Phase 2C added `document_templates`, `generated_documents`, backend-only `docx_text_v1` rendering, generated file storage, audit, and archive behavior.
+- Phase 2D added authenticated Russian-first card-workspace panels for attachments and generated documents, plus generated-document API endpoints needed by the UI.
 
 ## Review Findings After Phase 2E
 
@@ -204,16 +207,38 @@ Phase 2C did not implement:
 - MCP;
 - MDB migration.
 
-## Future Directions
-
 ### Phase 2D: Frontend Document Workflows
 
-Planned work:
+Status: completed.
 
-- Add Russian-first UI for attachments and generated documents.
-- Keep document UI inside feature modules, not a monolithic route.
-- Add upload/download/archive states and localized errors.
-- Keep public-link document behavior aligned with approved scope.
+Delivered:
+
+- Added Russian-first `Вложения` and `Документы` panels inside the card workspace.
+- Added authenticated frontend API client methods for attachment upload/download/archive.
+- Added authenticated frontend API client methods for listing document templates, generating documents, downloading generated content, and archiving generated documents.
+- Added generated-document REST API endpoints required by the frontend.
+- Kept public-link screens without upload/download/document controls.
+- Added localized empty, success, archive, download, and scanner-deferred states.
+- Added unit and e2e coverage for upload/download/archive and document generation workflows.
+
+Verification evidence:
+
+- `pnpm -C frontend test:run -- App.test.tsx` passed.
+- `pnpm -C frontend typecheck` passed.
+- `pnpm -C frontend e2e` passed.
+
+Phase 2D did not implement:
+
+- public-link upload/download;
+- public document generation;
+- document template management UI;
+- `file_ref`;
+- PDF conversion;
+- import/export;
+- MCP;
+- MDB migration.
+
+## Future Directions
 
 ### Later deferred items
 

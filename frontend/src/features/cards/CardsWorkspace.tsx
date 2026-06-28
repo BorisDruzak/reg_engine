@@ -21,6 +21,8 @@ import { Panel, SelectableList } from "@/components/common/DataSurfaces";
 import { errorText, shortId } from "@/components/common/dataUtils";
 
 import { FieldEditorControl } from "./FieldEditorControl";
+import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
+import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -79,6 +81,12 @@ export function CardsWorkspace({
           </div>
         </Panel>
       </div>
+      {card && (
+        <div className="split-grid">
+          <CardAttachmentsPanel cardId={card.id} token={token} />
+          <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
+        </div>
+      )}
     </div>
   );
 }

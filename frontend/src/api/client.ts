@@ -1,10 +1,15 @@
 import type {
   AccessGrantListRead,
   AuditEventListRead,
+  AttachmentListRead,
+  AttachmentRead,
   CardListRead,
   CardRead,
   CurrentUser,
+  DocumentTemplateListRead,
   FieldValueRead,
+  GeneratedDocumentListRead,
+  GeneratedDocumentRead,
   LoginResponse,
   OrganizationListRead,
   PermissionListRead,
@@ -22,7 +27,7 @@ export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1
 type RequestOptions = {
   method?: string;
   token?: string;
-  body?: unknown;
+  body?: BodyInit | Record<string, unknown>;
 };
 
 export class ApiError extends Error {
@@ -128,21 +133,105 @@ export async function listAuditEvents(token: string) {
   return apiRequest<AuditEventListRead>("/api/v1/audit-events?limit=20", { token });
 }
 
+export async function listAttachments(token: string, cardId: string) {
+  return apiRequest<AttachmentListRead>(`/api/v1/cards/${cardId}/attachments`, { token });
+}
+
+export async function uploadAttachment(
+  token: string,
+  cardId: string,
+  payload: { file: File; title?: string },
+) {
+  const formData = new FormData();
+  formData.append("file", payload.file);
+  if (payload.title?.trim()) {
+    formData.append("title", payload.title.trim());
+  }
+  return apiRequest<AttachmentRead>(`/api/v1/cards/${cardId}/attachments`, {
+    method: "POST",
+    token,
+    body: formData,
+  });
+}
+
+export async function downloadAttachmentContent(token: string, attachmentId: string) {
+  return downloadFile(
+    `/api/v1/attachments/${attachmentId}/content`,
+    token,
+    "X-Attachment-Filename",
+  );
+}
+
+export async function archiveAttachment(token: string, attachmentId: string) {
+  return apiRequest<AttachmentRead>(`/api/v1/attachments/${attachmentId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listDocumentTemplates(token: string, registryId: string) {
+  return apiRequest<DocumentTemplateListRead>(
+    `/api/v1/registries/${registryId}/document-templates`,
+    { token },
+  );
+}
+
+export async function listGeneratedDocuments(token: string, cardId: string) {
+  return apiRequest<GeneratedDocumentListRead>(`/api/v1/cards/${cardId}/generated-documents`, {
+    token,
+  });
+}
+
+export async function generateDocument(
+  token: string,
+  cardId: string,
+  templateId: string,
+  title?: string,
+) {
+  return apiRequest<GeneratedDocumentRead>(`/api/v1/cards/${cardId}/generated-documents`, {
+    method: "POST",
+    token,
+    body: { template_id: templateId, title: title?.trim() ? title.trim() : null },
+  });
+}
+
+export async function downloadGeneratedDocumentContent(token: string, generatedDocumentId: string) {
+  return downloadFile(
+    `/api/v1/generated-documents/${generatedDocumentId}/content`,
+    token,
+    "X-Document-Filename",
+  );
+}
+
+export async function archiveGeneratedDocument(token: string, generatedDocumentId: string) {
+  return apiRequest<GeneratedDocumentRead>(`/api/v1/generated-documents/${generatedDocumentId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
-  if (options.body !== undefined) {
+  const isFormData = options.body instanceof FormData;
+  if (options.body !== undefined && !isFormData) {
     headers["Content-Type"] = "application/json";
   }
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
   }
+  let body: BodyInit | undefined;
+  if (options.body instanceof FormData) {
+    body = options.body;
+  } else if (options.body !== undefined) {
+    body = JSON.stringify(options.body);
+  }
 
   const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
     method: options.method ?? "GET",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body,
   });
 
   if (!response.ok) {
@@ -151,6 +240,25 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   }
 
   return (await response.json()) as T;
+}
+
+async function downloadFile(path: string, token: string, filenameHeader: string) {
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const message = await errorMessage(response);
+    throw new ApiError(message, response.status);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: response.headers.get(filenameHeader) ?? "download",
+  };
 }
 
 async function errorMessage(response: Response) {
