@@ -20,7 +20,7 @@ const apiPayloads = {
     user: {
       id: "11111111-1111-4111-8111-111111111111",
       email: "admin@example.test",
-      display_name: "System Admin",
+      display_name: "Системный администратор",
       status: "active",
       is_superuser: true,
     },
@@ -31,7 +31,7 @@ const apiPayloads = {
         id: "22222222-2222-4222-8222-222222222222",
         parent_id: null,
         code: "root",
-        name: "Root Org",
+        name: "Главная организация",
         type: "organization",
         is_active: true,
       },
@@ -42,7 +42,7 @@ const apiPayloads = {
       {
         id: "11111111-1111-4111-8111-111111111111",
         email: "admin@example.test",
-        display_name: "System Admin",
+        display_name: "Системный администратор",
         status: "active",
         is_superuser: true,
         archived_at: null,
@@ -111,8 +111,8 @@ const apiPayloads = {
       {
         id: "77777777-7777-4777-8777-777777777777",
         code: "assets",
-        name: "Asset Registry",
-        description: "Tracked assets",
+        name: "Реестр активов",
+        description: "Учет активов",
         lifecycle_status: "active",
         schema_version: 1,
       },
@@ -122,8 +122,8 @@ const apiPayloads = {
     registry: {
       id: "77777777-7777-4777-8777-777777777777",
       code: "assets",
-      name: "Asset Registry",
-      description: "Tracked assets",
+      name: "Реестр активов",
+      description: "Учет активов",
       lifecycle_status: "active",
       schema_version: 1,
     },
@@ -132,7 +132,7 @@ const apiPayloads = {
         id: "88888888-8888-4888-8888-888888888888",
         registry_id: "77777777-7777-4777-8777-777777777777",
         code: "main",
-        title: "Main Block",
+        title: "Основной блок",
         description: null,
         position: 0,
         is_repeatable: false,
@@ -146,7 +146,7 @@ const apiPayloads = {
         id: "99999999-9999-4999-8999-999999999999",
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "status",
-        label: "Status Field",
+        label: "Статус",
         description: null,
         field_type: "text",
         position: 0,
@@ -160,7 +160,7 @@ const apiPayloads = {
         id: "99999999-9999-4999-8999-999999999998",
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "approved",
-        label: "Approved Field",
+        label: "Подтверждено",
         description: null,
         field_type: "bool",
         position: 1,
@@ -179,7 +179,7 @@ const apiPayloads = {
         registry_id: "77777777-7777-4777-8777-777777777777",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
-        display_name: "Asset Card",
+        display_name: "Карточка актива",
         lifecycle_status: "draft",
         public_view_enabled: false,
         public_edit_enabled: true,
@@ -190,7 +190,7 @@ const apiPayloads = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     registry_id: "77777777-7777-4777-8777-777777777777",
     organization_id: "22222222-2222-4222-8222-222222222222",
-    display_name: "Asset Card",
+    display_name: "Карточка актива",
     blocks: {
       main: {
         block_id: "88888888-8888-4888-8888-888888888888",
@@ -222,14 +222,14 @@ const apiPayloads = {
   },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    display_name: "Public Link Card",
+    display_name: "Публичная карточка",
     expires_at: "2026-06-29T12:00:00Z",
     can_edit: true,
     blocks: [
       {
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "public",
-        title: "Public Block",
+        title: "Публичный блок",
         instances: [
           {
             block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -238,7 +238,7 @@ const apiPayloads = {
               {
                 field_id: "99999999-9999-4999-8999-999999999997",
                 code: "public_status",
-                label: "Public Status",
+                label: "Публичный статус",
                 field_type: "text",
                 value: "drafted",
                 options_source_type: null,
@@ -452,30 +452,34 @@ test("logs in and renders authenticated admin workspace", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
 
-  expect(await screen.findByText("System Admin")).toBeInTheDocument();
-  expect(await screen.findByText("Root Org")).toBeInTheDocument();
+  expect(await screen.findByText("Системный администратор")).toBeInTheDocument();
+  expect(await screen.findByText("Главная организация")).toBeInTheDocument();
   expect(screen.getByText("Панель администратора")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Выйти" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Пользователи" }));
   expect(screen.getByText("users.manage")).toBeInTheDocument();
   expect(screen.getByText("system_admin")).toBeInTheDocument();
+  expect(screen.getAllByText("Системный администратор").length).toBeGreaterThan(0);
+  expect(screen.getByText("Управление пользователями.")).toBeInTheDocument();
+  expect(screen.queryByText("System admin")).not.toBeInTheDocument();
+  expect(screen.queryByText("Manage users.")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Реестры" }));
-  expect(await screen.findByText("Asset Registry")).toBeInTheDocument();
-  expect(screen.getAllByText("Main Block").length).toBeGreaterThan(0);
-  expect(screen.getByText("Status Field")).toBeInTheDocument();
+  expect(await screen.findByText("Реестр активов")).toBeInTheDocument();
+  expect(screen.getAllByText("Основной блок").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: "Карточки" }));
-  expect(await screen.findByText("Asset Card")).toBeInTheDocument();
+  expect(await screen.findByText("Карточка актива")).toBeInTheDocument();
   expect(screen.getByDisplayValue("drafted")).toBeInTheDocument();
-  const statusInput = await screen.findByLabelText("Status Field");
+  const statusInput = await screen.findByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(screen.getByRole("button", { name: "Сохранить Status Field" }));
-  expect(await screen.findByText("Сохранено: Status Field")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сохранить Статус" }));
+  expect(await screen.findByText("Сохранено: Статус")).toBeInTheDocument();
 
-  const approvedInput = await screen.findByLabelText("Approved Field");
+  const approvedInput = await screen.findByLabelText("Подтверждено");
   await user.click(approvedInput);
-  await user.click(screen.getByRole("button", { name: "Сохранить Approved Field" }));
-  expect(await screen.findByText("Сохранено: Approved Field")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сохранить Подтверждено" }));
+  expect(await screen.findByText("Сохранено: Подтверждено")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Аудит" }));
   expect(screen.getByText("Создание")).toBeInTheDocument();
@@ -525,22 +529,37 @@ test("logs in and renders authenticated admin workspace", async () => {
   });
 });
 
+test("shows localized login error text", async () => {
+  const user = userEvent.setup();
+  vi.mocked(fetch).mockImplementationOnce(async () =>
+    jsonResponse({ detail: "Invalid email or password." }, { status: 401 }),
+  );
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "bad-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+
+  expect(await screen.findByText("Неверная электронная почта или пароль.")).toBeInTheDocument();
+  expect(screen.queryByText("Invalid email or password.")).not.toBeInTheDocument();
+});
+
 test("edits a public-link card without authentication", async () => {
   const user = userEvent.setup();
   window.history.pushState({}, "", "/public/edit/public-token");
   render(<App />);
 
-  expect(await screen.findByRole("heading", { name: "Public Link Card" })).toBeInTheDocument();
-  expect(screen.getByText("Public Block")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Публичная карточка" })).toBeInTheDocument();
+  expect(screen.getByText("Публичный блок")).toBeInTheDocument();
   expect(screen.getByText("Публичное редактирование карточки")).toBeInTheDocument();
 
-  const statusInput = await screen.findByLabelText("Public Status");
+  const statusInput = await screen.findByLabelText("Публичный статус");
   expect(statusInput).toHaveValue("drafted");
   await user.clear(statusInput);
   await user.type(statusInput, "submitted");
-  await user.click(screen.getByRole("button", { name: "Сохранить Public Status" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить Публичный статус" }));
 
-  expect(await screen.findByText("Сохранено: Public Status")).toBeInTheDocument();
+  expect(await screen.findByText("Сохранено: Публичный статус")).toBeInTheDocument();
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
     expect(

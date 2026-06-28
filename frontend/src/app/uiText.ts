@@ -51,6 +51,14 @@ export const uiText = {
   expires: "Действует до",
   noEditablePublicFields: "В этой публичной ссылке нет редактируемых полей.",
   requestFailed: "Запрос не выполнен",
+  invalidEmailOrPassword: "Неверная электронная почта или пароль.",
+  bearerTokenRequired: "Нужен действующий сеанс. Войдите снова.",
+  bearerTokenExpired: "Срок действия сеанса истек. Войдите снова.",
+  bearerTokenInvalid: "Сеанс недействителен. Войдите снова.",
+  bearerTokenUserInactive: "Пользователь отключен или недоступен.",
+  integrityConstraintViolation: "Данные нарушают ограничения базы.",
+  internalServiceError: "Внутренняя ошибка сервиса.",
+  notFound: "Запись не найдена.",
   empty: "Пусто",
   jsonObjectRequired: "JSON-поле должно содержать объект.",
   numberRequired: "Числовое поле должно содержать число.",
@@ -160,6 +168,43 @@ export function grantScopeLabel(includeDescendants: boolean) {
   return includeDescendants ? uiText.descendants : uiText.exact;
 }
 
+export function roleDisplayNameLabel(code: string, fallbackName: string) {
+  const labels: Record<string, string> = {
+    auditor: "Аудитор",
+    org_admin: "Администратор организации",
+    registry_admin: "Администратор реестра",
+    system_admin: "Системный администратор",
+  };
+  return labels[code] ?? fallbackName;
+}
+
+export function roleDescriptionLabel(code: string, fallbackDescription: string | null | undefined) {
+  const labels: Record<string, string> = {
+    auditor: "Роль только для чтения аудита.",
+    org_admin: "Управление веткой организации и карточками.",
+    registry_admin: "Управление схемой реестра и карточками.",
+    system_admin: "Полное администрирование системы.",
+  };
+  return labels[code] ?? fallbackDescription ?? "";
+}
+
+export function permissionDescriptionLabel(
+  code: string,
+  fallbackDescription: string | null | undefined,
+) {
+  const labels: Record<string, string> = {
+    "access_grants.manage": "Управление правами доступа.",
+    "audit.read": "Чтение событий аудита.",
+    "cards.manage": "Управление карточками в разрешенной области организаций.",
+    "organizations.manage": "Управление организациями в разрешенной области.",
+    "permissions.read": "Чтение прав.",
+    "registry.schema.manage": "Управление схемой реестра, блоками и полями.",
+    "roles.read": "Чтение ролей.",
+    "users.manage": "Управление пользователями.",
+  };
+  return labels[code] ?? fallbackDescription ?? "";
+}
+
 export function auditActionLabel(value: string) {
   const labels: Record<string, string> = {
     archive: "Архивация",
@@ -201,6 +246,27 @@ export function auditSourceLabel(value: string | null | undefined) {
     system: "Система",
   };
   return labels[value] ?? value;
+}
+
+export function apiErrorMessageLabel(message: string) {
+  const labels: Record<string, string> = {
+    "Bearer token has expired.": uiText.bearerTokenExpired,
+    "Bearer token is required.": uiText.bearerTokenRequired,
+    "Bearer token user is not active.": uiText.bearerTokenUserInactive,
+    "Field value references a missing field.": uiText.notFound,
+    "Form field was not found.": uiText.notFound,
+    "Integrity constraint violation.": uiText.integrityConstraintViolation,
+    "Internal service error.": uiText.internalServiceError,
+    "Invalid bearer token.": uiText.bearerTokenInvalid,
+    "Invalid email or password.": uiText.invalidEmailOrPassword,
+    "Not Found": uiText.notFound,
+    "Temporary dev actor header is disabled. Use production auth when available.":
+      uiText.bearerTokenRequired,
+  };
+  if (message.startsWith("Unsupported field type:")) {
+    return "Неподдерживаемый тип поля.";
+  }
+  return labels[message] ?? message;
 }
 
 export function formatUiDateTime(value: string) {

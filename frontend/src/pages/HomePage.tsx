@@ -35,6 +35,7 @@ import type {
 } from "@/api/types";
 import {
   activityLabel,
+  apiErrorMessageLabel,
   auditActionLabel,
   auditObjectTypeLabel,
   auditSourceLabel,
@@ -46,6 +47,8 @@ import {
   lifecycleStatusLabel,
   optionsSourceLabel,
   organizationTypeLabel,
+  permissionDescriptionLabel,
+  roleDisplayNameLabel,
   saveLabel,
   savedLabel,
   sectionLabel,
@@ -699,7 +702,7 @@ function UsersAndRoles({
             items={roles.map((role) => ({
               id: role.id,
               title: role.code,
-              detail: role.name,
+              detail: roleDisplayNameLabel(role.code, role.name),
             }))}
           />
         </Panel>
@@ -708,7 +711,7 @@ function UsersAndRoles({
             items={permissions.map((permission) => ({
               id: permission.id,
               title: permission.code,
-              detail: permission.description ?? "",
+              detail: permissionDescriptionLabel(permission.code, permission.description),
             }))}
           />
         </Panel>
@@ -877,7 +880,7 @@ function saveSession(session: SessionState) {
 
 function errorText(error: unknown) {
   if (error instanceof ApiError) {
-    return error.message;
+    return apiErrorMessageLabel(error.message);
   }
   if (error instanceof Error) {
     return error.message;

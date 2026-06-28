@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 import { ApiError, readPublicLinkPreview, updatePublicLinkFieldValue } from "@/api/client";
 import type { PublicLinkPreviewFieldRead } from "@/api/types";
 import {
+  apiErrorMessageLabel,
   fieldTypeLabel,
   formatUiDateTime,
   instanceLabel,
@@ -161,7 +162,7 @@ function PublicFieldEditor({
 
 function errorText(error: unknown) {
   if (error instanceof ApiError) {
-    return error.message;
+    return apiErrorMessageLabel(error.message);
   }
   if (error instanceof Error) {
     return error.message;

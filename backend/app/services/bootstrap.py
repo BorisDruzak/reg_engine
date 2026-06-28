@@ -29,39 +29,39 @@ class BootstrapSeedResult:
 
 
 CORE_PERMISSION_SEEDS: tuple[PermissionSeed, ...] = (
-    PermissionSeed("organizations.manage", "Manage organizations within granted scope."),
-    PermissionSeed("registry.schema.manage", "Manage registry schema, blocks, and fields."),
-    PermissionSeed("cards.manage", "Manage cards within granted organization scope."),
-    PermissionSeed("audit.read", "Read audit events."),
-    PermissionSeed("users.manage", "Manage users."),
-    PermissionSeed("roles.read", "Read roles."),
-    PermissionSeed("permissions.read", "Read permissions."),
-    PermissionSeed("access_grants.manage", "Manage access grants."),
+    PermissionSeed("organizations.manage", "Управление организациями в разрешенной области."),
+    PermissionSeed("registry.schema.manage", "Управление схемой реестра, блоками и полями."),
+    PermissionSeed("cards.manage", "Управление карточками в разрешенной области организаций."),
+    PermissionSeed("audit.read", "Чтение событий аудита."),
+    PermissionSeed("users.manage", "Управление пользователями."),
+    PermissionSeed("roles.read", "Чтение ролей."),
+    PermissionSeed("permissions.read", "Чтение прав."),
+    PermissionSeed("access_grants.manage", "Управление правами доступа."),
 )
 
 CORE_ROLE_SEEDS: tuple[RoleSeed, ...] = (
     RoleSeed(
         code="system_admin",
-        name="System admin",
-        description="Full system administration role.",
+        name="Системный администратор",
+        description="Полное администрирование системы.",
         permission_codes=tuple(seed.code for seed in CORE_PERMISSION_SEEDS),
     ),
     RoleSeed(
         code="registry_admin",
-        name="Registry admin",
-        description="Registry schema and card administration role.",
+        name="Администратор реестра",
+        description="Управление схемой реестра и карточками.",
         permission_codes=("registry.schema.manage", "cards.manage"),
     ),
     RoleSeed(
         code="org_admin",
-        name="Organization admin",
-        description="Organization branch and card administration role.",
+        name="Администратор организации",
+        description="Управление веткой организации и карточками.",
         permission_codes=("organizations.manage", "cards.manage"),
     ),
     RoleSeed(
         code="auditor",
-        name="Auditor",
-        description="Audit read-only role.",
+        name="Аудитор",
+        description="Роль только для чтения аудита.",
         permission_codes=("audit.read",),
     ),
 )

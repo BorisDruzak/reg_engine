@@ -41,6 +41,15 @@ The next active checkpoint is Phase 1L.5.
 - Keep public-link editing backend-validated.
 - Keep normal deletes as archive behavior.
 - Keep the frontend Russian-first for user-facing text.
+- Keep built-in UI display names for roles, permissions, statuses, validation, and API errors Russian-first.
+- Keep visible demo/test names Russian unless a test intentionally verifies legacy stored text.
+
+Phase 1K.6 delivered:
+
+- Navigation, tables, panels, loading states, validation messages, and public-link screens use Russian text.
+- Built-in role names and permission descriptions are Russian in seed data and in the frontend display layer.
+- Frontend maps known backend/API error details to Russian browser messages.
+- Technical codes such as `system_admin`, `users.manage`, field codes, registry codes, and route/API names remain unchanged.
 
 ## Phase 1L: Current Implementation Bugfix, Security, And Live Stabilization
 

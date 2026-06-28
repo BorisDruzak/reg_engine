@@ -8,7 +8,7 @@ const apiPayloads = {
     user: {
       id: "11111111-1111-4111-8111-111111111111",
       email: "admin@example.test",
-      display_name: "System Admin",
+      display_name: "Системный администратор",
       status: "active",
       is_superuser: true,
     },
@@ -19,7 +19,7 @@ const apiPayloads = {
         id: "22222222-2222-4222-8222-222222222222",
         parent_id: null,
         code: "root",
-        name: "Root Org",
+        name: "Главная организация",
         type: "organization",
         is_active: true,
       },
@@ -30,7 +30,7 @@ const apiPayloads = {
       {
         id: "11111111-1111-4111-8111-111111111111",
         email: "admin@example.test",
-        display_name: "System Admin",
+        display_name: "Системный администратор",
         status: "active",
         is_superuser: true,
         archived_at: null,
@@ -99,8 +99,8 @@ const apiPayloads = {
       {
         id: "77777777-7777-4777-8777-777777777777",
         code: "assets",
-        name: "Asset Registry",
-        description: "Tracked assets",
+        name: "Реестр активов",
+        description: "Учет активов",
         lifecycle_status: "active",
         schema_version: 1,
       },
@@ -110,8 +110,8 @@ const apiPayloads = {
     registry: {
       id: "77777777-7777-4777-8777-777777777777",
       code: "assets",
-      name: "Asset Registry",
-      description: "Tracked assets",
+      name: "Реестр активов",
+      description: "Учет активов",
       lifecycle_status: "active",
       schema_version: 1,
     },
@@ -120,7 +120,7 @@ const apiPayloads = {
         id: "88888888-8888-4888-8888-888888888888",
         registry_id: "77777777-7777-4777-8777-777777777777",
         code: "main",
-        title: "Main Block",
+        title: "Основной блок",
         description: null,
         position: 0,
         is_repeatable: false,
@@ -134,7 +134,7 @@ const apiPayloads = {
         id: "99999999-9999-4999-8999-999999999999",
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "status",
-        label: "Status Field",
+        label: "Статус",
         description: null,
         field_type: "text",
         position: 0,
@@ -148,7 +148,7 @@ const apiPayloads = {
         id: "99999999-9999-4999-8999-999999999998",
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "approved",
-        label: "Approved Field",
+        label: "Подтверждено",
         description: null,
         field_type: "bool",
         position: 1,
@@ -167,7 +167,7 @@ const apiPayloads = {
         registry_id: "77777777-7777-4777-8777-777777777777",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
-        display_name: "Asset Card",
+        display_name: "Карточка актива",
         lifecycle_status: "draft",
         public_view_enabled: false,
         public_edit_enabled: true,
@@ -178,7 +178,7 @@ const apiPayloads = {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     registry_id: "77777777-7777-4777-8777-777777777777",
     organization_id: "22222222-2222-4222-8222-222222222222",
-    display_name: "Asset Card",
+    display_name: "Карточка актива",
     blocks: {
       main: {
         block_id: "88888888-8888-4888-8888-888888888888",
@@ -210,14 +210,14 @@ const apiPayloads = {
   },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    display_name: "Public Link Card",
+    display_name: "Публичная карточка",
     expires_at: "2026-06-29T12:00:00Z",
     can_edit: true,
     blocks: [
       {
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "public",
-        title: "Public Block",
+        title: "Публичный блок",
         instances: [
           {
             block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -226,7 +226,7 @@ const apiPayloads = {
               {
                 field_id: "99999999-9999-4999-8999-999999999997",
                 code: "public_status",
-                label: "Public Status",
+                label: "Публичный статус",
                 field_type: "text",
                 value: "drafted",
                 options_source_type: null,
@@ -302,26 +302,30 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByLabel("Пароль").fill("secret-pass");
   await page.getByRole("button", { name: "Войти" }).click();
 
-  await expect(page.getByText("System Admin").first()).toBeVisible();
-  await expect(page.getByText("Root Org")).toBeVisible();
+  await expect(page.getByText("Системный администратор").first()).toBeVisible();
+  await expect(page.getByText("Главная организация")).toBeVisible();
 
   await page.getByRole("button", { name: "Пользователи" }).click();
   await expect(page.getByText("users.manage")).toBeVisible();
   await expect(page.getByText("system_admin")).toBeVisible();
+  await expect(page.getByText("Системный администратор").first()).toBeVisible();
+  await expect(page.getByText("Управление пользователями.")).toBeVisible();
+  await expect(page.getByText("System admin", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Manage users.", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Реестры" }).click();
-  await expect(page.getByText("Asset Registry")).toBeVisible();
-  await expect(page.getByText("Status Field")).toBeVisible();
+  await expect(page.getByText("Реестр активов")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Статус" })).toBeVisible();
 
   await page.getByRole("button", { name: "Карточки" }).click();
-  await expect(page.getByText("Asset Card")).toBeVisible();
-  await expect(page.getByLabel("Status Field")).toHaveValue("drafted");
-  await page.getByLabel("Status Field").fill("published");
-  await page.getByRole("button", { name: "Сохранить Status Field" }).click();
-  await expect(page.getByText("Сохранено: Status Field")).toBeVisible();
-  await page.getByLabel("Approved Field").check();
-  await page.getByRole("button", { name: "Сохранить Approved Field" }).click();
-  await expect(page.getByText("Сохранено: Approved Field")).toBeVisible();
+  await expect(page.getByText("Карточка актива")).toBeVisible();
+  await expect(page.getByLabel("Статус")).toHaveValue("drafted");
+  await page.getByLabel("Статус").fill("published");
+  await page.getByRole("button", { name: "Сохранить Статус" }).click();
+  await expect(page.getByText("Сохранено: Статус")).toBeVisible();
+  await page.getByLabel("Подтверждено").check();
+  await page.getByRole("button", { name: "Сохранить Подтверждено" }).click();
+  await expect(page.getByText("Сохранено: Подтверждено")).toBeVisible();
 
   await page.getByRole("button", { name: "Аудит" }).click();
   await expect(page.getByText("Создание")).toBeVisible();
@@ -370,15 +374,15 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
   });
 
   await page.goto("/public/edit/public-token");
-  await expect(page.getByRole("heading", { name: "Public Link Card" })).toBeVisible();
-  await expect(page.getByText("Public Block")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Публичная карточка" })).toBeVisible();
+  await expect(page.getByText("Публичный блок")).toBeVisible();
   await expect(page.getByText("Публичное редактирование карточки")).toBeVisible();
-  await expect(page.getByLabel("Public Status")).toHaveValue("drafted");
+  await expect(page.getByLabel("Публичный статус")).toHaveValue("drafted");
 
-  await page.getByLabel("Public Status").fill("submitted");
-  await page.getByRole("button", { name: "Сохранить Public Status" }).click();
+  await page.getByLabel("Публичный статус").fill("submitted");
+  await page.getByRole("button", { name: "Сохранить Публичный статус" }).click();
 
-  await expect(page.getByText("Сохранено: Public Status")).toBeVisible();
+  await expect(page.getByText("Сохранено: Публичный статус")).toBeVisible();
   expect(editRequestBody).toEqual({
     raw_token: "public-token",
     field_id: "99999999-9999-4999-8999-999999999997",

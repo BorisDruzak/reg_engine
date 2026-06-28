@@ -62,6 +62,9 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
   - `Аудит`
 - Common UI actions must use Russian labels, for example `Войти`, `Выйти`, `Сохранить`, `Сохранено`.
 - Tables, panels, empty states, loading states, validation messages, and public-link screens must use Russian text.
+- Built-in user-facing role names, permission descriptions, status labels, and system display names must use Russian text in UI.
+- Frontend tests and demo fixtures must use Russian visible organization, registry, block, field, card, and user names unless the test intentionally checks legacy or user-entered foreign-language data.
+- Backend/API error details shown in the browser must be mapped to Russian user-facing text; raw English service messages are not UI copy.
 - Technical identifiers, permission codes, role codes, field codes, registry codes, API-provided names, and user-entered data may remain in their stored language.
 - Do not hardcode business-specific Russian labels that imply a fixed HR/employee registry. Keep labels generic and schema-driven.
 

@@ -10,7 +10,7 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app.models import Permission, Role, User, role_permissions
-from app.services.bootstrap import BootstrapService
+from app.services.bootstrap import CORE_PERMISSION_SEEDS, CORE_ROLE_SEEDS, BootstrapService
 
 EXPECTED_PERMISSIONS = {
     "organizations.manage",
@@ -29,6 +29,20 @@ EXPECTED_ROLE_PERMISSIONS = {
     "org_admin": {"organizations.manage", "cards.manage"},
     "auditor": {"audit.read"},
 }
+
+
+def test_bootstrap_seed_display_names_are_russian_for_ui() -> None:
+    role_names = {seed.code: seed.name for seed in CORE_ROLE_SEEDS}
+    permission_descriptions = {seed.code: seed.description for seed in CORE_PERMISSION_SEEDS}
+
+    assert role_names == {
+        "system_admin": "Системный администратор",
+        "registry_admin": "Администратор реестра",
+        "org_admin": "Администратор организации",
+        "auditor": "Аудитор",
+    }
+    assert permission_descriptions["users.manage"] == "Управление пользователями."
+    assert permission_descriptions["access_grants.manage"] == "Управление правами доступа."
 
 
 def test_bootstrap_password_hash_argument_resolves_environment_variable(
