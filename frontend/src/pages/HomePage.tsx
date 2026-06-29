@@ -224,6 +224,7 @@ export function HomePage() {
             schema={registrySchemaQuery.data ?? null}
             token={token}
             organizations={organizationsQuery.data?.items ?? []}
+            selectedRegistryId={activeRegistryId}
             selectedCardId={activeCardId}
             onSelectCard={setSelectedCardId}
           />

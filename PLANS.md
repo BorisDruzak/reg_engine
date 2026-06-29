@@ -49,6 +49,7 @@ Completed phases:
 - Phase 2L.4: Registry Management UI.
 - Phase 2L.5: Schema Builder UI.
 - Phase 2L.6: Reference List Management UI.
+- Phase 2L.7: Card Create, Metadata, And Editor UI.
 
 Current stop point:
 
@@ -70,10 +71,11 @@ Current stop point:
 - Phase 2L.4 Registry Management UI is completed.
 - Phase 2L.5 Schema Builder UI is completed.
 - Phase 2L.6 Reference List Management UI is completed.
+- Phase 2L.7 Card Create, Metadata, And Editor UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder,
   reference lists, and cards.
-- Phase 2L.7 Card Create, Metadata, And Editor UI is the next implementation
+- Phase 2L.8 Public Link Admin Controls UI is the next implementation
   slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
@@ -117,11 +119,11 @@ The current authenticated frontend is not yet a complete admin workspace:
   registry schema block/field create, update, and archive workflows are exposed
   through Russian-first UI; reference lists and reference items can be created,
   updated, archived, and selected for `select`/`multi_select` schema fields;
-- cards are listed and existing field values can be edited, but card creation,
-  card metadata edit, archive, repeatable block-instance management, and bulk
-  save workflows are incomplete;
-- current UI is useful for inspection and partial editing, not yet for full
-  setup from an empty database.
+- cards can be created, metadata-edited, archived, edited through existing
+  per-field controls, edited through atomic bulk save, and managed with
+  repeatable block-instance add/archive controls;
+- authenticated public-link list/create/disable controls are still incomplete
+  and remain assigned to Phase 2L.8.
 
 Phase 2L exists to close the remaining frontend workflow gaps before advanced
 document, import/export, report, or MCP phases.
@@ -814,6 +816,8 @@ Completion evidence:
 
 ### Phase 2L.7: Card Create, Metadata, And Editor UI
 
+Status: completed.
+
 Required work:
 
 - Add create card form:
@@ -832,6 +836,25 @@ Acceptance criteria:
 - Bulk save is atomic where API support exists.
 - Frontend e2e covers create card, edit values, add repeatable instance,
   archive card, and audit refresh.
+
+Completion evidence:
+
+- Added Russian-first card create form with registry, organization, optional
+  org unit, display name, and public view/edit flags.
+- Added card metadata panel with edit and archive controls.
+- Added repeatable block-instance add/archive controls using the Phase 2K API.
+- Added atomic bulk field-values save workflow while preserving the existing
+  per-field editor as a fallback path.
+- Added frontend test coverage for create, metadata update, repeatable
+  instance add/archive, bulk save payloads, card archive, and no hardcoded
+  employee/HR payload fields.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx -t
+  "creates updates archives cards"`, `pnpm -C frontend test:run`,
+  `pnpm -C frontend lint`, `pnpm -C frontend typecheck`, and
+  `pnpm -C frontend exec playwright test tests/e2e/smoke.spec.ts
+  --project=chromium`.
+- Verified `powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+  -SkipRemote`.
 
 ### Phase 2L.8: Public Link Admin Controls UI
 

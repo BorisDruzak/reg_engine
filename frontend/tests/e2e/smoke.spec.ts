@@ -25,6 +25,19 @@ const apiPayloads = {
       },
     ],
   },
+  orgUnits: {
+    items: [
+      {
+        id: "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
+        organization_id: "22222222-2222-4222-8222-222222222222",
+        parent_id: null,
+        code: "accounting",
+        name: "Отдел учета",
+        is_active: true,
+        archived_at: null,
+      },
+    ],
+  },
   users: {
     items: [
       {
@@ -128,6 +141,18 @@ const apiPayloads = {
         public_visible: true,
         public_editable: false,
       },
+      {
+        id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "details",
+        title: "Детали карточки",
+        description: null,
+        position: 1,
+        is_repeatable: true,
+        is_active: true,
+        public_visible: true,
+        public_editable: false,
+      },
     ],
     fields: [
       {
@@ -152,6 +177,20 @@ const apiPayloads = {
         description: null,
         field_type: "bool",
         position: 1,
+        options_source_type: null,
+        options_source_id: null,
+        is_active: true,
+        public_visible: true,
+        public_editable: false,
+      },
+      {
+        id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+        block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+        code: "comment",
+        label: "Комментарий",
+        description: null,
+        field_type: "text",
+        position: 0,
         options_source_type: null,
         options_source_id: null,
         is_active: true,
@@ -298,9 +337,102 @@ const apiPayloads = {
 test("renders login shell and authenticated admin workspace", async ({ page }) => {
   let cardStatusValue = "drafted";
   let cardApprovedValue = false;
+  let newCardStatusValue = "";
+  let newCardApprovedValue = false;
+  let newCardCommentValue = "";
+  let cardItems = [...apiPayloads.cards.items];
+  let createdCard: {
+    id: string;
+    registry_id: string;
+    organization_id: string;
+    org_unit_id: string | null;
+    display_name: string;
+    lifecycle_status: string;
+    public_view_enabled: boolean;
+    public_edit_enabled: boolean;
+  } | null = null;
+  let repeatableInstances: { block_instance_id: string; ordinal: number; value: string }[] = [];
+  let auditItems = [...apiPayloads.audit.items];
   let attachmentItems = [...apiPayloads.attachments.items];
   let documentTemplateItems = [...apiPayloads.documentTemplates.items];
   let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
+  const appendAuditEvent = (action: string, objectType: string, objectId: string) => {
+    auditItems = [
+      {
+        ...apiPayloads.audit.items[0],
+        id: `${action}-${auditItems.length}`,
+        action,
+        object_type: objectType,
+        object_id: objectId,
+        created_at: "2026-06-28T12:10:00Z",
+      },
+      ...auditItems,
+    ];
+  };
+  const createdCardRead = () => {
+    if (!createdCard) {
+      return null;
+    }
+    return {
+      ...createdCard,
+      blocks: {
+        main: {
+          block_id: "88888888-8888-4888-8888-888888888888",
+          code: "main",
+          instances: [
+            {
+              block_instance_id: null,
+              ordinal: 0,
+              fields: {
+                status: {
+                  field_id: "99999999-9999-4999-8999-999999999999",
+                  code: "status",
+                  field_type: "text",
+                  value: newCardStatusValue,
+                },
+                approved: {
+                  field_id: "99999999-9999-4999-8999-999999999998",
+                  code: "approved",
+                  field_type: "bool",
+                  value: newCardApprovedValue,
+                },
+              },
+            },
+          ],
+        },
+        details: {
+          block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+          code: "details",
+          instances: repeatableInstances.map((instance) => ({
+            block_instance_id: instance.block_instance_id,
+            ordinal: instance.ordinal,
+            fields: {
+              comment: {
+                field_id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+                code: "comment",
+                field_type: "text",
+                value: instance.value,
+              },
+            },
+          })),
+        },
+      },
+      fields: {
+        status: {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          code: "status",
+          field_type: "text",
+          value: newCardStatusValue,
+        },
+        approved: {
+          field_id: "99999999-9999-4999-8999-999999999998",
+          code: "approved",
+          field_type: "bool",
+          value: newCardApprovedValue,
+        },
+      },
+    };
+  };
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -313,6 +445,188 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
+    if (url.pathname === "/api/v1/organizations/22222222-2222-4222-8222-222222222222/org-units") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(apiPayloads.orgUnits),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          organization_id: string;
+          org_unit_id?: string | null;
+          display_name: string;
+          public_view_enabled?: boolean;
+          public_edit_enabled?: boolean;
+        };
+        createdCard = {
+          id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          organization_id: body.organization_id,
+          org_unit_id: body.org_unit_id ?? null,
+          display_name: body.display_name,
+          lifecycle_status: "draft",
+          public_view_enabled: Boolean(body.public_view_enabled),
+          public_edit_enabled: Boolean(body.public_edit_enabled),
+        };
+        cardItems = [...cardItems, createdCard];
+        appendAuditEvent("create", "card", createdCard.id);
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(createdCard),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: cardItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") {
+      if (request.method() === "PATCH" && createdCard) {
+        const body = request.postDataJSON() as {
+          display_name?: string | null;
+          public_view_enabled?: boolean | null;
+          public_edit_enabled?: boolean | null;
+        };
+        createdCard = {
+          ...createdCard,
+          display_name: body.display_name ?? createdCard.display_name,
+          public_view_enabled: body.public_view_enabled ?? createdCard.public_view_enabled,
+          public_edit_enabled: body.public_edit_enabled ?? createdCard.public_edit_enabled,
+        };
+        cardItems = cardItems.map((item) => (item.id === createdCard?.id ? createdCard : item));
+        appendAuditEvent("update", "card", createdCard.id);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(createdCard),
+        });
+        return;
+      }
+      if (request.method() === "DELETE" && createdCard) {
+        const archivedCard = { ...createdCard, lifecycle_status: "archived" };
+        cardItems = cardItems.filter((item) => item.id !== createdCard?.id);
+        appendAuditEvent("archive", "card", createdCard.id);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(archivedCard),
+        });
+        return;
+      }
+      const payload = createdCardRead();
+      await route.fulfill({
+        status: payload ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify(payload ?? { detail: "Not Found" }),
+      });
+      return;
+    }
+    if (
+      url.pathname ===
+      "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/blocks/8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d/instances"
+    ) {
+      const createdInstance = {
+        id: "edededed-eded-4ede-8ede-edededededed",
+        card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+        block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+        ordinal: repeatableInstances.length,
+      };
+      repeatableInstances = [
+        ...repeatableInstances,
+        {
+          block_instance_id: createdInstance.id,
+          ordinal: createdInstance.ordinal,
+          value: "",
+        },
+      ];
+      appendAuditEvent("create", "card_block_instance", createdInstance.id);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(createdInstance),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/card-block-instances/edededed-eded-4ede-8ede-edededededed") {
+      repeatableInstances = repeatableInstances.filter(
+        (instance) => instance.block_instance_id !== "edededed-eded-4ede-8ede-edededededed",
+      );
+      appendAuditEvent("archive", "card_block_instance", "edededed-eded-4ede-8ede-edededededed");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "edededed-eded-4ede-8ede-edededededed",
+          card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+          ordinal: 0,
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/values") {
+      const body = request.postDataJSON() as {
+        values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
+      };
+      for (const item of body.values) {
+        if (item.field_id === "99999999-9999-4999-8999-999999999999") {
+          newCardStatusValue = String(item.value ?? "");
+        }
+        if (item.field_id === "99999999-9999-4999-8999-999999999998") {
+          newCardApprovedValue = Boolean(item.value);
+        }
+        if (item.field_id === "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d") {
+          newCardCommentValue = String(item.value ?? "");
+          repeatableInstances = repeatableInstances.map((instance) =>
+            instance.block_instance_id === item.block_instance_id
+              ? { ...instance, value: newCardCommentValue }
+              : instance,
+          );
+        }
+      }
+      appendAuditEvent("update", "field_values", "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: body.values.map((item, index) => ({
+            id: `field-value-${index}`,
+            card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+            block_instance_id: item.block_instance_id ?? null,
+            field_id: item.field_id,
+            value: item.value,
+          })),
+        }),
+      });
+      return;
+    }
+    if (
+      url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/attachments" ||
+      url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/generated-documents"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [] }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/audit-events" && url.search === "?limit=20") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: auditItems }),
+      });
+      return;
+    }
     if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments") {
       if (request.method() === "POST") {
         const created = {
@@ -538,7 +852,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Системный администратор").first()).toBeVisible();
   await expect(page.getByText("Главная организация")).toBeVisible();
 
-  await page.getByRole("button", { name: "Пользователи" }).click();
+  await page.getByRole("button", { name: "Пользователи", exact: true }).click();
   await expect(page.getByText("Технический код: users.manage")).toBeVisible();
   await expect(page.getByText("Технический код: system_admin")).toBeVisible();
   await expect(page.getByText("Системный администратор").first()).toBeVisible();
@@ -546,20 +860,26 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("System admin", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Manage users.", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Реестры" }).click();
+  await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
   await expect(page.getByText("Статусы актива").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Карточки" }).click();
-  await expect(page.getByText("Карточка актива")).toBeVisible();
-  await expect(page.getByLabel("Статус")).toHaveValue("drafted");
-  await page.getByLabel("Статус").fill("published");
-  await page.getByRole("button", { name: "Сохранить Статус" }).click();
+  await page.getByRole("button", { name: "Карточки", exact: true }).click();
+  await expect(page.getByText("Карточка актива").first()).toBeVisible();
+  const statusFieldForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Сохранить Статус" }),
+  });
+  await expect(statusFieldForm.getByLabel("Статус")).toHaveValue("drafted");
+  await statusFieldForm.getByLabel("Статус").fill("published");
+  await statusFieldForm.getByRole("button", { name: "Сохранить Статус" }).click();
   await expect(page.getByText("Сохранено: Статус")).toBeVisible();
-  await page.getByLabel("Подтверждено").check();
-  await page.getByRole("button", { name: "Сохранить Подтверждено" }).click();
+  const approvedFieldForm = page.locator("form").filter({
+    has: page.getByRole("button", { name: "Сохранить Подтверждено" }),
+  });
+  await approvedFieldForm.getByLabel("Подтверждено").check();
+  await approvedFieldForm.getByRole("button", { name: "Сохранить Подтверждено" }).click();
   await expect(page.getByText("Сохранено: Подтверждено")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
@@ -600,8 +920,56 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Архивировать документ Сводка карточки" }).click();
   await expect(page.getByText("Документ архивирован")).toBeVisible();
 
-  await page.getByRole("button", { name: "Аудит" }).click();
-  await expect(page.getByText("Создание")).toBeVisible();
+  await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("Заполните обязательные поля")).toBeVisible();
+  await page.getByLabel("Название карточки").fill("Новая карточка");
+  await page
+    .getByLabel("Организация карточки")
+    .selectOption("22222222-2222-4222-8222-222222222222");
+  await page
+    .getByLabel("Подразделение карточки")
+    .selectOption("2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f");
+  await page.getByLabel("Публичный просмотр карточки").check();
+  await page.getByLabel("Публичное редактирование карточки").check();
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("Карточка создана")).toBeVisible();
+  await expect(page.getByText("Новая карточка").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Редактировать карточку Новая карточка" }).click();
+  await page.getByLabel("Название карточки").fill("Новая карточка обновлена");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(page.getByText("Карточка обновлена")).toBeVisible();
+  await expect(page.getByText("Новая карточка обновлена").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
+  await expect(page.getByText("Экземпляр блока создан")).toBeVisible();
+  const bulkForm = page.getByRole("form", { name: "Массовое сохранение полей" });
+  await bulkForm.getByLabel("Статус").fill("published");
+  await bulkForm.getByLabel("Подтверждено").check();
+  await bulkForm.getByLabel("Комментарий").fill("Комментарий по карточке");
+  await bulkForm.getByRole("button", { name: "Сохранить все поля" }).click();
+  await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: "Архивировать экземпляр блока Детали карточки экземпляр 1",
+    })
+    .click();
+  await expect(page.getByText("Экземпляр блока архивирован")).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "Архивировать карточку Новая карточка обновлена" })
+    .click();
+  const archiveCardDialog = page.getByRole("dialog", { name: "Архивировать карточку" });
+  await expect(archiveCardDialog).toBeVisible();
+  await archiveCardDialog.getByRole("button", { name: "Архивировать", exact: true }).click();
+  await expect(page.getByText("Карточка архивирована")).toBeVisible();
+  await expect(page.getByText("Карточка актива").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Аудит", exact: true }).click();
+  await expect(page.getByText("Создание").first()).toBeVisible();
+  await expect(page.getByText("Архивация").first()).toBeVisible();
+  await expect(page.getByText("Обновление").first()).toBeVisible();
 
   const adminSections = [
     { button: "Обзор", expectedLabel: "Сводка" },
@@ -614,7 +982,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   ];
 
   for (const section of adminSections) {
-    await page.getByRole("button", { name: section.button }).click();
+    await page.getByRole("button", { name: section.button, exact: true }).click();
     if ("expectedLabel" in section) {
       await expect(page.getByLabel(section.expectedLabel, { exact: true })).toBeVisible();
     } else {

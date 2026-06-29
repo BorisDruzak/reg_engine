@@ -457,6 +457,119 @@ tr:last-child td {
   display: none;
 }
 
+.card-metadata-panel,
+.repeatable-block-controls,
+.bulk-field-form {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.metadata-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.metadata-list div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.metadata-list dt {
+  color: #667085;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.metadata-list dd {
+  margin: 0;
+  color: #101828;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.card-actions {
+  justify-content: flex-start;
+}
+
+.repeatable-block-controls {
+  border-top: 1px solid #edf0f4;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.repeatable-block-controls h4,
+.bulk-field-header h4 {
+  margin: 0;
+  color: #101828;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.repeatable-block-control,
+.repeatable-instance-row,
+.repeatable-block-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.repeatable-block-control {
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 8px;
+}
+
+.repeatable-block-heading,
+.repeatable-instance-row {
+  justify-content: space-between;
+}
+
+.repeatable-instance-row span {
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.checkbox-control {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.checkbox-control input {
+  width: 18px !important;
+  min-height: 18px !important;
+  padding: 0 !important;
+}
+
+.bulk-field-form {
+  border-bottom: 1px solid #edf0f4;
+}
+
+.bulk-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bulk-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.bulk-field-grid small {
+  color: #667085;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
 .selectable-list {
   display: grid;
   margin: 0;
@@ -841,6 +954,8 @@ tr:last-child td {
   .workspace-nav,
   .summary-grid,
   .split-grid,
+  .metadata-list,
+  .bulk-field-grid,
   .field-editor-row,
   .attachment-form,
   .document-generator,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -6,11 +6,14 @@ import { App } from "@/App";
 import type {
   AccessGrantRead,
   AttachmentRead,
+  CardRead,
+  CardSummaryRead,
   DocumentTemplateRead,
   FormBlockRead,
   FormFieldRead,
   GeneratedDocumentRead,
   OrganizationRead,
+  OrgUnitRead,
   ReferenceItemRead,
   ReferenceListRead,
   RegistryRead,
@@ -46,6 +49,19 @@ const apiPayloads = {
         code: "root",
         name: "Главная организация",
         type: "organization",
+        is_active: true,
+      },
+    ],
+  },
+  orgUnits: {
+    items: [
+      {
+        id: "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
+        organization_id: "22222222-2222-4222-8222-222222222222",
+        parent_id: null,
+        code: "accounting",
+        name: "Отдел учета",
+        type: "department",
         is_active: true,
       },
     ],
@@ -184,6 +200,32 @@ const apiPayloads = {
         public_editable: false,
       },
     ],
+  },
+  repeatableBlock: {
+    id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+    registry_id: "77777777-7777-4777-8777-777777777777",
+    code: "details",
+    title: "Детали карточки",
+    description: "Повторяемые сведения карточки",
+    position: 10,
+    is_repeatable: true,
+    is_active: true,
+    public_visible: false,
+    public_editable: false,
+  },
+  repeatableField: {
+    id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+    block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+    code: "comment",
+    label: "Комментарий",
+    description: null,
+    field_type: "text",
+    position: 0,
+    options_source_type: null,
+    options_source_id: null,
+    is_active: true,
+    public_visible: false,
+    public_editable: false,
   },
   cards: {
     items: [
@@ -324,6 +366,7 @@ let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
 let organizationItems: OrganizationRead[];
+let orgUnitItems: OrgUnitRead[];
 let registryItems: RegistryRead[];
 let denyNextRegistryUpdate = false;
 let schemaBlockItems: FormBlockRead[];
@@ -336,6 +379,16 @@ let userItems: UserRead[];
 let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
 let denyNextGrantCreate = false;
+let cardItems: CardSummaryRead[];
+let cardValueStateById: Record<
+  string,
+  {
+    status: string;
+    approved: boolean;
+    repeatableNotes: { block_instance_id: string; ordinal: number; value: string }[];
+  }
+>;
+let denyNextCardUpdate = false;
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
@@ -347,6 +400,7 @@ beforeEach(() => {
   cardApprovedValue = false;
   publicStatusValue = "drafted";
   organizationItems = [...apiPayloads.organizations.items];
+  orgUnitItems = [...apiPayloads.orgUnits.items];
   registryItems = [...apiPayloads.registries.items];
   denyNextRegistryUpdate = false;
   schemaBlockItems = [...apiPayloads.schema.blocks];
@@ -359,6 +413,15 @@ beforeEach(() => {
   denyNextUserUpdate = false;
   grantItems = [...apiPayloads.grants.items];
   denyNextGrantCreate = false;
+  cardItems = [...apiPayloads.cards.items];
+  cardValueStateById = {
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": {
+      status: "drafted",
+      approved: false,
+      repeatableNotes: [],
+    },
+  };
+  denyNextCardUpdate = false;
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
@@ -424,6 +487,9 @@ beforeEach(() => {
       }
       if (url.endsWith("/api/v1/auth/me")) {
         return jsonResponse(apiPayloads.login.user);
+      }
+      if (url.endsWith("/api/v1/organizations/22222222-2222-4222-8222-222222222222/org-units")) {
+        return jsonResponse({ items: orgUnitItems });
       }
       if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
         const organizationId = url.split("/api/v1/organizations/")[1];
@@ -891,7 +957,100 @@ beforeEach(() => {
         return jsonResponse(currentRegistrySchema());
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
-        return jsonResponse(apiPayloads.cards);
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            organization_id: string;
+            display_name: string;
+            org_unit_id?: string | null;
+            public_view_enabled?: boolean;
+            public_edit_enabled?: boolean;
+          };
+          const created: CardSummaryRead = {
+            id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            organization_id: payload.organization_id,
+            org_unit_id: payload.org_unit_id ?? null,
+            display_name: payload.display_name,
+            lifecycle_status: "draft",
+            public_view_enabled: payload.public_view_enabled ?? false,
+            public_edit_enabled: payload.public_edit_enabled ?? false,
+          };
+          cardItems = [...cardItems, created];
+          cardValueStateById[created.id] = {
+            status: "",
+            approved: false,
+            repeatableNotes: [],
+          };
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: cardItems });
+      }
+      if (
+        url.endsWith(
+          "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/blocks/8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d/instances",
+        )
+      ) {
+        const state = cardValueStateById["cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd"];
+        const created = {
+          id: "edededed-eded-4ede-8ede-edededededed",
+          card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+          ordinal: state.repeatableNotes.length,
+        };
+        state.repeatableNotes = [
+          ...state.repeatableNotes,
+          { block_instance_id: created.id, ordinal: created.ordinal, value: "" },
+        ];
+        return jsonResponse(created, { status: 201 });
+      }
+      if (url.endsWith("/api/v1/card-block-instances/edededed-eded-4ede-8ede-edededededed")) {
+        const state = cardValueStateById["cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd"];
+        state.repeatableNotes = state.repeatableNotes.filter(
+          (item) => item.block_instance_id !== "edededed-eded-4ede-8ede-edededededed",
+        );
+        return jsonResponse({
+          id: "edededed-eded-4ede-8ede-edededededed",
+          card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+          ordinal: 0,
+        });
+      }
+      if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/values")) {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          values: {
+            field_id: string;
+            value: unknown;
+            block_instance_id?: string | null;
+          }[];
+        };
+        const state = cardValueStateById["cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd"];
+        for (const item of payload.values) {
+          if (item.field_id === "99999999-9999-4999-8999-999999999999") {
+            state.status = String(item.value ?? "");
+          }
+          if (item.field_id === "99999999-9999-4999-8999-999999999998") {
+            state.approved = Boolean(item.value);
+          }
+          if (item.field_id === "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d") {
+            state.repeatableNotes = state.repeatableNotes.map((note) =>
+              note.block_instance_id === item.block_instance_id
+                ? { ...note, value: String(item.value ?? "") }
+                : note,
+            );
+          }
+        }
+        return jsonResponse({
+          items: payload.values.map((item, index) => ({
+            id: `bulk-${index}`,
+            card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+            block_instance_id: item.block_instance_id ?? null,
+            field_id: item.field_id,
+            value: item.value,
+          })),
+        });
+      }
+      if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/attachments")) {
+        return jsonResponse({ items: [] });
       }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments")) {
         if (init?.method === "POST") {
@@ -1001,6 +1160,9 @@ beforeEach(() => {
         }
         return jsonResponse({ items: generatedDocumentItems });
       }
+      if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/generated-documents")) {
+        return jsonResponse({ items: [] });
+      }
       if (
         url.endsWith("/api/v1/generated-documents/12121212-1212-4212-8212-121212121212/content")
       ) {
@@ -1021,6 +1183,42 @@ beforeEach(() => {
         generatedDocumentItems = [];
         return jsonResponse(archived);
       }
+      if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd")) {
+        const current = cardItems.find(
+          (item) => item.id === "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+        );
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          if (denyNextCardUpdate) {
+            denyNextCardUpdate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            display_name?: string | null;
+            public_view_enabled?: boolean | null;
+            public_edit_enabled?: boolean | null;
+          };
+          const updated: CardSummaryRead = {
+            ...current,
+            display_name: payload.display_name ?? current.display_name,
+            public_view_enabled: payload.public_view_enabled ?? current.public_view_enabled,
+            public_edit_enabled: payload.public_edit_enabled ?? current.public_edit_enabled,
+          };
+          cardItems = cardItems.map((item) => (item.id === updated.id ? updated : item));
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived: CardSummaryRead = {
+            ...current,
+            lifecycle_status: "archived",
+          };
+          cardItems = cardItems.filter((item) => item.id !== current.id);
+          return jsonResponse(archived);
+        }
+        return jsonResponse(currentCardRead("cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd"));
+      }
       if (
         url.endsWith(
           "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999",
@@ -1031,6 +1229,7 @@ beforeEach(() => {
           block_instance_id: string | null;
         };
         cardStatusValue = payload.value;
+        cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].status = payload.value;
         return jsonResponse({
           id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1049,6 +1248,7 @@ beforeEach(() => {
           block_instance_id: string | null;
         };
         cardApprovedValue = payload.value;
+        cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].approved = payload.value;
         return jsonResponse({
           id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc",
           card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1074,49 +1274,92 @@ afterEach(() => {
   localStorage.clear();
 });
 
-function currentCardRead() {
-  return {
-    ...apiPayloads.cardRead,
-    blocks: {
-      main: {
-        ...apiPayloads.cardRead.blocks.main,
-        instances: [
-          {
-            block_instance_id: null,
-            ordinal: 0,
-            fields: {
-              status: {
-                field_id: "99999999-9999-4999-8999-999999999999",
-                code: "status",
-                field_type: "text",
-                value: cardStatusValue,
-              },
-              approved: {
-                field_id: "99999999-9999-4999-8999-999999999998",
-                code: "approved",
-                field_type: "bool",
-                value: cardApprovedValue,
-              },
+function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardRead {
+  const cardSummary =
+    cardItems.find((item) => item.id === cardId) ??
+    cardItems.find((item) => item.id === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") ??
+    apiPayloads.cards.items[0];
+  const state = cardValueStateById[cardSummary.id] ?? {
+    status: "",
+    approved: false,
+    repeatableNotes: [],
+  };
+  const blocks: CardRead["blocks"] = {
+    main: {
+      ...apiPayloads.cardRead.blocks.main,
+      instances: [
+        {
+          block_instance_id: null,
+          ordinal: 0,
+          fields: {
+            status: {
+              field_id: "99999999-9999-4999-8999-999999999999",
+              code: "status",
+              field_type: "text",
+              value: state.status,
+            },
+            approved: {
+              field_id: "99999999-9999-4999-8999-999999999998",
+              code: "approved",
+              field_type: "bool",
+              value: state.approved,
             },
           },
-        ],
-      },
+        },
+      ],
+    },
+  };
+  const hasRepeatableDetails = schemaBlockItems.some(
+    (block) => block.id === apiPayloads.repeatableBlock.id,
+  );
+  if (hasRepeatableDetails) {
+    blocks.details = {
+      block_id: apiPayloads.repeatableBlock.id,
+      code: apiPayloads.repeatableBlock.code,
+      instances: state.repeatableNotes.map((instance) => ({
+        block_instance_id: instance.block_instance_id,
+        ordinal: instance.ordinal,
+        fields: {
+          comment: {
+            field_id: apiPayloads.repeatableField.id,
+            code: apiPayloads.repeatableField.code,
+            field_type: apiPayloads.repeatableField.field_type,
+            value: instance.value,
+          },
+        },
+      })),
+    };
+  }
+
+  return {
+    ...apiPayloads.cardRead,
+    id: cardSummary.id,
+    registry_id: cardSummary.registry_id,
+    organization_id: cardSummary.organization_id,
+    display_name: cardSummary.display_name,
+    blocks: {
+      ...blocks,
     },
     fields: {
       status: {
         field_id: "99999999-9999-4999-8999-999999999999",
         code: "status",
         field_type: "text",
-        value: cardStatusValue,
+        value: state.status,
       },
       approved: {
         field_id: "99999999-9999-4999-8999-999999999998",
         code: "approved",
         field_type: "bool",
-        value: cardApprovedValue,
+        value: state.approved,
       },
     },
   };
+}
+
+function enableRepeatableDetailsSchema() {
+  schemaBlockItems = [...schemaBlockItems, apiPayloads.repeatableBlock];
+  schemaFieldItems = [...schemaFieldItems, apiPayloads.repeatableField];
 }
 
 function currentRegistrySchema() {
@@ -1183,17 +1426,23 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.getAllByText("Основной блок").length).toBeGreaterThan(0);
   expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: "Карточки" }));
-  expect(await screen.findByText("Карточка актива")).toBeInTheDocument();
-  expect(screen.getByDisplayValue("drafted")).toBeInTheDocument();
-  const statusInput = await screen.findByLabelText("Статус");
+  expect((await screen.findAllByText("Карточка актива")).length).toBeGreaterThan(0);
+  expect(screen.getAllByDisplayValue("drafted").length).toBeGreaterThan(0);
+  const statusSaveButton = screen.getByRole("button", { name: "Сохранить Статус" });
+  const statusForm = statusSaveButton.closest("form");
+  expect(statusForm).toBeTruthy();
+  const statusInput = within(statusForm as HTMLElement).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(screen.getByRole("button", { name: "Сохранить Статус" }));
+  await user.click(statusSaveButton);
   expect(await screen.findByText("Сохранено: Статус")).toBeInTheDocument();
 
-  const approvedInput = await screen.findByLabelText("Подтверждено");
+  const approvedSaveButton = screen.getByRole("button", { name: "Сохранить Подтверждено" });
+  const approvedForm = approvedSaveButton.closest("form");
+  expect(approvedForm).toBeTruthy();
+  const approvedInput = within(approvedForm as HTMLElement).getByLabelText("Подтверждено");
   await user.click(approvedInput);
-  await user.click(screen.getByRole("button", { name: "Сохранить Подтверждено" }));
+  await user.click(approvedSaveButton);
   expect(await screen.findByText("Сохранено: Подтверждено")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Аудит" }));
@@ -1240,6 +1489,170 @@ test("logs in and renders authenticated admin workspace", async () => {
           body.block_instance_id === null
         );
       }),
+    ).toBe(true);
+  });
+});
+
+test("creates updates archives cards and manages repeatable blocks with bulk save", async () => {
+  enableRepeatableDetailsSchema();
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const cardPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") &&
+          init?.method === "POST",
+      ).length;
+
+  await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
+  const postCountBeforeValidation = cardPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(cardPostCount()).toBe(postCountBeforeValidation);
+
+  await user.type(screen.getByLabelText("Название карточки"), "Новая карточка");
+  await user.selectOptions(screen.getByLabelText("Организация карточки"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+  await user.selectOptions(await screen.findByLabelText("Подразделение карточки"), [
+    "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
+  ]);
+  await user.click(screen.getByLabelText("Публичный просмотр карточки"));
+  await user.click(screen.getByLabelText("Публичное редактирование карточки"));
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Карточка создана")).toBeInTheDocument();
+  expect((await screen.findAllByText("Новая карточка")).length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: "Редактировать карточку Новая карточка" }));
+  const displayNameInput = await screen.findByLabelText("Название карточки");
+  await user.clear(displayNameInput);
+  await user.type(displayNameInput, "Новая карточка обновлена");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Карточка обновлена")).toBeInTheDocument();
+  expect((await screen.findAllByText("Новая карточка обновлена")).length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }),
+  );
+  expect(await screen.findByText("Экземпляр блока создан")).toBeInTheDocument();
+
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  const statusInput = within(bulkForm).getByLabelText("Статус");
+  await user.clear(statusInput);
+  await user.type(statusInput, "published");
+  await user.click(within(bulkForm).getByLabelText("Подтверждено"));
+  await user.type(within(bulkForm).getByLabelText("Комментарий"), "Комментарий по карточке");
+  await user.click(within(bulkForm).getByRole("button", { name: "Сохранить все поля" }));
+
+  expect(await screen.findByText("Поля карточки сохранены")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", {
+      name: "Архивировать экземпляр блока Детали карточки экземпляр 1",
+    }),
+  );
+  expect(await screen.findByText("Экземпляр блока архивирован")).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать карточку Новая карточка обновлена" }),
+  );
+  expect(await screen.findByRole("dialog", { name: "Архивировать карточку" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Карточка архивирована")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") &&
+        init?.method === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(createBody).toEqual({
+      organization_id: "22222222-2222-4222-8222-222222222222",
+      org_unit_id: "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
+      display_name: "Новая карточка",
+      public_view_enabled: true,
+      public_edit_enabled: true,
+    });
+    expect(createBody).not.toHaveProperty("employees");
+    expect(createBody).not.toHaveProperty("full_name");
+
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        return (
+          String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
+          init?.method === "PATCH" &&
+          body.display_name === "Новая карточка обновлена" &&
+          body.public_view_enabled === true &&
+          body.public_edit_enabled === true
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/blocks/8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d/instances",
+          ) && init?.method === "POST",
+      ),
+    ).toBe(true);
+
+    const bulkCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/values") &&
+        init?.method === "PATCH",
+    );
+    expect(bulkCall).toBeTruthy();
+    const bulkBody = JSON.parse(String(bulkCall?.[1]?.body ?? "{}")) as {
+      values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
+    };
+    expect(bulkBody.values).toEqual(
+      expect.arrayContaining([
+        {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          value: "published",
+          block_instance_id: null,
+        },
+        {
+          field_id: "99999999-9999-4999-8999-999999999998",
+          value: true,
+          block_instance_id: null,
+        },
+        {
+          field_id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+          value: "Комментарий по карточке",
+          block_instance_id: "edededed-eded-4ede-8ede-edededededed",
+        },
+      ]),
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/card-block-instances/edededed-eded-4ede-8ede-edededededed",
+          ) && init?.method === "DELETE",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
+          init?.method === "DELETE",
+      ),
     ).toBe(true);
   });
 });
