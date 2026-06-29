@@ -39,6 +39,10 @@ class Settings(BaseSettings):
         default="deferred",
         validation_alias="REG_ENGINE_MALWARE_SCANNER",
     )
+    frontend_dist_dir: str | None = Field(
+        default=None,
+        validation_alias="REG_ENGINE_FRONTEND_DIST_DIR",
+    )
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

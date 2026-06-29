@@ -42,6 +42,7 @@ Current stop point:
 - Phase 2J is the next planned phase: `file_ref` dynamic field type.
 - Phase 2J must start with planning/ADR and acceptance criteria before implementation.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred.
+- Operational tooling now supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
 

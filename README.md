@@ -90,6 +90,7 @@ pnpm -C frontend exec playwright install chromium
 | Server service status | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command status` |
 | Server service start | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command start` |
 | Server service stop | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command stop` |
+| Deploy frontend | `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1` |
 | Bootstrap | `powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Command seed` |
 | Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
 | Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
@@ -199,6 +200,16 @@ $env:CORS_ALLOWED_ORIGINS = "http://127.0.0.1:5173,https://registry.example.test
 ```
 
 Leave `CORS_ALLOWED_ORIGINS` empty when the frontend and API are served from the same origin. Do not use wildcard origins for authenticated deployments.
+
+By default the Vite frontend calls the API on the same origin using relative
+`/api/...` paths. Local Vite development proxies `/api` and `/health` to
+`http://127.0.0.1:8000`; set `VITE_API_BASE_URL` only for split-origin
+deployments.
+
+When `frontend/dist/index.html` exists next to the backend checkout, FastAPI
+serves it as the SPA shell and preserves `/api`, `/health`, `/docs`, `/redoc`,
+and `/openapi.json` as backend routes. Override the frontend directory only
+when needed through `REG_ENGINE_FRONTEND_DIST_DIR`.
 
 Auth API:
 
@@ -469,6 +480,16 @@ powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command stop
 ```
 
 Use `-Command restart` after deploying new backend code. Use `-NoInstall` with `start` or `restart` only when the existing unit file should not be refreshed.
+
+`scripts/deploy-frontend.ps1` builds `frontend/dist` locally, uploads that generated artifact to the configured server checkout, restarts the backend service, and verifies that the frontend and `/api/v1/health` respond from the same origin.
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1
+```
+
+After deployment, open the server service root URL in a browser. The API docs
+remain available at `/docs`.
 
 Access management API:
 

@@ -8,6 +8,7 @@ from app.core.config import (
     validate_runtime_configuration,
 )
 from app.core.logging import configure_logging
+from app.frontend import configure_frontend_routes
 
 
 def create_app() -> FastAPI:
@@ -29,6 +30,12 @@ def create_app() -> FastAPI:
     @application.get("/health", tags=["health"])
     def root_healthcheck() -> dict[str, str]:
         return {"status": "ok", "service": "reg_engine"}
+
+    configure_frontend_routes(
+        application,
+        dist_dir=settings.frontend_dist_dir,
+        api_prefix=settings.api_v1_prefix,
+    )
 
     return application
 

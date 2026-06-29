@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-29 14:50:56 +05:00
+- Generated: 2026-06-29 15:03:48 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -52,6 +52,7 @@
 - `backend/app/core/logging.py`
 - `backend/app/domain/__init__.py`
 - `backend/app/domain/constants.py`
+- `backend/app/frontend.py`
 - `backend/app/main.py`
 - `backend/app/models/__init__.py`
 - `backend/app/models/attachment.py`
@@ -113,6 +114,7 @@
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
 - `backend/tests/test_document_generation_services.py`
+- `backend/tests/test_frontend_static.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
@@ -194,6 +196,7 @@
 - `scripts/bootstrap.ps1`
 - `scripts/check.ps1`
 - `scripts/deploy.ps1`
+- `scripts/deploy-frontend.ps1`
 - `scripts/dev-backend.ps1`
 - `scripts/dev-cycle.ps1`
 - `scripts/dev-frontend.ps1`

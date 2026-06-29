@@ -271,7 +271,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   let attachmentItems = [...apiPayloads.attachments.items];
   let documentTemplateItems = [...apiPayloads.documentTemplates.items];
   let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
-  await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
     if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attachments") {
@@ -586,7 +586,7 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
     block_instance_id?: string | null;
   } | null = null;
 
-  await page.route("http://127.0.0.1:8000/api/v1/**", async (route) => {
+  await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
     if (
