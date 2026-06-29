@@ -39,6 +39,7 @@ Completed phases:
 - Phase 2K.1: Organization Units API.
 - Phase 2K.2: Registry Update And Archive API.
 - Phase 2K.3: Card Block Instance Archive API.
+- Phase 2K.4: Bulk Card Values Update API.
 
 Current stop point:
 
@@ -48,10 +49,11 @@ Current stop point:
 - Phase 2K.1 Organization Units API is completed.
 - Phase 2K.2 Registry Update And Archive API is completed.
 - Phase 2K.3 Card Block Instance Archive API is completed.
+- Phase 2K.4 Bulk Card Values Update API is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind core admin workflows if product usability is the priority.
-- Phase 2K.4 Bulk Card Values Update API is the next backend/API
-  implementation slice.
+- Phase 2K.5 API Coverage And Live Validation is the next backend/API
+  validation slice.
 - Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
@@ -76,10 +78,8 @@ Current stop point:
 The backend already exposes most core REST operations for organizations, users,
 access grants, blocks, fields, reference lists/items, cards, attachments,
 documents, public links, and audit reads. Phase 2K.0 records the current API
-readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. Remaining backend
-gaps before a complete admin workspace are:
-
-- atomic bulk card values update API.
+readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. No planned Phase 2K
+backend API gaps remain before the Phase 2K.5 validation slice.
 
 The current authenticated frontend is not yet a complete admin workspace:
 
@@ -353,7 +353,7 @@ Completion evidence:
 - Reads use organization visibility scope; create/update/archive require
   `organizations.manage` in organization scope or superuser.
 - Create/update/archive write `audit_events` with `object_type=org_unit`.
-- Tests added in `backend/tests/test_api_phase_2k_org_units.py`.
+- Tests added in `backend/tests/test_api_phase_2k.py`.
 
 ### Phase 2K.2: Registry Update And Archive API
 
@@ -411,6 +411,8 @@ Completion evidence:
 
 ### Phase 2K.4: Bulk Card Values Update API
 
+Status: completed.
+
 Required work:
 
 - Add an atomic bulk field-values endpoint, expected as `PATCH /api/v1/cards/{card_id}/values` or equivalent.
@@ -421,6 +423,17 @@ Required work:
 Acceptance criteria:
 
 - Tests cover atomic success, partial validation failure rollback, audit behavior, and permission denial.
+
+Completion evidence:
+
+- Added `PATCH /api/v1/cards/{card_id}/values`.
+- Bulk payload accepts multiple `{field_id, value, block_instance_id}` updates.
+- Bulk update reuses existing single-field coercion, validation, permission,
+  and audit behavior.
+- Service uses a nested transaction/savepoint so partial validation failure
+  rolls back earlier values in the same bulk request.
+- Tests cover route registration, success, rollback, and permission denial in
+  `backend/tests/test_api_phase_2k.py`.
 
 ### Phase 2K.5: API Coverage And Live Validation
 

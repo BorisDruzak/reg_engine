@@ -83,6 +83,13 @@ class _FieldAssignment:
     item_ids: list[UUID] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class BulkFieldValueInput:
+    field_id: UUID
+    value: object
+    block_instance_id: UUID | None = None
+
+
 class CardService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -230,6 +237,26 @@ class CardService:
             new_data_json={"card_id": str(card.id), "field_id": str(field_model.id)},
         )
         return field_value
+
+    def set_field_values_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        values: Sequence[BulkFieldValueInput],
+    ) -> list[FieldValue]:
+        with self.session.begin_nested():
+            field_values = [
+                self.set_field_value_for_actor(
+                    actor_user_id=actor_user_id,
+                    card_id=card_id,
+                    field_id=item.field_id,
+                    value=item.value,
+                    block_instance_id=item.block_instance_id,
+                )
+                for item in values
+            ]
+        return field_values
 
     def set_field_value_from_public_link(
         self,

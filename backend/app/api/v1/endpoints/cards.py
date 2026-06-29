@@ -18,11 +18,13 @@ from app.schemas.cards import (
     CardSummaryRead,
     CardTransferRequest,
     CardUpdate,
+    FieldValueListRead,
     FieldValueRead,
+    FieldValuesBulkUpdate,
     FieldValueUpdate,
 )
+from app.services.cards import BulkFieldValueInput, CardService
 from app.services.cards import CardRead as ServiceCardRead
-from app.services.cards import CardService
 
 router = APIRouter(tags=["cards"])
 
@@ -113,6 +115,34 @@ def set_card_field_value(
     except Exception as exc:
         raise_service_http_error(exc)
     return field_value_to_read(session, field_value)
+
+
+@router.patch("/cards/{card_id}/values", response_model=FieldValueListRead)
+def set_card_field_values(
+    card_id: UUID,
+    payload: FieldValuesBulkUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> FieldValueListRead:
+    values = [
+        BulkFieldValueInput(
+            field_id=item.field_id,
+            value=coerce_api_field_value(session, item.field_id, item.value),
+            block_instance_id=item.block_instance_id,
+        )
+        for item in payload.values
+    ]
+    try:
+        field_values = CardService(session).set_field_values_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            values=values,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return FieldValueListRead(
+        items=[field_value_to_read(session, field_value) for field_value in field_values]
+    )
 
 
 @router.patch("/cards/{card_id}", response_model=CardSummaryRead)

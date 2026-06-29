@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -248,6 +248,14 @@ def test_phase_2k_block_instance_archive_route_is_registered_without_database() 
     paths = set(app.openapi()["paths"])
 
     assert "/api/v1/card-block-instances/{block_instance_id}" in paths
+
+
+def test_phase_2k_bulk_card_values_route_is_registered_without_database() -> None:
+    app = create_app()
+    paths = app.openapi()["paths"]
+
+    assert "/api/v1/cards/{card_id}/values" in paths
+    assert "patch" in paths["/api/v1/cards/{card_id}/values"]
 
 
 def test_system_admin_can_manage_org_units(
@@ -738,3 +746,201 @@ def test_block_instance_archive_rejects_non_repeatable_and_system_blocks(
         headers=_actor_headers(system_admin.id),
     )
     assert system_response.status_code == 400, system_response.text
+
+
+def test_bulk_card_values_update_saves_multiple_values(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-bulk-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-bulk-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-bulk-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    first_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "first", "label": "First", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    second_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "second", "label": "Second", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+
+    response = _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{card['id']}/values",
+        actor_id=system_admin.id,
+        payload={
+            "values": [
+                {"field_id": first_field["id"], "value": "first value"},
+                {"field_id": second_field["id"], "value": "second value"},
+            ]
+        },
+    )
+
+    assert [item["field_id"] for item in response["items"]] == [
+        first_field["id"],
+        second_field["id"],
+    ]
+    card_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{card['id']}",
+        actor_id=system_admin.id,
+    )
+    assert card_read["fields"]["main.first"]["value"] == "first value"
+    assert card_read["fields"]["main.second"]["value"] == "second value"
+
+
+def test_bulk_card_values_update_rolls_back_on_partial_validation_failure(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-bulk-rollback-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-bulk-rollback-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-bulk-rollback-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    text_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "text", "label": "Text", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    organization_ref_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "organization", "label": "Organization", "field_type": "organization_ref"},
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{card['id']}/fields/{text_field['id']}",
+        actor_id=system_admin.id,
+        payload={"value": "old value"},
+    )
+
+    response = api_client.patch(
+        f"/api/v1/cards/{card['id']}/values",
+        json={
+            "values": [
+                {"field_id": text_field["id"], "value": "new value"},
+                {"field_id": organization_ref_field["id"], "value": str(uuid4())},
+            ]
+        },
+        headers=_actor_headers(system_admin.id),
+    )
+    assert response.status_code == 400, response.text
+
+    card_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{card['id']}",
+        actor_id=system_admin.id,
+    )
+    assert card_read["fields"]["main.text"]["value"] == "old value"
+    assert card_read["fields"]["main.organization"]["value"] is None
+
+
+def test_bulk_card_values_update_requires_card_permission(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-bulk-denied-system@example.test",
+        is_superuser=True,
+    )
+    outsider = _create_user(db_session, "phase2k-bulk-denied-outsider@example.test")
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-bulk-denied-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-bulk-denied-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "text", "label": "Text", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+
+    response = api_client.patch(
+        f"/api/v1/cards/{card['id']}/values",
+        json={"values": [{"field_id": field["id"], "value": "blocked"}]},
+        headers=_actor_headers(outsider.id),
+    )
+
+    assert response.status_code == 403, response.text

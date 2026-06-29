@@ -38,12 +38,26 @@ class FieldValueUpdate(BaseModel):
     block_instance_id: UUID | None = None
 
 
+class FieldValueBulkItemUpdate(BaseModel):
+    field_id: UUID
+    value: Any
+    block_instance_id: UUID | None = None
+
+
+class FieldValuesBulkUpdate(BaseModel):
+    values: list[FieldValueBulkItemUpdate]
+
+
 class FieldValueRead(BaseModel):
     id: UUID
     card_id: UUID
     block_instance_id: UUID
     field_id: UUID
     value: Any
+
+
+class FieldValueListRead(BaseModel):
+    items: list[FieldValueRead]
 
 
 class CardFieldRead(BaseModel):
