@@ -153,8 +153,14 @@ Current stop point:
 - Production PostgreSQL is migrated to `0010_reports` after fresh backup,
   preflight, disposable PostgreSQL verification, Alembic upgrade, post-checks,
   backend service restart, live OpenAPI route verification, and server check.
-- Next planned work by order is Phase 5 MCP Over API Only unless report
-  frontend UI/polish or non-JSON report output is explicitly prioritized first.
+- Phase 5A MCP Read-Only Gateway is the active implementation checkpoint:
+  read-only MCP JSON-RPC tools call the REST API only, do not import DB/models
+  or service layer, send `X-Reg-Engine-Source: mcp`, and migration
+  `0011_mcp_audit_source` is implemented locally and has passed disposable
+  PostgreSQL verification. Production migration/deploy evidence is still
+  pending.
+- Next planned work after Phase 5A is MCP hardening/configuration or explicitly
+  approved MCP write tools; write tools are not approved in the current plan.
 - Later explicit phases remain report frontend UI/polish, non-JSON report
   outputs, and Phase 5 MCP.
 - XLSX export/import, import/export frontend UI, binary attachment/document
@@ -1600,13 +1606,75 @@ Known limitations:
 
 Purpose: add MCP after API, auth, RBAC, audit, import/export, and document boundaries are stable.
 
-Planned scope:
+Status: in progress.
+
+Planned overall scope:
 
 - Read-only MCP tools first.
 - MCP calls API only.
 - No direct DB access.
 - Audit source `mcp`.
 - Write tools only after explicit approval.
+
+### Phase 5A: MCP Read-Only Gateway
+
+Status: implementation complete locally; deploy and production migration
+pending.
+
+Purpose: add a first read-only MCP gateway that uses the existing REST API as
+the only business-logic boundary.
+
+Completed local scope:
+
+- Added `app.mcp` package with a JSON-RPC stdio handler.
+- Added REST API client that uses HTTP `GET` only for MCP tools.
+- Added `X-Reg-Engine-Source: mcp` to MCP API requests.
+- Added request metadata and audit service support for user audit events with
+  `source=mcp`.
+- Added migration `0011_mcp_audit_source` to allow `audit_events.source='mcp'`.
+- Added `reg-engine-mcp` console script and `scripts/dev-mcp.ps1`.
+- Added read-only tools:
+  `reg_engine_health`, `reg_engine_list_organizations`,
+  `reg_engine_list_registries`, `reg_engine_read_registry_schema`,
+  `reg_engine_list_cards`, `reg_engine_read_card`,
+  `reg_engine_list_audit_events`, `reg_engine_list_report_templates`,
+  `reg_engine_list_report_runs`, and `reg_engine_read_report_run`.
+- Added guardrail tests proving MCP code does not import SQLAlchemy, Alembic,
+  database sessions, backend models, or backend service classes.
+
+Verification so far:
+
+- RED tests failed before implementation for missing MCP package, missing
+  `mcp` audit source, and missing migration.
+- Phase 5A targeted tests passed locally.
+- Backend pytest passed locally with `69 passed, 130 skipped`.
+- `ruff check` passed locally.
+- `mypy app` passed locally.
+- Disposable PostgreSQL database `reg_engine_phase5a_test` passed clean
+  `alembic upgrade head` through `0011_mcp_audit_source`.
+- PostgreSQL-backed Phase 5A targeted tests passed on the same disposable
+  database.
+
+Production migration checkpoint:
+
+- `0011_mcp_audit_source` is explicitly part of the active Phase 5A plan.
+- Production migration may be applied only after this implementation is pushed
+  to `origin/main`, the server checkout is synchronized, a fresh production
+  backup is created, preflight checks confirm the intentional `reg_engine`
+  target and current Alembic revision, and post-checks confirm
+  `0011_mcp_audit_source`, `ck_audit_events_source` includes `mcp`, service
+  health, live MCP/OpenAPI sanity, and server checks.
+
+Known limitations:
+
+- No MCP write tools.
+- No direct MCP database access.
+- No MCP-side RBAC shortcuts; all permissions remain API-enforced.
+- No public-link MCP workflows.
+- No binary attachment/generated-document download tools.
+- No standalone MCP auth model; Phase 5A uses an existing API bearer token.
+- The stdio gateway is a minimal JSON-RPC handler; packaged MCP SDK adoption
+  can be considered later if needed.
 
 ## Verification
 

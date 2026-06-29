@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 04:10:49 +05:00
+- Generated: 2026-06-30 04:23:50 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -56,6 +56,10 @@
 - `backend/app/domain/constants.py`
 - `backend/app/frontend.py`
 - `backend/app/main.py`
+- `backend/app/mcp/__init__.py`
+- `backend/app/mcp/api_client.py`
+- `backend/app/mcp/server.py`
+- `backend/app/mcp/tools.py`
 - `backend/app/models/__init__.py`
 - `backend/app/models/attachment.py`
 - `backend/app/models/audit.py`
@@ -108,6 +112,7 @@
 - `backend/migrations/versions/0008_file_ref_field_values.py`
 - `backend/migrations/versions/0009_document_template_versions.py`
 - `backend/migrations/versions/0010_reports.py`
+- `backend/migrations/versions/0011_mcp_audit_source.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -129,6 +134,7 @@
 - `backend/tests/test_document_generation_services.py`
 - `backend/tests/test_frontend_static.py`
 - `backend/tests/test_healthcheck.py`
+- `backend/tests/test_mcp_phase_5.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
 - `backend/tests/test_organization_permission_services.py`
@@ -221,6 +227,7 @@
 - `scripts/dev-backend.ps1`
 - `scripts/dev-cycle.ps1`
 - `scripts/dev-frontend.ps1`
+- `scripts/dev-mcp.ps1`
 - `scripts/format.ps1`
 - `scripts/lib/RegEngine.ps1`
 - `scripts/lint.ps1`

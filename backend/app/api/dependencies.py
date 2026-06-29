@@ -34,6 +34,7 @@ class RequestMetadata:
     ip_address: str | None
     user_agent: str | None
     request_id: str | None
+    source: str
 
 
 def get_request_metadata(request: Request) -> RequestMetadata:
@@ -45,6 +46,7 @@ def get_request_metadata(request: Request) -> RequestMetadata:
         ip_address=_normalize_ip_address(raw_ip),
         user_agent=request.headers.get("user-agent"),
         request_id=request.headers.get("x-request-id"),
+        source=_request_source(request.headers.get("x-reg-engine-source")),
     )
 
 
@@ -153,6 +155,10 @@ def _normalize_ip_address(raw_ip: str | None) -> str | None:
         return str(ip_address(raw_ip))
     except ValueError:
         return None
+
+
+def _request_source(raw_source: str | None) -> str:
+    return "mcp" if raw_source is not None and raw_source.strip().lower() == "mcp" else "api"
 
 
 def _raise_integrity_http_error(exc: IntegrityError) -> NoReturn:

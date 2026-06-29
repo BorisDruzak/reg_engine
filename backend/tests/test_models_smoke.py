@@ -231,6 +231,17 @@ def test_report_metadata_tables_use_required_columns() -> None:
         assert column_name in report_runs.c
 
 
+def test_audit_source_metadata_allows_mcp() -> None:
+    audit_events = Base.metadata.tables["audit_events"]
+    source_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in audit_events.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert "mcp" in source_checks["ck_audit_events_source"]
+
+
 def test_public_link_attachment_limit_columns_are_explicit() -> None:
     card_public_links = Base.metadata.tables["card_public_links"]
 

@@ -116,6 +116,7 @@ class AuditService:
         source: str,
     ) -> AuditEvent:
         metadata = self._request_metadata()
+        resolved_source = (metadata.get("source") or "api") if source == "api" else source
         event = AuditEvent(
             actor_type=actor_type,
             actor_user_id=actor_user_id,
@@ -125,7 +126,7 @@ class AuditService:
             object_id=object_id,
             old_data_json=old_data_json,
             new_data_json=new_data_json,
-            source=source,
+            source=resolved_source,
             ip_address=metadata.get("ip_address"),
             user_agent=metadata.get("user_agent"),
             request_id=metadata.get("request_id"),
@@ -137,15 +138,21 @@ class AuditService:
     def _request_metadata(self) -> dict[str, str | None]:
         raw_metadata = self.session.info.get("audit_metadata")
         if raw_metadata is None:
-            return {"ip_address": None, "user_agent": None, "request_id": None}
+            return {"ip_address": None, "user_agent": None, "request_id": None, "source": "api"}
         if isinstance(raw_metadata, dict):
             return {
                 "ip_address": raw_metadata.get("ip_address"),
                 "user_agent": raw_metadata.get("user_agent"),
                 "request_id": raw_metadata.get("request_id"),
+                "source": _normalize_audit_source(raw_metadata.get("source")),
             }
         return {
             "ip_address": getattr(raw_metadata, "ip_address", None),
             "user_agent": getattr(raw_metadata, "user_agent", None),
             "request_id": getattr(raw_metadata, "request_id", None),
+            "source": _normalize_audit_source(getattr(raw_metadata, "source", None)),
         }
+
+
+def _normalize_audit_source(raw_source: object) -> str:
+    return "mcp" if isinstance(raw_source, str) and raw_source.strip().lower() == "mcp" else "api"
