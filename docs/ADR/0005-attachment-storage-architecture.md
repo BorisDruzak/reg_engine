@@ -84,6 +84,14 @@ Phase 2I separates field-edit usage from attachment-upload usage. `max_uses` /
 increments only `attachment_upload_count`; list/download do not increment usage
 counters.
 
+Phase 2J makes `max_attachment_uploads` configurable through the authenticated
+public-link create API. Existing public-link settings remain create-only in this
+slice; no PATCH endpoint is added, so changing a limit requires disabling and
+recreating the link. Public attachment upload quota consumption locks and
+refreshes the `card_public_links` row before checking/incrementing
+`attachment_upload_count`, preventing stale-session and parallel upload races
+from exceeding the configured limit.
+
 Frontend visibility is only a UX hint. Backend services and API routes must enforce the rules.
 
 ## Malware Scanner Hook

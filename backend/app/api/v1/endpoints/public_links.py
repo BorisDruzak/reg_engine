@@ -53,6 +53,7 @@ def create_public_link(
             actor_user_id=actor_user_id,
             card_id=card_id,
             expires_in_days=payload.expires_in_days,
+            max_attachment_uploads=payload.max_attachment_uploads,
         )
     except Exception as exc:
         raise_service_http_error(exc)

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class PublicLinkCreate(BaseModel):
     expires_in_days: int = Field(default=7, ge=1, le=30)
+    max_attachment_uploads: int | None = Field(default=None, ge=0)
 
 
 class PublicLinkTokenRead(BaseModel):

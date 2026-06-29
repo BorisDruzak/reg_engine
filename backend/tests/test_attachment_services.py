@@ -9,11 +9,21 @@ from uuid import UUID
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.models import AccessGrant, AuditEvent, Permission, Role, StoredFile, User, role_permissions
+from app.models import (
+    AccessGrant,
+    AuditEvent,
+    CardAttachment,
+    CardPublicLink,
+    Permission,
+    Role,
+    StoredFile,
+    User,
+    role_permissions,
+)
 from app.services.attachments import (
     AttachmentService,
     AttachmentServiceError,
@@ -155,40 +165,48 @@ def _grant_access(
     return grant
 
 
-def _attachment_context(db_session: Session) -> dict[str, Any]:
-    system_admin = _create_user(db_session, "attachments-system@example.test", is_superuser=True)
-    child_admin = _create_user(db_session, "attachments-child-admin@example.test")
-    root_admin = _create_user(db_session, "attachments-root-admin@example.test")
-    root_limited_admin = _create_user(db_session, "attachments-root-limited-admin@example.test")
-    sibling_admin = _create_user(db_session, "attachments-sibling-admin@example.test")
-    no_access_user = _create_user(db_session, "attachments-no-access@example.test")
+def _attachment_context(db_session: Session, *, suffix: str = "") -> dict[str, Any]:
+    code_suffix = suffix.replace("-", "_")
+    system_admin = _create_user(
+        db_session,
+        f"attachments-system{suffix}@example.test",
+        is_superuser=True,
+    )
+    child_admin = _create_user(db_session, f"attachments-child-admin{suffix}@example.test")
+    root_admin = _create_user(db_session, f"attachments-root-admin{suffix}@example.test")
+    root_limited_admin = _create_user(
+        db_session,
+        f"attachments-root-limited-admin{suffix}@example.test",
+    )
+    sibling_admin = _create_user(db_session, f"attachments-sibling-admin{suffix}@example.test")
+    no_access_user = _create_user(db_session, f"attachments-no-access{suffix}@example.test")
     card_role = _create_role_with_permissions(
         db_session,
-        "attachments_card_admin",
+        f"attachments_card_admin{code_suffix}",
         ["cards.manage"],
     )
 
     organization_service = OrganizationService(db_session)
     root = organization_service.create_root_for_actor(
         actor_user_id=system_admin.id,
-        code="attachments-root",
+        code=f"attachments-root{suffix}",
         name="Attachments Root",
     )
     child = organization_service.create_child(
         parent_id=root.id,
-        code="attachments-child",
+        code=f"attachments-child{suffix}",
         name="Attachments Child",
         created_by=system_admin.id,
     )
     sibling = organization_service.create_child(
         parent_id=root.id,
-        code="attachments-sibling",
+        code=f"attachments-sibling{suffix}",
         name="Attachments Sibling",
         created_by=system_admin.id,
     )
     registry = RegistrySchemaService(db_session).create_registry_for_actor(
         actor_user_id=system_admin.id,
-        code="attachments-registry",
+        code=f"attachments-registry{suffix}",
         name="Attachments Registry",
     )
 
@@ -856,6 +874,87 @@ def test_public_link_attachment_upload_increments_only_attachment_upload_counter
 
     assert public_token.public_link.used_count == 1
     assert public_token.public_link.attachment_upload_count == 1
+
+
+def test_public_link_attachment_upload_quota_refreshes_stale_two_session_state(
+    migrated_test_engine: Engine,
+    tmp_path: Path,
+) -> None:
+    try:
+        setup_session = Session(migrated_test_engine, expire_on_commit=False)
+        try:
+            context = _attachment_context(setup_session, suffix="-quota-race")
+            context["card"].public_edit_enabled = True
+            public_token = PublicLinkService(setup_session).create_public_link_for_actor(
+                actor_user_id=context["child_admin"].id,
+                card_id=context["card"].id,
+            )
+            public_token.public_link.max_attachment_uploads = 1
+            public_link_id = public_token.public_link.id
+            card_id = context["card"].id
+            setup_session.commit()
+        finally:
+            setup_session.close()
+
+        first_session = Session(migrated_test_engine, expire_on_commit=False)
+        second_session = Session(migrated_test_engine, expire_on_commit=False)
+        try:
+            first_stale_link = first_session.get(CardPublicLink, public_link_id)
+            second_stale_link = second_session.get(CardPublicLink, public_link_id)
+            assert first_stale_link is not None
+            assert second_stale_link is not None
+            assert first_stale_link.attachment_upload_count == 0
+            assert second_stale_link.attachment_upload_count == 0
+
+            AttachmentService(
+                first_session,
+                storage=LocalFilesystemAttachmentStorage(tmp_path / "first"),
+            ).create_attachment_from_public_link(
+                actor_public_link_id=public_link_id,
+                card_id=card_id,
+                original_filename="first.txt",
+                content_type="text/plain",
+                content=b"first",
+            )
+            first_session.commit()
+
+            with pytest.raises(PermissionDeniedError):
+                AttachmentService(
+                    second_session,
+                    storage=LocalFilesystemAttachmentStorage(tmp_path / "second"),
+                ).create_attachment_from_public_link(
+                    actor_public_link_id=public_link_id,
+                    card_id=card_id,
+                    original_filename="second.txt",
+                    content_type="text/plain",
+                    content=b"second",
+                )
+            second_session.rollback()
+        finally:
+            first_session.close()
+            second_session.close()
+
+        verify_session = Session(migrated_test_engine)
+        try:
+            public_link = verify_session.get(CardPublicLink, public_link_id)
+            assert public_link is not None
+            assert public_link.attachment_upload_count == 1
+            attachment_count = verify_session.scalar(
+                select(func.count())
+                .select_from(CardAttachment)
+                .where(CardAttachment.card_id == card_id)
+            )
+            assert attachment_count == 1
+        finally:
+            verify_session.close()
+    finally:
+        with migrated_test_engine.begin() as cleanup_connection:
+            cleanup_connection.execute(
+                text(
+                    "TRUNCATE TABLE users, roles, permissions, organizations, "
+                    "registries, stored_files RESTART IDENTITY CASCADE"
+                )
+            )
 
 
 def test_public_link_attachment_workflow_respects_edit_link_state(

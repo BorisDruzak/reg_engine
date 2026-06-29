@@ -411,7 +411,10 @@ class AttachmentService:
         title: str | None = None,
         description: str | None = None,
     ) -> CardAttachment:
-        public_link = self._get_public_attachment_link(actor_public_link_id)
+        public_link = self._get_public_attachment_link(
+            actor_public_link_id,
+            lock_for_update=True,
+        )
         self._require_public_attachment_upload_available(public_link)
         card = self._get_public_attachment_card(public_link, card_id=card_id)
         created_by_user_id = self._public_link_created_by(public_link)
@@ -514,8 +517,22 @@ class AttachmentService:
             raise AttachmentServiceError("Stored file was not found.")
         return stored_file
 
-    def _get_public_attachment_link(self, public_link_id: UUID) -> CardPublicLink:
-        public_link = self.session.get(CardPublicLink, public_link_id)
+    def _get_public_attachment_link(
+        self,
+        public_link_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> CardPublicLink:
+        if lock_for_update:
+            statement = (
+                select(CardPublicLink)
+                .where(CardPublicLink.id == public_link_id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            )
+            public_link = self.session.scalars(statement).one_or_none()
+        else:
+            public_link = self.session.get(CardPublicLink, public_link_id)
         if public_link is None:
             raise PermissionDeniedError("Public link is not active.")
 

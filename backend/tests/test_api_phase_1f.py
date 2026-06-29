@@ -591,6 +591,57 @@ def test_api_public_link_respects_card_public_edit_enabled(
     assert public_edit.status_code == 403, public_edit.text
 
 
+def test_api_public_link_create_accepts_attachment_upload_limit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-public-upload-limit-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="api-public-upload-limit-root",
+        name="API Public Upload Limit Root",
+    )
+    registry = RegistrySchemaService(db_session).create_registry_for_actor(
+        actor_user_id=system_admin.id,
+        code="api-public-upload-limit-registry",
+        name="API Public Upload Limit Registry",
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        organization_id=organization.id,
+        display_name="Public Upload Limit Card",
+        public_edit_enabled=True,
+    )
+
+    created = _post_json(
+        api_client,
+        f"/api/v1/cards/{card.id}/public-links",
+        {"max_attachment_uploads": 1},
+        actor_id=system_admin.id,
+    )
+    listed = api_client.get(
+        f"/api/v1/cards/{card.id}/public-links",
+        headers=_actor_headers(system_admin.id),
+    )
+    negative_limit = api_client.post(
+        f"/api/v1/cards/{card.id}/public-links",
+        json={"max_attachment_uploads": -1},
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert created["raw_token"]
+    assert listed.status_code == 200, listed.text
+    [public_link] = listed.json()["items"]
+    assert public_link["max_attachment_uploads"] == 1
+    assert public_link["attachment_upload_count"] == 0
+    assert negative_limit.status_code == 422, negative_limit.text
+
+
 def test_api_public_link_preview_returns_public_edit_schema(
     api_client: TestClient,
     db_session: Session,

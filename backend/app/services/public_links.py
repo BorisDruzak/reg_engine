@@ -92,9 +92,12 @@ class PublicLinkService:
         actor_user_id: UUID,
         card_id: UUID,
         expires_in_days: int = DEFAULT_PUBLIC_LINK_TTL_DAYS,
+        max_attachment_uploads: int | None = None,
     ) -> PublicLinkToken:
         if expires_in_days < 1 or expires_in_days > 30:
             raise PublicLinkError("Public link expiration must be between 1 and 30 days.")
+        if max_attachment_uploads is not None and max_attachment_uploads < 0:
+            raise PublicLinkError("Public attachment upload limit must not be negative.")
         card = self._get_active_card(card_id)
         self._require_card_permission(actor_user_id, card)
 
@@ -103,6 +106,7 @@ class PublicLinkService:
             card_id=card.id,
             token_hash=hash_public_token(raw_token),
             expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
+            max_attachment_uploads=max_attachment_uploads,
             created_by=actor_user_id,
         )
         self.session.add(public_link)
@@ -115,6 +119,7 @@ class PublicLinkService:
             new_data_json={
                 "card_id": str(card.id),
                 "expires_at": public_link.expires_at.isoformat(),
+                "max_attachment_uploads": max_attachment_uploads,
             },
         )
         return PublicLinkToken(raw_token=raw_token, public_link=public_link)

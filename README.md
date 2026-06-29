@@ -44,7 +44,7 @@ Target system:
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, and public-link attachment list/upload/download APIs.
 - Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, audit reads, public-link card editing, and public-link attachment list/upload/download.
-- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. `file_ref`, PDF conversion, binary `.docx` template upload, and template versioning remain deferred.
+- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Phase 2J makes public attachment upload limits configurable at public-link creation time and protects quota consumption with row-level locking. `file_ref`, PDF conversion, binary `.docx` template upload, and template versioning remain deferred.
 - Import/export, reports, PDF conversion, and MCP are later phases.
 
 ## Local Setup
@@ -255,6 +255,18 @@ DELETE /api/v1/attachments/{attachment_id}
 
 Upload uses multipart form data with `file` and optional `title` / `description`. Backend access checks follow card scope: create/archive require editable card access, and metadata/download require readable card access.
 
+Authenticated public-link management API:
+
+```powershell
+POST   /api/v1/cards/{card_id}/public-links
+GET    /api/v1/cards/{card_id}/public-links
+DELETE /api/v1/public-links/{public_link_id}
+```
+
+Public-link creation accepts optional `expires_in_days` and
+`max_attachment_uploads`. `max_attachment_uploads=null` or an omitted value
+means unlimited public attachment uploads for that link.
+
 Public-link attachment API:
 
 ```powershell
@@ -263,7 +275,7 @@ POST /api/v1/public-links/attachments/upload
 POST /api/v1/public-links/attachments/{attachment_id}/content
 ```
 
-Public-link attachment list/upload/download require an active public edit link, `public_link.can_edit=true`, `card.public_edit_enabled=true`, and a non-archived, non-superseded card. `card_public_links.max_uses` / `used_count` apply to public field edits only. Public attachment uploads use separate `max_attachment_uploads` / `attachment_upload_count` semantics. List/download do not increment usage counters, and exhausted field-edit usage does not block attachment list/download. Public-link upload uses the same bounded read, MIME allow-list, scanner hook, storage cleanup, filename normalization, and safe download-header behavior as authenticated attachment workflows. Public-link responses intentionally omit `stored_file_id`, `checksum_sha256`, storage keys, and filesystem details. Public-link archive/delete is not exposed.
+Public-link attachment list/upload/download require an active public edit link, `public_link.can_edit=true`, `card.public_edit_enabled=true`, and a non-archived, non-superseded card. `card_public_links.max_uses` / `used_count` apply to public field edits only. Public attachment uploads use separate `max_attachment_uploads` / `attachment_upload_count` semantics. Administrators can set `max_attachment_uploads` when creating a public link; omitted/null means unlimited uploads for that active link. Existing public-link settings are create-only in the current API slice, so changing the limit requires disabling the old link and creating a new one. Upload quota consumption locks and refreshes the public-link row before checking/incrementing the counter so parallel or stale-session uploads cannot exceed the limit. List/download do not increment usage counters, and exhausted field-edit usage does not block attachment list/download. Public-link upload uses the same bounded read, MIME allow-list, scanner hook, storage cleanup, filename normalization, and safe download-header behavior as authenticated attachment workflows. Public-link responses intentionally omit `stored_file_id`, `checksum_sha256`, storage keys, and filesystem details. Public-link archive/delete is not exposed.
 
 Upload reads are bounded by `REG_ENGINE_MAX_ATTACHMENT_BYTES`; oversized uploads
 are rejected before unbounded request-body growth is possible. If metadata
@@ -402,6 +414,16 @@ public attachment uploads have separate counters:
 The public-link upload form validates missing files with the Russian message
 `Выберите файл`.
 
+## Phase 2J Public-Link Attachment Quota API
+
+Phase 2J adds `max_attachment_uploads` to the authenticated public-link create
+API. Public-link read/list responses continue to expose
+`max_attachment_uploads` and `attachment_upload_count`. No PATCH endpoint for
+existing public-link settings is exposed in this slice; operators should disable
+and recreate a link when its upload limit must change. Public attachment upload
+quota checks use a row-level lock and refresh the `card_public_links` row before
+checking/incrementing `attachment_upload_count`.
+
 ## Remote Infrastructure Configuration
 
 This repository is public. Do not commit concrete runtime hostnames, LAN IP addresses, SSH users, private key paths, database endpoints, passwords, deploy-key values, or operator-only runbooks.
@@ -510,4 +532,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment workflow hardening. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.

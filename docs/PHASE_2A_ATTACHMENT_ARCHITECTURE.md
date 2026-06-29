@@ -178,6 +178,16 @@ Phase 2H public-link attachment rules:
 - public-link upload records `scanner_status`, writes an `attachment_create`
   audit event with `actor_type=public_link`, and increments
   `attachment_upload_count` only after successful attachment creation;
+- Phase 2J makes `max_attachment_uploads` configurable when an administrator
+  creates a public link; omitted/null means unlimited uploads for that active
+  link;
+- existing public-link upload limit settings are create-only in Phase 2J. No
+  PATCH endpoint is exposed, so operators should disable and recreate a link
+  when a limit must change;
+- public-link upload quota consumption locks and refreshes the
+  `card_public_links` row before checking/incrementing
+  `attachment_upload_count`, so stale sessions and parallel uploads cannot
+  exceed `max_attachment_uploads`;
 - public-link download writes an `attachment_download` audit event with
   `actor_type=public_link`;
 - public-link list/download do not increment usage counters;
