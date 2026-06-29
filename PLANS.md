@@ -40,6 +40,7 @@ Current stop point:
 
 - Phase 2H public-link attachment workflows are completed.
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
+- Phase 2J is the next planned public-link attachment hardening slice.
 - PDF conversion, `file_ref`, binary `.docx` upload/versioning,
   import/export, reports, and MCP remain deferred.
 
@@ -89,8 +90,8 @@ Completed Phase 2 work:
 
 Active Phase 2 work:
 
-- No active Phase 2 implementation slice is open. Next work requires an
-  explicit approved phase.
+- Phase 2J is planned next for public-link attachment quota API and concurrency
+  hardening before live/public use.
 
 ## Review Findings After Phase 2E
 
@@ -471,6 +472,9 @@ Verification evidence:
 - Added frontend regression test for no-file public upload validation.
 - Added metadata/schema tests for explicit public attachment upload limit
   columns and constraints.
+- Production DB was verified at Alembic revision `0007_public_link_limits`;
+  `card_public_links` has both `max_attachment_uploads` and
+  `attachment_upload_count`.
 
 Phase 2I must not implement:
 
@@ -489,6 +493,70 @@ Acceptance criteria:
 - Public-link usage semantics are explicit and tested.
 - Attachment upload limits and field edit limits are separate.
 - Existing Phase 2H behavior remains intact.
+- No unrelated document feature is added.
+
+### Phase 2J: Public-Link Attachment Quota API And Concurrency Hardening
+
+Status: planned next.
+
+Purpose: make public-link attachment upload limits configurable and race-safe
+before live/public use, while keeping `file_ref`, PDF, import/export, reports,
+MCP, public archive/delete, and public generated-document workflows out of
+scope.
+
+Scope decisions:
+
+- Phase 2I added storage and service semantics for
+  `max_attachment_uploads` / `attachment_upload_count`.
+- `PublicLinkCreate` still accepts only `expires_in_days`, so administrators
+  cannot set upload limits through the public API yet.
+- `PublicLinkRead` already exposes `max_attachment_uploads` and
+  `attachment_upload_count`.
+- Current quota check/increment is service-level and can race under parallel
+  uploads.
+- Download streaming remains deferred until `AttachmentStorage` exposes a
+  streaming/open-file boundary; wrapping already loaded `read_bytes` content in
+  `StreamingResponse` is not useful hardening.
+
+Required work:
+
+1. Add `max_attachment_uploads` to `PublicLinkCreate` with validation that
+   accepts `null` or a non-negative integer.
+2. Decide whether existing public links need a settings update endpoint:
+   - if yes, add a narrow PATCH endpoint for public-link settings;
+   - if no, document create-only configuration for this slice.
+3. Add backend API tests proving administrators can set upload limits when
+   creating public links.
+4. Add row-level locking or an atomic update for public attachment upload quota
+   consumption so parallel uploads cannot exceed `max_attachment_uploads`.
+5. Add regression tests for parallel or two-session quota consumption where
+   `max_attachment_uploads=1`.
+6. Keep list/download independent from quota counters.
+7. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs.
+8. Run local checks, frontend checks if UI changes, and PostgreSQL-backed tests
+   against a disposable `_test` database.
+
+Phase 2J must not implement:
+
+- `file_ref` dynamic field type;
+- PDF conversion;
+- binary `.docx` template upload;
+- template versioning;
+- import/export;
+- reports;
+- MCP;
+- public attachment archive/delete;
+- public generated-document workflows;
+- large-file streaming until the storage abstraction has a streaming/open-file
+  boundary.
+
+Acceptance criteria:
+
+- Public-link attachment upload limits can be configured through an approved
+  admin API path.
+- Quota consumption is race-safe under concurrent uploads.
+- List/download remain allowed when only upload quota is exhausted.
+- Field-edit `max_uses` remains separate from attachment upload quota.
 - No unrelated document feature is added.
 
 ## Future Directions
