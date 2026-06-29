@@ -38,9 +38,11 @@ Completed phases:
 Current stop point:
 
 - Phase 2H public-link attachment workflows are completed.
-- PDF conversion remains deferred.
-- `file_ref` remains deferred.
-- Binary `.docx` template upload and template versioning remain deferred.
+- Phase 2I is the next bugfix/hardening slice.
+- Phase 2I uses option C: separate field-edit usage and attachment-upload usage
+  semantics.
+- PDF conversion, `file_ref`, binary `.docx` upload/versioning,
+  import/export, reports, and MCP remain deferred.
 
 ## Core Rules
 
@@ -85,8 +87,8 @@ Completed Phase 2 work:
 
 Active Phase 2 work:
 
-- No active Phase 2 implementation slice is open. Next work requires an explicit
-  approved phase.
+- Phase 2I is planned next as a bugfix/hardening slice before `file_ref`, PDF,
+  import/export, reports, or MCP.
 
 ## Review Findings After Phase 2E
 
@@ -379,6 +381,72 @@ Acceptance criteria:
 - Public-link screens still do not expose generated document, template,
   archive/delete, `file_ref`, PDF, import/export, or MCP controls.
 - No new database migration is added.
+
+### Phase 2I: Public-Link Attachment Limit Semantics And Bugfixes
+
+Status: planned next.
+
+Purpose: fix public-link attachment workflow edge cases before moving to
+`file_ref`, PDF, import/export, reports, or MCP.
+
+Decision: use option C for public-link usage limits.
+
+`card_public_links.max_uses` / `used_count` must not remain an overloaded limit
+for every public-link action.
+
+Separate semantics are required:
+
+- public field edit usage and public attachment upload usage are separate
+  concepts;
+- list/download should not consume usage counters;
+- attachment upload must have its own upload limit/counter, or an equivalent
+  clearly named mechanism;
+- if attachment upload limit is exhausted, upload is denied, but list/download
+  remain allowed while the public link is active and the card is
+  public-editable;
+- disabled, expired, archived, superseded, and non-editable card/link states
+  must still deny upload/download.
+
+Required work for implementation phase:
+
+1. Decide exact technical model for option C:
+   - either add explicit fields such as `max_attachment_uploads` and
+     `attachment_upload_count`;
+   - or implement an equivalent separate policy without overloading
+     `used_count`.
+2. If schema change is required, create Alembic migration and follow migration
+   approval rules.
+3. Add regression tests:
+   - public link with field-edit max usage exhausted can still list/download
+     existing attachments if link is active;
+   - upload limit exhaustion blocks upload only;
+   - list/download do not increment any usage counter;
+   - successful upload increments only the attachment upload counter;
+   - disabled/expired/superseded/archived states still deny public attachment
+     operations.
+4. Fix public-link no-file UI validation message:
+   - show a clear Russian message such as `Выберите файл`.
+5. Verify frontend public-link upload/list/download still works.
+6. Update README, PLANS.md, PROJECT_TREE.md and docs as needed.
+
+Phase 2I must not implement:
+
+- `file_ref` dynamic field type;
+- PDF conversion;
+- binary `.docx` template upload;
+- template versioning;
+- import/export;
+- reports;
+- MCP;
+- public attachment archive/delete;
+- public generated-document workflows.
+
+Acceptance criteria:
+
+- Public-link usage semantics are explicit and tested.
+- Attachment upload limits and field edit limits are separate.
+- Existing Phase 2H behavior remains intact.
+- No unrelated document feature is added.
 
 ## Future Directions
 
