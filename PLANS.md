@@ -44,6 +44,7 @@ Completed phases:
 - Phase 2K: Core Backend API Completeness.
 - Phase 2L.0: Admin UI Mutation Foundation.
 - Phase 2L.1: Organization Management UI.
+- Phase 2L.2: User Management UI.
 
 Current stop point:
 
@@ -60,10 +61,11 @@ Current stop point:
   deferred behind Phase 2L core admin workflows unless explicitly reprioritized.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
+- Phase 2L.2 User Management UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.2 User Management UI is the next implementation slice.
+- Phase 2L.3 Access Grant Management UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -98,8 +100,8 @@ The current authenticated frontend is not yet a complete admin workspace:
   mapping, and an E2E smoke path that opens every admin section without console
   errors;
 - organizations can be created, edited, and archived through Russian-first UI;
-- users, roles, and permissions are listed, but users cannot be created,
-  edited, password-reset, or archived in UI;
+- users can be created, edited, password-reset, and archived through
+  Russian-first UI; roles and permissions remain read-only in this phase;
 - access grants are listed, but grants cannot be issued or revoked in UI;
 - registries and schemas are displayed, but registry create/update/archive and
   block/field/reference-list editing are not exposed as UI workflows;
@@ -576,6 +578,8 @@ Completion evidence:
 
 ### Phase 2L.2: User Management UI
 
+Status: completed.
+
 Required work:
 
 - Add create user form with email, display name, password, status, and superuser
@@ -590,6 +594,30 @@ Acceptance criteria:
 - User can create, edit, password-reset, and archive users through UI.
 - Password fields are not logged or persisted outside the API request.
 - Frontend tests cover validation, success, and backend-denied states.
+
+Completion evidence:
+
+- Added Russian-first user create form with email, display name, password,
+  status, and superuser flag.
+- Added user profile edit form for email, display name, status, and superuser
+  flag.
+- Added admin password reset workflow that sends password only in the password
+  update request and clears the field after success.
+- Added user archive confirmation through the shared Phase 2L.0 confirmation
+  component.
+- Built-in/system display names continue to render through localized
+  `userDisplayNameLabel`.
+- Added frontend tests for required-field validation, create, edit, password
+  reset, archive, password non-display after submit, request payload shape, and
+  backend-denied localized error handling.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx`,
+  `pnpm -C frontend test:run`, `pnpm -C frontend lint`, and
+  `pnpm -C frontend typecheck`.
+- Verified `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`,
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`, and
+  `pnpm -C frontend e2e`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, or MCP work was added.
 
 ### Phase 2L.3: Access Grant Management UI
 

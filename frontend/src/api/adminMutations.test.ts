@@ -48,7 +48,10 @@ function jsonResponse(body: unknown) {
 const token = "test-token";
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ id: "result" })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => jsonResponse({ id: "result" })),
+  );
 });
 
 afterEach(() => {

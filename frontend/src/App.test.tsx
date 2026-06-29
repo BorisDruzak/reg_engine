@@ -8,6 +8,7 @@ import type {
   DocumentTemplateRead,
   GeneratedDocumentRead,
   OrganizationRead,
+  UserRead,
 } from "@/api/types";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
@@ -287,6 +288,8 @@ let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
 let organizationItems: OrganizationRead[];
+let userItems: UserRead[];
+let denyNextUserUpdate = false;
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
@@ -298,6 +301,8 @@ beforeEach(() => {
   cardApprovedValue = false;
   publicStatusValue = "drafted";
   organizationItems = [...apiPayloads.organizations.items];
+  userItems = [...apiPayloads.users.items];
+  denyNextUserUpdate = false;
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
@@ -412,8 +417,61 @@ beforeEach(() => {
         }
         return jsonResponse({ items: organizationItems });
       }
+      if (url.includes("/api/v1/users/")) {
+        const userId = url.split("/api/v1/users/")[1];
+        const current = userItems.find((item) => item.id === userId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          if (denyNextUserUpdate) {
+            denyNextUserUpdate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            email?: string | null;
+            display_name?: string | null;
+            password?: string | null;
+            status?: string | null;
+            is_superuser?: boolean | null;
+          };
+          const updated = {
+            ...current,
+            email: payload.email ?? current.email,
+            display_name: payload.display_name ?? current.display_name,
+            status: payload.status ?? current.status,
+            is_superuser: payload.is_superuser ?? current.is_superuser,
+          };
+          userItems = userItems.map((item) => (item.id === userId ? updated : item));
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, archived_at: "2026-06-28T12:06:00Z" };
+          userItems = userItems.filter((item) => item.id !== userId);
+          return jsonResponse(archived);
+        }
+      }
       if (url.endsWith("/api/v1/users")) {
-        return jsonResponse(apiPayloads.users);
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            email: string;
+            display_name: string;
+            password: string;
+            status?: string;
+            is_superuser?: boolean;
+          };
+          const created: UserRead = {
+            id: "24242424-2424-4242-8242-242424242424",
+            email: payload.email,
+            display_name: payload.display_name,
+            status: payload.status ?? "active",
+            is_superuser: payload.is_superuser ?? false,
+            archived_at: null,
+          };
+          userItems = [...userItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: userItems });
       }
       if (url.endsWith("/api/v1/roles")) {
         return jsonResponse(apiPayloads.roles);
@@ -824,11 +882,15 @@ test("creates edits and archives organizations in Russian UI", async () => {
   await user.click(
     screen.getByRole("button", { name: "Архивировать организацию Обновленная организация" }),
   );
-  expect(await screen.findByRole("dialog", { name: "Архивировать организацию" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать организацию" }),
+  ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Архивировать" }));
 
   expect(await screen.findByText("Организация архивирована")).toBeInTheDocument();
-  await waitFor(() => expect(screen.queryByText("Обновленная организация")).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByText("Обновленная организация")).not.toBeInTheDocument(),
+  );
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -863,12 +925,158 @@ test("creates edits and archives organizations in Russian UI", async () => {
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
-          String(input).endsWith(
-            "/api/v1/organizations/23232323-2323-4232-8232-232323232323",
-          ) && init?.method === "DELETE",
+          String(input).endsWith("/api/v1/organizations/23232323-2323-4232-8232-232323232323") &&
+          init?.method === "DELETE",
       ),
     ).toBe(true);
   });
+});
+
+test("creates edits resets password and archives users in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Пользователи" }));
+
+  const userPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) => String(input).endsWith("/api/v1/users") && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать пользователя" }));
+  const postCountBeforeValidation = userPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(userPostCount()).toBe(postCountBeforeValidation);
+
+  await user.type(screen.getByLabelText("Электронная почта пользователя"), "operator@example.test");
+  await user.type(screen.getByLabelText("Имя пользователя"), "Оператор реестра");
+  await user.type(screen.getByLabelText("Пароль пользователя"), "secret-created");
+  await user.selectOptions(screen.getByLabelText("Статус пользователя"), ["active"]);
+  await user.click(screen.getByLabelText("Суперпользователь"));
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Пользователь создан")).toBeInTheDocument();
+  expect(screen.getByText("Оператор реестра")).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("secret-created")).not.toBeInTheDocument();
+  expect(screen.queryByText("secret-created")).not.toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Редактировать пользователя Оператор реестра" }),
+  );
+  const editNameInput = await screen.findByLabelText("Имя пользователя");
+  await user.clear(editNameInput);
+  await user.type(editNameInput, "Оператор архива");
+  await user.selectOptions(screen.getByLabelText("Статус пользователя"), ["inactive"]);
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Пользователь обновлен")).toBeInTheDocument();
+  expect(screen.getByText("Оператор архива")).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Сбросить пароль пользователя Оператор архива" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  await user.type(screen.getByLabelText("Новый пароль"), "secret-reset");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Пароль обновлен")).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("secret-reset")).not.toBeInTheDocument();
+  expect(screen.queryByText("secret-reset")).not.toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать пользователя Оператор архива" }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать пользователя" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Пользователь архивирован")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Оператор архива")).not.toBeInTheDocument());
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (!String(input).endsWith("/api/v1/users") || init?.method !== "POST") {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          email?: string;
+          display_name?: string;
+          password?: string;
+          status?: string;
+          is_superuser?: boolean;
+        };
+        return (
+          body.email === "operator@example.test" &&
+          body.display_name === "Оператор реестра" &&
+          body.password === "secret-created" &&
+          body.status === "active" &&
+          body.is_superuser === true
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/users/24242424-2424-4242-8242-242424242424") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return body.display_name === "Оператор архива" && body.password === undefined;
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/users/24242424-2424-4242-8242-242424242424") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return Object.keys(body).length === 1 && body.password === "secret-reset";
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/users/24242424-2424-4242-8242-242424242424") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("shows localized user mutation denial text", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Пользователи" }));
+
+  await user.click(screen.getAllByRole("button", { name: /Редактировать пользователя/ })[0]);
+  const editNameInput = await screen.findByLabelText("Имя пользователя");
+  await user.clear(editNameInput);
+  await user.type(editNameInput, "Запрещенное изменение");
+  denyNextUserUpdate = true;
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
 });
 
 test("shows localized login error text", async () => {

@@ -70,7 +70,7 @@ export function OrganizationsTable({
   });
   const mutationError = localError
     ? new Error(localError)
-    : createMutation.error ?? updateMutation.error ?? archiveMutation.error;
+    : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
 
   function openCreateForm() {
@@ -151,7 +151,10 @@ export function OrganizationsTable({
         </button>
       </div>
       <div className="panel-feedback">
-        <MutationFeedback error={formState ? null : mutationError} successMessage={successMessage} />
+        <MutationFeedback
+          error={formState ? null : mutationError}
+          successMessage={successMessage}
+        />
       </div>
       {formState && (
         <div className="panel-form">
@@ -181,7 +184,9 @@ export function OrganizationsTable({
               {uiText.organizationName} организации
               <input
                 value={formState.name}
-                onChange={(event) => setFormState({ ...formState, name: event.currentTarget.value })}
+                onChange={(event) =>
+                  setFormState({ ...formState, name: event.currentTarget.value })
+                }
               />
             </label>
             <label>

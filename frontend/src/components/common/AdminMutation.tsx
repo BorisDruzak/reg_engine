@@ -61,7 +61,12 @@ export function AdminMutationDialog({
   const titleId = useId();
 
   return (
-    <div className="admin-mutation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div
+      className="admin-mutation-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       <div className="admin-mutation-dialog-surface">
         <h3 id={titleId}>{title}</h3>
         {children}
@@ -110,7 +115,11 @@ export function MutationFeedback({
 }) {
   return (
     <>
-      {error && <p className="inline-alert" role="alert">{errorText(error)}</p>}
+      {error && (
+        <p className="inline-alert" role="alert">
+          {errorText(error)}
+        </p>
+      )}
       {successMessage && <p className="inline-success">{successMessage}</p>}
     </>
   );

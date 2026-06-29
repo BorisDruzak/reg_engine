@@ -231,6 +231,7 @@ export function HomePage() {
             users={usersQuery.data?.items ?? []}
             roles={rolesQuery.data?.items ?? []}
             permissions={permissionsQuery.data?.items ?? []}
+            token={token}
           />
         )}
         {activeSection === "access" && (
