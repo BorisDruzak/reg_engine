@@ -271,6 +271,15 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   let attachmentItems = [...apiPayloads.attachments.items];
   let documentTemplateItems = [...apiPayloads.documentTemplates.items];
   let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => {
+    consoleErrors.push(error.message);
+  });
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
@@ -561,6 +570,27 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Аудит" }).click();
   await expect(page.getByText("Создание")).toBeVisible();
+
+  const adminSections = [
+    { button: "Обзор", expectedLabel: "Сводка" },
+    { button: "Организации", expectedText: "Главная организация" },
+    { button: "Реестры", expectedText: "Реестр активов" },
+    { button: "Карточки", expectedText: "Карточка актива" },
+    { button: "Пользователи", expectedText: "Управление пользователями." },
+    { button: "Доступ", expectedText: "С потомками" },
+    { button: "Аудит", expectedText: "Создание" },
+  ];
+
+  for (const section of adminSections) {
+    await page.getByRole("button", { name: section.button }).click();
+    if ("expectedLabel" in section) {
+      await expect(page.getByLabel(section.expectedLabel, { exact: true })).toBeVisible();
+    } else {
+      await expect(page.getByText(section.expectedText).first()).toBeVisible();
+    }
+  }
+
+  expect(consoleErrors).toEqual([]);
 });
 
 test("renders public-link edit page and saves a field", async ({ page }) => {

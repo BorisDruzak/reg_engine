@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-29 16:31:25 +05:00
+- Generated: 2026-06-29 16:49:24 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -151,6 +151,7 @@
 - `frontend/index.html`
 - `frontend/package.json`
 - `frontend/playwright.config.ts`
+- `frontend/src/api/adminMutations.test.ts`
 - `frontend/src/api/client.ts`
 - `frontend/src/api/types.ts`
 - `frontend/src/App.test.tsx`
@@ -160,6 +161,9 @@
 - `frontend/src/app/uiText.test.ts`
 - `frontend/src/app/uiText.ts`
 - `frontend/src/components/common/.gitkeep`
+- `frontend/src/components/common/AdminMutation.test.tsx`
+- `frontend/src/components/common/AdminMutation.tsx`
+- `frontend/src/components/common/AdminMutationUtils.ts`
 - `frontend/src/components/common/DataSurfaces.tsx`
 - `frontend/src/components/common/dataUtils.ts`
 - `frontend/src/components/layout/.gitkeep`

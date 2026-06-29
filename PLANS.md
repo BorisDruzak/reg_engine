@@ -42,6 +42,7 @@ Completed phases:
 - Phase 2K.4: Bulk Card Values Update API.
 - Phase 2K.5: API Coverage And Live Validation.
 - Phase 2K: Core Backend API Completeness.
+- Phase 2L.0: Admin UI Mutation Foundation.
 
 Current stop point:
 
@@ -56,10 +57,11 @@ Current stop point:
 - Phase 2K Core Backend API Completeness is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind Phase 2L core admin workflows unless explicitly reprioritized.
-- Phase 2L is the current next frontend product-completeness phase: full admin CRUD UI
+- Phase 2L.0 Admin UI Mutation Foundation is completed.
+- Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.0 Admin UI Mutation Foundation is the next implementation slice.
+- Phase 2L.1 Organization Management UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -89,6 +91,10 @@ before Phase 2L.
 
 The current authenticated frontend is not yet a complete admin workspace:
 
+- Phase 2L.0 now provides shared admin mutation API client functions, reusable
+  Russian-first form/dialog/confirmation/feedback components, localized error
+  mapping, and an E2E smoke path that opens every admin section without console
+  errors;
 - organizations are listed but cannot be created, edited, or archived in UI;
 - users, roles, and permissions are listed, but users cannot be created,
   edited, password-reset, or archived in UI;
@@ -474,8 +480,7 @@ Completion evidence:
 
 ## Phase 2L: Core Admin CRUD UI
 
-Status: planned after Phase 2K API readiness, or earlier for workflows whose
-API is already complete.
+Status: in progress.
 
 Purpose: make the authenticated Russian-first admin UI capable of setting up
 and operating the registry engine from an empty or near-empty database without
@@ -495,6 +500,8 @@ Phase 2L must not implement:
 
 ### Phase 2L.0: Admin UI Mutation Foundation
 
+Status: completed.
+
 Required work:
 
 - Add frontend API client functions for create/update/archive operations already
@@ -509,6 +516,25 @@ Acceptance criteria:
 - Unit tests cover shared form/error utilities.
 - E2E smoke can log in and open every admin section without console errors.
 - No business-specific labels or fixed employee fields are added.
+
+Completion evidence:
+
+- Added typed frontend API client functions for backend create/update/archive
+  routes covering organizations, org units, registries, blocks, fields,
+  reference lists/items, cards, repeatable block instances, bulk field values,
+  users, access grants, public links, and card transfer.
+- Added reusable Russian-first admin mutation components:
+  `AdminMutationForm`, `AdminMutationDialog`, `ArchiveConfirmation`, and
+  `MutationFeedback`.
+- Error and success feedback uses existing localized frontend error mapping.
+- Added frontend unit tests for admin mutation API routes and shared mutation
+  form/dialog/feedback utilities.
+- Updated Playwright smoke to log in, open every admin section, and fail on
+  browser console/page errors.
+- Verified `pnpm -C frontend test:run`, `pnpm -C frontend lint`,
+  `pnpm -C frontend typecheck`, and `pnpm -C frontend e2e`.
+- No business-specific labels, fixed employee fields, backend code,
+  migrations, import/export, PDF conversion, reports, or MCP work was added.
 
 ### Phase 2L.1: Organization Management UI
 

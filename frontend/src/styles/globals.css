@@ -117,6 +117,7 @@ button {
 }
 
 .primary-button,
+.danger-button,
 .ghost-button,
 .nav-item {
   min-height: 38px;
@@ -134,6 +135,16 @@ button {
 }
 
 .primary-button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.danger-button {
+  color: #ffffff;
+  background: #b42348;
+}
+
+.danger-button:disabled {
   cursor: progress;
   opacity: 0.68;
 }
@@ -626,6 +637,103 @@ tr:last-child td {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.admin-mutation-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.admin-mutation-header {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-mutation-header h3,
+.admin-mutation-dialog-surface h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.admin-mutation-header p,
+.archive-confirmation p {
+  margin: 0;
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.admin-mutation-body {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-mutation-body label {
+  display: grid;
+  gap: 6px;
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.admin-mutation-body input,
+.admin-mutation-body select,
+.admin-mutation-body textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #101828;
+  background: #ffffff;
+}
+
+.admin-mutation-body textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.admin-mutation-body input:focus,
+.admin-mutation-body select:focus,
+.admin-mutation-body textarea:focus {
+  outline: 3px solid rgba(15, 118, 110, 0.16);
+  border-color: #0f766e;
+}
+
+.admin-mutation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-mutation-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(16, 24, 40, 0.36);
+}
+
+.admin-mutation-dialog-surface {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(24, 34, 48, 0.18);
+}
+
+.archive-confirmation {
+  display: grid;
+  gap: 14px;
 }
 
 .inline-alert,

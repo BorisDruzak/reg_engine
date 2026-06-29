@@ -31,6 +31,44 @@ export type OrganizationListRead = {
   items: OrganizationRead[];
 };
 
+export type OrganizationCreatePayload = {
+  code: string;
+  name: string;
+  parent_id?: string | null;
+  organization_type?: string;
+};
+
+export type OrganizationUpdatePayload = {
+  name?: string | null;
+  organization_type?: string | null;
+};
+
+export type OrgUnitRead = {
+  id: string;
+  organization_id: string;
+  parent_id: string | null;
+  code: string;
+  name: string;
+  type: string | null;
+  is_active: boolean;
+};
+
+export type OrgUnitListRead = {
+  items: OrgUnitRead[];
+};
+
+export type OrgUnitCreatePayload = {
+  code: string;
+  name: string;
+  parent_id?: string | null;
+  unit_type?: string | null;
+};
+
+export type OrgUnitUpdatePayload = {
+  name?: string | null;
+  unit_type?: string | null;
+};
+
 export type RegistryRead = {
   id: string;
   code: string;
@@ -44,6 +82,18 @@ export type RegistryListRead = {
   items: RegistryRead[];
 };
 
+export type RegistryCreatePayload = {
+  code: string;
+  name: string;
+  description?: string | null;
+};
+
+export type RegistryUpdatePayload = {
+  name?: string | null;
+  description?: string | null;
+  lifecycle_status?: string | null;
+};
+
 export type FormBlockRead = {
   id: string;
   registry_id: string;
@@ -55,6 +105,22 @@ export type FormBlockRead = {
   is_active: boolean;
   public_visible: boolean;
   public_editable: boolean;
+};
+
+export type FormBlockCreatePayload = {
+  code: string;
+  title: string;
+  description?: string | null;
+  position?: number;
+  is_repeatable?: boolean;
+  public_visible?: boolean;
+  public_editable?: boolean;
+};
+
+export type FormBlockUpdatePayload = {
+  title?: string | null;
+  description?: string | null;
+  position?: number | null;
 };
 
 export type FormFieldRead = {
@@ -72,6 +138,57 @@ export type FormFieldRead = {
   public_editable: boolean;
 };
 
+export type FormFieldCreatePayload = {
+  code: string;
+  label: string;
+  field_type: string;
+  description?: string | null;
+  position?: number;
+  options_source_type?: string | null;
+  options_source_id?: string | null;
+  public_visible?: boolean;
+  public_editable?: boolean;
+};
+
+export type FormFieldUpdatePayload = {
+  label?: string | null;
+  description?: string | null;
+  position?: number | null;
+  is_active?: boolean | null;
+};
+
+export type ReferenceListRead = {
+  id: string;
+  registry_id: string | null;
+  owner_organization_id: string | null;
+  code: string;
+  name: string;
+  description: string | null;
+  inherit_to_descendants: boolean;
+  locked_for_descendants: boolean;
+  managed_by_system_only: boolean;
+  is_active: boolean;
+};
+
+export type ReferenceListListRead = {
+  items: ReferenceListRead[];
+};
+
+export type ReferenceListCreatePayload = {
+  code: string;
+  name: string;
+  owner_organization_id?: string | null;
+  description?: string | null;
+  inherit_to_descendants?: boolean;
+  locked_for_descendants?: boolean;
+  managed_by_system_only?: boolean;
+};
+
+export type ReferenceListUpdatePayload = {
+  name?: string | null;
+  description?: string | null;
+};
+
 export type ReferenceItemRead = {
   id: string;
   list_id: string;
@@ -85,6 +202,20 @@ export type ReferenceItemRead = {
 
 export type ReferenceItemListRead = {
   items: ReferenceItemRead[];
+};
+
+export type ReferenceItemCreatePayload = {
+  code: string;
+  label: string;
+  parent_id?: string | null;
+  description?: string | null;
+  position?: number;
+};
+
+export type ReferenceItemUpdatePayload = {
+  label?: string | null;
+  description?: string | null;
+  position?: number | null;
 };
 
 export type RegistrySchemaRead = {
@@ -106,6 +237,24 @@ export type CardSummaryRead = {
 
 export type CardListRead = {
   items: CardSummaryRead[];
+};
+
+export type CardCreatePayload = {
+  organization_id: string;
+  display_name: string;
+  org_unit_id?: string | null;
+  public_view_enabled?: boolean;
+  public_edit_enabled?: boolean;
+};
+
+export type CardUpdatePayload = {
+  display_name?: string | null;
+  public_view_enabled?: boolean | null;
+  public_edit_enabled?: boolean | null;
+};
+
+export type CardTransferPayload = {
+  target_organization_id: string;
 };
 
 export type CardFieldRead = {
@@ -142,6 +291,59 @@ export type FieldValueRead = {
   block_instance_id: string | null;
   field_id: string;
   value: unknown;
+};
+
+export type FieldValueBulkItemUpdatePayload = {
+  field_id: string;
+  value: unknown;
+  block_instance_id?: string | null;
+};
+
+export type FieldValuesBulkUpdatePayload = {
+  values: FieldValueBulkItemUpdatePayload[];
+};
+
+export type FieldValueListRead = {
+  items: FieldValueRead[];
+};
+
+export type CardBlockInstanceSummaryRead = {
+  id: string;
+  card_id: string;
+  block_id: string;
+  ordinal: number;
+};
+
+export type PublicLinkCreatePayload = {
+  expires_in_days?: number;
+  max_attachment_uploads?: number | null;
+};
+
+export type PublicLinkTokenRead = {
+  id: string;
+  card_id: string;
+  raw_token: string;
+  status: string;
+  can_edit: boolean;
+  expires_at: string;
+};
+
+export type PublicLinkRead = {
+  id: string;
+  card_id: string;
+  status: string;
+  can_view: boolean;
+  can_edit: boolean;
+  expires_at: string;
+  max_uses: number | null;
+  used_count: number;
+  max_attachment_uploads: number | null;
+  attachment_upload_count: number;
+  disabled_at: string | null;
+};
+
+export type PublicLinkListRead = {
+  items: PublicLinkRead[];
 };
 
 export type PublicLinkPreviewOptionRead = {
@@ -213,6 +415,22 @@ export type UserListRead = {
   items: UserRead[];
 };
 
+export type UserCreatePayload = {
+  email: string;
+  display_name: string;
+  password: string;
+  status?: string;
+  is_superuser?: boolean;
+};
+
+export type UserUpdatePayload = {
+  email?: string | null;
+  display_name?: string | null;
+  password?: string | null;
+  status?: string | null;
+  is_superuser?: boolean | null;
+};
+
 export type RoleRead = {
   id: string;
   code: string;
@@ -251,6 +469,16 @@ export type AccessGrantRead = {
 
 export type AccessGrantListRead = {
   items: AccessGrantRead[];
+};
+
+export type AccessGrantCreatePayload = {
+  user_id: string;
+  role_id: string;
+  registry_id?: string | null;
+  organization_id?: string | null;
+  include_descendants?: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
 };
 
 export type AuditEventRead = {

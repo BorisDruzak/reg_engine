@@ -1,28 +1,67 @@
 import type {
   AccessGrantListRead,
+  AccessGrantCreatePayload,
+  AccessGrantRead,
   AuditEventListRead,
   AttachmentListRead,
   AttachmentRead,
+  CardBlockInstanceSummaryRead,
+  CardCreatePayload,
   CardListRead,
   CardRead,
+  CardSummaryRead,
+  CardTransferPayload,
+  CardUpdatePayload,
   CurrentUser,
   DocumentTemplateCreatePayload,
   DocumentTemplateListRead,
   DocumentTemplateRead,
+  FieldValueListRead,
+  FieldValuesBulkUpdatePayload,
   FieldValueRead,
+  FormBlockCreatePayload,
+  FormBlockRead,
+  FormBlockUpdatePayload,
+  FormFieldCreatePayload,
+  FormFieldRead,
+  FormFieldUpdatePayload,
   GeneratedDocumentListRead,
   GeneratedDocumentRead,
   LoginResponse,
+  OrganizationCreatePayload,
   OrganizationListRead,
+  OrganizationRead,
+  OrganizationUpdatePayload,
+  OrgUnitCreatePayload,
+  OrgUnitListRead,
+  OrgUnitRead,
+  OrgUnitUpdatePayload,
+  PublicLinkCreatePayload,
+  PublicLinkListRead,
+  PublicLinkRead,
+  PublicLinkTokenRead,
   PublicLinkAttachmentListRead,
   PublicLinkAttachmentRead,
   PermissionListRead,
   PublicLinkPreviewRead,
+  ReferenceItemCreatePayload,
   ReferenceItemListRead,
   RegistryListRead,
+  ReferenceItemRead,
+  ReferenceItemUpdatePayload,
+  ReferenceListCreatePayload,
+  ReferenceListListRead,
+  ReferenceListRead,
+  ReferenceListUpdatePayload,
+  RegistryCreatePayload,
+  RegistryRead,
   RegistrySchemaRead,
+  RegistryUpdatePayload,
   RoleListRead,
+  UserCreatePayload,
   UserListRead,
+  UserRead,
+  UserUpdatePayload,
 } from "./types";
 import { uiText } from "../app/uiText";
 
@@ -59,20 +98,223 @@ export async function listOrganizations(token: string) {
   return apiRequest<OrganizationListRead>("/api/v1/organizations", { token });
 }
 
-export async function listRegistries(token: string) {
-  return apiRequest<RegistryListRead>("/api/v1/registries", { token });
+export async function createOrganization(token: string, payload: OrganizationCreatePayload) {
+  return apiRequest<OrganizationRead>("/api/v1/organizations", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateOrganization(
+  token: string,
+  organizationId: string,
+  payload: OrganizationUpdatePayload,
+) {
+  return apiRequest<OrganizationRead>(`/api/v1/organizations/${organizationId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveOrganization(token: string, organizationId: string) {
+  return apiRequest<OrganizationRead>(`/api/v1/organizations/${organizationId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listOrgUnits(token: string, organizationId: string) {
+  return apiRequest<OrgUnitListRead>(`/api/v1/organizations/${organizationId}/org-units`, {
+    token,
+  });
+}
+
+export async function createOrgUnit(
+  token: string,
+  organizationId: string,
+  payload: OrgUnitCreatePayload,
+) {
+  return apiRequest<OrgUnitRead>(`/api/v1/organizations/${organizationId}/org-units`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function readOrgUnit(token: string, orgUnitId: string) {
+  return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, { token });
+}
+
+export async function updateOrgUnit(
+  token: string,
+  orgUnitId: string,
+  payload: OrgUnitUpdatePayload,
+) {
+  return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveOrgUnit(token: string, orgUnitId: string) {
+  return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listRegistries(token: string, includeArchive = false) {
+  const archiveQuery = includeArchive ? "?include_archive=true" : "";
+  return apiRequest<RegistryListRead>(`/api/v1/registries${archiveQuery}`, { token });
+}
+
+export async function createRegistry(token: string, payload: RegistryCreatePayload) {
+  return apiRequest<RegistryRead>("/api/v1/registries", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateRegistry(
+  token: string,
+  registryId: string,
+  payload: RegistryUpdatePayload,
+) {
+  return apiRequest<RegistryRead>(`/api/v1/registries/${registryId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveRegistry(token: string, registryId: string) {
+  return apiRequest<RegistryRead>(`/api/v1/registries/${registryId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function getRegistrySchema(token: string, registryId: string) {
   return apiRequest<RegistrySchemaRead>(`/api/v1/registries/${registryId}/schema`, { token });
 }
 
+export async function createFormBlock(
+  token: string,
+  registryId: string,
+  payload: FormBlockCreatePayload,
+) {
+  return apiRequest<FormBlockRead>(`/api/v1/registries/${registryId}/blocks`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateFormBlock(
+  token: string,
+  blockId: string,
+  payload: FormBlockUpdatePayload,
+) {
+  return apiRequest<FormBlockRead>(`/api/v1/blocks/${blockId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveFormBlock(token: string, blockId: string) {
+  return apiRequest<FormBlockRead>(`/api/v1/blocks/${blockId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function createFormField(
+  token: string,
+  blockId: string,
+  payload: FormFieldCreatePayload,
+) {
+  return apiRequest<FormFieldRead>(`/api/v1/blocks/${blockId}/fields`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateFormField(
+  token: string,
+  fieldId: string,
+  payload: FormFieldUpdatePayload,
+) {
+  return apiRequest<FormFieldRead>(`/api/v1/fields/${fieldId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveFormField(token: string, fieldId: string) {
+  return apiRequest<FormFieldRead>(`/api/v1/fields/${fieldId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function listCards(token: string, registryId: string) {
   return apiRequest<CardListRead>(`/api/v1/registries/${registryId}/cards`, { token });
 }
 
+export async function createCard(token: string, registryId: string, payload: CardCreatePayload) {
+  return apiRequest<CardSummaryRead>(`/api/v1/registries/${registryId}/cards`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
+}
+
+export async function updateCard(token: string, cardId: string, payload: CardUpdatePayload) {
+  return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveCard(token: string, cardId: string) {
+  return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function createCardBlockInstance(token: string, cardId: string, blockId: string) {
+  return apiRequest<CardBlockInstanceSummaryRead>(
+    `/api/v1/cards/${cardId}/blocks/${blockId}/instances`,
+    { method: "POST", token },
+  );
+}
+
+export async function archiveCardBlockInstance(token: string, blockInstanceId: string) {
+  return apiRequest<CardBlockInstanceSummaryRead>(
+    `/api/v1/card-block-instances/${blockInstanceId}`,
+    { method: "DELETE", token },
+  );
+}
+
+export async function transferCard(token: string, cardId: string, payload: CardTransferPayload) {
+  return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}/transfer`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
 
 export async function updateCardFieldValue(
@@ -89,8 +331,102 @@ export async function updateCardFieldValue(
   });
 }
 
+export async function updateCardFieldValues(
+  token: string,
+  cardId: string,
+  payload: FieldValuesBulkUpdatePayload,
+) {
+  return apiRequest<FieldValueListRead>(`/api/v1/cards/${cardId}/values`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
 export async function listReferenceItems(token: string, listId: string) {
   return apiRequest<ReferenceItemListRead>(`/api/v1/reference-lists/${listId}/items`, { token });
+}
+
+export async function listReferenceLists(
+  token: string,
+  registryId: string,
+  organizationId?: string | null,
+) {
+  const organizationQuery = organizationId ? `?organization_id=${organizationId}` : "";
+  return apiRequest<ReferenceListListRead>(
+    `/api/v1/registries/${registryId}/reference-lists${organizationQuery}`,
+    { token },
+  );
+}
+
+export async function createReferenceList(
+  token: string,
+  registryId: string,
+  payload: ReferenceListCreatePayload,
+) {
+  return apiRequest<ReferenceListRead>(`/api/v1/registries/${registryId}/reference-lists`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function readReferenceList(token: string, listId: string) {
+  return apiRequest<ReferenceListRead>(`/api/v1/reference-lists/${listId}`, { token });
+}
+
+export async function updateReferenceList(
+  token: string,
+  listId: string,
+  payload: ReferenceListUpdatePayload,
+) {
+  return apiRequest<ReferenceListRead>(`/api/v1/reference-lists/${listId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveReferenceList(token: string, listId: string) {
+  return apiRequest<ReferenceListRead>(`/api/v1/reference-lists/${listId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function createReferenceItem(
+  token: string,
+  listId: string,
+  payload: ReferenceItemCreatePayload,
+) {
+  return apiRequest<ReferenceItemRead>(`/api/v1/reference-lists/${listId}/items`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function readReferenceItem(token: string, itemId: string) {
+  return apiRequest<ReferenceItemRead>(`/api/v1/reference-items/${itemId}`, { token });
+}
+
+export async function updateReferenceItem(
+  token: string,
+  itemId: string,
+  payload: ReferenceItemUpdatePayload,
+) {
+  return apiRequest<ReferenceItemRead>(`/api/v1/reference-items/${itemId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveReferenceItem(token: string, itemId: string) {
+  return apiRequest<ReferenceItemRead>(`/api/v1/reference-items/${itemId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function readPublicLinkPreview(rawToken: string) {
@@ -152,6 +488,29 @@ export async function listUsers(token: string) {
   return apiRequest<UserListRead>("/api/v1/users", { token });
 }
 
+export async function createUser(token: string, payload: UserCreatePayload) {
+  return apiRequest<UserRead>("/api/v1/users", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateUser(token: string, userId: string, payload: UserUpdatePayload) {
+  return apiRequest<UserRead>(`/api/v1/users/${userId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveUser(token: string, userId: string) {
+  return apiRequest<UserRead>(`/api/v1/users/${userId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function listRoles(token: string) {
   return apiRequest<RoleListRead>("/api/v1/roles", { token });
 }
@@ -162,6 +521,21 @@ export async function listPermissions(token: string) {
 
 export async function listAccessGrants(token: string) {
   return apiRequest<AccessGrantListRead>("/api/v1/access-grants", { token });
+}
+
+export async function createAccessGrant(token: string, payload: AccessGrantCreatePayload) {
+  return apiRequest<AccessGrantRead>("/api/v1/access-grants", {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveAccessGrant(token: string, grantId: string) {
+  return apiRequest<AccessGrantRead>(`/api/v1/access-grants/${grantId}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function listAuditEvents(token: string) {
@@ -259,6 +633,29 @@ export async function downloadGeneratedDocumentContent(token: string, generatedD
 
 export async function archiveGeneratedDocument(token: string, generatedDocumentId: string) {
   return apiRequest<GeneratedDocumentRead>(`/api/v1/generated-documents/${generatedDocumentId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listPublicLinks(token: string, cardId: string) {
+  return apiRequest<PublicLinkListRead>(`/api/v1/cards/${cardId}/public-links`, { token });
+}
+
+export async function createPublicLink(
+  token: string,
+  cardId: string,
+  payload: PublicLinkCreatePayload,
+) {
+  return apiRequest<PublicLinkTokenRead>(`/api/v1/cards/${cardId}/public-links`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function archivePublicLink(token: string, publicLinkId: string) {
+  return apiRequest<PublicLinkRead>(`/api/v1/public-links/${publicLinkId}`, {
     method: "DELETE",
     token,
   });
