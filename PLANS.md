@@ -65,6 +65,7 @@ Completed phases:
 - Phase 3A: Card Export Foundation.
 - Phase 3B: Import Preview And Mapping.
 - Phase 3C: Import Commit And Export Polish.
+- Phase 4A: Report Foundation API.
 
 Current stop point:
 
@@ -145,11 +146,15 @@ Current stop point:
   backend API slice: CSV commit reuses preview validation, applies atomic
   create/update batches, groups new-card rows by optional `import_key`, and
   writes import audit.
-- Phase 4A Report Foundation is the active implementation checkpoint:
-  migration `0010_reports`, backend report templates/runs, JSON report output
-  storage, scoped reads/downloads, and audit are implemented locally and have
-  passed disposable PostgreSQL verification. Production migration/deploy
-  evidence is still pending.
+- Phase 4A Report Foundation API is completed: migration `0010_reports`,
+  backend report templates/runs, JSON report output storage, scoped
+  reads/downloads, and audit are implemented, pushed, deployed, and migrated in
+  production.
+- Production PostgreSQL is migrated to `0010_reports` after fresh backup,
+  preflight, disposable PostgreSQL verification, Alembic upgrade, post-checks,
+  backend service restart, live OpenAPI route verification, and server check.
+- Next planned work by order is Phase 5 MCP Over API Only unless report
+  frontend UI/polish or non-JSON report output is explicitly prioritized first.
 - Later explicit phases remain report frontend UI/polish, non-JSON report
   outputs, and Phase 5 MCP.
 - XLSX export/import, import/export frontend UI, binary attachment/document
@@ -1509,7 +1514,7 @@ Known limitations:
 
 Purpose: add report definitions and report runs.
 
-Status: in progress.
+Status: completed for the approved backend report foundation slice.
 
 Planned overall scope:
 
@@ -1520,8 +1525,7 @@ Planned overall scope:
 
 ### Phase 4A: Report Foundation API
 
-Status: implementation complete locally; deploy and production migration
-pending.
+Status: completed.
 
 Purpose: add the first backend/API report slice without frontend report UI,
 XLSX/PDF report outputs, scheduled jobs, public report workflows, binary
@@ -1563,16 +1567,23 @@ Verification so far:
   `alembic upgrade head` through `0010_reports`.
 - PostgreSQL-backed `tests/test_api_phase_4_reports.py` passed on the same
   disposable database.
+- Full `scripts/check.ps1 -SkipRemote` passed with backend pytest
+  `62 passed, 130 skipped`, frontend unit tests `29 passed`, frontend build,
+  and project tree check.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- Deployed commit `abaa76b` to the configured server checkout.
+- Production PostgreSQL was migrated from `0009_document_template_versions` to
+  `0010_reports` after a fresh server-side backup outside Git, preflight table
+  checks, disposable PostgreSQL verification, Alembic upgrade, and post-checks.
+- Post-checks verified Alembic current `0010_reports (head)`,
+  `report_templates`, `report_runs`, report constraints, and report indexes.
+- Backend service was restarted; healthcheck returned `ok`,
+  `scripts/server-check.ps1` passed, and live OpenAPI exposed all report
+  endpoints.
 
 Production migration checkpoint:
 
-- `0010_reports` is explicitly part of the active Phase 4A plan.
-- Production migration may be applied only after this implementation is pushed
-  to `origin/main`, the server checkout is synchronized, a fresh production
-  backup is created, preflight checks confirm the intentional `reg_engine`
-  target and current Alembic revision, and post-checks confirm
-  `report_templates`, `report_runs`, constraints, indexes, service health, and
-  server checks.
+- Completed for `0010_reports`.
 
 Known limitations:
 
