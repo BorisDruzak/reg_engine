@@ -59,6 +59,7 @@ Completed phases:
 - Phase 2J.4: `file_ref` API Support.
 - Phase 2J.5: `file_ref` Frontend Authenticated Editor.
 - Phase 2J.6: `file_ref` Generated Document Rendering.
+- Phase 2J.7: `file_ref` Live Validation.
 
 Current stop point:
 
@@ -99,6 +100,10 @@ Current stop point:
   `docx_text_v1` renders active references as attachment title/original
   filename text, empty values as empty text, and archived references with an
   `(архив)` marker, without embedding files or adding download URLs.
+- Phase 2J.7 `file_ref` live validation is completed on disposable
+  PostgreSQL and temporary storage: schema creation, attachment upload,
+  `file_ref` set/read, generated document rendering, transfer copy semantics,
+  audit metadata, and cleanup were verified.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -113,8 +118,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.7 Live Validation for `file_ref`: verify the
-  full file-ref flow on disposable PostgreSQL and temporary storage.
+- Phase 2J is complete.
+- Next planned work is Phase 2M binary `.docx` template upload and template
+  versioning, which remains an explicit advanced document phase.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -231,10 +237,14 @@ Completed Phase 2 work:
   filename text, empty values render as empty text, and archived references
   render with an `(архив)` marker. Generated documents still do not embed
   attachment bytes or add download URLs.
+- Phase 2J.7 completed live validation on disposable PostgreSQL and temporary
+  storage for the full `file_ref` flow: create schema, upload attachment, set
+  and read metadata, generate document text, transfer card, verify target-card
+  attachment link, verify transfer audit metadata, and clean up test resources.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 through Phase 2J.6 are completed and Phase 2J.7 is the next planned live-validation slice.
+Status: completed.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -492,6 +502,8 @@ Completion evidence:
 
 ### Phase 2J.7: Live Validation
 
+Status: completed.
+
 Required work:
 
 - Use disposable PostgreSQL database and temporary storage.
@@ -508,6 +520,21 @@ Acceptance criteria:
 - No production personal data is used.
 - No production storage is mutated.
 - Local checks, PostgreSQL-backed tests, frontend tests, project-map check, README, and PLANS update pass.
+
+Completion evidence:
+
+- Server validation used disposable database `reg_engine_2j7_file_ref_test`
+  and temporary storage `/tmp/reg_engine_2j7_file_ref_storage`.
+- Alembic upgraded the disposable database through
+  `0008_file_ref_field_values`.
+- Validation created a registry schema with a `file_ref` field, uploaded an
+  attachment to a card, set `file_ref`, and read safe metadata.
+- Generated `.docx` content rendered `File: Validation scan (validation.pdf)`
+  without leaking attachment ids, dataclass output, or attachment API links.
+- Transfer created a new target-card `card_attachments` link pointing to the
+  same stored file and recorded `copied_file_ref_attachments` in audit
+  metadata.
+- Disposable database and temporary storage were removed after validation.
 
 ## Phase 2J Non-Goals
 
