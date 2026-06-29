@@ -46,6 +46,7 @@ Completed phases:
 - Phase 2L.1: Organization Management UI.
 - Phase 2L.2: User Management UI.
 - Phase 2L.3: Access Grant Management UI.
+- Phase 2L.4: Registry Management UI.
 
 Current stop point:
 
@@ -64,10 +65,11 @@ Current stop point:
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
 - Phase 2L.3 Access Grant Management UI is completed.
+- Phase 2L.4 Registry Management UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.4 Registry Management UI is the next implementation slice.
+- Phase 2L.5 Schema Builder UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -106,8 +108,9 @@ The current authenticated frontend is not yet a complete admin workspace:
   Russian-first UI; roles and permissions remain read-only in this phase;
 - access grants can be issued and revoked through Russian-first UI with
   explicit organization/registry/descendant scope summary;
-- registries and schemas are displayed, but registry create/update/archive and
-  block/field/reference-list editing are not exposed as UI workflows;
+- registries can be created, updated, and archived through Russian-first UI;
+  registry schema is still read-only, so block/field/reference-list editing is
+  not exposed as UI workflows;
 - cards are listed and existing field values can be edited, but card creation,
   card metadata edit, archive, repeatable block-instance management, and bulk
   save workflows are incomplete;
@@ -668,6 +671,8 @@ Completion evidence:
 
 ### Phase 2L.4: Registry Management UI
 
+Status: completed.
+
 Required work:
 
 - Add create registry form.
@@ -681,6 +686,26 @@ Acceptance criteria:
 - User can create a generic schema-driven registry through UI.
 - User can update/archive registry metadata if API support exists.
 - Tests prove no hardcoded employee registry fields are created.
+
+Completion evidence:
+
+- Added Russian-first registry create/edit/archive controls to the authenticated
+  registry workspace.
+- Registry mutations use existing Phase 2K API support and invalidate registry,
+  schema, card, and audit query data after successful changes.
+- Registry lifecycle/status values are surfaced through existing Russian status
+  labels.
+- Added frontend tests for required-field validation, create, update, archive,
+  backend-denied localized error handling, and request payloads without
+  hardcoded employee/HR fields.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx`,
+  `pnpm -C frontend test:run`, `pnpm -C frontend lint`, and
+  `pnpm -C frontend typecheck`.
+- Verified `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`,
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`, and
+  `pnpm -C frontend e2e`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, or MCP work was added.
 
 ### Phase 2L.5: Schema Builder UI
 

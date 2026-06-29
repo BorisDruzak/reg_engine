@@ -209,6 +209,7 @@ export function HomePage() {
             registries={registriesQuery.data?.items ?? []}
             schema={registrySchemaQuery.data ?? null}
             selectedRegistryId={activeRegistryId}
+            token={token}
             onSelectRegistry={(registryId) => {
               setSelectedRegistryId(registryId);
               setSelectedCardId(null);

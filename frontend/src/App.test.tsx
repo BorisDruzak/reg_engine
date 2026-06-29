@@ -9,6 +9,7 @@ import type {
   DocumentTemplateRead,
   GeneratedDocumentRead,
   OrganizationRead,
+  RegistryRead,
   UserRead,
 } from "@/api/types";
 
@@ -289,6 +290,8 @@ let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
 let organizationItems: OrganizationRead[];
+let registryItems: RegistryRead[];
+let denyNextRegistryUpdate = false;
 let userItems: UserRead[];
 let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
@@ -304,6 +307,8 @@ beforeEach(() => {
   cardApprovedValue = false;
   publicStatusValue = "drafted";
   organizationItems = [...apiPayloads.organizations.items];
+  registryItems = [...apiPayloads.registries.items];
+  denyNextRegistryUpdate = false;
   userItems = [...apiPayloads.users.items];
   denyNextUserUpdate = false;
   grantItems = [...apiPayloads.grants.items];
@@ -528,8 +533,64 @@ beforeEach(() => {
         }
         return jsonResponse({ items: grantItems });
       }
+      if (
+        url.includes("/api/v1/registries/") &&
+        !url.endsWith("/schema") &&
+        !url.includes("/cards") &&
+        !url.includes("/document-templates")
+      ) {
+        const registryId = url.split("/api/v1/registries/")[1].split("?")[0];
+        const current = registryItems.find((item) => item.id === registryId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          if (denyNextRegistryUpdate) {
+            denyNextRegistryUpdate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            name?: string | null;
+            description?: string | null;
+            lifecycle_status?: string | null;
+          };
+          const updated: RegistryRead = {
+            ...current,
+            name: payload.name ?? current.name,
+            description: payload.description ?? current.description,
+            lifecycle_status: payload.lifecycle_status ?? current.lifecycle_status,
+          };
+          registryItems = registryItems.map((item) => (item.id === registryId ? updated : item));
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived: RegistryRead = {
+            ...current,
+            lifecycle_status: "archived",
+          };
+          registryItems = registryItems.filter((item) => item.id !== registryId);
+          return jsonResponse(archived);
+        }
+      }
       if (url.endsWith("/api/v1/registries")) {
-        return jsonResponse(apiPayloads.registries);
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            description?: string | null;
+          };
+          const created: RegistryRead = {
+            id: "25252525-2525-4252-8252-252525252525",
+            code: payload.code,
+            name: payload.name,
+            description: payload.description ?? null,
+            lifecycle_status: "draft",
+            schema_version: 1,
+          };
+          registryItems = [...registryItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: registryItems });
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
         return jsonResponse(apiPayloads.schema);
@@ -815,7 +876,7 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.queryByText("System admin")).not.toBeInTheDocument();
   expect(screen.queryByText("Manage users.")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Реестры" }));
-  expect(await screen.findByText("Реестр активов")).toBeInTheDocument();
+  expect((await screen.findAllByText("Реестр активов")).length).toBeGreaterThan(0);
   expect(screen.getAllByText("Основной блок").length).toBeGreaterThan(0);
   expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: "Карточки" }));
@@ -1277,6 +1338,134 @@ test("shows localized access grant denial text", async () => {
   ]);
   denyNextGrantCreate = true;
   await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+});
+
+test("creates edits and archives registries in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  const registryPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) => String(input).endsWith("/api/v1/registries") && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать реестр" }));
+  const postCountBeforeValidation = registryPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(registryPostCount()).toBe(postCountBeforeValidation);
+
+  await user.type(screen.getByLabelText("Код реестра"), "contracts");
+  await user.type(screen.getByLabelText("Название реестра"), "Реестр договоров");
+  await user.type(screen.getByLabelText("Описание реестра"), "Договорная работа");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Реестр создан")).toBeInTheDocument();
+  expect(screen.getAllByText("Реестр договоров").length).toBeGreaterThan(0);
+  expect(screen.getByText(/contracts \/ v1 \/ Черновик/)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Редактировать реестр Реестр договоров" }));
+  const editNameInput = await screen.findByLabelText("Название реестра");
+  await user.clear(editNameInput);
+  await user.type(editNameInput, "Реестр договоров обновленный");
+  const editDescriptionInput = screen.getByLabelText("Описание реестра");
+  await user.clear(editDescriptionInput);
+  await user.type(editDescriptionInput, "Обновленная договорная работа");
+  await user.selectOptions(screen.getByLabelText("Статус реестра"), ["active"]);
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Реестр обновлен")).toBeInTheDocument();
+  expect(screen.getAllByText("Реестр договоров обновленный").length).toBeGreaterThan(0);
+  expect(screen.getByText(/contracts \/ v1 \/ Активно/)).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", {
+      name: "Архивировать реестр Реестр договоров обновленный",
+    }),
+  );
+  expect(await screen.findByRole("dialog", { name: "Архивировать реестр" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Реестр архивирован")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByText("Реестр договоров обновленный")).not.toBeInTheDocument(),
+  );
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input).endsWith("/api/v1/registries") && init?.method === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(createBody).toEqual({
+      code: "contracts",
+      name: "Реестр договоров",
+      description: "Договорная работа",
+    });
+    for (const forbiddenField of [
+      "employees",
+      "employee",
+      "full_name",
+      "birth_date",
+      "education",
+      "qualification",
+      "experience",
+    ]) {
+      expect(createBody).not.toHaveProperty(forbiddenField);
+    }
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          name?: string;
+          description?: string | null;
+          lifecycle_status?: string | null;
+        };
+        return (
+          String(input).endsWith("/api/v1/registries/25252525-2525-4252-8252-252525252525") &&
+          init?.method === "PATCH" &&
+          body.name === "Реестр договоров обновленный" &&
+          body.description === "Обновленная договорная работа" &&
+          body.lifecycle_status === "active"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/registries/25252525-2525-4252-8252-252525252525") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("shows localized registry mutation denial text", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  await user.click(screen.getByRole("button", { name: "Редактировать реестр Реестр активов" }));
+  const editNameInput = await screen.findByLabelText("Название реестра");
+  await user.clear(editNameInput);
+  await user.type(editNameInput, "Недоступный реестр");
+  denyNextRegistryUpdate = true;
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
   expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
