@@ -41,8 +41,9 @@ Current stop point:
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
 - Phase 2J is the next planned phase: `file_ref` dynamic field type.
 - Phase 2J must start with planning/ADR and acceptance criteria before implementation.
-- PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred.
-- Operational tooling now supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
+- After Phase 2J, the next implementation priority is Phase 2K: core backend/API completeness for remaining registry operations.
+- PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
+- Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
 
@@ -240,17 +241,154 @@ Phase 2J must not implement:
 - MDB migration;
 - service desk integration.
 
-## Future Directions After Phase 2J
+## Phase 2K: Core Backend API Completeness
 
-These require explicit approval after Phase 2J:
+Status: planned after Phase 2J.
 
-- Public-link `file_ref` editing.
-- `multi_file_ref`.
-- Binary `.docx` template upload and template versioning.
-- PDF conversion.
-- Import/export.
-- Reports.
-- MCP over API only.
+Purpose: close remaining non-document backend API gaps that are needed for a complete registry administration workflow before moving to advanced documents, import/export, reports, or MCP.
+
+Phase 2K must not implement:
+
+- PDF conversion;
+- binary `.docx` template upload;
+- template versioning;
+- import/export;
+- reports;
+- MCP;
+- service desk integration;
+- hardcoded HR fields.
+
+### Phase 2K.1: Organization Units API
+
+Required work:
+
+- Add API for `org_units` management:
+  - list by organization;
+  - create;
+  - read;
+  - update;
+  - archive.
+- Keep `org_units` as filters/reference data, not RBAC boundaries in v1.
+- Enforce organization-scope permissions through backend services.
+
+Acceptance criteria:
+
+- Org-unit API tests cover allowed and denied access paths.
+- Org-unit list can be used by frontend filters and dynamic `org_unit_ref` fields.
+
+### Phase 2K.2: Registry Update And Archive API
+
+Required work:
+
+- Add registry update endpoint for safe metadata changes such as name/description/status where supported.
+- Add registry archive endpoint.
+- Keep schema-changing operations in block/field APIs.
+- Keep archive behavior soft; no physical deletion.
+
+Acceptance criteria:
+
+- Registry update/archive tests cover permission boundaries.
+- Archived registries do not disappear from audit/history-sensitive reads where archive scope is requested.
+
+### Phase 2K.3: Card Block Instance Archive API
+
+Required work:
+
+- Add archive endpoint for repeatable `card_block_instances`.
+- Prevent archiving required/non-repeatable system instances where unsafe.
+- Ensure archived block instances are hidden from normal card reads but available in archive scope if supported.
+
+Acceptance criteria:
+
+- Tests cover repeatable instance archive, non-repeatable/system guardrails, and value retention.
+
+### Phase 2K.4: Bulk Card Values Update API
+
+Required work:
+
+- Add an atomic bulk field-values endpoint, expected as `PATCH /api/v1/cards/{card_id}/values` or equivalent.
+- Reuse existing single-field validation and audit behavior.
+- Ensure either all values save or none save.
+- Include support for normal dynamic field types and `file_ref` after Phase 2J.
+
+Acceptance criteria:
+
+- Tests cover atomic success, partial validation failure rollback, audit behavior, and permission denial.
+
+### Phase 2K.5: API Coverage And Live Validation
+
+Required work:
+
+- Add integration tests for org units, registry update/archive, block-instance archive, and bulk card values.
+- Validate against disposable PostgreSQL and temporary storage where relevant.
+- Update README, PLANS.md, PROJECT_TREE.md, and frontend API client only if needed.
+
+Acceptance criteria:
+
+- Local backend checks pass.
+- PostgreSQL-backed tests pass against disposable database.
+- No unrelated document/import/report/MCP work is introduced.
+
+## Planned Phases After Phase 2K
+
+These require explicit approval after Phase 2K:
+
+### Phase 2L: Binary `.docx` Template Upload And Template Versioning
+
+Purpose: move from JSON `docx_text_v1` template bodies toward managed binary template assets and version history.
+
+Planned scope:
+
+- Upload binary `.docx` templates through authenticated API.
+- Store template files through storage abstraction.
+- Add template versions.
+- Keep templates schema-driven and avoid real personal data in Git/tests.
+- Keep PDF conversion deferred.
+
+### Phase 2M: PDF Conversion
+
+Purpose: add PDF generation after generated-document and template boundaries are stable.
+
+Planned scope:
+
+- Decide renderer/converter strategy.
+- Add PDF generation for supported generated documents.
+- Store generated PDFs through storage abstraction.
+- Add audit and access checks.
+- Avoid adding direct public-link PDF flows unless explicitly approved.
+
+### Phase 3: Import And Export
+
+Purpose: add controlled data exchange.
+
+Planned scope:
+
+- CSV/XLSX import with mapping, preview, validation, and audit.
+- CSV/XLSX/JSON export with permission checks.
+- Export of attachment/document metadata only first; binary export requires separate approval.
+
+### Phase 4: Reports
+
+Purpose: add report definitions and report runs.
+
+Planned scope:
+
+- Report templates.
+- Registry/card reports.
+- Period reports.
+- Report output storage and audit.
+
+### Phase 5: MCP Over API Only
+
+Purpose: add MCP after API, auth, RBAC, audit, import/export, and document boundaries are stable.
+
+Planned scope:
+
+- Read-only MCP tools first.
+- MCP calls API only.
+- No direct DB access.
+- Audit source `mcp`.
+- Write tools only after explicit approval.
 
 ## Verification
 
