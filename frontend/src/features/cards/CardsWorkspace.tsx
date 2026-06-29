@@ -9,6 +9,7 @@ import {
   createCardBlockInstance,
   createPublicLink,
   listOrgUnits,
+  listAttachments,
   listPublicLinks,
   listReferenceItems,
   updateCard,
@@ -26,6 +27,7 @@ import type {
   PublicLinkRead,
   PublicLinkTokenRead,
   RegistrySchemaRead,
+  AttachmentRead,
 } from "@/api/types";
 import {
   fieldTypeLabel,
@@ -44,12 +46,13 @@ import {
 import { Panel, SelectableList } from "@/components/common/DataSurfaces";
 import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
 
-import { FieldEditorControl } from "./FieldEditorControl";
+import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
   type FieldEditorState,
   coerceEditorValue,
+  fileRefValueFromUnknown,
   formatValue as formatEditorValue,
   initialEditorValue,
 } from "./fieldEditorUtils";
@@ -87,6 +90,10 @@ export function CardsWorkspace({
     [organizations],
   );
   const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
+  const bulkFieldRows = useMemo(
+    () => fieldRows.filter((field) => field.field.field_type !== "file_ref"),
+    [fieldRows],
+  );
   const repeatableBlocks = useMemo(
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
@@ -337,11 +344,11 @@ export function CardsWorkspace({
         </Panel>
       </div>
       <Panel title={uiText.cardFields}>
-        {card && fieldRows.length > 0 && (
+        {card && bulkFieldRows.length > 0 && (
           <BulkCardValuesForm
             key={fieldRows.map((field) => field.key).join("|")}
             card={card}
-            fields={fieldRows}
+            fields={bulkFieldRows}
             token={token}
           />
         )}
@@ -1023,6 +1030,15 @@ function CardFieldEditor({
       Boolean(token && referenceListId) &&
       ["select", "multi_select"].includes(field.field.field_type),
   });
+  const attachmentsQuery = useQuery({
+    queryKey: ["attachments", token, cardId],
+    queryFn: () => listAttachments(token, cardId),
+    enabled: Boolean(token && cardId && field.field.field_type === "file_ref"),
+  });
+  const fileRefOptions = useMemo(
+    () => buildFileRefOptions(attachmentsQuery.data?.items ?? [], field.field.value),
+    [attachmentsQuery.data?.items, field.field.value],
+  );
   const mutation = useMutation({
     mutationFn: (value: unknown) =>
       updateCardFieldValue(token, cardId, field.field.field_id, value, field.blockInstanceId),
@@ -1065,6 +1081,7 @@ function CardFieldEditor({
           fieldType={field.field.field_type}
           label={field.label}
           options={referenceItemsQuery.data?.items ?? []}
+          fileRefOptions={fileRefOptions}
           value={rawValue}
           onChange={updateRawValue}
         />
@@ -1078,6 +1095,44 @@ function CardFieldEditor({
       {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
+}
+
+function buildFileRefOptions(
+  attachments: AttachmentRead[],
+  currentValue: unknown,
+): FieldEditorFileRefOption[] {
+  const options = attachments
+    .filter((attachment) => !attachment.archived_at)
+    .map((attachment) => ({
+      id: attachment.id,
+      label: attachmentLabel(attachment),
+      archived: false,
+    }));
+  const currentFileRef = fileRefValueFromUnknown(currentValue);
+  if (currentFileRef && !options.some((item) => item.id === currentFileRef.attachment_id)) {
+    options.push({
+      id: currentFileRef.attachment_id,
+      label: fileRefLabel(currentFileRef),
+      archived: Boolean(currentFileRef.archived_at),
+    });
+  }
+  return options;
+}
+
+function attachmentLabel(attachment: AttachmentRead) {
+  const title = attachment.title || attachment.original_filename;
+  return title === attachment.original_filename
+    ? attachment.original_filename
+    : `${title} (${attachment.original_filename})`;
+}
+
+function fileRefLabel(fileRef: ReturnType<typeof fileRefValueFromUnknown>) {
+  if (!fileRef) {
+    return uiText.empty;
+  }
+  return fileRef.title === fileRef.original_filename
+    ? fileRef.original_filename
+    : `${fileRef.title} (${fileRef.original_filename})`;
 }
 
 function buildEditableCardFields(

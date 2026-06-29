@@ -57,6 +57,7 @@ Completed phases:
 - Phase 2J.2: `file_ref` Backend Service Support.
 - Phase 2J.3: `file_ref` Transfer Behavior.
 - Phase 2J.4: `file_ref` API Support.
+- Phase 2J.5: `file_ref` Frontend Authenticated Editor.
 
 Current stop point:
 
@@ -89,6 +90,10 @@ Current stop point:
   value endpoints accept `card_attachment.id`/`null` and card reads return safe
   attachment metadata without storage keys, filesystem paths, checksums, or
   stored-file ids.
+- Phase 2J.5 `file_ref` frontend authenticated editor is completed: the
+  Russian card editor lists existing card attachments, allows selecting and
+  clearing a `file_ref`, shows empty and archived states, and keeps inline file
+  upload out of the `file_ref` control.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -103,9 +108,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.5 Frontend Authenticated Editor for
-  `file_ref`: expose existing card attachments as selectable candidates in the
-  schema-driven card editor.
+- Next planned work is Phase 2J.6 Generated Document Rendering for
+  `file_ref`: render attachment title/original filename text in
+  `docx_text_v1` outputs without embedding files or links.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -209,12 +214,17 @@ Completed Phase 2 work:
 - Phase 2J.4 added authenticated REST card value API support for `file_ref`.
   Single-field and card-read responses expose safe metadata with attachment id,
   title, original filename, content type, content length, scanner status, and
-  archive status. Frontend UI, generated document rendering, import/export,
-  PDF, reports, and MCP remain deferred.
+  archive status.
+- Phase 2J.5 added authenticated Russian-first frontend `file_ref` editing.
+  The schema builder exposes the generic `file_ref` field type, the card editor
+  lists existing card attachments as selectable candidates, supports clear,
+  shows empty/archived states, excludes `file_ref` from bulk save, and keeps
+  inline upload out of the `file_ref` control. Generated document rendering,
+  import/export, PDF, reports, and MCP remain deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 through Phase 2J.4 are completed and Phase 2J.5 is the next planned implementation slice.
+Status: in progress; Phase 2J.0 through Phase 2J.5 are completed and Phase 2J.6 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -397,6 +407,8 @@ Completion evidence:
 
 ### Phase 2J.5: Frontend Authenticated Editor
 
+Status: completed.
+
 Required work:
 
 - Add authenticated `file_ref` editor to the schema-driven card form.
@@ -415,6 +427,24 @@ Acceptance criteria:
 
 - Frontend unit/e2e tests cover list/select/save/clear/empty-state behavior.
 - Dynamic form stays schema-driven and does not hardcode HR document fields.
+
+Completion evidence:
+
+- The authenticated card editor renders `file_ref` as a Russian-first file
+  selector backed by existing active card attachments.
+- The editor allows selecting an attachment, clearing the selected file, and
+  saving `card_attachment.id`/`null` through the existing field-value API.
+- Empty states show `Нет вложений` and
+  `Сначала загрузите файл во Вложения`.
+- Archived referenced values remain visible with `Файл архивирован` while
+  active candidates still come from the attachment list endpoint.
+- `file_ref` is excluded from bulk field save to avoid accidental clearing.
+- The schema builder exposes the generic `file_ref` field type.
+- Unit tests cover list/select/save/clear/empty/archived states; Playwright
+  smoke covers schema creation, upload, select, and save.
+- No inline upload inside the `file_ref` control, public-link `file_ref`
+  editing, generated document rendering, import/export, PDF, reports, MCP,
+  backend migration, or business-specific document field was added.
 
 ### Phase 2J.6: Generated Document Rendering
 

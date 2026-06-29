@@ -12,9 +12,23 @@ export type FieldEditorOption = {
   label: string;
 };
 
+export type FileRefValue = {
+  attachment_id: string;
+  title: string;
+  original_filename: string;
+  archived_at: string | null;
+};
+
 export function initialEditorValue(field: EditableFieldValue): FieldEditorState {
   if (field.field_type === "bool") {
     return Boolean(field.value);
+  }
+  if (field.field_type === "file_ref") {
+    const fileRefValue = fileRefValueFromUnknown(field.value);
+    if (fileRefValue) {
+      return fileRefValue.attachment_id;
+    }
+    return typeof field.value === "string" ? field.value : "";
   }
   if (field.field_type === "multi_select") {
     return Array.isArray(field.value) ? field.value.map(String) : [];
@@ -37,6 +51,9 @@ export function coerceEditorValue(fieldType: string, value: FieldEditorState): u
   }
   if (fieldType === "multi_select") {
     return Array.isArray(value) ? value : [];
+  }
+  if (fieldType === "file_ref") {
+    return typeof value === "string" && value.trim() ? value : null;
   }
   if (fieldType === "json") {
     if (typeof value !== "string") {
@@ -83,6 +100,12 @@ export function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === "") {
     return uiText.empty;
   }
+  const fileRefValue = fileRefValueFromUnknown(value);
+  if (fileRefValue) {
+    const title = fileRefValue.title || fileRefValue.original_filename;
+    const archiveLabel = fileRefValue.archived_at ? `, ${uiText.fileArchived}` : "";
+    return `${title} (${fileRefValue.original_filename})${archiveLabel}`;
+  }
   if (Array.isArray(value)) {
     return value.map(formatValue).join(", ");
   }
@@ -93,4 +116,23 @@ export function formatValue(value: unknown): string {
     return booleanLabel(value);
   }
   return String(value);
+}
+
+export function fileRefValueFromUnknown(value: unknown): FileRefValue | null {
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.attachment_id !== "string" ||
+    typeof candidate.original_filename !== "string"
+  ) {
+    return null;
+  }
+  return {
+    attachment_id: candidate.attachment_id,
+    title: typeof candidate.title === "string" ? candidate.title : candidate.original_filename,
+    original_filename: candidate.original_filename,
+    archived_at: typeof candidate.archived_at === "string" ? candidate.archived_at : null,
+  };
 }

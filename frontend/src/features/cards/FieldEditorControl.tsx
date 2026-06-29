@@ -7,12 +7,14 @@ export function FieldEditorControl({
   fieldType,
   label,
   options,
+  fileRefOptions = [],
   value,
   onChange,
 }: {
   fieldType: string;
   label: string;
   options: FieldEditorOption[];
+  fileRefOptions?: FieldEditorFileRefOption[];
   value: FieldEditorState;
   onChange: (value: FieldEditorState) => void;
 }) {
@@ -73,6 +75,40 @@ export function FieldEditorControl({
     );
   }
 
+  if (fieldType === "file_ref") {
+    const selectedValue = typeof value === "string" ? value : "";
+    const selectedOption = fileRefOptions.find((item) => item.id === selectedValue);
+    const hasActiveOptions = fileRefOptions.some((item) => !item.archived);
+    return (
+      <div className="file-ref-control">
+        <select
+          aria-label={label}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          value={selectedValue}
+        >
+          <option value="">{uiText.selectFile}</option>
+          {fileRefOptions.map((item) => (
+            <option key={item.id} value={item.id} disabled={item.archived}>
+              {item.archived ? `${item.label} / ${uiText.fileArchived}` : item.label}
+            </option>
+          ))}
+        </select>
+        {selectedValue && (
+          <button type="button" className="ghost-button" onClick={() => onChange("")}>
+            {uiText.clearFile}
+          </button>
+        )}
+        {!hasActiveOptions && (
+          <>
+            <small>{uiText.noAttachments}</small>
+            <small>{uiText.uploadFileFirst}</small>
+          </>
+        )}
+        {selectedOption?.archived && <small>{uiText.fileArchived}</small>}
+      </div>
+    );
+  }
+
   return (
     <input
       aria-label={label}
@@ -82,3 +118,9 @@ export function FieldEditorControl({
     />
   );
 }
+
+export type FieldEditorFileRefOption = {
+  id: string;
+  label: string;
+  archived: boolean;
+};

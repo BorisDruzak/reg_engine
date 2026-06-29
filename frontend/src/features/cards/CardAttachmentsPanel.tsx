@@ -57,6 +57,7 @@ export function CardAttachmentsPanel({ cardId, token }: { cardId: string; token:
       setMessage(uiText.fileArchived);
       setLocalError(null);
       await queryClient.invalidateQueries({ queryKey: ["attachments", token, cardId] });
+      await queryClient.invalidateQueries({ queryKey: ["card", token, cardId] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },
     onError: (error) => setLocalError(errorText(error)),

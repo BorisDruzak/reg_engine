@@ -1050,6 +1050,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     referenceList: "61616161-6161-4616-8616-616161616161",
     referenceItem: "51515151-5151-4515-8515-515151515151",
     field: "31313131-3131-4313-8313-313131313131",
+    fileRefField: "32323232-3232-4323-8323-323232323232",
     card: "21212121-2121-4212-8212-212121212121",
     attachment: "11111111-aaaa-4111-8111-111111111111",
     template: "12121212-aaaa-4212-8212-121212121212",
@@ -1543,7 +1544,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
         public_editable?: boolean;
       };
       const created = {
-        id: ids.field,
+        id: body.field_type === "file_ref" ? ids.fileRefField : ids.field,
         block_id: ids.block,
         code: body.code,
         label: body.label,
@@ -1709,6 +1710,39 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
             field_id: item.field_id,
             value: item.value,
           })),
+        }),
+      });
+      return;
+    }
+    if (url.pathname === `/api/v1/cards/${ids.card}/fields/${ids.fileRefField}`) {
+      const body = request.postDataJSON() as {
+        value: string | null;
+        block_instance_id?: string | null;
+      };
+      const attachment = attachments.find((item) => item.id === body.value);
+      const value =
+        body.value && attachment
+          ? {
+              attachment_id: attachment.id,
+              title: attachment.title ?? attachment.original_filename,
+              original_filename: attachment.original_filename,
+              content_type: attachment.content_type,
+              content_length_bytes: attachment.content_length_bytes,
+              scanner_status: attachment.scanner_status,
+              archived_at: attachment.archived_at,
+            }
+          : null;
+      cardFieldValues = { ...cardFieldValues, [ids.fileRefField]: value };
+      appendAuditEvent("update", "field_value", ids.card);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "setup-file-ref-value",
+          card_id: ids.card,
+          block_instance_id: body.block_instance_id ?? null,
+          field_id: ids.fileRefField,
+          value,
         }),
       });
       return;
@@ -1955,6 +1989,13 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Поле формы создано")).toBeVisible();
 
+  await page.getByRole("button", { name: "Создать поле формы" }).click();
+  await page.getByLabel("Код поля формы").fill("qa_file");
+  await page.getByLabel("Тип поля формы").selectOption("file_ref");
+  await page.getByLabel("Название поля формы").fill("Файл проверки");
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("Поле формы создано")).toBeVisible();
+
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
   await page.getByLabel("Название карточки").fill("Карточка проверки");
@@ -1979,6 +2020,12 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   });
   await page.getByRole("button", { name: "Загрузить файл" }).click();
   await expect(page.getByText("Файл загружен")).toBeVisible();
+
+  await page
+    .getByLabel("Файл проверки", { exact: true })
+    .selectOption("11111111-aaaa-4111-8111-111111111111");
+  await page.getByRole("button", { name: "Сохранить Файл проверки" }).click();
+  await expect(page.getByText("Сохранено: Файл проверки")).toBeVisible();
 
   await page.getByLabel("Код шаблона").fill("qa_doc");
   await page.getByLabel("Название шаблона").fill("Документ проверки");

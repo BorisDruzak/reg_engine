@@ -682,6 +682,21 @@ tr:last-child td {
   border-color: #0f766e;
 }
 
+.file-ref-control {
+  display: grid;
+  gap: 6px;
+}
+
+.file-ref-control .ghost-button {
+  justify-self: start;
+}
+
+.file-ref-control small {
+  color: #667085;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .attachment-form,
 .document-generator {
   display: grid;

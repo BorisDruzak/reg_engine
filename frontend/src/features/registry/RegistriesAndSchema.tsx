@@ -118,6 +118,7 @@ const supportedFieldTypes = [
   "organization_ref",
   "org_unit_ref",
   "registry_ref",
+  "file_ref",
 ];
 
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);

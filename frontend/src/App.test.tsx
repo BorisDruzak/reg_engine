@@ -228,6 +228,20 @@ const apiPayloads = {
     public_visible: false,
     public_editable: false,
   },
+  fileRefField: {
+    id: "9f9f9f9f-9f9f-49f9-89f9-9f9f9f9f9f9f",
+    block_id: "88888888-8888-4888-8888-888888888888",
+    code: "supporting_file",
+    label: "Файл карточки",
+    description: null,
+    field_type: "file_ref",
+    position: 2,
+    options_source_type: null,
+    options_source_id: null,
+    is_active: true,
+    public_visible: false,
+    public_editable: false,
+  },
   cards: {
     items: [
       {
@@ -437,12 +451,23 @@ let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
 let denyNextGrantCreate = false;
 let cardItems: CardSummaryRead[];
+type TestFileRefValue = {
+  attachment_id: string;
+  title: string;
+  original_filename: string;
+  content_type: string;
+  content_length_bytes: number;
+  scanner_status: string;
+  archived_at: string | null;
+};
+
 let cardValueStateById: Record<
   string,
   {
     status: string;
     approved: boolean;
     repeatableNotes: { block_instance_id: string; ordinal: number; value: string }[];
+    fileRef: TestFileRefValue | null;
   }
 >;
 let denyNextCardUpdate = false;
@@ -477,6 +502,7 @@ beforeEach(() => {
       status: "drafted",
       approved: false,
       repeatableNotes: [],
+      fileRef: null,
     },
   };
   denyNextCardUpdate = false;
@@ -1039,6 +1065,7 @@ beforeEach(() => {
             status: "",
             approved: false,
             repeatableNotes: [],
+            fileRef: null,
           };
           return jsonResponse(created, { status: 201 });
         }
@@ -1369,6 +1396,37 @@ beforeEach(() => {
           value: cardApprovedValue,
         });
       }
+      if (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/9f9f9f9f-9f9f-49f9-89f9-9f9f9f9f9f9f",
+        )
+      ) {
+        const payload = JSON.parse(String(init?.body)) as {
+          value: string | null;
+          block_instance_id: string | null;
+        };
+        const attachment = attachmentItems.find((item) => item.id === payload.value);
+        const fileRef =
+          payload.value && attachment
+            ? {
+                attachment_id: attachment.id,
+                title: attachment.title ?? attachment.original_filename,
+                original_filename: attachment.original_filename,
+                content_type: attachment.content_type,
+                content_length_bytes: attachment.content_length_bytes,
+                scanner_status: attachment.scanner_status,
+                archived_at: attachment.archived_at,
+              }
+            : null;
+        cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].fileRef = fileRef;
+        return jsonResponse({
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbe",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          block_instance_id: payload.block_instance_id,
+          field_id: "9f9f9f9f-9f9f-49f9-89f9-9f9f9f9f9f9f",
+          value: fileRef,
+        });
+      }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")) {
         return jsonResponse(currentCardRead());
       }
@@ -1395,6 +1453,7 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     status: "",
     approved: false,
     repeatableNotes: [],
+    fileRef: null,
   };
   const blocks: CardRead["blocks"] = {
     main: {
@@ -1442,6 +1501,39 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
       })),
     };
   }
+  const hasFileRefField = schemaFieldItems.some(
+    (field) => field.id === apiPayloads.fileRefField.id,
+  );
+  if (hasFileRefField) {
+    blocks.main.instances[0].fields.supporting_file = {
+      field_id: apiPayloads.fileRefField.id,
+      code: apiPayloads.fileRefField.code,
+      field_type: apiPayloads.fileRefField.field_type,
+      value: state.fileRef,
+    };
+  }
+  const fields: CardRead["fields"] = {
+    status: {
+      field_id: "99999999-9999-4999-8999-999999999999",
+      code: "status",
+      field_type: "text",
+      value: state.status,
+    },
+    approved: {
+      field_id: "99999999-9999-4999-8999-999999999998",
+      code: "approved",
+      field_type: "bool",
+      value: state.approved,
+    },
+  };
+  if (hasFileRefField) {
+    fields.supporting_file = {
+      field_id: apiPayloads.fileRefField.id,
+      code: apiPayloads.fileRefField.code,
+      field_type: apiPayloads.fileRefField.field_type,
+      value: state.fileRef,
+    };
+  }
 
   return {
     ...apiPayloads.cardRead,
@@ -1452,26 +1544,17 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     blocks: {
       ...blocks,
     },
-    fields: {
-      status: {
-        field_id: "99999999-9999-4999-8999-999999999999",
-        code: "status",
-        field_type: "text",
-        value: state.status,
-      },
-      approved: {
-        field_id: "99999999-9999-4999-8999-999999999998",
-        code: "approved",
-        field_type: "bool",
-        value: state.approved,
-      },
-    },
+    fields,
   };
 }
 
 function enableRepeatableDetailsSchema() {
   schemaBlockItems = [...schemaBlockItems, apiPayloads.repeatableBlock];
   schemaFieldItems = [...schemaFieldItems, apiPayloads.repeatableField];
+}
+
+function enableFileRefSchema() {
+  schemaFieldItems = [...schemaFieldItems, apiPayloads.fileRefField];
 }
 
 function currentRegistrySchema() {
@@ -2994,6 +3077,115 @@ test("manages card attachments and generated documents in Russian UI", async () 
       }),
     ).toBe(true);
   });
+});
+
+test("selects and clears file_ref fields from existing card attachments", async () => {
+  enableFileRefSchema();
+  attachmentItems = [
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      stored_file_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      title: "Акт проверки",
+      description: null,
+      position: 0,
+      original_filename: "akt.txt",
+      content_type: "text/plain",
+      content_length_bytes: 11,
+      checksum_sha256: "a".repeat(64),
+      scanner_status: "deferred",
+      created_at: "2026-06-28T12:01:00Z",
+      archived_at: null,
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  expect(within(bulkForm).queryByLabelText("Файл карточки")).not.toBeInTheDocument();
+
+  const saveButton = await screen.findByRole("button", { name: "Сохранить Файл карточки" });
+  const fieldForm = saveButton.closest("form");
+  expect(fieldForm).toBeTruthy();
+  const fileSelect = within(fieldForm as HTMLElement).getByLabelText("Файл карточки");
+  expect(fileSelect.tagName).toBe("SELECT");
+  expect(within(fieldForm as HTMLElement).getByText("Акт проверки (akt.txt)")).toBeInTheDocument();
+
+  await user.selectOptions(fileSelect, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+  await user.click(saveButton);
+
+  expect(await screen.findByText("Сохранено: Файл карточки")).toBeInTheDocument();
+  await waitFor(() => {
+    const fileRefCalls = vi.mocked(fetch).mock.calls.filter(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/9f9f9f9f-9f9f-49f9-89f9-9f9f9f9f9f9f",
+        ) && init?.method === "PATCH"
+      );
+    });
+    expect(
+      fileRefCalls.some(([, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { value?: unknown };
+        return body.value === "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+      }),
+    ).toBe(true);
+  });
+
+  await user.click(within(fieldForm as HTMLElement).getByRole("button", { name: "Очистить файл" }));
+  await user.click(saveButton);
+
+  await waitFor(() => {
+    const fileRefCalls = vi.mocked(fetch).mock.calls.filter(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/9f9f9f9f-9f9f-49f9-89f9-9f9f9f9f9f9f",
+        ) && init?.method === "PATCH"
+      );
+    });
+    expect(
+      fileRefCalls.some(([, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { value?: unknown };
+        return body.value === null;
+      }),
+    ).toBe(true);
+  });
+});
+
+test("shows file_ref empty and archived states in Russian UI", async () => {
+  enableFileRefSchema();
+  cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].fileRef = {
+    attachment_id: "f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1",
+    title: "Архивный акт",
+    original_filename: "archive.txt",
+    content_type: "text/plain",
+    content_length_bytes: 12,
+    scanner_status: "deferred",
+    archived_at: "2026-06-28T12:02:00Z",
+  };
+  attachmentItems = [];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const saveButton = await screen.findByRole("button", { name: "Сохранить Файл карточки" });
+  const fieldForm = saveButton.closest("form");
+  expect(fieldForm).toBeTruthy();
+  expect(within(fieldForm as HTMLElement).getByText("Файл архивирован")).toBeInTheDocument();
+  expect(within(fieldForm as HTMLElement).getByText("Нет вложений")).toBeInTheDocument();
+  expect(
+    within(fieldForm as HTMLElement).getByText("Сначала загрузите файл во Вложения"),
+  ).toBeInTheDocument();
 });
 
 test("creates and archives document templates in Russian UI", async () => {
