@@ -66,6 +66,7 @@ Completed phases:
 - Phase 3B: Import Preview And Mapping.
 - Phase 3C: Import Commit And Export Polish.
 - Phase 4A: Report Foundation API.
+- Phase 5A: MCP Read-Only Gateway.
 
 Current stop point:
 
@@ -153,14 +154,16 @@ Current stop point:
 - Production PostgreSQL is migrated to `0010_reports` after fresh backup,
   preflight, disposable PostgreSQL verification, Alembic upgrade, post-checks,
   backend service restart, live OpenAPI route verification, and server check.
-- Phase 5A MCP Read-Only Gateway is the active implementation checkpoint:
-  read-only MCP JSON-RPC tools call the REST API only, do not import DB/models
-  or service layer, send `X-Reg-Engine-Source: mcp`, and migration
-  `0011_mcp_audit_source` is implemented locally and has passed disposable
-  PostgreSQL verification. Production migration/deploy evidence is still
-  pending.
-- Next planned work after Phase 5A is MCP hardening/configuration or explicitly
-  approved MCP write tools; write tools are not approved in the current plan.
+- Phase 5A MCP Read-Only Gateway is completed: read-only MCP JSON-RPC tools
+  call the REST API only, do not import DB/models or service layer, send
+  `X-Reg-Engine-Source: mcp`, and migration `0011_mcp_audit_source` is
+  implemented, pushed, deployed, and migrated in production.
+- Production PostgreSQL is migrated to `0011_mcp_audit_source` after fresh
+  backup, preflight, disposable PostgreSQL verification, Alembic upgrade,
+  post-checks, backend service restart, live MCP sanity, and server check.
+- Next planned work requires explicit prioritization: MCP hardening/config,
+  MCP write tools, report UI/polish, non-JSON reports, XLSX workflows, or
+  another deferred phase.
 - Later explicit phases remain report frontend UI/polish, non-JSON report
   outputs, and Phase 5 MCP.
 - XLSX export/import, import/export frontend UI, binary attachment/document
@@ -792,7 +795,7 @@ Completion evidence:
 
 ## Phase 2L: Core Admin CRUD UI
 
-Status: in progress.
+Status: completed for the approved read-only MCP gateway slice.
 
 Purpose: make the authenticated Russian-first admin UI capable of setting up
 and operating the registry engine from an empty or near-empty database without
@@ -1618,8 +1621,7 @@ Planned overall scope:
 
 ### Phase 5A: MCP Read-Only Gateway
 
-Status: implementation complete locally; deploy and production migration
-pending.
+Status: completed.
 
 Purpose: add a first read-only MCP gateway that uses the existing REST API as
 the only business-logic boundary.
@@ -1654,16 +1656,27 @@ Verification so far:
   `alembic upgrade head` through `0011_mcp_audit_source`.
 - PostgreSQL-backed Phase 5A targeted tests passed on the same disposable
   database.
+- Full `scripts/check.ps1 -SkipRemote` passed with backend pytest
+  `69 passed, 130 skipped`, frontend unit tests `29 passed`, frontend build,
+  and project tree check.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- Local MCP stdio sanity passed with `python -m app.mcp.server` for
+  `initialize` and `tools/list`.
+- Deployed commit `424c81c` to the configured server checkout.
+- Production PostgreSQL was migrated from `0010_reports` to
+  `0011_mcp_audit_source` after a fresh server-side backup outside Git,
+  preflight checks, disposable PostgreSQL verification, Alembic upgrade, and
+  post-checks.
+- Post-checks verified Alembic current `0011_mcp_audit_source (head)` and
+  `ck_audit_events_source` containing `mcp`.
+- Backend service was restarted; healthcheck returned `ok`,
+  `scripts/server-check.ps1` passed, live MCP stdio sanity returned
+  `initialize`, `tools/list`, and `reg_engine_health`, and installed console
+  script `reg-engine-mcp` responded to `initialize`.
 
 Production migration checkpoint:
 
-- `0011_mcp_audit_source` is explicitly part of the active Phase 5A plan.
-- Production migration may be applied only after this implementation is pushed
-  to `origin/main`, the server checkout is synchronized, a fresh production
-  backup is created, preflight checks confirm the intentional `reg_engine`
-  target and current Alembic revision, and post-checks confirm
-  `0011_mcp_audit_source`, `ck_audit_events_source` includes `mcp`, service
-  health, live MCP/OpenAPI sanity, and server checks.
+- Completed for `0011_mcp_audit_source`.
 
 Known limitations:
 
