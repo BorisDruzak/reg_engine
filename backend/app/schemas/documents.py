@@ -22,6 +22,8 @@ class DocumentTemplateRead(BaseModel):
     output_filename_template: str
     output_content_type: str
     is_active: bool
+    current_version_id: UUID | None = None
+    current_version_number: int | None = None
     created_at: datetime
     archived_at: datetime | None
 
@@ -30,6 +32,24 @@ class DocumentTemplateRead(BaseModel):
 
 class DocumentTemplateListRead(BaseModel):
     items: list[DocumentTemplateRead]
+
+
+class DocumentTemplateVersionRead(BaseModel):
+    id: UUID
+    template_id: UUID
+    version_number: int
+    template_format: str
+    original_filename: str | None
+    content_type: str | None
+    content_length_bytes: int | None
+    created_at: datetime
+    archived_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentTemplateVersionListRead(BaseModel):
+    items: list[DocumentTemplateVersionRead]
 
 
 class GeneratedDocumentCreate(BaseModel):
@@ -41,6 +61,7 @@ class GeneratedDocumentRead(BaseModel):
     id: UUID
     card_id: UUID
     template_id: UUID
+    template_version_id: UUID | None
     stored_file_id: UUID
     title: str
     output_filename: str

@@ -16,6 +16,8 @@ import type {
   DocumentTemplateCreatePayload,
   DocumentTemplateListRead,
   DocumentTemplateRead,
+  DocumentTemplateVersionListRead,
+  DocumentTemplateVersionRead,
   FieldValueListRead,
   FieldValuesBulkUpdatePayload,
   FieldValueRead,
@@ -597,11 +599,66 @@ export async function createDocumentTemplate(
   });
 }
 
+export async function uploadBinaryDocumentTemplate(
+  token: string,
+  registryId: string,
+  payload: {
+    file: File;
+    code: string;
+    name: string;
+    description?: string | null;
+    outputFilenameTemplate?: string;
+  },
+) {
+  const formData = new FormData();
+  formData.append("file", payload.file);
+  formData.append("code", payload.code);
+  formData.append("name", payload.name);
+  if (payload.description?.trim()) {
+    formData.append("description", payload.description.trim());
+  }
+  if (payload.outputFilenameTemplate?.trim()) {
+    formData.append("output_filename_template", payload.outputFilenameTemplate.trim());
+  }
+  return apiRequest<DocumentTemplateRead>(
+    `/api/v1/registries/${registryId}/document-templates/upload`,
+    {
+      method: "POST",
+      token,
+      body: formData,
+    },
+  );
+}
+
 export async function archiveDocumentTemplate(token: string, templateId: string) {
   return apiRequest<DocumentTemplateRead>(`/api/v1/document-templates/${templateId}`, {
     method: "DELETE",
     token,
   });
+}
+
+export async function listDocumentTemplateVersions(token: string, templateId: string) {
+  return apiRequest<DocumentTemplateVersionListRead>(
+    `/api/v1/document-templates/${templateId}/versions`,
+    { token },
+  );
+}
+
+export async function uploadBinaryDocumentTemplateVersion(
+  token: string,
+  templateId: string,
+  file: File,
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<DocumentTemplateVersionRead>(
+    `/api/v1/document-templates/${templateId}/versions/upload`,
+    {
+      method: "POST",
+      token,
+      body: formData,
+    },
+  );
 }
 
 export async function listGeneratedDocuments(token: string, cardId: string) {

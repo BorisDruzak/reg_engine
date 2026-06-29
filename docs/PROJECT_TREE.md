@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 00:49:30 +05:00
+- Generated: 2026-06-30 02:25:21 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -99,6 +99,7 @@
 - `backend/migrations/versions/0006_generated_documents.py`
 - `backend/migrations/versions/0007_public_link_attachment_limits.py`
 - `backend/migrations/versions/0008_file_ref_field_values.py`
+- `backend/migrations/versions/0009_document_template_versions.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -133,6 +134,7 @@
 - `docs/ADR/0005-attachment-storage-architecture.md`
 - `docs/ADR/0006-generated-document-templates.md`
 - `docs/ADR/0007-file-ref-dynamic-field.md`
+- `docs/ADR/0008-binary-docx-template-versioning.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`

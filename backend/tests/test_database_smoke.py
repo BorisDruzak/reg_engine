@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "card_relations",
     "cards",
     "document_templates",
+    "document_template_versions",
     "field_value_items",
     "field_values",
     "form_blocks",
@@ -178,7 +179,7 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0008_file_ref_field_values"
+    assert version == "0009_document_template_versions"
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:
@@ -460,11 +461,21 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             created_by=user_id,
             updated_by=user_id,
         )
+        template_version_id = _insert_returning_id(
+            connection,
+            "document_template_versions",
+            template_id=template_id,
+            version_number=1,
+            template_format="docx_text_v1",
+            template_body="Card: {{ card.display_name }}",
+            created_by=user_id,
+        )
         _insert_returning_id(
             connection,
             "generated_documents",
             card_id=card_id,
             template_id=template_id,
+            template_version_id=template_version_id,
             stored_file_id=stored_file_id,
             title="Smoke generated document",
             output_filename="smoke.docx",

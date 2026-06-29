@@ -24,6 +24,7 @@ EXPECTED_TABLES = {
     "card_relations",
     "cards",
     "document_templates",
+    "document_template_versions",
     "field_value_items",
     "field_values",
     "form_blocks",
@@ -56,8 +57,15 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "CREATE EXTENSION IF NOT EXISTS pgcrypto" in sql
     assert "CREATE TABLE alembic_version" in sql
     for table_name in EXPECTED_TABLES:
-        assert f"CREATE TABLE {table_name}" in sql
+        assert f"CREATE TABLE {table_name}" in sql or f"CREATE TABLE public.{table_name}" in sql
     assert "0008_file_ref_field_values" in sql
+    assert "0009_document_template_versions" in sql
+    assert (
+        "CREATE TABLE document_template_versions" in sql
+        or "CREATE TABLE public.document_template_versions" in sql
+    )
+    assert "template_version_id UUID" in sql
+    assert "'docx_binary_v1'" in sql
     assert "value_attachment_id UUID" in sql
     assert "fk_field_values_value_attachment_id_card_attachments" in sql
     assert "ix_field_values_field_attachment" in sql

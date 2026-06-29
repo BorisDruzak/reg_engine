@@ -1,6 +1,16 @@
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,7 +42,7 @@ class DocumentTemplate(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
         nullable=False,
         server_default="docx_text_v1",
     )
-    template_body: Mapped[str] = mapped_column(Text, nullable=False)
+    template_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_filename_template: Mapped[str] = mapped_column(
         String, nullable=False, server_default="{{ card.display_name }}.docx"
     )
@@ -50,6 +60,55 @@ class DocumentTemplate(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     archive_reason: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class DocumentTemplateVersion(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
+    __tablename__ = "document_template_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "template_id",
+            "version_number",
+            name="uq_document_template_versions_template_version",
+        ),
+        CheckConstraint("version_number > 0", name="version_number_positive"),
+        CheckConstraint(
+            f"template_format in ({quoted(DOCUMENT_TEMPLATE_FORMATS)})",
+            name="template_format",
+        ),
+        CheckConstraint(
+            "template_format != 'docx_binary_v1' OR stored_file_id IS NOT NULL",
+            name="storage_for_binary",
+        ),
+        CheckConstraint(
+            "template_format != 'docx_text_v1' OR template_body IS NOT NULL",
+            name="body_for_text",
+        ),
+        Index("ix_document_template_versions_template_id", "template_id"),
+        Index("ix_document_template_versions_stored_file_id", "stored_file_id"),
+        Index("ix_document_template_versions_template_active", "template_id", "archived_at"),
+    )
+
+    template_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("document_templates.id"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    template_format: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        server_default="docx_text_v1",
+    )
+    template_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stored_file_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stored_files.id"), nullable=True
+    )
+    original_filename: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_length_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    archived_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    archive_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
 class GeneratedDocument(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "generated_documents"
     __table_args__ = (
@@ -59,6 +118,7 @@ class GeneratedDocument(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base)
         ),
         Index("ix_generated_documents_card_id", "card_id"),
         Index("ix_generated_documents_template_id", "template_id"),
+        Index("ix_generated_documents_template_version_id", "template_version_id"),
         Index("ix_generated_documents_stored_file_id", "stored_file_id"),
         Index("ix_generated_documents_card_archive", "card_id", "archived_at"),
     )
@@ -66,6 +126,9 @@ class GeneratedDocument(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base)
     card_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cards.id"))
     template_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("document_templates.id")
+    )
+    template_version_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("document_template_versions.id")
     )
     stored_file_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("stored_files.id")

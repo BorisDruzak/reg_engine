@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import UUID
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from alembic import command
@@ -21,6 +21,8 @@ from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_per
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
+
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _require_test_database_url() -> str:
@@ -119,6 +121,40 @@ def _restore_env(name: str, value: str | None) -> None:
 
 def _actor_headers(user_id: UUID) -> dict[str, str]:
     return {"X-Actor-User-Id": str(user_id)}
+
+
+def _binary_docx_bytes(body_text: str) -> bytes:
+    escaped_text = body_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f'<w:body><w:p><w:r><w:t xml:space="preserve">{escaped_text}</w:t></w:r></w:p>'
+        "</w:body></w:document>"
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.'
+            'wordprocessingml.document.main+xml"/>'
+            "</Types>",
+        )
+        archive.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+            'relationships"><Relationship Id="rId1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'officeDocument" Target="word/document.xml"/></Relationships>',
+        )
+        archive.writestr("word/document.xml", document_xml)
+    return buffer.getvalue()
 
 
 def _create_user(session: Session, email: str, *, is_superuser: bool = False) -> User:
@@ -356,3 +392,96 @@ def test_generated_document_api_supports_phase_2d_workflow(
         ).all()
     )
     assert {"generated_document_generate", "generated_document_archive"} <= audit_actions
+
+
+def test_binary_docx_template_upload_versions_and_generates_latest_version(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _document_api_context(db_session)
+
+    upload_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/document-templates/upload",
+        headers=_actor_headers(context["schema_admin"].id),
+        data={
+            "code": "binary-summary",
+            "name": "Бинарный шаблон",
+            "output_filename_template": "{{ card.display_name }}.docx",
+        },
+        files={
+            "file": (
+                "summary-v1.docx",
+                _binary_docx_bytes("V1 {{ card.display_name }} {{ fields.main.title }}"),
+                DOCX_CONTENT_TYPE,
+            )
+        },
+    )
+    assert upload_response.status_code == 201, upload_response.text
+    template_payload = upload_response.json()
+    assert template_payload["template_format"] == "docx_binary_v1"
+    assert template_payload["current_version_number"] == 1
+    assert template_payload["current_version_id"] is not None
+
+    versions_response = api_client.get(
+        f"/api/v1/document-templates/{template_payload['id']}/versions",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+    assert versions_response.status_code == 200, versions_response.text
+    versions = versions_response.json()["items"]
+    assert [version["version_number"] for version in versions] == [1]
+    assert versions[0]["template_format"] == "docx_binary_v1"
+    assert versions[0]["original_filename"] == "summary-v1.docx"
+    assert "stored_file_id" not in versions[0]
+    assert "checksum_sha256" not in versions[0]
+
+    version_two_response = api_client.post(
+        f"/api/v1/document-templates/{template_payload['id']}/versions/upload",
+        headers=_actor_headers(context["schema_admin"].id),
+        files={
+            "file": (
+                "summary-v2.docx",
+                _binary_docx_bytes("V2 {{ card.display_name }} {{ fields.main.title }}"),
+                DOCX_CONTENT_TYPE,
+            )
+        },
+    )
+    assert version_two_response.status_code == 201, version_two_response.text
+    version_two = version_two_response.json()
+    assert version_two["version_number"] == 2
+    assert version_two["original_filename"] == "summary-v2.docx"
+
+    generate_response = api_client.post(
+        f"/api/v1/cards/{context['card'].id}/generated-documents",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"template_id": template_payload["id"]},
+    )
+    assert generate_response.status_code == 201, generate_response.text
+    generated_payload = generate_response.json()
+    assert generated_payload["template_version_id"] == version_two["id"]
+    assert generated_payload["content_type"] == DOCX_CONTENT_TYPE
+
+    download_response = api_client.get(
+        f"/api/v1/generated-documents/{generated_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert download_response.status_code == 200, download_response.text
+    with ZipFile(BytesIO(download_response.content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "V2" in rendered_xml
+    assert "{{ card.display_name }}" not in rendered_xml
+    assert "{{ fields.main.title }}" not in rendered_xml
+    assert "V1" not in rendered_xml
+
+    invalid_upload_response = api_client.post(
+        f"/api/v1/document-templates/{template_payload['id']}/versions/upload",
+        headers=_actor_headers(context["schema_admin"].id),
+        files={"file": ("not-docx.txt", b"not a zip", "text/plain")},
+    )
+    assert invalid_upload_response.status_code == 422, invalid_upload_response.text
+
+    audit_actions = set(
+        db_session.scalars(
+            select(AuditEvent.action).where(AuditEvent.object_type == "document_template")
+        ).all()
+    )
+    assert {"document_template_create", "document_template_version_create"} <= audit_actions

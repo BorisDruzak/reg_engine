@@ -12,6 +12,7 @@ EXPECTED_TABLES = {
     "card_relations",
     "cards",
     "document_templates",
+    "document_template_versions",
     "field_value_items",
     "field_values",
     "form_blocks",
@@ -130,6 +131,7 @@ def test_attachment_metadata_tables_use_required_columns() -> None:
 
 def test_generated_document_metadata_tables_use_required_columns() -> None:
     document_templates = Base.metadata.tables["document_templates"]
+    document_template_versions = Base.metadata.tables["document_template_versions"]
     generated_documents = Base.metadata.tables["generated_documents"]
 
     for column_name in {
@@ -151,8 +153,25 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
         assert column_name in document_templates.c
 
     for column_name in {
+        "template_id",
+        "version_number",
+        "template_format",
+        "template_body",
+        "stored_file_id",
+        "original_filename",
+        "content_type",
+        "content_length_bytes",
+        "created_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in document_template_versions.c
+
+    for column_name in {
         "card_id",
         "template_id",
+        "template_version_id",
         "stored_file_id",
         "title",
         "output_filename",

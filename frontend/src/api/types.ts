@@ -530,6 +530,8 @@ export type DocumentTemplateRead = {
   output_filename_template: string;
   output_content_type: string;
   is_active: boolean;
+  current_version_id?: string | null;
+  current_version_number?: number | null;
   created_at: string;
   archived_at: string | null;
 };
@@ -546,10 +548,27 @@ export type DocumentTemplateListRead = {
   items: DocumentTemplateRead[];
 };
 
+export type DocumentTemplateVersionRead = {
+  id: string;
+  template_id: string;
+  version_number: number;
+  template_format: string;
+  original_filename: string | null;
+  content_type: string | null;
+  content_length_bytes: number | null;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type DocumentTemplateVersionListRead = {
+  items: DocumentTemplateVersionRead[];
+};
+
 export type GeneratedDocumentRead = {
   id: string;
   card_id: string;
   template_id: string;
+  template_version_id?: string | null;
   stored_file_id: string | null;
   title: string;
   output_filename: string;

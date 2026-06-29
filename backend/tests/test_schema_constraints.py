@@ -32,6 +32,7 @@ def test_important_unique_constraints_exist() -> None:
         "reference_items": {"uq_reference_items_list_id_code"},
         "card_block_instances": {"uq_card_block_instances_card_id_block_id_ordinal"},
         "document_templates": {"uq_document_templates_registry_id_code"},
+        "document_template_versions": {"uq_document_template_versions_template_version"},
         "stored_files": {"uq_stored_files_storage_key"},
         "field_value_items": {"uq_field_value_items_value_item"},
         "card_relations": {"uq_card_relations_source_target_type"},
@@ -54,6 +55,11 @@ def test_important_check_constraints_exist() -> None:
         },
         "card_attachments": {"ck_card_attachments_position_non_negative"},
         "document_templates": {"ck_document_templates_template_format"},
+        "document_template_versions": {
+            "ck_document_template_versions_template_format",
+            "ck_document_template_versions_version_number_positive",
+            "ck_document_template_versions_storage_for_binary",
+        },
         "generated_documents": {"ck_generated_documents_render_status"},
         "card_public_links": {
             "ck_card_public_links_status",
@@ -104,9 +110,15 @@ def test_important_indexes_exist() -> None:
             "ix_document_templates_registry_id",
             "ix_document_templates_registry_archive",
         },
+        "document_template_versions": {
+            "ix_document_template_versions_template_id",
+            "ix_document_template_versions_stored_file_id",
+            "ix_document_template_versions_template_active",
+        },
         "generated_documents": {
             "ix_generated_documents_card_id",
             "ix_generated_documents_template_id",
+            "ix_generated_documents_template_version_id",
             "ix_generated_documents_stored_file_id",
             "ix_generated_documents_card_archive",
         },

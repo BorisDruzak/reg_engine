@@ -60,6 +60,7 @@ Completed phases:
 - Phase 2J.5: `file_ref` Frontend Authenticated Editor.
 - Phase 2J.6: `file_ref` Generated Document Rendering.
 - Phase 2J.7: `file_ref` Live Validation.
+- Phase 2M: Binary `.docx` Template Upload And Template Versioning.
 
 Current stop point:
 
@@ -119,12 +120,12 @@ Current stop point:
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
 - Phase 2J is complete.
-- Next planned work is Phase 2M binary `.docx` template upload and template
-  versioning, which remains an explicit advanced document phase.
-- Later explicit phases remain Phase 2M binary `.docx` template
-  upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
-  reports, and Phase 5 MCP.
-- PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
+- Phase 2M binary `.docx` template upload and template versioning is
+  completed as an authenticated backend API and migration slice.
+- Next planned work is Phase 2N PDF conversion.
+- Later explicit phases remain Phase 2N PDF conversion, Phase 3
+  import/export, Phase 4 reports, and Phase 5 MCP.
+- PDF conversion, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -241,6 +242,13 @@ Completed Phase 2 work:
   storage for the full `file_ref` flow: create schema, upload attachment, set
   and read metadata, generate document text, transfer card, verify target-card
   attachment link, verify transfer audit metadata, and clean up test resources.
+- Phase 2M added `document_template_versions`, migration
+  `0009_document_template_versions`, authenticated binary `.docx` template
+  upload, binary version upload/list API, generated-document
+  `template_version_id`, and latest-version rendering for `docx_binary_v1`.
+  Public document workflows, binary template download, PDF conversion,
+  advanced Word run/content-control templating, import/export, reports, and MCP
+  remain deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
@@ -1188,6 +1196,8 @@ reprioritizes them.
 
 ### Phase 2M: Binary `.docx` Template Upload And Template Versioning
 
+Status: completed.
+
 Purpose: move from JSON `docx_text_v1` template bodies toward managed binary template assets and version history.
 
 Planned scope:
@@ -1197,6 +1207,40 @@ Planned scope:
 - Add template versions.
 - Keep templates schema-driven and avoid real personal data in Git/tests.
 - Keep PDF conversion deferred.
+
+Completion evidence:
+
+- Added migration `0009_document_template_versions`.
+- Added `document_template_versions` with version number, template format,
+  text body or stored binary file reference, safe binary metadata, archive
+  fields, and uniqueness/index/check constraints.
+- Existing text templates are backfilled as version `1`.
+- Added `generated_documents.template_version_id`.
+- Added `docx_binary_v1` template format support.
+- Added authenticated multipart API:
+  `POST /api/v1/registries/{registry_id}/document-templates/upload`,
+  `GET /api/v1/document-templates/{template_id}/versions`, and
+  `POST /api/v1/document-templates/{template_id}/versions/upload`.
+- Binary template files are stored through the storage abstraction under the
+  `document_templates` prefix and are not stored in Git.
+- Generation uses the latest active template version and records the
+  `template_version_id`.
+- Version read responses expose safe metadata and omit storage keys, checksums,
+  and stored-file ids.
+- Tests cover metadata/migration constraints, binary upload, version upload,
+  latest-version generation, invalid upload rejection, safe version response
+  shape, and audit events.
+
+Known limitations:
+
+- No browser UI for binary template upload in this slice.
+- Binary template download is not exposed.
+- The first `docx_binary_v1` renderer replaces placeholders in `.docx` XML
+  parts when placeholders are contiguous text; advanced Word run merging,
+  content controls, tables/repeated sections, and conditional blocks are
+  deferred.
+- PDF conversion, public generated-document workflows, import/export, reports,
+  and MCP remain deferred.
 
 ### Phase 2N: PDF Conversion
 

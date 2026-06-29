@@ -3,7 +3,8 @@
 Phase 2C adds the backend foundation for generated `.docx` documents. It does
 not add frontend UI, public-link file flows, PDF conversion, import/export,
 MCP, MDB migration, or service desk integration. Phase 2J.6 later added
-`file_ref` text rendering to the existing `docx_text_v1` renderer.
+`file_ref` text rendering to the existing `docx_text_v1` renderer. Phase 2M
+later added binary `.docx` template upload and template versioning.
 
 ## Metadata Schema
 
@@ -29,6 +30,27 @@ Important columns:
 - `archive_reason`
 
 The accepted Phase 2C `template_format` is `docx_text_v1`.
+
+Phase 2M adds `docx_binary_v1` for uploaded binary `.docx` templates.
+
+### `document_template_versions`
+
+One row describes one immutable version of a document template.
+
+Important columns:
+
+- `template_id`
+- `version_number`
+- `template_format`
+- `template_body`
+- `stored_file_id`
+- `original_filename`
+- `content_type`
+- `content_length_bytes`
+- `created_by`
+- `archived_at`
+- `archived_by`
+- `archive_reason`
 
 ### `generated_documents`
 
@@ -77,6 +99,15 @@ Archived referenced attachments keep rendering metadata with an `(архив)`
 marker. The renderer does not embed attachment binaries or add download URLs for
 `file_ref`.
 
+`docx_binary_v1` templates are uploaded through authenticated multipart API
+endpoints and stored through the storage abstraction under the
+`document_templates` prefix. Generation uses the latest active version and
+records `generated_documents.template_version_id`. The first binary renderer
+replaces supported placeholders in `.docx` XML parts when placeholders are
+stored as contiguous text. It does not implement PDF conversion, template
+download, public document workflows, or advanced Word run/content-control
+templating.
+
 ## Service Boundary
 
 ### `DocumentService`
@@ -84,6 +115,8 @@ marker. The renderer does not embed attachment binaries or add download URLs for
 Responsibilities:
 
 - create document templates;
+- upload binary document templates;
+- create and list document template versions;
 - archive document templates;
 - generate `.docx` documents from schema-driven card data;
 - create `stored_files` and `generated_documents` metadata;
@@ -122,6 +155,8 @@ Implemented Phase 2C regression tests include:
 - `test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text`
 - `test_docx_text_v1_renders_empty_file_ref_as_empty_text`
 - `test_docx_text_v1_renders_archived_file_ref_with_archive_marker`
+- `test_binary_docx_template_upload_versions_and_generates_latest_version`
 
 Migration and metadata tests also cover `document_templates`,
-`generated_documents`, indexes, constraints, and Alembic head.
+`document_template_versions`, `generated_documents`, indexes, constraints, and
+Alembic head.
