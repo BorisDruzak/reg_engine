@@ -53,6 +53,7 @@ Completed phases:
 - Phase 2L.8: Public Link Admin Controls UI.
 - Phase 2L.9: Admin UI Live Validation.
 - Phase 2J.0: `file_ref` Planning And ADR.
+- Phase 2J.1: `file_ref` Database And Model Foundation.
 
 Current stop point:
 
@@ -67,6 +68,9 @@ Current stop point:
 - Phase 2K Core Backend API Completeness is completed.
 - Phase 2J.0 `file_ref` planning and ADR is completed and recorded in
   `docs/ADR/0007-file-ref-dynamic-field.md`.
+- Phase 2J.1 `file_ref` database and model foundation is completed:
+  migration `0008_file_ref_field_values`, metadata support, and model smoke
+  tests are in place.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -81,9 +85,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.1 Database And Model Foundation for `file_ref`.
-  This is a migration/model checkpoint and must follow the project migration
-  rules before touching any production database.
+- Next planned work is Phase 2J.2 Backend Service Support for `file_ref`.
+  Service code must keep public-link edit blocked/deferred and must reject
+  wrong-card or archived attachment selections.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -168,10 +172,15 @@ Completed Phase 2 work:
 - Phase 2H added public-link attachment list/upload/download for active public edit links without adding public archive/delete, generated-document controls, `file_ref`, PDF conversion, import/export, MCP, or a new migration.
 - Phase 2I separated public field-edit usage limits from public attachment upload limits, added rollback storage cleanup, clarified download streaming deferral, and fixed public no-file UI validation text.
 - Phase 2J.0 accepted the `file_ref` dynamic field type ADR without adding backend code, frontend code, API endpoints, or migrations.
+- Phase 2J.1 added `field_values.value_attachment_id`, registered the generic
+  `file_ref` field type, added migration `0008_file_ref_field_values`, and
+  added model/migration smoke coverage. Type registration supports schema
+  persistence, but value-setting/read service semantics, endpoints, frontend UI,
+  public-link editing, import/export, PDF, reports, and MCP remain deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 is completed and Phase 2J.1 is the next planned implementation slice.
+Status: in progress; Phase 2J.0 and Phase 2J.1 are completed and Phase 2J.2 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -210,6 +219,8 @@ Completion evidence:
 
 ### Phase 2J.1: Database And Model Foundation
 
+Status: completed.
+
 Required work after Phase 2J.0 acceptance:
 
 - Add migration, expected as `0008_file_ref_field_values` or equivalent.
@@ -223,6 +234,19 @@ Acceptance criteria:
 - Migration applies cleanly on disposable PostgreSQL.
 - Metadata/schema tests cover the new column, FK, index, and allowed field type.
 - No HR-specific document field is added.
+
+Completion evidence:
+
+- Added migration `0008_file_ref_field_values`.
+- Added nullable `field_values.value_attachment_id` referencing
+  `card_attachments.id`.
+- Added index `ix_field_values_field_attachment`.
+- Added `file_ref` to the generic dynamic field type check.
+- Added model/migration smoke tests for column, FK, index, and allowed type.
+- Type registration now supports schema persistence, but no `file_ref`
+  value-setting/read service semantics, REST value API metadata behavior,
+  frontend UI, public-link `file_ref` editing, import/export, PDF, reports, MCP,
+  or HR-specific document model was added in Phase 2J.1.
 
 ### Phase 2J.2: Backend Service Support
 

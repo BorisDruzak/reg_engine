@@ -1,3 +1,6 @@
+from sqlalchemy import CheckConstraint
+
+from app.domain.constants import FIELD_TYPES
 from app.models import Base
 
 EXPECTED_TABLES = {
@@ -66,6 +69,30 @@ def test_dynamic_values_use_typed_columns() -> None:
         "value_reference_item_id",
     }:
         assert column_name in field_values.c
+
+
+def test_file_ref_database_foundation_metadata_is_registered() -> None:
+    assert "file_ref" in FIELD_TYPES
+
+    field_values = Base.metadata.tables["field_values"]
+
+    assert "value_attachment_id" in field_values.c
+    assert {
+        index.name: [column.name for column in index.columns] for index in field_values.indexes
+    }["ix_field_values_field_attachment"] == ["field_id", "value_attachment_id"]
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in field_values.c.value_attachment_id.foreign_keys
+    } == {("card_attachments", "id")}
+
+    form_fields = Base.metadata.tables["form_fields"]
+    field_type_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in form_fields.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert "file_ref" in field_type_checks["ck_form_fields_field_type"]
 
 
 def test_attachment_metadata_tables_use_required_columns() -> None:

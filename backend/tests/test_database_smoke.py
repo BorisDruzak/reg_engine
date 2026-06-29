@@ -178,7 +178,7 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0007_public_link_limits"
+    assert version == "0008_file_ref_field_values"
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:
@@ -334,6 +334,15 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             options_source_id=reference_list_id,
             created_by=user_id,
         )
+        file_ref_field_id = _insert_returning_id(
+            connection,
+            "form_fields",
+            block_id=block_id,
+            code="attachment",
+            label="Attachment",
+            field_type="file_ref",
+            created_by=user_id,
+        )
 
         card_id = _insert_returning_id(
             connection,
@@ -423,13 +432,23 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             scanner_status="deferred",
             created_by=user_id,
         )
-        _insert_returning_id(
+        card_attachment_id = _insert_returning_id(
             connection,
             "card_attachments",
             card_id=card_id,
             stored_file_id=stored_file_id,
             title="Smoke attachment",
             created_by=user_id,
+        )
+        _insert_returning_id(
+            connection,
+            "field_values",
+            card_id=card_id,
+            block_instance_id=block_instance_id,
+            field_id=file_ref_field_id,
+            value_attachment_id=card_attachment_id,
+            created_by=user_id,
+            updated_by=user_id,
         )
         template_id = _insert_returning_id(
             connection,

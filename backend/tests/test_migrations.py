@@ -57,6 +57,11 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "CREATE TABLE alembic_version" in sql
     for table_name in EXPECTED_TABLES:
         assert f"CREATE TABLE {table_name}" in sql
+    assert "0008_file_ref_field_values" in sql
+    assert "value_attachment_id UUID" in sql
+    assert "fk_field_values_value_attachment_id_card_attachments" in sql
+    assert "ix_field_values_field_attachment" in sql
+    assert "'file_ref'" in sql
     assert "CREATE TABLE employees" not in sql
 
 

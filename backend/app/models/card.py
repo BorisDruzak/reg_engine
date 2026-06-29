@@ -104,6 +104,7 @@ class FieldValue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_field_values_field_user", "field_id", "value_user_id"),
         Index("ix_field_values_field_organization", "field_id", "value_organization_id"),
         Index("ix_field_values_field_org_unit", "field_id", "value_org_unit_id"),
+        Index("ix_field_values_field_attachment", "field_id", "value_attachment_id"),
     )
 
     card_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cards.id"))
@@ -134,6 +135,9 @@ class FieldValue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     value_registry_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("registries.id")
+    )
+    value_attachment_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("card_attachments.id")
     )
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
     updated_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))

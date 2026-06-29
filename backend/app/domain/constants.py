@@ -15,6 +15,7 @@ FIELD_TYPES = (
     "organization_ref",
     "org_unit_ref",
     "registry_ref",
+    "file_ref",
 )
 REQUIRED_MODES = ("not_required", "required", "required_on_publish")
 PUBLIC_LINK_STATUSES = ("active", "disabled", "expired")
