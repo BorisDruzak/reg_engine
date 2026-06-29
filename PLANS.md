@@ -122,6 +122,10 @@ Current stop point:
 - Phase 2J is complete.
 - Phase 2M binary `.docx` template upload and template versioning is
   completed as an authenticated backend API and migration slice.
+- Production PostgreSQL is migrated to
+  `0009_document_template_versions` after fresh backup, preflight,
+  disposable PostgreSQL verification, Alembic upgrade, post-checks, backend
+  service restart, and server check.
 - Next planned work is Phase 2N PDF conversion.
 - Later explicit phases remain Phase 2N PDF conversion, Phase 3
   import/export, Phase 4 reports, and Phase 5 MCP.
@@ -1230,6 +1234,13 @@ Completion evidence:
 - Tests cover metadata/migration constraints, binary upload, version upload,
   latest-version generation, invalid upload rejection, safe version response
   shape, and audit events.
+- Production PostgreSQL was migrated from `0008_file_ref_field_values` to
+  `0009_document_template_versions` after a fresh server-side backup outside
+  Git, preflight checks, disposable PostgreSQL verification, and post-checks.
+  Post-checks verified Alembic current `0009_document_template_versions`,
+  `document_template_versions`, `generated_documents.template_version_id`,
+  nullable `document_templates.template_body`, key constraints, and indexes.
+  The backend service was restarted and `scripts/server-check.ps1` passed.
 
 Known limitations:
 
