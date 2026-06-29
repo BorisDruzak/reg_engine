@@ -50,6 +50,7 @@ Completed phases:
 - Phase 2L.5: Schema Builder UI.
 - Phase 2L.6: Reference List Management UI.
 - Phase 2L.7: Card Create, Metadata, And Editor UI.
+- Phase 2L.8: Public Link Admin Controls UI.
 
 Current stop point:
 
@@ -72,10 +73,11 @@ Current stop point:
 - Phase 2L.5 Schema Builder UI is completed.
 - Phase 2L.6 Reference List Management UI is completed.
 - Phase 2L.7 Card Create, Metadata, And Editor UI is completed.
+- Phase 2L.8 Public Link Admin Controls UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder,
   reference lists, and cards.
-- Phase 2L.8 Public Link Admin Controls UI is the next implementation
+- Phase 2L.9 Admin UI Live Validation is the next implementation
   slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
@@ -122,8 +124,9 @@ The current authenticated frontend is not yet a complete admin workspace:
 - cards can be created, metadata-edited, archived, edited through existing
   per-field controls, edited through atomic bulk save, and managed with
   repeatable block-instance add/archive controls;
-- authenticated public-link list/create/disable controls are still incomplete
-  and remain assigned to Phase 2L.8.
+- authenticated public-link list/create/disable controls are available on the
+  card workspace and expose separate attachment-upload limit semantics;
+- the remaining Phase 2L work is the full browser live-validation pass.
 
 Phase 2L exists to close the remaining frontend workflow gaps before advanced
 document, import/export, report, or MCP phases.
@@ -858,6 +861,8 @@ Completion evidence:
 
 ### Phase 2L.8: Public Link Admin Controls UI
 
+Status: completed.
+
 Required work:
 
 - Add authenticated public-link list/create/disable controls on the card
@@ -872,6 +877,33 @@ Acceptance criteria:
 - User can set attachment upload limit at link creation.
 - Public-link UI tests cover disabled, expired, upload-limit, and no-file
   validation messaging.
+
+Completion evidence:
+
+- Added Russian-first authenticated public-link panel to the card workspace.
+- Public-link list shows active, disabled, expired, field-edit usage, and
+  attachment-upload usage as separate concepts.
+- Create form exposes `expires_in_days` and `max_attachment_uploads`; blank
+  upload limit maps to unlimited uploads and does not overload `used_count`.
+- Created public-link raw token and relative public edit URL are shown only
+  after a successful create response.
+- Disable flow uses explicit confirmation and the existing authenticated
+  public-link archive endpoint.
+- Added frontend unit coverage for list/create/disable, disabled status,
+  expired status, exhausted upload limit, separate usage counters, and create
+  payload shape without `max_uses`/`used_count`.
+- Existing public-link frontend test continues to cover no-file validation with
+  `Выберите файл`.
+- Updated Playwright smoke to cover the authenticated public-link panel.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx -t
+  "public links from authenticated"`, `pnpm -C frontend test:run`,
+  `pnpm -C frontend lint`, `pnpm -C frontend typecheck`,
+  `pnpm -C frontend e2e`, and
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Verified `powershell -ExecutionPolicy Bypass -File scripts/check.ps1
+  -SkipRemote`.
+- No backend code, migrations, generated-document public workflows, `file_ref`,
+  PDF conversion, import/export, reports, or MCP work was added.
 
 ### Phase 2L.9: Admin UI Live Validation
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+﻿import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -14,6 +14,7 @@ import type {
   GeneratedDocumentRead,
   OrganizationRead,
   OrgUnitRead,
+  PublicLinkRead,
   ReferenceItemRead,
   ReferenceListRead,
   RegistryRead,
@@ -275,6 +276,62 @@ const apiPayloads = {
       },
     },
   },
+  publicLinks: {
+    items: [
+      {
+        id: "41414141-4141-4141-8141-414141414141",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "active",
+        can_view: true,
+        can_edit: true,
+        expires_at: "2099-07-05T12:00:00Z",
+        max_uses: 5,
+        used_count: 1,
+        max_attachment_uploads: 3,
+        attachment_upload_count: 1,
+        disabled_at: null,
+      },
+      {
+        id: "42424242-4242-4242-8242-424242424242",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "disabled",
+        can_view: true,
+        can_edit: true,
+        expires_at: "2099-07-05T12:00:00Z",
+        max_uses: null,
+        used_count: 0,
+        max_attachment_uploads: null,
+        attachment_upload_count: 0,
+        disabled_at: "2026-06-28T12:00:00Z",
+      },
+      {
+        id: "43434343-4343-4343-8343-434343434343",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "expired",
+        can_view: true,
+        can_edit: true,
+        expires_at: "2026-06-28T12:00:00Z",
+        max_uses: 2,
+        used_count: 0,
+        max_attachment_uploads: 2,
+        attachment_upload_count: 0,
+        disabled_at: null,
+      },
+      {
+        id: "44444444-4444-4444-8444-444444444445",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "active",
+        can_view: true,
+        can_edit: true,
+        expires_at: "2099-07-05T12:00:00Z",
+        max_uses: 10,
+        used_count: 2,
+        max_attachment_uploads: 2,
+        attachment_upload_count: 2,
+        disabled_at: null,
+      },
+    ] as PublicLinkRead[],
+  },
   attachments: {
     items: [] as AttachmentRead[],
   },
@@ -389,6 +446,7 @@ let cardValueStateById: Record<
   }
 >;
 let denyNextCardUpdate = false;
+let publicLinkItems: PublicLinkRead[];
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
@@ -422,6 +480,7 @@ beforeEach(() => {
     },
   };
   denyNextCardUpdate = false;
+  publicLinkItems = [...apiPayloads.publicLinks.items];
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
@@ -984,6 +1043,59 @@ beforeEach(() => {
           return jsonResponse(created, { status: 201 });
         }
         return jsonResponse({ items: cardItems });
+      }
+      if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links")) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            expires_in_days?: number;
+            max_attachment_uploads?: number | null;
+          };
+          const created: PublicLinkRead = {
+            id: "45454545-4545-4545-8545-454545454545",
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            status: "active",
+            can_view: true,
+            can_edit: true,
+            expires_at: "2099-07-04T12:00:00Z",
+            max_uses: null,
+            used_count: 0,
+            max_attachment_uploads: payload.max_attachment_uploads ?? null,
+            attachment_upload_count: 0,
+            disabled_at: null,
+          };
+          publicLinkItems = [...publicLinkItems, created];
+          return jsonResponse(
+            {
+              id: created.id,
+              card_id: created.card_id,
+              raw_token: "created-public-token",
+              status: created.status,
+              can_edit: created.can_edit,
+              expires_at: created.expires_at,
+            },
+            { status: 201 },
+          );
+        }
+        return jsonResponse({ items: publicLinkItems });
+      }
+      if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/public-links")) {
+        return jsonResponse({ items: [] });
+      }
+      if (url.includes("/api/v1/public-links/") && init?.method === "DELETE") {
+        const publicLinkId = url.split("/api/v1/public-links/")[1];
+        const current = publicLinkItems.find((item) => item.id === publicLinkId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        const disabled: PublicLinkRead = {
+          ...current,
+          status: "disabled",
+          disabled_at: "2026-06-28T13:00:00Z",
+        };
+        publicLinkItems = publicLinkItems.map((item) =>
+          item.id === publicLinkId ? disabled : item,
+        );
+        return jsonResponse(disabled);
       }
       if (
         url.endsWith(
@@ -1651,6 +1763,73 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
       fetchMock.mock.calls.some(
         ([input, init]) =>
           String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("manages public links from authenticated card workspace", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByRole("heading", { name: "Публичные ссылки" })).toBeInTheDocument();
+  expect(screen.getAllByText("Статус ссылки: Активна").length).toBeGreaterThan(0);
+  expect(screen.getByText("Статус ссылки: Отключена")).toBeInTheDocument();
+  expect(screen.getByText("Статус ссылки: Истекла")).toBeInTheDocument();
+  expect(screen.getByText("Редактирование полей: 1 из 5")).toBeInTheDocument();
+  expect(screen.getByText("Загрузки вложений: 1 из 3")).toBeInTheDocument();
+  expect(screen.getByText("Загрузки вложений: 2 из 2")).toBeInTheDocument();
+  expect(screen.getByText("Лимит загрузок исчерпан")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Создать публичную ссылку" }));
+  const expiresInput = await screen.findByLabelText("Срок действия ссылки, дней");
+  await user.clear(expiresInput);
+  await user.type(expiresInput, "5");
+  await user.type(screen.getByLabelText("Лимит загрузок вложений"), "2");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Публичная ссылка создана")).toBeInTheDocument();
+  expect(screen.getByText("created-public-token")).toBeInTheDocument();
+  expect(screen.getAllByText("Загрузки вложений: 0 из 2").length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", {
+      name: "Отключить публичную ссылку 41414141",
+    }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Отключить публичную ссылку" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Отключить" }));
+
+  expect(await screen.findByText("Публичная ссылка отключена")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links") &&
+        init?.method === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(createBody).toEqual({
+      expires_in_days: 5,
+      max_attachment_uploads: 2,
+    });
+    expect(createBody).not.toHaveProperty("max_uses");
+    expect(createBody).not.toHaveProperty("used_count");
+
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/public-links/41414141-4141-4141-8141-414141414141") &&
           init?.method === "DELETE",
       ),
     ).toBe(true);

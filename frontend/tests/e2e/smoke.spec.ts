@@ -247,6 +247,23 @@ const apiPayloads = {
       },
     },
   },
+  publicLinks: {
+    items: [
+      {
+        id: "41414141-4141-4141-8141-414141414141",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        status: "active",
+        can_view: true,
+        can_edit: true,
+        expires_at: "2099-07-05T12:00:00Z",
+        max_uses: 5,
+        used_count: 1,
+        max_attachment_uploads: 3,
+        attachment_upload_count: 1,
+        disabled_at: null,
+      },
+    ],
+  },
   attachments: {
     items: [],
   },
@@ -353,6 +370,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   } | null = null;
   let repeatableInstances: { block_instance_id: string; ordinal: number; value: string }[] = [];
   let auditItems = [...apiPayloads.audit.items];
+  const publicLinkItems = [...apiPayloads.publicLinks.items];
   let attachmentItems = [...apiPayloads.attachments.items];
   let documentTemplateItems = [...apiPayloads.documentTemplates.items];
   let generatedDocumentItems = [...apiPayloads.generatedDocuments.items];
@@ -485,6 +503,22 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ items: cardItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: publicLinkItems }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/public-links") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [] }),
       });
       return;
     }
@@ -884,6 +918,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Публичные ссылки" })).toBeVisible();
+  await expect(page.getByText("Загрузки вложений: 1 из 3")).toBeVisible();
   await expect(page.getByText("Нет файлов")).toBeVisible();
   await expect(page.getByText("Нет документов")).toBeVisible();
   await page.getByLabel("Код шаблона").fill("acceptance_act");

@@ -2,11 +2,14 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { useMemo, useState, type FormEvent } from "react";
 
 import {
+  archivePublicLink,
   archiveCard,
   archiveCardBlockInstance,
   createCard,
   createCardBlockInstance,
+  createPublicLink,
   listOrgUnits,
+  listPublicLinks,
   listReferenceItems,
   updateCard,
   updateCardFieldValue,
@@ -19,6 +22,9 @@ import type {
   FormFieldRead,
   OrgUnitRead,
   OrganizationRead,
+  PublicLinkCreatePayload,
+  PublicLinkRead,
+  PublicLinkTokenRead,
   RegistrySchemaRead,
 } from "@/api/types";
 import {
@@ -36,7 +42,7 @@ import {
   MutationFeedback,
 } from "@/components/common/AdminMutation";
 import { Panel, SelectableList } from "@/components/common/DataSurfaces";
-import { errorText, shortId } from "@/components/common/dataUtils";
+import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
 
 import { FieldEditorControl } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
@@ -353,6 +359,7 @@ export function CardsWorkspace({
         <div className="split-grid">
           <CardAttachmentsPanel cardId={card.id} token={token} />
           <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
+          <PublicLinksPanel cardId={card.id} token={token} />
         </div>
       )}
       {archiveTarget && (
@@ -481,6 +488,228 @@ function CardMutationForm({
         <span>{uiText.publicEditCard}</span>
       </label>
     </AdminMutationForm>
+  );
+}
+
+type PublicLinkFormState = {
+  expiresInDays: string;
+  maxAttachmentUploads: string;
+};
+
+function PublicLinksPanel({ cardId, token }: { cardId: string; token: string }) {
+  const queryClient = useQueryClient();
+  const [isCreating, setIsCreating] = useState(false);
+  const [form, setForm] = useState<PublicLinkFormState>(() => initialPublicLinkForm());
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [createdToken, setCreatedToken] = useState<PublicLinkTokenRead | null>(null);
+  const [disableTarget, setDisableTarget] = useState<PublicLinkRead | null>(null);
+
+  const publicLinksQuery = useQuery({
+    queryKey: ["public-links", token, cardId],
+    queryFn: () => listPublicLinks(token, cardId),
+    enabled: Boolean(token && cardId),
+  });
+  const createMutation = useMutation({
+    mutationFn: (payload: PublicLinkCreatePayload) => createPublicLink(token, cardId, payload),
+    onSuccess: async (created) => {
+      setCreatedToken(created);
+      setSuccessMessage(uiText.publicLinkCreated);
+      setIsCreating(false);
+      setForm(initialPublicLinkForm());
+      await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
+      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+    },
+  });
+  const disableMutation = useMutation({
+    mutationFn: (target: PublicLinkRead) => archivePublicLink(token, target.id),
+    onSuccess: async () => {
+      setDisableTarget(null);
+      setSuccessMessage(uiText.publicLinkDisabled);
+      await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
+      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+    },
+  });
+
+  function openCreateForm() {
+    setIsCreating(true);
+    setLocalError(null);
+    setSuccessMessage(null);
+    setCreatedToken(null);
+  }
+
+  function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLocalError(null);
+    setSuccessMessage(null);
+    setCreatedToken(null);
+    const payload = buildPublicLinkPayload(form);
+    if (typeof payload === "string") {
+      setLocalError(payload);
+      return;
+    }
+    createMutation.mutate(payload);
+  }
+
+  const items = publicLinksQuery.data?.items ?? [];
+
+  return (
+    <Panel title={uiText.publicLinks}>
+      <div className="panel-toolbar">
+        <button type="button" className="primary-button" onClick={openCreateForm}>
+          {uiText.createPublicLink}
+        </button>
+      </div>
+      {isCreating && (
+        <div className="panel-form">
+          <AdminMutationForm
+            title={uiText.createPublicLink}
+            submitLabel={uiText.create}
+            isSubmitting={createMutation.isPending}
+            error={localError ? new Error(localError) : createMutation.error}
+            onCancel={() => setIsCreating(false)}
+            onSubmit={handleCreateSubmit}
+          >
+            <label>
+              <span>{uiText.publicLinkExpiresInDays}</span>
+              <input
+                min={1}
+                max={30}
+                step={1}
+                type="number"
+                value={form.expiresInDays}
+                onChange={(event) => {
+                  const expiresInDays = event.currentTarget.value;
+                  setForm((current) => ({
+                    ...current,
+                    expiresInDays,
+                  }));
+                }}
+              />
+            </label>
+            <label>
+              <span>{uiText.publicLinkAttachmentUploadLimit}</span>
+              <input
+                min={0}
+                step={1}
+                type="number"
+                placeholder={uiText.publicLinkUnlimitedUploads}
+                value={form.maxAttachmentUploads}
+                onChange={(event) => {
+                  const maxAttachmentUploads = event.currentTarget.value;
+                  setForm((current) => ({
+                    ...current,
+                    maxAttachmentUploads,
+                  }));
+                }}
+              />
+            </label>
+          </AdminMutationForm>
+        </div>
+      )}
+      <MutationFeedback
+        error={publicLinksQuery.error ?? disableMutation.error}
+        successMessage={successMessage}
+      />
+      {createdToken && (
+        <div className="public-link-token" aria-label={uiText.publicLinkToken}>
+          <span>{uiText.publicLinkToken}</span>
+          <code>{createdToken.raw_token}</code>
+          <span>
+            {uiText.publicLinkUrl}: /public/edit/{createdToken.raw_token}
+          </span>
+        </div>
+      )}
+      {items.length > 0 ? (
+        <ul className="public-link-list">
+          {items.map((publicLink) => (
+            <PublicLinkListItem
+              key={publicLink.id}
+              publicLink={publicLink}
+              isDisabling={disableMutation.isPending}
+              onDisable={() => {
+                setDisableTarget(publicLink);
+                setSuccessMessage(null);
+                setLocalError(null);
+              }}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="data-empty">
+          {publicLinksQuery.isLoading ? uiText.loadingCard : uiText.noData}
+        </p>
+      )}
+      {disableTarget && (
+        <AdminMutationDialog title={uiText.disablePublicLink}>
+          <div className="archive-confirmation">
+            <p>
+              {uiText.publicLink}: {shortId(disableTarget.id)}
+            </p>
+            <p>{uiText.publicLinkDisableConfirmation}</p>
+            <div className="admin-mutation-actions">
+              <button type="button" className="ghost-button" onClick={() => setDisableTarget(null)}>
+                {uiText.cancel}
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={disableMutation.isPending}
+                onClick={() => disableMutation.mutate(disableTarget)}
+              >
+                {disableMutation.isPending ? uiText.saving : uiText.disable}
+              </button>
+            </div>
+          </div>
+        </AdminMutationDialog>
+      )}
+    </Panel>
+  );
+}
+
+function PublicLinkListItem({
+  publicLink,
+  isDisabling,
+  onDisable,
+}: {
+  publicLink: PublicLinkRead;
+  isDisabling: boolean;
+  onDisable: () => void;
+}) {
+  const statusLabel = publicLinkStatusLabel(publicLink);
+  const uploadLimitExhausted =
+    publicLink.max_attachment_uploads !== null &&
+    publicLink.attachment_upload_count >= publicLink.max_attachment_uploads;
+  const canDisable = publicLink.status === "active" && !publicLink.disabled_at;
+
+  return (
+    <li>
+      <div>
+        <strong>{`${uiText.publicLink} ${shortId(publicLink.id)}`}</strong>
+        <span>
+          {uiText.publicLinkStatus}: {statusLabel}
+        </span>
+        <span>
+          {uiText.expires}: {formatDate(publicLink.expires_at)}
+        </span>
+        <span>{publicLinkFieldEditUsageLabel(publicLink)}</span>
+        <span>{publicLinkAttachmentUsageLabel(publicLink)}</span>
+        {uploadLimitExhausted && <span>{uiText.publicLinkUploadLimitExhausted}</span>}
+      </div>
+      <div className="row-actions">
+        {canDisable && (
+          <button
+            type="button"
+            className="ghost-button"
+            aria-label={`${uiText.disablePublicLink} ${shortId(publicLink.id)}`}
+            disabled={isDisabling}
+            onClick={onDisable}
+          >
+            {uiText.disablePublicLink}
+          </button>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -685,6 +914,70 @@ function currentBulkValue(field: EditableCardField, draftValues: Record<string, 
 
 function optionalId(value: string) {
   return value.trim() ? value : null;
+}
+
+function initialPublicLinkForm(): PublicLinkFormState {
+  return {
+    expiresInDays: "7",
+    maxAttachmentUploads: "",
+  };
+}
+
+function buildPublicLinkPayload(form: PublicLinkFormState): PublicLinkCreatePayload | string {
+  const expiresInDays = Number(form.expiresInDays);
+  if (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 30) {
+    return uiText.publicLinkExpiresInvalid;
+  }
+
+  const maxAttachmentUploadsText = form.maxAttachmentUploads.trim();
+  if (!maxAttachmentUploadsText) {
+    return {
+      expires_in_days: expiresInDays,
+      max_attachment_uploads: null,
+    };
+  }
+
+  const maxAttachmentUploads = Number(maxAttachmentUploadsText);
+  if (!Number.isInteger(maxAttachmentUploads) || maxAttachmentUploads < 0) {
+    return uiText.publicLinkUploadLimitInvalid;
+  }
+
+  return {
+    expires_in_days: expiresInDays,
+    max_attachment_uploads: maxAttachmentUploads,
+  };
+}
+
+function publicLinkStatusLabel(publicLink: PublicLinkRead) {
+  if (publicLink.disabled_at || publicLink.status === "disabled") {
+    return "Отключена";
+  }
+  if (publicLink.status === "expired" || new Date(publicLink.expires_at) <= new Date()) {
+    return "Истекла";
+  }
+  if (publicLink.status === "active") {
+    return "Активна";
+  }
+  return publicLink.status;
+}
+
+function publicLinkFieldEditUsageLabel(publicLink: PublicLinkRead) {
+  return usageLabel(uiText.publicLinkFieldEditUsage, publicLink.used_count, publicLink.max_uses);
+}
+
+function publicLinkAttachmentUsageLabel(publicLink: PublicLinkRead) {
+  return usageLabel(
+    uiText.publicLinkAttachmentUploadUsage,
+    publicLink.attachment_upload_count,
+    publicLink.max_attachment_uploads,
+  );
+}
+
+function usageLabel(label: string, used: number, max: number | null) {
+  if (max === null) {
+    return `${label}: ${used} / ${uiText.publicLinkUnlimitedUploads}`;
+  }
+  return `${label}: ${used} из ${max}`;
 }
 
 async function invalidateCardQueries(

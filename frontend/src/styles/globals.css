@@ -725,6 +725,65 @@ tr:last-child td {
   border-top: 1px solid #edf0f4;
 }
 
+.public-link-token {
+  display: grid;
+  gap: 5px;
+  margin: 12px 14px;
+  border: 1px solid #b7dfd8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #0f5f58;
+  background: #eefbf8;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.public-link-token code {
+  overflow-wrap: anywhere;
+  color: #101828;
+  font-size: 0.82rem;
+}
+
+.public-link-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-link-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.public-link-list li:last-child {
+  border-bottom: 0;
+}
+
+.public-link-list strong,
+.public-link-list span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.public-link-list strong {
+  color: #101828;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.public-link-list span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .attachment-status {
   padding: 10px 14px 0;
 }
