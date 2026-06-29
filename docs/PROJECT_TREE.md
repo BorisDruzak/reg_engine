@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 02:50:49 +05:00
+- Generated: 2026-06-30 03:11:15 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -40,6 +40,7 @@
 - `backend/app/api/v1/endpoints/cards.py`
 - `backend/app/api/v1/endpoints/documents.py`
 - `backend/app/api/v1/endpoints/health.py`
+- `backend/app/api/v1/endpoints/import_export.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/public_links.py`
 - `backend/app/api/v1/endpoints/registries.py`
@@ -83,6 +84,7 @@
 - `backend/app/services/bootstrap.py`
 - `backend/app/services/cards.py`
 - `backend/app/services/documents.py`
+- `backend/app/services/import_export.py`
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
 - `backend/app/services/public_links.py`
@@ -109,6 +111,7 @@
 - `backend/tests/test_api_phase_2b_attachments.py`
 - `backend/tests/test_api_phase_2d_documents.py`
 - `backend/tests/test_api_phase_2k.py`
+- `backend/tests/test_api_phase_3_import_export.py`
 - `backend/tests/test_attachment_services.py`
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`

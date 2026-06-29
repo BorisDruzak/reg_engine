@@ -62,6 +62,7 @@ Completed phases:
 - Phase 2J.7: `file_ref` Live Validation.
 - Phase 2M: Binary `.docx` Template Upload And Template Versioning.
 - Phase 2N: PDF Conversion.
+- Phase 3A: Card Export Foundation.
 
 Current stop point:
 
@@ -130,10 +131,16 @@ Current stop point:
 - Phase 2N PDF conversion is completed for authenticated `docx_text_v1`
   generated documents. Binary `.docx` layout conversion to PDF and public
   generated-document workflows remain deferred.
-- Next planned work is Phase 3 import/export.
-- Later explicit phases remain Phase 3 import/export, Phase 4 reports, and
-  Phase 5 MCP.
-- Import/export, reports, and MCP remain deferred until their explicit phases.
+- Phase 3A Card Export Foundation is completed as an authenticated backend API
+  slice: JSON and CSV card export use card visibility scope, preserve
+  schema-driven block/instance/field structure, export attachment/generated
+  document metadata only, and write audit events.
+- Next planned work is Phase 3B import preview and mapping.
+- Later explicit phases remain Phase 3B/3C import/export completion, Phase 4
+  reports, and Phase 5 MCP.
+- XLSX export, CSV/XLSX import commit, import/export frontend UI, binary
+  attachment/document export, reports, and MCP remain deferred until their
+  explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1300,11 +1307,97 @@ Known limitations:
 
 Purpose: add controlled data exchange.
 
+Status: in progress.
+
 Planned scope:
 
 - CSV/XLSX import with mapping, preview, validation, and audit.
 - CSV/XLSX/JSON export with permission checks.
 - Export of attachment/document metadata only first; binary export requires separate approval.
+
+Decisions:
+
+- Export uses the same backend organization-scope card visibility as card
+  list/read.
+- JSON export preserves schema-driven `blocks -> instances -> fields`.
+- CSV export is field-row based and must include `block_code`,
+  `block_instance_ordinal`, and `field_code` to avoid ambiguity when different
+  blocks reuse the same field code.
+- Attachment and generated-document exports include metadata only in the first
+  slice. Binary bytes, storage keys, checksums, stored file ids, and filesystem
+  paths are not exported.
+- Export actions write `audit_events` with `action=export`.
+- Import preview and import commit must validate against existing registry
+  schema instead of creating hardcoded business fields.
+
+### Phase 3A: Card Export Foundation
+
+Status: completed.
+
+Purpose: provide a safe backend export foundation before import workflows and
+XLSX support.
+
+Completed scope:
+
+- Added authenticated API:
+  `GET /api/v1/registries/{registry_id}/exports/cards?format=json|csv`.
+- JSON export includes registry id, format version, visible cards, card
+  metadata, schema-driven blocks/instances/fields, attachment metadata, and
+  generated-document metadata.
+- CSV export emits one row per card field with explicit card, block, instance,
+  field, field type, and serialized value columns.
+- Export uses `CardService.list_visible_cards` and
+  `CardService.read_card_for_actor` so organization scope, descendant scope,
+  archive filtering, and backend permission behavior remain centralized.
+- Export writes `audit_events` with `action=export`,
+  `object_type=registry`, format, export type, and exported card count.
+- Added PostgreSQL-backed API regression tests for scoped JSON export,
+  duplicate field-code CSV export, attachment/document metadata-only output,
+  and audit recording.
+- Verification on 2026-06-30: RED failed with 404 before implementation on
+  disposable `reg_engine_phase3a_test`; GREEN passed with `2 passed` after
+  implementation on the same disposable PostgreSQL strategy; targeted mypy and
+  ruff passed; `scripts/check.ps1 -SkipRemote` passed with backend pytest
+  `61 passed, 124 skipped`, frontend unit tests `29 passed`, frontend build,
+  and project tree check; `pnpm -C frontend e2e` passed with `3 passed`.
+
+Known limitations:
+
+- No XLSX export in this slice.
+- No import preview or import commit in this slice.
+- No frontend export UI in this slice.
+- CSV export is field-row based; it is intended for technical exchange and
+  mapping, not a polished report.
+- Reference values are exported as stored ids in Phase 3A; label enrichment is
+  deferred to later import/export polish.
+- Binary attachment and generated-document bytes are not exported.
+
+### Phase 3B: Import Preview And Mapping
+
+Status: planned next.
+
+Purpose: add safe import preview before any data mutation.
+
+Planned scope:
+
+- CSV import preview first, XLSX preview later if dependency and UX boundaries
+  are accepted.
+- Registry field mapping by `block_code.field_code`.
+- Validate organization/card visibility and editable scope.
+- Validate dynamic values through the same service rules as manual card edits.
+- Return row-level validation errors without mutating cards.
+- Do not upload binary attachments/documents through import in this phase.
+
+### Phase 3C: Import Commit And Export Polish
+
+Status: planned.
+
+Planned scope:
+
+- Commit validated import batches with audit.
+- Decide create-vs-update matching rules.
+- Add XLSX export if needed.
+- Add frontend import/export controls after backend semantics are stable.
 
 ### Phase 4: Reports
 
