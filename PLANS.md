@@ -35,16 +35,13 @@ Completed phases:
 - Phase 2G: Document template management UI.
 - Phase 2H: Public-link attachment workflows.
 - Phase 2I: Public-link attachment limit semantics and bugfixes.
-- Phase 2J: Public-link attachment quota API and concurrency hardening.
 
 Current stop point:
 
-- Phase 2H public-link attachment workflows are completed.
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
-- Phase 2J public-link attachment quota API and concurrency hardening is
-  completed.
-- PDF conversion, `file_ref`, binary `.docx` upload/versioning,
-  import/export, reports, and MCP remain deferred.
+- Phase 2J is the next planned phase: `file_ref` dynamic field type.
+- Phase 2J must start with planning/ADR and acceptance criteria before implementation.
+- PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred.
 
 ## Core Rules
 
@@ -56,22 +53,20 @@ Current stop point:
 - Keep public-link editing backend-validated.
 - Keep normal deletes as archive behavior.
 - Keep the frontend Russian-first for user-facing text.
-- Keep Phase 2 document work attachment-first; generated document work starts only from the Phase 2C backend foundation.
 - Keep Phase 2 storage roots and operational values outside Git.
-- Keep `file_ref` deferred until its later approved phase.
+- Keep `file_ref` generic: it must not become an HR-specific document field.
 
 ## Phase 2: Documents And Attachments
 
 Status: in progress.
 
-Approved scope:
+Approved direction so far:
 
 - Card-level attachments first.
-- Generated documents started backend-only in Phase 2C and have authenticated
-  card-workspace UI in Phase 2D and template management UI in Phase 2G.
-- Local filesystem backend through a storage abstraction, configured outside Git.
-- No public-link upload/download in the first attachment slice.
-- `file_ref` deferred until attachment metadata is stable.
+- Local filesystem storage backend through a storage abstraction, configured outside Git.
+- Generated `.docx` documents use schema-driven card data through the approved `docx_text_v1` renderer.
+- Public-link attachment list/upload/download is available for active public edit links.
+- Public-link attachment upload limits are separate from public field-edit usage limits.
 
 Completed Phase 2 work:
 
@@ -83,529 +78,173 @@ Completed Phase 2 work:
 - Phase 2C added `document_templates`, `generated_documents`, backend-only `docx_text_v1` rendering, generated file storage, audit, and archive behavior.
 - Phase 2D added authenticated Russian-first card-workspace panels for attachments and generated documents, plus generated-document API endpoints needed by the UI.
 - Phase 2G added authenticated Russian-first template creation and archive controls for existing `docx_text_v1` document templates.
-- Phase 2H added public-link attachment list/upload/download for active public
-  edit links without adding public archive/delete, generated-document controls,
-  `file_ref`, PDF conversion, import/export, MCP, or a new migration.
-- Phase 2I separated public field-edit usage limits from public attachment
-  upload limits, added rollback storage cleanup, clarified download streaming
-  deferral, and fixed public no-file UI validation text.
-- Phase 2J added create-time API configuration for public attachment upload
-  limits and made public upload quota consumption race-safe with a row-level
-  lock and row refresh.
+- Phase 2H added public-link attachment list/upload/download for active public edit links without adding public archive/delete, generated-document controls, `file_ref`, PDF conversion, import/export, MCP, or a new migration.
+- Phase 2I separated public field-edit usage limits from public attachment upload limits, added rollback storage cleanup, clarified download streaming deferral, and fixed public no-file UI validation text.
 
-Active Phase 2 work:
+## Phase 2J: `file_ref` Dynamic Field Type
 
-- No active Phase 2 implementation slice is open. Next work requires an
-  explicit approved phase.
+Status: planned next.
 
-## Review Findings After Phase 2E
+Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
-These findings were addressed in Phase 2F before generated documents, frontend attachment UI, public-link file flows, or `file_ref`.
+### Phase 2J.0: Planning And ADR
 
-### P0: Upload memory behavior
+Status: planned next.
 
-Before Phase 2F, the API read uploaded file content into memory before service-level size validation. This was acceptable only for small test files. Phase 2F had to implement a bounded read or streaming storage path that enforces configured size limits before unbounded memory growth is possible.
+Required decisions:
 
-### P0: Storage and database consistency
+- `file_ref` references `card_attachments.id`, not `stored_files.id`.
+- `file_ref` is a single attachment reference in the first implementation; `multi_file_ref` is deferred.
+- `file_ref` uses existing attachment upload/list/download flows. It does not upload bytes inline in the first implementation.
+- Public-link editing of `file_ref` is deferred.
+- Transfer behavior must not copy the old `card_attachment.id` directly into the new card.
+- Generated documents render `file_ref` as attachment title/original filename text only.
 
-Before Phase 2F, the service wrote bytes to storage before metadata rows were fully committed. If the database transaction failed after storage write, an orphaned file could remain. Phase 2F had to add cleanup-on-failure behavior or a documented pending/committed storage lifecycle.
+Acceptance criteria:
 
-### P1: Filename and download header hardening
+- ADR records the decisions above before code starts.
+- PLANS.md states all sub-phases, tests, non-goals, and transfer behavior.
+- No backend, frontend, migration, or API implementation starts in Phase 2J.0.
 
-Attachment filenames are stored as metadata and later returned in response headers. Phase 2F had to normalize or validate filenames for control characters and unsafe header characters, and use a safe `Content-Disposition` attachment header for downloads.
+### Phase 2J.1: Database And Model Foundation
 
-### P1: Runtime content-type policy
+Required work after Phase 2J.0 acceptance:
 
-The attachment service supports `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`, but an empty allow-list means all content types are accepted in development/test. Phase 2F had to decide and document whether an explicit allow-list is required for staging/production-like runtimes while remaining convenient for tests.
+- Add migration, expected as `0008_file_ref_field_values` or equivalent.
+- Add `field_values.value_attachment_id uuid nullable` referencing `card_attachments.id`.
+- Add an index such as `ix_field_values_field_id_value_attachment_id`.
+- Add `file_ref` to supported dynamic field types and related check constraints/constants.
+- Keep `file_ref` generic and schema-driven.
 
-### P1: MIME trust boundary
+Acceptance criteria:
 
-The backend relies on the client-provided upload MIME type for MVP allow-list checks. Phase 2F had to document this as MVP behavior or add a basic server-side type check where practical.
+- Migration applies cleanly on disposable PostgreSQL.
+- Metadata/schema tests cover the new column, FK, index, and allowed field type.
+- No HR-specific document field is added.
 
-### P1: Malware scanner setting is not enforced
+### Phase 2J.2: Backend Service Support
 
-Runtime setting `REG_ENGINE_MALWARE_SCANNER` exists, while the service uses the deferred scanner hook for the MVP slice. Phase 2F had to either enforce only the documented `deferred` mode or wire supported scanner modes explicitly. Unsupported scanner modes must fail clearly.
+Required work:
 
-### P1: Attachment retention and stored file lifecycle
+- Allow registry admins to create `form_fields.field_type=file_ref`.
+- Let authenticated card editors set a `file_ref` value to an existing active attachment of the same card.
+- Let authenticated card editors clear a `file_ref` value with `null`.
+- Reject references to attachments from another card.
+- Reject setting a new `file_ref` value to an archived attachment.
+- Preserve existing `file_ref` values on read if the referenced attachment is later archived, returning archived metadata instead of silently deleting the value.
+- Keep public-link edit for `file_ref` blocked/deferred.
 
-Archiving an attachment preserves metadata and bytes. Phase 2F had to explicitly document whether `stored_files.archived_at` remains unused for now, whether file bytes are retained indefinitely, and what later garbage-collection or retention phase will own cleanup.
+Acceptance criteria:
 
-### P2: Attachment API response shape
+- Service tests cover set, read, clear, wrong-card rejection, archived-attachment rejection, and archived-reference read behavior.
+- Audit records field value changes without exposing storage keys or filesystem paths.
 
-Attachment responses expose internal `stored_file_id` and checksum. Phase 2F had to confirm whether these values should remain visible before frontend document UI starts.
+### Phase 2J.3: Transfer Behavior
 
-## Phase 2F: Attachment Backend Hardening Before Next Document Phases
+Required behavior:
 
-Purpose: close attachment backend correctness and security gaps before approving generated documents, frontend attachment UI, public-link file flows, or `file_ref`.
+- When a card transfer copies dynamic values, `file_ref` must not point from the new card to the old card's `card_attachment.id`.
+- Preferred behavior: create a new `card_attachment` row for the target card pointing to the same `stored_file_id`, copy title/description/position as appropriate, and point the new field value to the new `card_attachment.id`.
+- If the referenced old attachment is archived at transfer time, either preserve a read-only archived reference according to explicit rules or clear it with a documented audit entry. Preferred behavior is to copy only active attachment links.
 
-Status: completed.
+Acceptance criteria:
 
-Phase 2F must not implement:
+- Transfer tests prove the new card has its own `card_attachment` link.
+- New card `file_ref` points to the new attachment link, not the old one.
+- Old and new attachment links may share the same `stored_file_id`; binary bytes are not duplicated.
 
-- generated document templates;
-- frontend attachment/document UI;
-- public-link upload/download;
-- `file_ref` dynamic field type;
-- import/export;
+### Phase 2J.4: API Support
+
+Required work:
+
+- Existing card field update endpoint accepts `file_ref` values as `card_attachment.id` or `null`.
+- Card read returns `file_ref` as metadata, not only a raw UUID.
+- Metadata should include: `attachment_id`, `title`, `original_filename`, `content_type`, `content_length_bytes`, `scanner_status`, and `archived_at`.
+- Existing attachment list endpoint remains the source of selectable file candidates.
+
+Acceptance criteria:
+
+- API tests cover set, clear, read metadata, wrong-card rejection, and archived-reference read behavior.
+- API responses do not expose storage key, filesystem path, or storage root.
+
+### Phase 2J.5: Frontend Authenticated Editor
+
+Required work:
+
+- Add authenticated `file_ref` editor to the schema-driven card form.
+- The editor lists active attachments for the current card.
+- The editor allows selecting an attachment and clearing the value.
+- The editor shows Russian-first labels and empty states:
+  - `Файл`;
+  - `Выберите файл`;
+  - `Нет вложений`;
+  - `Сначала загрузите файл во Вложения`;
+  - `Файл архивирован`;
+  - `Очистить файл`.
+- Do not add inline file upload inside the `file_ref` control in this phase.
+
+Acceptance criteria:
+
+- Frontend unit/e2e tests cover list/select/save/clear/empty-state behavior.
+- Dynamic form stays schema-driven and does not hardcode HR document fields.
+
+### Phase 2J.6: Generated Document Rendering
+
+Required work:
+
+- `docx_text_v1` renders `file_ref` as attachment title/original filename text.
+- Empty `file_ref` renders safely as empty text.
+- Archived referenced attachment renders with an archive marker, for example `(архив)`.
+- Do not embed binary files into generated `.docx`.
+- Do not add PDF conversion.
+- Do not add download URLs into generated documents in this phase.
+
+Acceptance criteria:
+
+- Generated document tests cover active file ref, empty file ref, and archived file ref rendering.
+- Rendering remains schema-driven and does not assume HR templates.
+
+### Phase 2J.7: Live Validation
+
+Required work:
+
+- Use disposable PostgreSQL database and temporary storage.
+- Create a registry schema with a `file_ref` field.
+- Upload an attachment to a card.
+- Set `file_ref` to that attachment.
+- Read the card and verify metadata.
+- Generate a document and verify rendered text.
+- Transfer the card and verify the new card has its own attachment link and `file_ref` points to it.
+- Clean up disposable database/storage.
+
+Acceptance criteria:
+
+- No production personal data is used.
+- No production storage is mutated.
+- Local checks, PostgreSQL-backed tests, frontend tests, project-map check, README, and PLANS update pass.
+
+## Phase 2J Non-Goals
+
+Phase 2J must not implement:
+
+- `multi_file_ref`;
+- public-link `file_ref` editing;
+- inline upload inside the `file_ref` editor;
+- `file_ref` import/export;
+- PDF conversion;
+- binary `.docx` template upload;
+- template versioning;
+- reports;
 - MCP;
 - MDB migration;
 - service desk integration.
 
-Required work:
+## Future Directions After Phase 2J
 
-1. Add bounded upload reading or streaming storage so configured size limits are enforced without unbounded memory reads.
-2. Add storage cleanup on database failure, or introduce an explicit pending/committed storage lifecycle.
-3. Normalize/validate `original_filename` for unsafe/control characters and add safe download filename handling.
-4. Decide and enforce production-like behavior for `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES`.
-5. Document or improve the MIME trust boundary.
-6. Enforce supported `REG_ENGINE_MALWARE_SCANNER` values; unsupported values must fail clearly.
-7. Document attachment retention and stored-file lifecycle.
-8. Decide whether `stored_file_id` and checksum stay in user-facing API responses.
-9. Add regression tests for the items above.
-10. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs where needed.
+These require explicit approval after Phase 2J:
 
-Delivered:
-
-- Added bounded multipart upload reading in the attachment API. Oversized uploads fail with `413` before an unbounded `read()`.
-- Added storage cleanup when post-write scanner/metadata work fails before transaction completion.
-- Normalized stored filenames for control/header-unsafe characters.
-- Added safe `Content-Disposition: attachment` download headers with ASCII fallback and UTF-8 `filename*`.
-- Required `REG_ENGINE_ATTACHMENT_ALLOWED_TYPES` in production-like runtimes while keeping development/test convenient.
-- Documented the MVP MIME trust boundary: the allow-list checks the client-provided upload MIME type until a later scanner/content-inspection phase.
-- Enforced `REG_ENGINE_MALWARE_SCANNER=deferred` as the only supported scanner mode for this slice; unsupported modes fail startup.
-- Documented that attachment archive preserves stored file metadata and bytes, leaves `stored_files.archived_at` unused in the MVP link-archive flow, and defers physical cleanup to a later retention phase.
-- Kept `stored_file_id` and `checksum_sha256` in authenticated API responses as technical metadata for authorized callers; frontend UI should not present them as primary labels.
-- Added regression tests for bounded upload reads, cleanup-on-failure, filename/header safety, production-like allow-list enforcement, and unsupported scanner mode rejection.
-
-Acceptance criteria:
-
-- Oversized uploads are rejected without unbounded memory reads.
-- Failed metadata writes do not silently leave untracked files, or the pending-file lifecycle is explicit and tested.
-- Download headers are safe for filenames with unusual characters.
-- Runtime storage/content-type/scanner settings are deterministic and tested.
-- Attachment archive/retention behavior is documented.
-- Existing attachment service/API tests still pass.
-- No generated-document, frontend attachment UI, public-link file flow, or `file_ref` work is introduced.
-
-## Phase 2C: Generated Document Templates
-
-Status: completed.
-
-Delivered:
-
-- Added `document_templates` and `generated_documents` metadata tables in migration `0006_generated_documents`.
-- Chose `docx_text_v1` as the first constrained renderer.
-- Rendered `.docx` output from schema-driven card data through `DocumentService`.
-- Stored generated bytes through `stored_files` and the existing storage abstraction with prefix `generated_documents`.
-- Enforced `registry.schema.manage` for template create/archive.
-- Enforced `cards.manage` for generation and generated-document archive.
-- Kept generated document reads scoped by card visibility.
-- Blocked generation for archived/superseded cards.
-- Preserved stored file metadata and bytes when generated documents are archived.
-- Recorded audit events for template create/archive and document generate/archive.
-
-Verification evidence:
-
-- Disposable PostgreSQL backend suite passed against a database ending with `_test`.
-- Local `scripts/check.ps1 -SkipRemote` passed.
-- `scripts/push-git.ps1` passed and pushed `main`.
-- Server checkout was updated from `origin/main`.
-- Fresh production PostgreSQL backup was created outside Git before migration.
-- Production preflight confirmed Alembic `0005_attachments` and absent Phase 2C tables.
-- Production Alembic upgrade reached `0006_generated_documents`.
-- Production post-check confirmed `document_templates`, `generated_documents`, constraints, and backend `create_app`.
-
-Phase 2C did not implement:
-
-- frontend attachment/document UI;
-- public-link upload/download or public document generation;
-- `file_ref`;
-- PDF conversion;
-- binary `.docx` template upload;
-- import/export;
-- MCP;
-- MDB migration.
-
-### Phase 2D: Frontend Document Workflows
-
-Status: completed.
-
-Delivered:
-
-- Added Russian-first `Вложения` and `Документы` panels inside the card workspace.
-- Added authenticated frontend API client methods for attachment upload/download/archive.
-- Added authenticated frontend API client methods for listing document templates, generating documents, downloading generated content, and archiving generated documents.
-- Added generated-document REST API endpoints required by the frontend.
-- Kept public-link screens without upload/download/document controls.
-- Added localized empty, success, archive, download, and scanner-deferred states.
-- Added unit and e2e coverage for upload/download/archive and document generation workflows.
-
-Verification evidence:
-
-- `pnpm -C frontend test:run -- App.test.tsx` passed.
-- `pnpm -C frontend typecheck` passed.
-- `pnpm -C frontend e2e` passed.
-
-Phase 2D did not implement:
-
-- public-link upload/download;
-- public document generation;
-- document template management UI;
-- `file_ref`;
-- PDF conversion;
-- import/export;
-- MCP;
-- MDB migration.
-
-### Phase 2G: Document Template Management UI
-
-Status: completed.
-
-Purpose: expose the already-approved authenticated document-template backend in
-the card workspace without adding new backend schema, public-link file behavior,
-binary template uploads, PDF conversion, import/export, or MCP.
-
-Delivered:
-
-- Added authenticated frontend API client methods for document template create
-  and archive.
-- Added Russian-first document template management UI inside the authenticated
-  card workspace.
-- Added active template list with archive actions.
-- Kept generation based on active templates and refreshed the generator after
-  template create/archive.
-- Kept public-link screens without attachment, generated-document, or template
-  controls.
-- Added unit and e2e coverage for template create/archive workflows.
-
-Verification evidence:
-
-- `pnpm -C frontend test:run -- App.test.tsx` passed.
-- `pnpm -C frontend typecheck` passed.
-- `pnpm -C frontend e2e` passed.
-- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote` passed.
-
-Acceptance criteria:
-
-- Template management UI uses Russian user-facing labels.
-- Template create sends `code`, `name`, optional `description`,
-  `template_body`, and `output_filename_template` to the existing API.
-- Template archive uses the existing archive endpoint and removes archived
-  templates from the active list.
-- Public-link pages do not call attachment, generated-document, or
-  document-template endpoints.
-- No backend models, migrations, services, auth flow, import/export, documents
-  beyond `docx_text_v1`, MCP, or frontend public-link file controls are added.
-
-Phase 2G did not implement:
-
-- public-link upload/download;
-- public document generation;
-- binary `.docx` template upload;
-- template versioning;
-- `file_ref`;
-- PDF conversion;
-- import/export;
-- MCP;
-- MDB migration.
-
-### Phase 2H: Public-Link Attachment Workflows
-
-Status: completed.
-
-Purpose: allow an active public edit link to list, upload, and download active
-card attachments without adding public archive, generated-document controls,
-`file_ref`, PDF conversion, import/export, MCP, or a new migration.
-
-Scope decisions:
-
-- Public-link file workflows use the existing card-level attachment metadata and
-  storage abstraction.
-- Public-link upload requires an active public link, `public_link.can_edit=true`,
-  and `card.public_edit_enabled=true`.
-- Public-link list/download require the same active public edit link in this
-  slice; public view-only file pages remain future work.
-- Public-link upload stores `created_by` as the user that created the public
-  link, while audit events use `actor_type=public_link`.
-- Phase 2I supersedes the original Phase 2H counter behavior: public-link
-  upload increments `attachment_upload_count`, while `used_count` remains scoped
-  to public field edits.
-- Public-link archive/delete is not exposed in this phase.
-- Archived and superseded cards remain blocked for public-link upload/download.
-
-Required work:
-
-1. Add service tests for public-link attachment list/upload/download. Completed.
-2. Add API tests for unauthenticated public-link attachment endpoints. Completed.
-3. Reuse bounded upload reading, MIME allow-list, filename normalization,
-   scanner hook, storage cleanup, and safe download headers. Completed.
-4. Add Russian-first public-link UI controls for file upload/download. Completed.
-5. Keep public-link generated documents, template management, archive/delete,
-   `file_ref`, PDF, import/export, MCP, and migrations out of scope. Completed.
-6. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs.
-   Completed.
-7. Run local backend/frontend checks and e2e tests. Completed.
-
-Delivered:
-
-- Added public-link attachment service workflows for list, upload, metadata
-  read, and content download.
-- Added unauthenticated public-link attachment REST endpoints that use
-  `raw_token` and never expose storage internals.
-- Kept public-link uploads behind active edit-link checks:
-  `public_link.can_edit=true`, `card.public_edit_enabled=true`, non-expired,
-  non-disabled, non-archived, non-superseded card.
-- Reused authenticated attachment hardening: bounded multipart reads, MIME
-  allow-list enforcement, filename normalization, scanner hook, storage cleanup,
-  and safe download headers.
-- Recorded public-link upload/download audit events with
-  `actor_type=public_link`; Phase 2I later changed upload counting to
-  `attachment_upload_count`, while list and download do not increment usage
-  counters.
-- Added Russian-first public-link attachment UI for upload/list/download.
-
-Verification evidence:
-
-- Backend service/API tests cover public-link upload, list, download, audit,
-  edit-link/card-state denial, cross-card denial, disabled/expired link denial,
-  archived attachment denial, and superseded card denial.
-- Frontend unit tests cover public-link upload/download without Authorization
-  headers and without generated-document/template controls.
-- Frontend e2e smoke covers public-link attachment upload/download and verifies
-  no generated-document/template endpoint calls.
-- Local full backend pytest runs still skip broader PostgreSQL-backed tests when
-  `TEST_DATABASE_URL` is not set.
-- Targeted attachment service/API PostgreSQL-backed tests passed against a
-  disposable `reg_engine_phase2h_test` database, which was deleted after the
-  run.
-
-Acceptance criteria:
-
-- Active public edit links can list active card attachments.
-- Active public edit links can upload card attachments with scanner status
-  recorded.
-- Active public edit links can download active attachment content with safe
-  download headers.
-- Disabled, expired, non-editable, archived, and superseded public-link/card
-  states cannot upload or download. Phase 2I later clarified that exhausted
-  field-edit usage does not block attachment list/download, while exhausted
-  attachment upload usage blocks upload only.
-- Public-link upload/download write `audit_events` with `actor_type=public_link`.
-- Public-link screens still do not expose generated document, template,
-  archive/delete, `file_ref`, PDF, import/export, or MCP controls.
-- No new database migration is added.
-
-### Phase 2I: Public-Link Attachment Limit Semantics And Bugfixes
-
-Status: completed.
-
-Purpose: fix public-link attachment workflow edge cases before moving to
-`file_ref`, PDF, import/export, reports, or MCP.
-
-Decision: use option C for public-link usage limits.
-
-`card_public_links.max_uses` / `used_count` must not remain an overloaded limit
-for every public-link action.
-
-Separate semantics are required:
-
-- public field edit usage and public attachment upload usage are separate
-  concepts;
-- list/download should not consume usage counters;
-- attachment upload must have its own upload limit/counter, or an equivalent
-  clearly named mechanism;
-- if attachment upload limit is exhausted, upload is denied, but list/download
-  remain allowed while the public link is active and the card is
-  public-editable;
-- disabled, expired, archived, superseded, and non-editable card/link states
-  must still deny upload/download.
-
-Required work for implementation phase:
-
-1. Decide exact technical model for option C:
-   - either add explicit fields such as `max_attachment_uploads` and
-     `attachment_upload_count`;
-   - or implement an equivalent separate policy without overloading
-     `used_count`.
-   Completed with explicit `max_attachment_uploads` and
-   `attachment_upload_count` fields.
-2. If schema change is required, create Alembic migration and follow migration
-   approval rules. Completed with migration `0007_public_link_limits`.
-3. Add regression tests:
-   - public link with field-edit max usage exhausted can still list/download
-     existing attachments if link is active;
-   - upload limit exhaustion blocks upload only;
-   - list/download do not increment any usage counter;
-   - successful upload increments only the attachment upload counter;
-   - disabled/expired/superseded/archived states still deny public attachment
-     operations.
-   Completed.
-4. Fix public-link no-file UI validation message:
-   - show a clear Russian message such as `Выберите файл`.
-   Completed.
-5. Verify frontend public-link upload/list/download still works. Completed.
-6. Update README, PLANS.md, PROJECT_TREE.md and docs as needed. Completed.
-
-Delivered:
-
-- Added explicit public attachment upload limit fields:
-  `card_public_links.max_attachment_uploads` and
-  `card_public_links.attachment_upload_count`.
-- Kept `max_uses` and `used_count` scoped to public field-edit usage.
-- Public attachment list/download no longer fail solely because field-edit
-  `max_uses` is exhausted.
-- Public attachment upload increments only `attachment_upload_count`.
-- Exhausted attachment upload limit blocks upload only; list/download remain
-  available while the link is active and the card is public-editable.
-- Disabled, expired, archived, superseded, and non-editable card/link states
-  still deny public attachment operations.
-- Added pending storage cleanup on SQLAlchemy transaction rollback so stored
-  bytes written before a failed/rolled-back transaction are removed.
-- Fixed public-link no-file validation to show `Выберите файл`.
-- Evaluated `StreamingResponse` for attachment downloads. It remains deferred
-  because the current storage abstraction exposes only `read_bytes`; real
-  streaming should be implemented together with a streaming/open-file storage
-  boundary instead of wrapping already-loaded bytes.
-
-Verification evidence:
-
-- Added service regression tests for field-edit max usage exhaustion,
-  attachment upload limit exhaustion, list/download counter behavior, successful
-  upload counter behavior, and transaction rollback storage cleanup.
-- Added API regression test for public upload followed by list/download when
-  field-edit `max_uses` is already reached.
-- Added frontend regression test for no-file public upload validation.
-- Added metadata/schema tests for explicit public attachment upload limit
-  columns and constraints.
-- Production DB was verified at Alembic revision `0007_public_link_limits`;
-  `card_public_links` has both `max_attachment_uploads` and
-  `attachment_upload_count`.
-
-Phase 2I must not implement:
-
-- `file_ref` dynamic field type;
-- PDF conversion;
-- binary `.docx` template upload;
-- template versioning;
-- import/export;
-- reports;
-- MCP;
-- public attachment archive/delete;
-- public generated-document workflows.
-
-Acceptance criteria:
-
-- Public-link usage semantics are explicit and tested.
-- Attachment upload limits and field edit limits are separate.
-- Existing Phase 2H behavior remains intact.
-- No unrelated document feature is added.
-
-### Phase 2J: Public-Link Attachment Quota API And Concurrency Hardening
-
-Status: completed.
-
-Purpose: make public-link attachment upload limits configurable and race-safe
-before live/public use, while keeping `file_ref`, PDF, import/export, reports,
-MCP, public archive/delete, and public generated-document workflows out of
-scope.
-
-Scope decisions:
-
-- Phase 2I added storage and service semantics for
-  `max_attachment_uploads` / `attachment_upload_count`.
-- `PublicLinkCreate` accepts `max_attachment_uploads`, so administrators can
-  set upload limits through the authenticated public-link create API.
-- `PublicLinkRead` already exposes `max_attachment_uploads` and
-  `attachment_upload_count`.
-- Existing public-link settings are create-only in this slice. No PATCH endpoint
-  is added; changing an upload limit requires disabling the old link and
-  creating a new one.
-- Public attachment upload quota consumption uses a row-level lock with row
-  refresh before checking/incrementing `attachment_upload_count`, so parallel or
-  stale-session uploads cannot exceed the configured limit.
-- Download streaming remains deferred until `AttachmentStorage` exposes a
-  streaming/open-file boundary; wrapping already loaded `read_bytes` content in
-  `StreamingResponse` is not useful hardening.
-
-Required work:
-
-1. Add `max_attachment_uploads` to `PublicLinkCreate` with validation that
-   accepts `null` or a non-negative integer. Completed.
-2. Decide whether existing public links need a settings update endpoint:
-   - if yes, add a narrow PATCH endpoint for public-link settings;
-   - if no, document create-only configuration for this slice.
-   Completed with create-only configuration; no PATCH endpoint is added in
-   Phase 2J.
-3. Add backend API tests proving administrators can set upload limits when
-   creating public links. Completed.
-4. Add row-level locking or an atomic update for public attachment upload quota
-   consumption so parallel uploads cannot exceed `max_attachment_uploads`.
-   Completed with row-level locking and `populate_existing` row refresh.
-5. Add regression tests for parallel or two-session quota consumption where
-   `max_attachment_uploads=1`. Completed.
-6. Keep list/download independent from quota counters. Completed.
-7. Update README, PLANS.md, PROJECT_TREE.md, and attachment architecture docs.
-   Completed where content changed; no project tree structure changed.
-8. Run local checks, frontend checks if UI changes, and PostgreSQL-backed tests
-   against a disposable `_test` database. Completed for backend; no frontend UI
-   changed.
-
-Delivered:
-
-- Added `max_attachment_uploads` to `PublicLinkCreate` and passed it through the
-  public-link create endpoint into `PublicLinkService`.
-- Kept `null` upload limit semantics as unlimited, and rejected negative limits
-  at the API validation boundary and service boundary.
-- Did not add a PATCH endpoint for existing public-link settings in this slice;
-  operators must disable and recreate a link to change its upload limit.
-- Changed public attachment upload to lock and refresh the `card_public_links`
-  row before quota checks and counter increments.
-- Preserved Phase 2I semantics: list/download do not consume counters, and
-  field-edit `max_uses` remains separate from attachment upload quota.
-
-Verification evidence:
-
-- Added API regression coverage proving `max_attachment_uploads` is accepted on
-  public-link creation, is visible in public-link list responses, and rejects
-  negative values.
-- Added two-session PostgreSQL-backed service regression coverage proving a
-  stale second session cannot upload after the first upload consumes
-  `max_attachment_uploads=1`.
-- Targeted PostgreSQL-backed RED/GREEN tests were run against disposable
-  `reg_engine_phase2j_test`.
-- Full `scripts/check.ps1 -SkipRemote` passed with `TEST_DATABASE_URL` pointed
-  at disposable `reg_engine_phase2j_test`: backend pytest `150 passed`, ruff
-  check, ruff format check, mypy, frontend lint/typecheck/unit/build, and
-  project-map check all passed.
-
-Phase 2J must not implement:
-
-- `file_ref` dynamic field type;
-- PDF conversion;
-- binary `.docx` template upload;
-- template versioning;
-- import/export;
-- reports;
-- MCP;
-- public attachment archive/delete;
-- public generated-document workflows;
-- large-file streaming until the storage abstraction has a streaming/open-file
-  boundary.
-
-Acceptance criteria:
-
-- Public-link attachment upload limits can be configured through an approved
-  admin API path.
-- Quota consumption is race-safe under concurrent uploads.
-- List/download remain allowed when only upload quota is exhausted.
-- Field-edit `max_uses` remains separate from attachment upload quota.
-- No unrelated document feature is added.
-
-## Future Directions
-
-### Later deferred items
-
-- `file_ref` dynamic field type.
+- Public-link `file_ref` editing.
+- `multi_file_ref`.
 - Binary `.docx` template upload and template versioning.
 - PDF conversion.
 - Import/export.
