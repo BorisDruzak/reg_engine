@@ -1360,6 +1360,12 @@ Completed scope:
   ruff passed; `scripts/check.ps1 -SkipRemote` passed with backend pytest
   `61 passed, 124 skipped`, frontend unit tests `29 passed`, frontend build,
   and project tree check; `pnpm -C frontend e2e` passed with `3 passed`.
+- Deployed commit `a8c1027` to the configured server checkout. No production
+  migration was required because Phase 3A adds no schema changes. Backend
+  service was restarted, healthcheck passed, live OpenAPI exposed
+  `/api/v1/registries/{registry_id}/exports/cards`, `scripts/server-check.ps1`
+  passed, and production Alembic remained at
+  `0009_document_template_versions` head.
 
 Known limitations:
 
