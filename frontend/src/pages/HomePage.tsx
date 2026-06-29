@@ -208,6 +208,7 @@ export function HomePage() {
           <RegistriesAndSchema
             registries={registriesQuery.data?.items ?? []}
             schema={registrySchemaQuery.data ?? null}
+            organizations={organizationsQuery.data?.items ?? []}
             selectedRegistryId={activeRegistryId}
             token={token}
             onSelectRegistry={(registryId) => {

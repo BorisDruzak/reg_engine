@@ -232,6 +232,36 @@ const apiPayloads = {
   generatedDocuments: {
     items: [],
   },
+  referenceLists: {
+    items: [
+      {
+        id: "abababab-abab-4aba-8aba-abababababab",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        owner_organization_id: "22222222-2222-4222-8222-222222222222",
+        code: "asset_statuses",
+        name: "Статусы актива",
+        description: "Статусы карточек",
+        inherit_to_descendants: true,
+        locked_for_descendants: true,
+        managed_by_system_only: false,
+        is_active: true,
+      },
+    ],
+  },
+  referenceItems: {
+    items: [
+      {
+        id: "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc",
+        list_id: "abababab-abab-4aba-8aba-abababababab",
+        parent_id: null,
+        code: "active",
+        label: "Активен",
+        description: "Активная карточка",
+        position: 0,
+        is_active: true,
+      },
+    ],
+  },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     display_name: "Публичная карточка",
@@ -519,6 +549,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Реестры" }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
+  await expect(page.getByText("Статусы актива").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Карточки" }).click();
   await expect(page.getByText("Карточка актива")).toBeVisible();
@@ -765,6 +797,12 @@ function responsePayload(
   }
   if (pathname === "/api/v1/registries") {
     return apiPayloads.registries;
+  }
+  if (pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists") {
+    return apiPayloads.referenceLists;
+  }
+  if (pathname === "/api/v1/reference-lists/abababab-abab-4aba-8aba-abababababab/items") {
+    return apiPayloads.referenceItems;
   }
   if (pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/schema") {
     return apiPayloads.schema;

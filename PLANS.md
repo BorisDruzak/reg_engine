@@ -48,6 +48,7 @@ Completed phases:
 - Phase 2L.3: Access Grant Management UI.
 - Phase 2L.4: Registry Management UI.
 - Phase 2L.5: Schema Builder UI.
+- Phase 2L.6: Reference List Management UI.
 
 Current stop point:
 
@@ -68,10 +69,12 @@ Current stop point:
 - Phase 2L.3 Access Grant Management UI is completed.
 - Phase 2L.4 Registry Management UI is completed.
 - Phase 2L.5 Schema Builder UI is completed.
+- Phase 2L.6 Reference List Management UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
-  for organizations, users, access grants, registries, schema builder, and
-  cards.
-- Phase 2L.6 Reference List Management UI is the next implementation slice.
+  for organizations, users, access grants, registries, schema builder,
+  reference lists, and cards.
+- Phase 2L.7 Card Create, Metadata, And Editor UI is the next implementation
+  slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -112,7 +115,8 @@ The current authenticated frontend is not yet a complete admin workspace:
   explicit organization/registry/descendant scope summary;
 - registries can be created, updated, and archived through Russian-first UI;
   registry schema block/field create, update, and archive workflows are exposed
-  through Russian-first UI; reference-list editing is not exposed yet;
+  through Russian-first UI; reference lists and reference items can be created,
+  updated, archived, and selected for `select`/`multi_select` schema fields;
 - cards are listed and existing field values can be edited, but card creation,
   card metadata edit, archive, repeatable block-instance management, and bulk
   save workflows are incomplete;
@@ -763,10 +767,12 @@ Known limitations:
   `FormBlockRead`/`FormFieldRead` API schemas. Phase 2L.5 therefore does not
   add proactive required-mode controls or lock/system badges; backend denial is
   still the security boundary.
-- Full reference-list create/update/archive and select/multi_select list
-  selection UX remains Phase 2L.6.
+- `file_ref` remains deferred until Phase 2J, so schema builder does not expose
+  file-backed dynamic fields yet.
 
 ### Phase 2L.6: Reference List Management UI
+
+Status: completed.
 
 Required work:
 
@@ -781,6 +787,30 @@ Acceptance criteria:
 - User can create a reference list and items through UI.
 - Select/multi_select fields can use that reference list.
 - Locked inherited list behavior is visible and cannot be bypassed in UI.
+
+Completion evidence:
+
+- Added Russian-first reference-list create, update, and archive controls in
+  the registry admin workspace.
+- Added Russian-first reference-item create, update, and archive controls for
+  the selected reference list.
+- Reference-list creation exposes owner organization, inheritance to
+  descendants, locked-for-descendants, and system-managed flags supported by the
+  current backend API.
+- Reference-list table surfaces owner organization, inheritance, locked state,
+  and active/archive status; backend-denied locked/inherited operations are
+  mapped to localized Russian error text.
+- Schema field creation now uses a reference-list selector for
+  `select`/`multi_select` fields instead of a raw reference-list UUID input.
+- Added frontend tests for reference-list/item create-update-archive,
+  select-field reference-list wiring without hardcoded options, and locked
+  reference-list denial localization.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx -t
+  "reference lists|select fields|locked reference"`,
+  `pnpm -C frontend test:run`, `pnpm -C frontend lint`, and
+  `pnpm -C frontend typecheck`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, MCP, or `file_ref` implementation was added.
 
 ### Phase 2L.7: Card Create, Metadata, And Editor UI
 

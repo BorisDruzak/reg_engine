@@ -11,6 +11,8 @@ import type {
   FormFieldRead,
   GeneratedDocumentRead,
   OrganizationRead,
+  ReferenceItemRead,
+  ReferenceListRead,
   RegistryRead,
   UserRead,
 } from "@/api/types";
@@ -255,6 +257,36 @@ const apiPayloads = {
   generatedDocuments: {
     items: [] as GeneratedDocumentRead[],
   },
+  referenceLists: {
+    items: [
+      {
+        id: "abababab-abab-4aba-8aba-abababababab",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        owner_organization_id: "22222222-2222-4222-8222-222222222222",
+        code: "asset_statuses",
+        name: "Статусы актива",
+        description: "Статусы карточек",
+        inherit_to_descendants: true,
+        locked_for_descendants: true,
+        managed_by_system_only: false,
+        is_active: true,
+      },
+    ],
+  },
+  referenceItems: {
+    items: [
+      {
+        id: "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc",
+        list_id: "abababab-abab-4aba-8aba-abababababab",
+        parent_id: null,
+        code: "active",
+        label: "Активен",
+        description: "Активная карточка",
+        position: 0,
+        is_active: true,
+      },
+    ],
+  },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     display_name: "Публичная карточка",
@@ -297,6 +329,9 @@ let denyNextRegistryUpdate = false;
 let schemaBlockItems: FormBlockRead[];
 let schemaFieldItems: FormFieldRead[];
 let denyNextFieldArchive = false;
+let referenceListItems: ReferenceListRead[];
+let referenceItemItems: ReferenceItemRead[];
+let denyNextReferenceListUpdate = false;
 let userItems: UserRead[];
 let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
@@ -317,6 +352,9 @@ beforeEach(() => {
   schemaBlockItems = [...apiPayloads.schema.blocks];
   schemaFieldItems = [...apiPayloads.schema.fields];
   denyNextFieldArchive = false;
+  referenceListItems = [...apiPayloads.referenceLists.items];
+  referenceItemItems = [...apiPayloads.referenceItems.items];
+  denyNextReferenceListUpdate = false;
   userItems = [...apiPayloads.users.items];
   denyNextUserUpdate = false;
   grantItems = [...apiPayloads.grants.items];
@@ -540,6 +578,131 @@ beforeEach(() => {
           return jsonResponse(created, { status: 201 });
         }
         return jsonResponse({ items: grantItems });
+      }
+      if (url.includes("/api/v1/reference-items/")) {
+        const itemId = url.split("/api/v1/reference-items/")[1];
+        const current = referenceItemItems.find((item) => item.id === itemId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            label?: string | null;
+            description?: string | null;
+            position?: number | null;
+          };
+          const updated: ReferenceItemRead = {
+            ...current,
+            label: payload.label ?? current.label,
+            description: payload.description ?? current.description,
+            position: payload.position ?? current.position,
+          };
+          referenceItemItems = referenceItemItems.map((item) =>
+            item.id === itemId ? updated : item,
+          );
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, is_active: false };
+          referenceItemItems = referenceItemItems.filter((item) => item.id !== itemId);
+          return jsonResponse(archived);
+        }
+      }
+      if (url.includes("/api/v1/reference-lists/") && url.endsWith("/items")) {
+        const listId = url.split("/api/v1/reference-lists/")[1].split("/items")[0];
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            label: string;
+            parent_id?: string | null;
+            description?: string | null;
+            position?: number;
+          };
+          const created: ReferenceItemRead = {
+            id: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+            list_id: listId,
+            parent_id: payload.parent_id ?? null,
+            code: payload.code,
+            label: payload.label,
+            description: payload.description ?? null,
+            position: payload.position ?? 0,
+            is_active: true,
+          };
+          referenceItemItems = [...referenceItemItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({
+          items: referenceItemItems.filter((item) => item.list_id === listId),
+        });
+      }
+      if (url.includes("/api/v1/reference-lists/")) {
+        const listId = url.split("/api/v1/reference-lists/")[1].split("?")[0];
+        const current = referenceListItems.find((item) => item.id === listId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          if (denyNextReferenceListUpdate) {
+            denyNextReferenceListUpdate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            name?: string | null;
+            description?: string | null;
+          };
+          const updated: ReferenceListRead = {
+            ...current,
+            name: payload.name ?? current.name,
+            description: payload.description ?? current.description,
+          };
+          referenceListItems = referenceListItems.map((item) =>
+            item.id === listId ? updated : item,
+          );
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          if (denyNextReferenceListUpdate) {
+            denyNextReferenceListUpdate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const archived = { ...current, is_active: false };
+          referenceListItems = referenceListItems.filter((item) => item.id !== listId);
+          referenceItemItems = referenceItemItems.filter((item) => item.list_id !== listId);
+          return jsonResponse(archived);
+        }
+        return jsonResponse(current);
+      }
+      if (
+        url
+          .split("?")[0]
+          .endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists")
+      ) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            owner_organization_id?: string | null;
+            description?: string | null;
+            inherit_to_descendants?: boolean;
+            locked_for_descendants?: boolean;
+            managed_by_system_only?: boolean;
+          };
+          const created: ReferenceListRead = {
+            id: "dededede-dede-4ede-8ede-dededededede",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            owner_organization_id: payload.owner_organization_id ?? null,
+            code: payload.code,
+            name: payload.name,
+            description: payload.description ?? null,
+            inherit_to_descendants: payload.inherit_to_descendants ?? false,
+            locked_for_descendants: payload.locked_for_descendants ?? false,
+            managed_by_system_only: payload.managed_by_system_only ?? false,
+            is_active: true,
+          };
+          referenceListItems = [...referenceListItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: referenceListItems });
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/blocks")) {
         if (init?.method === "POST") {
@@ -1825,6 +1988,314 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       ),
     ).toBe(true);
   });
+});
+
+test("creates edits and archives reference lists and items in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
+  expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Активен").length).toBeGreaterThan(0);
+
+  const referenceListPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists",
+          ) && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать справочник" }));
+  const postCountBeforeValidation = referenceListPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(referenceListPostCount()).toBe(postCountBeforeValidation);
+
+  fireEvent.change(screen.getByLabelText("Код справочника"), {
+    target: { value: "priority_levels" },
+  });
+  fireEvent.change(screen.getByLabelText("Название справочника"), {
+    target: { value: "Приоритеты" },
+  });
+  fireEvent.change(screen.getByLabelText("Описание справочника"), {
+    target: { value: "Уровни приоритета карточки" },
+  });
+  await user.selectOptions(screen.getByLabelText("Организация-владелец"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+  await user.click(screen.getByLabelText("Наследовать дочерним организациям"));
+  await user.click(screen.getByLabelText("Заблокировать для дочерних организаций"));
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Справочник создан")).toBeInTheDocument();
+  expect(screen.getAllByText("Приоритеты").length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: "Редактировать справочник Приоритеты" }));
+  const listNameInput = await screen.findByLabelText("Название справочника");
+  fireEvent.change(listNameInput, { target: { value: "Приоритеты карточки" } });
+  fireEvent.change(screen.getByLabelText("Описание справочника"), {
+    target: { value: "Обновленные уровни приоритета" },
+  });
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Справочник обновлен")).toBeInTheDocument();
+  expect(screen.getAllByText("Приоритеты карточки").length).toBeGreaterThan(0);
+
+  const referenceItemPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/reference-lists/dededede-dede-4ede-8ede-dededededede/items",
+          ) && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать элемент справочника" }));
+  const itemPostCountBeforeValidation = referenceItemPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(referenceItemPostCount()).toBe(itemPostCountBeforeValidation);
+
+  fireEvent.change(screen.getByLabelText("Код элемента справочника"), {
+    target: { value: "high" },
+  });
+  fireEvent.change(screen.getByLabelText("Название элемента справочника"), {
+    target: { value: "Высокий" },
+  });
+  fireEvent.change(screen.getByLabelText("Описание элемента справочника"), {
+    target: { value: "Высокий приоритет" },
+  });
+  fireEvent.change(screen.getByLabelText("Позиция элемента справочника"), {
+    target: { value: "5" },
+  });
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Элемент справочника создан")).toBeInTheDocument();
+  expect(screen.getAllByText("Высокий").length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", { name: "Редактировать элемент справочника Высокий" }),
+  );
+  const itemLabelInput = await screen.findByLabelText("Название элемента справочника");
+  fireEvent.change(itemLabelInput, { target: { value: "Высокий приоритет" } });
+  fireEvent.change(screen.getByLabelText("Описание элемента справочника"), {
+    target: { value: "Обновленное значение" },
+  });
+  fireEvent.change(screen.getByLabelText("Позиция элемента справочника"), {
+    target: { value: "6" },
+  });
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Элемент справочника обновлен")).toBeInTheDocument();
+  expect(screen.getAllByText("Высокий приоритет").length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", {
+      name: "Архивировать элемент справочника Высокий приоритет",
+    }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать элемент справочника" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Элемент справочника архивирован")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Высокий приоритет")).not.toBeInTheDocument());
+
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать справочник Приоритеты карточки" }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать справочник" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Справочник архивирован")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Приоритеты карточки")).not.toBeInTheDocument());
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    const createListCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists",
+        ) && init?.method === "POST",
+    );
+    expect(createListCall).toBeTruthy();
+    const createListBody = JSON.parse(String(createListCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(createListBody).toEqual({
+      code: "priority_levels",
+      name: "Приоритеты",
+      owner_organization_id: "22222222-2222-4222-8222-222222222222",
+      description: "Уровни приоритета карточки",
+      inherit_to_descendants: true,
+      locked_for_descendants: true,
+      managed_by_system_only: false,
+    });
+
+    const createItemCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith(
+          "/api/v1/reference-lists/dededede-dede-4ede-8ede-dededededede/items",
+        ) && init?.method === "POST",
+    );
+    expect(createItemCall).toBeTruthy();
+    const createItemBody = JSON.parse(String(createItemCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(createItemBody).toEqual({
+      code: "high",
+      label: "Высокий",
+      parent_id: null,
+      description: "Высокий приоритет",
+      position: 5,
+    });
+
+    for (const body of [createListBody, createItemBody]) {
+      for (const forbiddenField of [
+        "employees",
+        "employee",
+        "full_name",
+        "birth_date",
+        "education",
+        "qualification",
+        "experience",
+      ]) {
+        expect(body).not.toHaveProperty(forbiddenField);
+      }
+    }
+
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/reference-lists/dededede-dede-4ede-8ede-dededededede") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.name === "Приоритеты карточки" &&
+          body.description === "Обновленные уровни приоритета"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/reference-items/cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.label === "Высокий приоритет" &&
+          body.description === "Обновленное значение" &&
+          body.position === 6
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/reference-items/cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/reference-lists/dededede-dede-4ede-8ede-dededededede") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("wires select fields to reference lists without hardcoded options", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
+  fireEvent.change(screen.getByLabelText("Код поля формы"), { target: { value: "state" } });
+  fireEvent.change(screen.getByLabelText("Название поля формы"), {
+    target: { value: "Состояние" },
+  });
+  await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["select"]);
+  await user.selectOptions(screen.getByLabelText("Справочник для поля"), [
+    "abababab-abab-4aba-8aba-abababababab",
+  ]);
+  expect(screen.queryByLabelText("ID справочника")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
+  expect(screen.getByText("Состояние")).toBeInTheDocument();
+  expect(screen.getAllByText("Справочник").length).toBeGreaterThan(0);
+
+  await waitFor(() => {
+    const createFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields") &&
+          init?.method === "POST",
+      );
+    expect(createFieldCall).toBeTruthy();
+    const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      code: "state",
+      label: "Состояние",
+      field_type: "select",
+      options_source_type: "reference_list",
+      options_source_id: "abababab-abab-4aba-8aba-abababababab",
+    });
+    expect(body).not.toHaveProperty("options");
+    expect(body).not.toHaveProperty("employees");
+  });
+});
+
+test("shows localized locked reference list denial text", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
+  expect(screen.getByText("Заблокирован для дочерних организаций")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Редактировать справочник Статусы актива" }));
+  const listNameInput = await screen.findByLabelText("Название справочника");
+  fireEvent.change(listNameInput, { target: { value: "Недоступный справочник" } });
+  denyNextReferenceListUpdate = true;
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Статусы актива").length).toBeGreaterThan(0);
 });
 
 test("shows localized locked schema field denial text", async () => {

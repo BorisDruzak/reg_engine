@@ -1,18 +1,34 @@
-import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type FormEvent } from "react";
 
 import {
   archiveFormBlock,
   archiveFormField,
+  archiveReferenceItem,
+  archiveReferenceList,
   archiveRegistry,
   createFormBlock,
   createFormField,
+  createReferenceItem,
+  createReferenceList,
   createRegistry,
+  listReferenceItems,
+  listReferenceLists,
+  updateReferenceItem,
+  updateReferenceList,
   updateFormBlock,
   updateFormField,
   updateRegistry,
 } from "@/api/client";
-import type { FormBlockRead, FormFieldRead, RegistryRead, RegistrySchemaRead } from "@/api/types";
+import type {
+  FormBlockRead,
+  FormFieldRead,
+  OrganizationRead,
+  ReferenceItemRead,
+  ReferenceListRead,
+  RegistryRead,
+  RegistrySchemaRead,
+} from "@/api/types";
 import {
   activityLabel,
   booleanLabel,
@@ -66,6 +82,28 @@ type FieldFormState = {
   publicEditable: boolean;
 };
 
+type ReferenceListFormState = {
+  mode: "create" | "edit";
+  listId: string | null;
+  code: string;
+  name: string;
+  description: string;
+  ownerOrganizationId: string;
+  inheritToDescendants: boolean;
+  lockedForDescendants: boolean;
+  managedBySystemOnly: boolean;
+};
+
+type ReferenceItemFormState = {
+  mode: "create" | "edit";
+  itemId: string | null;
+  code: string;
+  label: string;
+  description: string;
+  parentId: string;
+  position: string;
+};
+
 const supportedFieldTypes = [
   "text",
   "number",
@@ -82,15 +120,19 @@ const supportedFieldTypes = [
   "registry_ref",
 ];
 
+const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
+
 export function RegistriesAndSchema({
   registries,
   schema,
+  organizations,
   selectedRegistryId,
   token,
   onSelectRegistry,
 }: {
   registries: RegistryRead[];
   schema: RegistrySchemaRead | null;
+  organizations: OrganizationRead[];
   selectedRegistryId: string;
   token: string;
   onSelectRegistry: (registryId: string) => void;
@@ -104,6 +146,12 @@ export function RegistriesAndSchema({
     () => new Map((schema?.blocks ?? []).map((block) => [block.id, block])),
     [schema?.blocks],
   );
+  const referenceListsQuery = useQuery({
+    queryKey: ["reference-lists", token, selectedRegistryId],
+    queryFn: () => listReferenceLists(token, selectedRegistryId),
+    enabled: Boolean(token && selectedRegistryId),
+  });
+  const referenceLists = referenceListsQuery.data?.items ?? [];
   const createMutation = useMutation({
     mutationFn: (payload: { code: string; name: string; description: string | null }) =>
       createRegistry(token, payload),
@@ -335,6 +383,15 @@ export function RegistriesAndSchema({
           blocks={schema?.blocks ?? []}
           blocksById={blocksById}
           fields={schema?.fields ?? []}
+          referenceLists={referenceLists}
+          token={token}
+        />
+      </Panel>
+      <Panel title={uiText.referenceLists}>
+        <ReferenceListsPanel
+          organizations={organizations}
+          referenceLists={referenceLists}
+          selectedRegistryId={selectedRegistryId}
           token={token}
         />
       </Panel>
@@ -725,11 +782,13 @@ function SchemaFieldsPanel({
   blocks,
   fields,
   blocksById,
+  referenceLists,
   token,
 }: {
   blocks: FormBlockRead[];
   fields: FormFieldRead[];
   blocksById: Map<string, FormBlockRead>;
+  referenceLists: ReferenceListRead[];
   token: string;
 }) {
   const queryClient = useQueryClient();
@@ -863,6 +922,7 @@ function SchemaFieldsPanel({
     setLocalError(null);
     setSuccessMessage(null);
     if (formState.mode === "create") {
+      const usesReferenceList = referenceBackedFieldTypes.has(formState.fieldType);
       createMutation.mutate({
         blockId,
         code,
@@ -870,8 +930,8 @@ function SchemaFieldsPanel({
         field_type: formState.fieldType,
         description: description || null,
         position: positionNumber(formState.position),
-        options_source_type: optionsSourceId ? "reference_list" : null,
-        options_source_id: optionsSourceId || null,
+        options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
+        options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
         public_visible: formState.publicVisible,
         public_editable: formState.publicEditable,
       });
@@ -949,7 +1009,13 @@ function SchemaFieldsPanel({
                   <select
                     value={formState.fieldType}
                     onChange={(event) =>
-                      setFormState({ ...formState, fieldType: event.currentTarget.value })
+                      setFormState({
+                        ...formState,
+                        fieldType: event.currentTarget.value,
+                        optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
+                          ? formState.optionsSourceId
+                          : "",
+                      })
                     }
                   >
                     {supportedFieldTypes.map((fieldType) => (
@@ -991,15 +1057,24 @@ function SchemaFieldsPanel({
             </label>
             {formState.mode === "create" && (
               <>
-                <label>
-                  {uiText.referenceListId}
-                  <input
-                    value={formState.optionsSourceId}
-                    onChange={(event) =>
-                      setFormState({ ...formState, optionsSourceId: event.currentTarget.value })
-                    }
-                  />
-                </label>
+                {referenceBackedFieldTypes.has(formState.fieldType) && (
+                  <label>
+                    {uiText.referenceListForField}
+                    <select
+                      value={formState.optionsSourceId}
+                      onChange={(event) =>
+                        setFormState({ ...formState, optionsSourceId: event.currentTarget.value })
+                      }
+                    >
+                      <option value="">{uiText.noReferenceList}</option>
+                      {referenceLists.map((referenceList) => (
+                        <option key={referenceList.id} value={referenceList.id}>
+                          {referenceList.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   <input
                     type="checkbox"
@@ -1116,6 +1191,716 @@ function FieldsTable({
       </table>
     </div>
   );
+}
+
+function ReferenceListsPanel({
+  organizations,
+  referenceLists,
+  selectedRegistryId,
+  token,
+}: {
+  organizations: OrganizationRead[];
+  referenceLists: ReferenceListRead[];
+  selectedRegistryId: string;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const [selectedReferenceListId, setSelectedReferenceListId] = useState<string | null>(null);
+  const activeReferenceListId = selectedReferenceListId ?? referenceLists[0]?.id ?? "";
+  const activeReferenceList =
+    referenceLists.find((referenceList) => referenceList.id === activeReferenceListId) ?? null;
+  const referenceItemsQuery = useQuery({
+    queryKey: ["reference-items", token, activeReferenceListId],
+    queryFn: () => listReferenceItems(token, activeReferenceListId),
+    enabled: Boolean(token && activeReferenceListId),
+  });
+  const referenceItems = referenceItemsQuery.data?.items ?? [];
+  const organizationById = useMemo(
+    () => new Map(organizations.map((organization) => [organization.id, organization])),
+    [organizations],
+  );
+  const [listFormState, setListFormState] = useState<ReferenceListFormState | null>(null);
+  const [itemFormState, setItemFormState] = useState<ReferenceItemFormState | null>(null);
+  const [listArchiveTarget, setListArchiveTarget] = useState<ReferenceListRead | null>(null);
+  const [itemArchiveTarget, setItemArchiveTarget] = useState<ReferenceItemRead | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const createListMutation = useMutation({
+    mutationFn: (payload: {
+      code: string;
+      name: string;
+      owner_organization_id: string | null;
+      description: string | null;
+      inherit_to_descendants: boolean;
+      locked_for_descendants: boolean;
+      managed_by_system_only: boolean;
+    }) => createReferenceList(token, selectedRegistryId, payload),
+    onSuccess: async (created) => {
+      setListFormState(null);
+      setSelectedReferenceListId(created.id);
+      setSuccessMessage(uiText.referenceListCreated);
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, created.id);
+    },
+  });
+  const updateListMutation = useMutation({
+    mutationFn: (payload: { listId: string; name: string; description: string | null }) =>
+      updateReferenceList(token, payload.listId, {
+        name: payload.name,
+        description: payload.description,
+      }),
+    onSuccess: async (_updated, payload) => {
+      setListFormState(null);
+      setSuccessMessage(uiText.referenceListUpdated);
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, payload.listId);
+    },
+  });
+  const archiveListMutation = useMutation({
+    mutationFn: (listId: string) => archiveReferenceList(token, listId),
+    onSuccess: async (_archived, listId) => {
+      setListArchiveTarget(null);
+      setSuccessMessage(uiText.referenceListArchived);
+      if (activeReferenceListId === listId) {
+        setSelectedReferenceListId(
+          referenceLists.find((referenceList) => referenceList.id !== listId)?.id ?? null,
+        );
+      }
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, listId);
+    },
+  });
+  const createItemMutation = useMutation({
+    mutationFn: (payload: {
+      listId: string;
+      code: string;
+      label: string;
+      parent_id: string | null;
+      description: string | null;
+      position: number;
+    }) =>
+      createReferenceItem(token, payload.listId, {
+        code: payload.code,
+        label: payload.label,
+        parent_id: payload.parent_id,
+        description: payload.description,
+        position: payload.position,
+      }),
+    onSuccess: async (_created, payload) => {
+      setItemFormState(null);
+      setSuccessMessage(uiText.referenceItemCreated);
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, payload.listId);
+    },
+  });
+  const updateItemMutation = useMutation({
+    mutationFn: (payload: {
+      itemId: string;
+      label: string;
+      description: string | null;
+      position: number;
+    }) =>
+      updateReferenceItem(token, payload.itemId, {
+        label: payload.label,
+        description: payload.description,
+        position: payload.position,
+      }),
+    onSuccess: async () => {
+      setItemFormState(null);
+      setSuccessMessage(uiText.referenceItemUpdated);
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, activeReferenceListId);
+    },
+  });
+  const archiveItemMutation = useMutation({
+    mutationFn: (itemId: string) => archiveReferenceItem(token, itemId),
+    onSuccess: async () => {
+      setItemArchiveTarget(null);
+      setSuccessMessage(uiText.referenceItemArchived);
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, activeReferenceListId);
+    },
+  });
+  const mutationError = localError
+    ? new Error(localError)
+    : (createListMutation.error ??
+      updateListMutation.error ??
+      archiveListMutation.error ??
+      createItemMutation.error ??
+      updateItemMutation.error ??
+      archiveItemMutation.error ??
+      referenceItemsQuery.error);
+
+  function organizationLabel(organizationId: string | null) {
+    if (!organizationId) {
+      return uiText.none;
+    }
+    return organizationById.get(organizationId)?.name ?? shortId(organizationId);
+  }
+
+  function openCreateListForm() {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setItemFormState(null);
+    setListFormState({
+      mode: "create",
+      listId: null,
+      code: "",
+      name: "",
+      description: "",
+      ownerOrganizationId: "",
+      inheritToDescendants: false,
+      lockedForDescendants: false,
+      managedBySystemOnly: false,
+    });
+  }
+
+  function openEditListForm(referenceList: ReferenceListRead) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setItemFormState(null);
+    setListFormState({
+      mode: "edit",
+      listId: referenceList.id,
+      code: referenceList.code,
+      name: referenceList.name,
+      description: referenceList.description ?? "",
+      ownerOrganizationId: referenceList.owner_organization_id ?? "",
+      inheritToDescendants: referenceList.inherit_to_descendants,
+      lockedForDescendants: referenceList.locked_for_descendants,
+      managedBySystemOnly: referenceList.managed_by_system_only,
+    });
+  }
+
+  function closeListForm() {
+    setListFormState(null);
+    setLocalError(null);
+  }
+
+  function openCreateItemForm() {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setListFormState(null);
+    setItemFormState({
+      mode: "create",
+      itemId: null,
+      code: "",
+      label: "",
+      description: "",
+      parentId: "",
+      position: "0",
+    });
+  }
+
+  function openEditItemForm(item: ReferenceItemRead) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setListFormState(null);
+    setItemFormState({
+      mode: "edit",
+      itemId: item.id,
+      code: item.code,
+      label: item.label,
+      description: item.description ?? "",
+      parentId: item.parent_id ?? "",
+      position: String(item.position),
+    });
+  }
+
+  function closeItemForm() {
+    setItemFormState(null);
+    setLocalError(null);
+  }
+
+  function handleListFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!listFormState) {
+      return;
+    }
+
+    const code = listFormState.code.trim();
+    const name = listFormState.name.trim();
+    const description = listFormState.description.trim();
+    if (!name || (listFormState.mode === "create" && !code)) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    if (listFormState.mode === "create") {
+      createListMutation.mutate({
+        code,
+        name,
+        owner_organization_id: listFormState.ownerOrganizationId || null,
+        description: description || null,
+        inherit_to_descendants: listFormState.inheritToDescendants,
+        locked_for_descendants: listFormState.lockedForDescendants,
+        managed_by_system_only: listFormState.managedBySystemOnly,
+      });
+      return;
+    }
+
+    if (listFormState.listId) {
+      updateListMutation.mutate({
+        listId: listFormState.listId,
+        name,
+        description: description || null,
+      });
+    }
+  }
+
+  function handleItemFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!itemFormState || !activeReferenceListId) {
+      return;
+    }
+
+    const code = itemFormState.code.trim();
+    const label = itemFormState.label.trim();
+    const description = itemFormState.description.trim();
+    if (!label || (itemFormState.mode === "create" && !code)) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    if (itemFormState.mode === "create") {
+      createItemMutation.mutate({
+        listId: activeReferenceListId,
+        code,
+        label,
+        parent_id: itemFormState.parentId || null,
+        description: description || null,
+        position: positionNumber(itemFormState.position),
+      });
+      return;
+    }
+
+    if (itemFormState.itemId) {
+      updateItemMutation.mutate({
+        itemId: itemFormState.itemId,
+        label,
+        description: description || null,
+        position: positionNumber(itemFormState.position),
+      });
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="split-grid">
+        <div className="stack">
+          <div className="panel-toolbar">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!selectedRegistryId}
+              onClick={openCreateListForm}
+            >
+              {uiText.createReferenceList}
+            </button>
+          </div>
+          <div className="panel-feedback">
+            <MutationFeedback
+              error={listFormState || itemFormState ? null : mutationError}
+              successMessage={successMessage}
+            />
+          </div>
+          {listFormState && (
+            <div className="panel-form">
+              <AdminMutationForm
+                title={
+                  listFormState.mode === "create"
+                    ? uiText.createReferenceList
+                    : uiText.editReferenceList
+                }
+                submitLabel={listFormState.mode === "create" ? uiText.create : uiText.save}
+                isSubmitting={createListMutation.isPending || updateListMutation.isPending}
+                error={mutationError}
+                successMessage={null}
+                onCancel={closeListForm}
+                onSubmit={handleListFormSubmit}
+              >
+                {listFormState.mode === "create" && (
+                  <label>
+                    {uiText.referenceListCode}
+                    <input
+                      value={listFormState.code}
+                      onChange={(event) =>
+                        setListFormState({ ...listFormState, code: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                )}
+                <label>
+                  {uiText.referenceListName}
+                  <input
+                    value={listFormState.name}
+                    onChange={(event) =>
+                      setListFormState({ ...listFormState, name: event.currentTarget.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {uiText.referenceListDescription}
+                  <textarea
+                    value={listFormState.description}
+                    onChange={(event) =>
+                      setListFormState({
+                        ...listFormState,
+                        description: event.currentTarget.value,
+                      })
+                    }
+                  />
+                </label>
+                {listFormState.mode === "create" && (
+                  <>
+                    <label>
+                      {uiText.referenceListOwnerOrganization}
+                      <select
+                        value={listFormState.ownerOrganizationId}
+                        onChange={(event) =>
+                          setListFormState({
+                            ...listFormState,
+                            ownerOrganizationId: event.currentTarget.value,
+                          })
+                        }
+                      >
+                        <option value="">{uiText.noOwnerOrganization}</option>
+                        {organizations.map((organization) => (
+                          <option key={organization.id} value={organization.id}>
+                            {organization.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={listFormState.inheritToDescendants}
+                        onChange={(event) =>
+                          setListFormState({
+                            ...listFormState,
+                            inheritToDescendants: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                      {uiText.inheritReferenceListToDescendants}
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={listFormState.lockedForDescendants}
+                        onChange={(event) =>
+                          setListFormState({
+                            ...listFormState,
+                            lockedForDescendants: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                      {uiText.lockReferenceListForDescendants}
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={listFormState.managedBySystemOnly}
+                        onChange={(event) =>
+                          setListFormState({
+                            ...listFormState,
+                            managedBySystemOnly: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                      {uiText.managedBySystemOnly}
+                    </label>
+                  </>
+                )}
+              </AdminMutationForm>
+            </div>
+          )}
+          {listArchiveTarget && (
+            <AdminMutationDialog title={uiText.archiveReferenceList}>
+              <ArchiveConfirmation
+                entityLabel={uiText.referenceList}
+                itemLabel={listArchiveTarget.name}
+                isPending={archiveListMutation.isPending}
+                onCancel={() => setListArchiveTarget(null)}
+                onConfirm={() => archiveListMutation.mutate(listArchiveTarget.id)}
+              />
+            </AdminMutationDialog>
+          )}
+          <SelectableList
+            items={referenceLists.map((referenceList) => ({
+              id: referenceList.id,
+              title: referenceList.name,
+              detail: `${referenceList.code} / ${organizationLabel(
+                referenceList.owner_organization_id,
+              )}`,
+            }))}
+            selectedId={activeReferenceListId}
+            onSelect={(referenceListId) => {
+              setSelectedReferenceListId(referenceListId);
+              setLocalError(null);
+              setSuccessMessage(null);
+            }}
+          />
+          <ReferenceListsTable
+            organizationLabel={organizationLabel}
+            referenceLists={referenceLists}
+            onArchiveReferenceList={(referenceList) => {
+              setLocalError(null);
+              setSuccessMessage(null);
+              setListArchiveTarget(referenceList);
+            }}
+            onEditReferenceList={openEditListForm}
+          />
+        </div>
+        <div className="stack">
+          <h3>{uiText.referenceItems}</h3>
+          <div className="panel-toolbar">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!activeReferenceList}
+              onClick={openCreateItemForm}
+            >
+              {uiText.createReferenceItem}
+            </button>
+          </div>
+          {itemFormState && (
+            <div className="panel-form">
+              <AdminMutationForm
+                title={
+                  itemFormState.mode === "create"
+                    ? uiText.createReferenceItem
+                    : uiText.editReferenceItem
+                }
+                submitLabel={itemFormState.mode === "create" ? uiText.create : uiText.save}
+                isSubmitting={createItemMutation.isPending || updateItemMutation.isPending}
+                error={mutationError}
+                successMessage={null}
+                onCancel={closeItemForm}
+                onSubmit={handleItemFormSubmit}
+              >
+                {itemFormState.mode === "create" && (
+                  <label>
+                    {uiText.referenceItemCode}
+                    <input
+                      value={itemFormState.code}
+                      onChange={(event) =>
+                        setItemFormState({ ...itemFormState, code: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                )}
+                <label>
+                  {uiText.referenceItemLabel}
+                  <input
+                    value={itemFormState.label}
+                    onChange={(event) =>
+                      setItemFormState({ ...itemFormState, label: event.currentTarget.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {uiText.referenceItemDescription}
+                  <textarea
+                    value={itemFormState.description}
+                    onChange={(event) =>
+                      setItemFormState({
+                        ...itemFormState,
+                        description: event.currentTarget.value,
+                      })
+                    }
+                  />
+                </label>
+                {itemFormState.mode === "create" && (
+                  <label>
+                    {uiText.parentReferenceItem}
+                    <select
+                      value={itemFormState.parentId}
+                      onChange={(event) =>
+                        setItemFormState({ ...itemFormState, parentId: event.currentTarget.value })
+                      }
+                    >
+                      <option value="">{uiText.noParentReferenceItem}</option>
+                      {referenceItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  {uiText.referenceItemPosition}
+                  <input
+                    type="number"
+                    value={itemFormState.position}
+                    onChange={(event) =>
+                      setItemFormState({ ...itemFormState, position: event.currentTarget.value })
+                    }
+                  />
+                </label>
+              </AdminMutationForm>
+            </div>
+          )}
+          {itemArchiveTarget && (
+            <AdminMutationDialog title={uiText.archiveReferenceItem}>
+              <ArchiveConfirmation
+                entityLabel={uiText.referenceItem}
+                itemLabel={itemArchiveTarget.label}
+                isPending={archiveItemMutation.isPending}
+                onCancel={() => setItemArchiveTarget(null)}
+                onConfirm={() => archiveItemMutation.mutate(itemArchiveTarget.id)}
+              />
+            </AdminMutationDialog>
+          )}
+          <ReferenceItemsTable
+            referenceItems={referenceItems}
+            onArchiveReferenceItem={(item) => {
+              setLocalError(null);
+              setSuccessMessage(null);
+              setItemArchiveTarget(item);
+            }}
+            onEditReferenceItem={openEditItemForm}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReferenceListsTable({
+  organizationLabel,
+  referenceLists,
+  onEditReferenceList,
+  onArchiveReferenceList,
+}: {
+  organizationLabel: (organizationId: string | null) => string;
+  referenceLists: ReferenceListRead[];
+  onEditReferenceList: (referenceList: ReferenceListRead) => void;
+  onArchiveReferenceList: (referenceList: ReferenceListRead) => void;
+}) {
+  if (referenceLists.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{uiText.referenceListName}</th>
+            <th>{uiText.code}</th>
+            <th>{uiText.referenceListOwnerOrganization}</th>
+            <th>{uiText.inheritReferenceListToDescendants}</th>
+            <th>{uiText.lockedForDescendants}</th>
+            <th>{uiText.status}</th>
+            <th>{uiText.action}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {referenceLists.map((referenceList) => (
+            <tr key={referenceList.id}>
+              <td>{referenceList.name}</td>
+              <td>{referenceList.code}</td>
+              <td>{organizationLabel(referenceList.owner_organization_id)}</td>
+              <td>{booleanLabel(referenceList.inherit_to_descendants)}</td>
+              <td>{booleanLabel(referenceList.locked_for_descendants)}</td>
+              <td>{activityLabel(referenceList.is_active)}</td>
+              <td>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onEditReferenceList(referenceList)}
+                  >
+                    {uiText.editReferenceList} {referenceList.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onArchiveReferenceList(referenceList)}
+                  >
+                    {uiText.archiveReferenceList} {referenceList.name}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ReferenceItemsTable({
+  referenceItems,
+  onEditReferenceItem,
+  onArchiveReferenceItem,
+}: {
+  referenceItems: ReferenceItemRead[];
+  onEditReferenceItem: (item: ReferenceItemRead) => void;
+  onArchiveReferenceItem: (item: ReferenceItemRead) => void;
+}) {
+  if (referenceItems.length === 0) {
+    return <p className="data-empty">{uiText.noData}</p>;
+  }
+
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>{uiText.referenceItemLabel}</th>
+            <th>{uiText.code}</th>
+            <th>{uiText.parentReferenceItem}</th>
+            <th>{uiText.referenceItemPosition}</th>
+            <th>{uiText.status}</th>
+            <th>{uiText.action}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {referenceItems.map((item) => (
+            <tr key={item.id}>
+              <td>{item.label}</td>
+              <td>{item.code}</td>
+              <td>{item.parent_id ? shortId(item.parent_id) : uiText.none}</td>
+              <td>{item.position}</td>
+              <td>{activityLabel(item.is_active)}</td>
+              <td>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onEditReferenceItem(item)}
+                  >
+                    {uiText.editReferenceItem} {item.label}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onArchiveReferenceItem(item)}
+                  >
+                    {uiText.archiveReferenceItem} {item.label}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+async function invalidateReferenceData(
+  queryClient: QueryClient,
+  token: string,
+  registryId: string,
+  referenceListId: string,
+) {
+  await queryClient.invalidateQueries({ queryKey: ["reference-lists", token, registryId] });
+  await queryClient.invalidateQueries({ queryKey: ["reference-items", token, referenceListId] });
+  await invalidateRegistryData(queryClient, token);
 }
 
 function positionNumber(value: string) {
