@@ -39,9 +39,13 @@ Completed phases:
 Current stop point:
 
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
-- Phase 2J is the next planned phase: `file_ref` dynamic field type.
-- Phase 2J must start with planning/ADR and acceptance criteria before implementation.
-- After Phase 2J, the next implementation priority is Phase 2K: core backend/API completeness for remaining registry operations.
+- Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
+  deferred behind core admin workflows if product usability is the priority.
+- Phase 2K is the next backend/API gap-closure phase for remaining registry
+  administration operations.
+- Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
+  for organizations, users, access grants, registries, schema builder, and
+  cards.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -57,6 +61,28 @@ Current stop point:
 - Keep the frontend Russian-first for user-facing text.
 - Keep Phase 2 storage roots and operational values outside Git.
 - Keep `file_ref` generic: it must not become an HR-specific document field.
+
+## Current Admin UI Gap
+
+The backend already exposes most core REST operations for organizations, users,
+access grants, registries, blocks, fields, reference lists, cards, attachments,
+documents, public links, and audit reads. The current authenticated frontend is
+not yet a complete admin workspace:
+
+- organizations are listed but cannot be created, edited, or archived in UI;
+- users, roles, and permissions are listed, but users cannot be created,
+  edited, password-reset, or archived in UI;
+- access grants are listed, but grants cannot be issued or revoked in UI;
+- registries and schemas are displayed, but registry create/update/archive and
+  block/field/reference-list editing are not exposed as UI workflows;
+- cards are listed and existing field values can be edited, but card creation,
+  card metadata edit, archive, repeatable block-instance management, and bulk
+  save workflows are incomplete;
+- current UI is useful for inspection and partial editing, not yet for full
+  setup from an empty database.
+
+Phase 2K and Phase 2L exist to close this gap before advanced document,
+import/export, report, or MCP phases.
 
 ## Phase 2: Documents And Attachments
 
@@ -85,7 +111,7 @@ Completed Phase 2 work:
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: planned next.
+Status: planned, can be deferred behind Phase 2K/2L admin usability work.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -243,7 +269,7 @@ Phase 2J must not implement:
 
 ## Phase 2K: Core Backend API Completeness
 
-Status: planned after Phase 2J.
+Status: planned next for backend/API gaps that block full admin UI.
 
 Purpose: close remaining non-document backend API gaps that are needed for a complete registry administration workflow before moving to advanced documents, import/export, reports, or MCP.
 
@@ -257,6 +283,24 @@ Phase 2K must not implement:
 - MCP;
 - service desk integration;
 - hardcoded HR fields.
+
+### Phase 2K.0: Admin Workflow API Gap Audit
+
+Required work:
+
+- Verify the actual API surface needed by Phase 2L:
+  organizations, org units, users, roles, permissions, access grants,
+  registries, blocks, fields, reference lists/items, cards, block instances,
+  public links, attachments, generated documents, and audit.
+- Record which workflows already have complete API support and which require
+  backend additions in Phase 2K.
+- Keep frontend-only gaps in Phase 2L, not Phase 2K.
+
+Acceptance criteria:
+
+- PLANS.md or a linked implementation note lists the API readiness matrix.
+- No new business-specific tables or HR-specific fields are introduced.
+- No frontend implementation is added in this audit step.
 
 ### Phase 2K.1: Organization Units API
 
@@ -329,11 +373,211 @@ Acceptance criteria:
 - PostgreSQL-backed tests pass against disposable database.
 - No unrelated document/import/report/MCP work is introduced.
 
-## Planned Phases After Phase 2K
+## Phase 2L: Core Admin CRUD UI
 
-These require explicit approval after Phase 2K:
+Status: planned after Phase 2K API readiness, or earlier for workflows whose
+API is already complete.
 
-### Phase 2L: Binary `.docx` Template Upload And Template Versioning
+Purpose: make the authenticated Russian-first admin UI capable of setting up
+and operating the registry engine from an empty or near-empty database without
+using Swagger or manual API calls.
+
+Phase 2L must not implement:
+
+- `file_ref` unless Phase 2J is already completed;
+- PDF conversion;
+- binary `.docx` template upload;
+- template versioning;
+- import/export;
+- reports;
+- MCP;
+- service desk integration;
+- hardcoded HR screens or HR-only labels.
+
+### Phase 2L.0: Admin UI Mutation Foundation
+
+Required work:
+
+- Add frontend API client functions for create/update/archive operations already
+  exposed by backend.
+- Establish reusable Russian-first form, modal/drawer, confirmation, error, and
+  success-message patterns.
+- Keep backend errors mapped to Russian user-facing messages.
+- Preserve frontend checks as UX only; backend remains the security boundary.
+
+Acceptance criteria:
+
+- Unit tests cover shared form/error utilities.
+- E2E smoke can log in and open every admin section without console errors.
+- No business-specific labels or fixed employee fields are added.
+
+### Phase 2L.1: Organization Management UI
+
+Required work:
+
+- Add create organization form.
+- Add edit organization metadata form.
+- Add archive organization confirmation.
+- Display parent/child context clearly.
+- Keep descendants visibility rules explained through data, not frontend-only
+  security checks.
+
+Acceptance criteria:
+
+- User can create a root or child organization through UI.
+- User can edit allowed organization metadata through UI.
+- User can archive an organization with confirmation.
+- Frontend tests cover create/edit/archive success and validation errors.
+
+### Phase 2L.2: User Management UI
+
+Required work:
+
+- Add create user form with email, display name, password, status, and superuser
+  flag where allowed.
+- Add edit user form for profile/status fields.
+- Add password reset/change workflow for admins.
+- Add archive user confirmation.
+- Show Russian labels for built-in/system display names.
+
+Acceptance criteria:
+
+- User can create, edit, password-reset, and archive users through UI.
+- Password fields are not logged or persisted outside the API request.
+- Frontend tests cover validation, success, and backend-denied states.
+
+### Phase 2L.3: Access Grant Management UI
+
+Required work:
+
+- Add create access grant workflow:
+  user, role, optional registry, organization, include descendants, validity
+  dates where supported.
+- Add revoke/archive access grant confirmation.
+- Show scope summary in Russian before save.
+- Prevent ambiguous UI states where a grant appears broader or narrower than
+  backend rules.
+
+Acceptance criteria:
+
+- User can issue and revoke grants through UI.
+- Org admin descendant-scope rules remain backend-enforced.
+- Frontend tests cover global, organization-scoped, descendant, registry-scoped,
+  and denied grant flows where supported by API.
+
+### Phase 2L.4: Registry Management UI
+
+Required work:
+
+- Add create registry form.
+- Add update/archive registry controls when Phase 2K exposes them.
+- Keep registry as a list/mechanism for organizing cards, not a per-organization
+  database schema.
+- Surface lifecycle/status labels in Russian.
+
+Acceptance criteria:
+
+- User can create a generic schema-driven registry through UI.
+- User can update/archive registry metadata if API support exists.
+- Tests prove no hardcoded employee registry fields are created.
+
+### Phase 2L.5: Schema Builder UI
+
+Required work:
+
+- Add block create/update/archive controls.
+- Add field create/update/archive controls.
+- Support dynamic field types already supported by backend.
+- Support repeatable block flag, public visibility/editability flags, required
+  flags, position/order controls where API supports them.
+- Keep locked/system blocks and fields protected by backend and reflected in UI.
+
+Acceptance criteria:
+
+- User can build a registry schema from UI without migrations.
+- Adding a new field keeps old cards valid with empty values.
+- Frontend tests cover block/field create/update/archive and locked-field
+  denial states.
+
+### Phase 2L.6: Reference List Management UI
+
+Required work:
+
+- Add reference-list create/update/archive controls.
+- Add reference-item create/update/archive controls.
+- Support owner organization, inheritance to descendants, and locked inherited
+  list behavior as exposed by backend.
+- Wire select/multi_select fields to reference lists without hardcoded options.
+
+Acceptance criteria:
+
+- User can create a reference list and items through UI.
+- Select/multi_select fields can use that reference list.
+- Locked inherited list behavior is visible and cannot be bypassed in UI.
+
+### Phase 2L.7: Card Create, Metadata, And Editor UI
+
+Required work:
+
+- Add create card form:
+  registry, organization, optional org unit, display name, lifecycle/public-edit
+  flags where supported.
+- Add card metadata edit and archive controls.
+- Add repeatable block-instance add/archive UI after Phase 2K API support.
+- Add bulk save workflow after Phase 2K API support.
+- Keep existing per-field editor as a fallback path.
+
+Acceptance criteria:
+
+- User can create a card through UI and immediately edit schema-driven values.
+- User can archive a card with confirmation.
+- Repeatable block instance controls work where API support exists.
+- Bulk save is atomic where API support exists.
+- Frontend e2e covers create card, edit values, add repeatable instance,
+  archive card, and audit refresh.
+
+### Phase 2L.8: Public Link Admin Controls UI
+
+Required work:
+
+- Add authenticated public-link list/create/disable controls on the card
+  workspace.
+- Expose `expires_in_days` and `max_attachment_uploads` controls.
+- Clearly separate field-edit usage limits from attachment-upload limits.
+- Keep public-link generated-document workflows deferred.
+
+Acceptance criteria:
+
+- User can create and disable a public edit link through UI.
+- User can set attachment upload limit at link creation.
+- Public-link UI tests cover disabled, expired, upload-limit, and no-file
+  validation messaging.
+
+### Phase 2L.9: Admin UI Live Validation
+
+Required work:
+
+- Use disposable or explicitly approved test data.
+- Validate this complete setup path in browser:
+  create organization, create user, issue access grant, create registry, build
+  schema, create reference list/items, create card, edit card fields, upload
+  attachment, generate document, create public link, verify audit.
+- Capture console health and first-screen rendering evidence.
+- Update README, PLANS.md, PROJECT_TREE.md, and docs as needed.
+
+Acceptance criteria:
+
+- Full admin setup path works from UI without Swagger/manual API calls.
+- `scripts/check.ps1 -SkipRemote` passes.
+- Frontend e2e and browser smoke pass.
+- Server deployment and same-origin frontend serving remain working.
+
+## Planned Phases After Core Admin UI
+
+These require explicit approval after Phase 2K/2L unless the user explicitly
+reprioritizes them.
+
+### Phase 2M: Binary `.docx` Template Upload And Template Versioning
 
 Purpose: move from JSON `docx_text_v1` template bodies toward managed binary template assets and version history.
 
@@ -345,7 +589,7 @@ Planned scope:
 - Keep templates schema-driven and avoid real personal data in Git/tests.
 - Keep PDF conversion deferred.
 
-### Phase 2M: PDF Conversion
+### Phase 2N: PDF Conversion
 
 Purpose: add PDF generation after generated-document and template boundaries are stable.
 
