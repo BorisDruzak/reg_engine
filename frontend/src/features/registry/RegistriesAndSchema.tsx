@@ -1,7 +1,17 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type FormEvent } from "react";
 
-import { archiveRegistry, createRegistry, updateRegistry } from "@/api/client";
+import {
+  archiveFormBlock,
+  archiveFormField,
+  archiveRegistry,
+  createFormBlock,
+  createFormField,
+  createRegistry,
+  updateFormBlock,
+  updateFormField,
+  updateRegistry,
+} from "@/api/client";
 import type { FormBlockRead, FormFieldRead, RegistryRead, RegistrySchemaRead } from "@/api/types";
 import {
   activityLabel,
@@ -28,6 +38,49 @@ type RegistryFormState = {
   description: string;
   lifecycleStatus: string;
 };
+
+type BlockFormState = {
+  mode: "create" | "edit";
+  blockId: string | null;
+  code: string;
+  title: string;
+  description: string;
+  position: string;
+  isRepeatable: boolean;
+  publicVisible: boolean;
+  publicEditable: boolean;
+};
+
+type FieldFormState = {
+  mode: "create" | "edit";
+  fieldId: string | null;
+  blockId: string;
+  code: string;
+  label: string;
+  description: string;
+  fieldType: string;
+  position: string;
+  optionsSourceId: string;
+  isActive: boolean;
+  publicVisible: boolean;
+  publicEditable: boolean;
+};
+
+const supportedFieldTypes = [
+  "text",
+  "number",
+  "date",
+  "datetime",
+  "bool",
+  "json",
+  "select",
+  "multi_select",
+  "card_ref",
+  "user_ref",
+  "organization_ref",
+  "org_unit_ref",
+  "registry_ref",
+];
 
 export function RegistriesAndSchema({
   registries,
@@ -270,11 +323,20 @@ export function RegistriesAndSchema({
           />
         </Panel>
         <Panel title={uiText.schemaBlocks}>
-          <BlocksTable blocks={schema?.blocks ?? []} />
+          <SchemaBlocksPanel
+            blocks={schema?.blocks ?? []}
+            selectedRegistryId={selectedRegistryId}
+            token={token}
+          />
         </Panel>
       </div>
       <Panel title={uiText.schemaFields}>
-        <FieldsTable fields={schema?.fields ?? []} blocksById={blocksById} />
+        <SchemaFieldsPanel
+          blocks={schema?.blocks ?? []}
+          blocksById={blocksById}
+          fields={schema?.fields ?? []}
+          token={token}
+        />
       </Panel>
     </div>
   );
@@ -336,7 +398,281 @@ function RegistriesTable({
   );
 }
 
-function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
+function SchemaBlocksPanel({
+  blocks,
+  selectedRegistryId,
+  token,
+}: {
+  blocks: FormBlockRead[];
+  selectedRegistryId: string;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const [formState, setFormState] = useState<BlockFormState | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<FormBlockRead | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      code: string;
+      title: string;
+      description: string | null;
+      position: number;
+      is_repeatable: boolean;
+      public_visible: boolean;
+      public_editable: boolean;
+    }) => createFormBlock(token, selectedRegistryId, payload),
+    onSuccess: async () => {
+      setFormState(null);
+      setSuccessMessage(uiText.formBlockCreated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const updateMutation = useMutation({
+    mutationFn: (payload: {
+      blockId: string;
+      title: string;
+      description: string | null;
+      position: number;
+    }) =>
+      updateFormBlock(token, payload.blockId, {
+        title: payload.title,
+        description: payload.description,
+        position: payload.position,
+      }),
+    onSuccess: async () => {
+      setFormState(null);
+      setSuccessMessage(uiText.formBlockUpdated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const archiveMutation = useMutation({
+    mutationFn: (blockId: string) => archiveFormBlock(token, blockId),
+    onSuccess: async () => {
+      setArchiveTarget(null);
+      setSuccessMessage(uiText.formBlockArchived);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const mutationError = localError
+    ? new Error(localError)
+    : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
+  const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  function openCreateForm() {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFormState({
+      mode: "create",
+      blockId: null,
+      code: "",
+      title: "",
+      description: "",
+      position: "0",
+      isRepeatable: false,
+      publicVisible: true,
+      publicEditable: false,
+    });
+  }
+
+  function openEditForm(block: FormBlockRead) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFormState({
+      mode: "edit",
+      blockId: block.id,
+      code: block.code,
+      title: block.title,
+      description: block.description ?? "",
+      position: String(block.position),
+      isRepeatable: block.is_repeatable,
+      publicVisible: block.public_visible,
+      publicEditable: block.public_editable,
+    });
+  }
+
+  function closeForm() {
+    setFormState(null);
+    setLocalError(null);
+  }
+
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!formState) {
+      return;
+    }
+
+    const code = formState.code.trim();
+    const title = formState.title.trim();
+    const description = formState.description.trim();
+    if (!title || (formState.mode === "create" && !code)) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    if (formState.mode === "create") {
+      createMutation.mutate({
+        code,
+        title,
+        description: description || null,
+        position: positionNumber(formState.position),
+        is_repeatable: formState.isRepeatable,
+        public_visible: formState.publicVisible,
+        public_editable: formState.publicEditable,
+      });
+      return;
+    }
+
+    if (formState.blockId) {
+      updateMutation.mutate({
+        blockId: formState.blockId,
+        title,
+        description: description || null,
+        position: positionNumber(formState.position),
+      });
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="panel-toolbar">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={!selectedRegistryId}
+          onClick={openCreateForm}
+        >
+          {uiText.createFormBlock}
+        </button>
+      </div>
+      <div className="panel-feedback">
+        <MutationFeedback
+          error={formState ? null : mutationError}
+          successMessage={successMessage}
+        />
+      </div>
+      {formState && (
+        <div className="panel-form">
+          <AdminMutationForm
+            title={formState.mode === "create" ? uiText.createFormBlock : uiText.editFormBlock}
+            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
+            isSubmitting={isFormSubmitting}
+            error={mutationError}
+            successMessage={null}
+            onCancel={closeForm}
+            onSubmit={handleFormSubmit}
+          >
+            {formState.mode === "create" && (
+              <label>
+                {uiText.formBlockCode}
+                <input
+                  value={formState.code}
+                  onChange={(event) =>
+                    setFormState({ ...formState, code: event.currentTarget.value })
+                  }
+                />
+              </label>
+            )}
+            <label>
+              {uiText.formBlockTitle}
+              <input
+                value={formState.title}
+                onChange={(event) =>
+                  setFormState({ ...formState, title: event.currentTarget.value })
+                }
+              />
+            </label>
+            <label>
+              {uiText.formBlockDescription}
+              <textarea
+                value={formState.description}
+                onChange={(event) =>
+                  setFormState({ ...formState, description: event.currentTarget.value })
+                }
+              />
+            </label>
+            <label>
+              {uiText.formBlockPosition}
+              <input
+                type="number"
+                value={formState.position}
+                onChange={(event) =>
+                  setFormState({ ...formState, position: event.currentTarget.value })
+                }
+              />
+            </label>
+            {formState.mode === "create" && (
+              <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={formState.isRepeatable}
+                    onChange={(event) =>
+                      setFormState({ ...formState, isRepeatable: event.currentTarget.checked })
+                    }
+                  />
+                  {uiText.repeatableBlock}
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={formState.publicVisible}
+                    onChange={(event) =>
+                      setFormState({ ...formState, publicVisible: event.currentTarget.checked })
+                    }
+                  />
+                  {uiText.publicVisibleBlock}
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={formState.publicEditable}
+                    onChange={(event) =>
+                      setFormState({ ...formState, publicEditable: event.currentTarget.checked })
+                    }
+                  />
+                  {uiText.publicEditableBlock}
+                </label>
+              </>
+            )}
+          </AdminMutationForm>
+        </div>
+      )}
+      {archiveTarget && (
+        <AdminMutationDialog title={uiText.archiveFormBlock}>
+          <ArchiveConfirmation
+            entityLabel={uiText.formBlock}
+            itemLabel={archiveTarget.title}
+            isPending={archiveMutation.isPending}
+            onCancel={() => setArchiveTarget(null)}
+            onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
+          />
+        </AdminMutationDialog>
+      )}
+      <BlocksTable
+        blocks={blocks}
+        onArchiveBlock={(block) => {
+          setLocalError(null);
+          setSuccessMessage(null);
+          setArchiveTarget(block);
+        }}
+        onEditBlock={openEditForm}
+      />
+    </div>
+  );
+}
+
+function BlocksTable({
+  blocks,
+  onEditBlock,
+  onArchiveBlock,
+}: {
+  blocks: FormBlockRead[];
+  onEditBlock: (block: FormBlockRead) => void;
+  onArchiveBlock: (block: FormBlockRead) => void;
+}) {
   return (
     <div className="table-wrap">
       <table>
@@ -346,6 +682,7 @@ function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
             <th>{uiText.code}</th>
             <th>{uiText.repeatable}</th>
             <th>{uiText.status}</th>
+            <th>{uiText.action}</th>
           </tr>
         </thead>
         <tbody>
@@ -355,6 +692,20 @@ function BlocksTable({ blocks }: { blocks: FormBlockRead[] }) {
               <td>{block.code}</td>
               <td>{booleanLabel(block.is_repeatable)}</td>
               <td>{activityLabel(block.is_active)}</td>
+              <td>
+                <div className="row-actions">
+                  <button type="button" className="ghost-button" onClick={() => onEditBlock(block)}>
+                    {uiText.editFormBlock} {block.title}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onArchiveBlock(block)}
+                  >
+                    {uiText.archiveFormBlock} {block.title}
+                  </button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -370,12 +721,357 @@ async function invalidateRegistryData(queryClient: QueryClient, token: string) {
   await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
 }
 
+function SchemaFieldsPanel({
+  blocks,
+  fields,
+  blocksById,
+  token,
+}: {
+  blocks: FormBlockRead[];
+  fields: FormFieldRead[];
+  blocksById: Map<string, FormBlockRead>;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const [formState, setFormState] = useState<FieldFormState | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<FormFieldRead | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const createMutation = useMutation({
+    mutationFn: (payload: {
+      blockId: string;
+      code: string;
+      label: string;
+      field_type: string;
+      description: string | null;
+      position: number;
+      options_source_type: string | null;
+      options_source_id: string | null;
+      public_visible: boolean;
+      public_editable: boolean;
+    }) =>
+      createFormField(token, payload.blockId, {
+        code: payload.code,
+        label: payload.label,
+        field_type: payload.field_type,
+        description: payload.description,
+        position: payload.position,
+        options_source_type: payload.options_source_type,
+        options_source_id: payload.options_source_id,
+        public_visible: payload.public_visible,
+        public_editable: payload.public_editable,
+      }),
+    onSuccess: async () => {
+      setFormState(null);
+      setSuccessMessage(uiText.formFieldCreated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const updateMutation = useMutation({
+    mutationFn: (payload: {
+      fieldId: string;
+      label: string;
+      description: string | null;
+      position: number;
+      is_active: boolean;
+    }) =>
+      updateFormField(token, payload.fieldId, {
+        label: payload.label,
+        description: payload.description,
+        position: payload.position,
+        is_active: payload.is_active,
+      }),
+    onSuccess: async () => {
+      setFormState(null);
+      setSuccessMessage(uiText.formFieldUpdated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const archiveMutation = useMutation({
+    mutationFn: (fieldId: string) => archiveFormField(token, fieldId),
+    onSuccess: async () => {
+      setArchiveTarget(null);
+      setSuccessMessage(uiText.formFieldArchived);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const mutationError = localError
+    ? new Error(localError)
+    : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
+  const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  function openCreateForm() {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFormState({
+      mode: "create",
+      fieldId: null,
+      blockId: blocks[0]?.id ?? "",
+      code: "",
+      label: "",
+      description: "",
+      fieldType: "text",
+      position: "0",
+      optionsSourceId: "",
+      isActive: true,
+      publicVisible: true,
+      publicEditable: false,
+    });
+  }
+
+  function openEditForm(field: FormFieldRead) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFormState({
+      mode: "edit",
+      fieldId: field.id,
+      blockId: field.block_id,
+      code: field.code,
+      label: field.label,
+      description: field.description ?? "",
+      fieldType: field.field_type,
+      position: String(field.position),
+      optionsSourceId:
+        field.options_source_type === "reference_list" ? (field.options_source_id ?? "") : "",
+      isActive: field.is_active,
+      publicVisible: field.public_visible,
+      publicEditable: field.public_editable,
+    });
+  }
+
+  function closeForm() {
+    setFormState(null);
+    setLocalError(null);
+  }
+
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!formState) {
+      return;
+    }
+
+    const code = formState.code.trim();
+    const label = formState.label.trim();
+    const blockId = formState.blockId.trim();
+    const description = formState.description.trim();
+    const optionsSourceId = formState.optionsSourceId.trim();
+    if (!label || (formState.mode === "create" && (!code || !blockId))) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    if (formState.mode === "create") {
+      createMutation.mutate({
+        blockId,
+        code,
+        label,
+        field_type: formState.fieldType,
+        description: description || null,
+        position: positionNumber(formState.position),
+        options_source_type: optionsSourceId ? "reference_list" : null,
+        options_source_id: optionsSourceId || null,
+        public_visible: formState.publicVisible,
+        public_editable: formState.publicEditable,
+      });
+      return;
+    }
+
+    if (formState.fieldId) {
+      updateMutation.mutate({
+        fieldId: formState.fieldId,
+        label,
+        description: description || null,
+        position: positionNumber(formState.position),
+        is_active: formState.isActive,
+      });
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="panel-toolbar">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={blocks.length === 0}
+          onClick={openCreateForm}
+        >
+          {uiText.createFormField}
+        </button>
+      </div>
+      <div className="panel-feedback">
+        <MutationFeedback
+          error={formState ? null : mutationError}
+          successMessage={successMessage}
+        />
+      </div>
+      {formState && (
+        <div className="panel-form">
+          <AdminMutationForm
+            title={formState.mode === "create" ? uiText.createFormField : uiText.editFormField}
+            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
+            isSubmitting={isFormSubmitting}
+            error={mutationError}
+            successMessage={null}
+            onCancel={closeForm}
+            onSubmit={handleFormSubmit}
+          >
+            {formState.mode === "create" && (
+              <>
+                <label>
+                  {uiText.formBlock}
+                  <select
+                    value={formState.blockId}
+                    onChange={(event) =>
+                      setFormState({ ...formState, blockId: event.currentTarget.value })
+                    }
+                  >
+                    {blocks.map((block) => (
+                      <option key={block.id} value={block.id}>
+                        {block.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {uiText.formFieldCode}
+                  <input
+                    value={formState.code}
+                    onChange={(event) =>
+                      setFormState({ ...formState, code: event.currentTarget.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {uiText.formFieldType}
+                  <select
+                    value={formState.fieldType}
+                    onChange={(event) =>
+                      setFormState({ ...formState, fieldType: event.currentTarget.value })
+                    }
+                  >
+                    {supportedFieldTypes.map((fieldType) => (
+                      <option key={fieldType} value={fieldType}>
+                        {fieldTypeLabel(fieldType)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+            <label>
+              {uiText.formFieldLabel}
+              <input
+                value={formState.label}
+                onChange={(event) =>
+                  setFormState({ ...formState, label: event.currentTarget.value })
+                }
+              />
+            </label>
+            <label>
+              {uiText.formFieldDescription}
+              <textarea
+                value={formState.description}
+                onChange={(event) =>
+                  setFormState({ ...formState, description: event.currentTarget.value })
+                }
+              />
+            </label>
+            <label>
+              {uiText.formFieldPosition}
+              <input
+                type="number"
+                value={formState.position}
+                onChange={(event) =>
+                  setFormState({ ...formState, position: event.currentTarget.value })
+                }
+              />
+            </label>
+            {formState.mode === "create" && (
+              <>
+                <label>
+                  {uiText.referenceListId}
+                  <input
+                    value={formState.optionsSourceId}
+                    onChange={(event) =>
+                      setFormState({ ...formState, optionsSourceId: event.currentTarget.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={formState.publicVisible}
+                    onChange={(event) =>
+                      setFormState({ ...formState, publicVisible: event.currentTarget.checked })
+                    }
+                  />
+                  {uiText.publicVisibleField}
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={formState.publicEditable}
+                    onChange={(event) =>
+                      setFormState({ ...formState, publicEditable: event.currentTarget.checked })
+                    }
+                  />
+                  {uiText.publicEditableField}
+                </label>
+              </>
+            )}
+            {formState.mode === "edit" && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={formState.isActive}
+                  onChange={(event) =>
+                    setFormState({ ...formState, isActive: event.currentTarget.checked })
+                  }
+                />
+                {uiText.activeFormField}
+              </label>
+            )}
+          </AdminMutationForm>
+        </div>
+      )}
+      {archiveTarget && (
+        <AdminMutationDialog title={uiText.archiveFormField}>
+          <ArchiveConfirmation
+            entityLabel={uiText.formField}
+            itemLabel={archiveTarget.label}
+            isPending={archiveMutation.isPending}
+            onCancel={() => setArchiveTarget(null)}
+            onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
+          />
+        </AdminMutationDialog>
+      )}
+      <FieldsTable
+        blocksById={blocksById}
+        fields={fields}
+        onArchiveField={(field) => {
+          setLocalError(null);
+          setSuccessMessage(null);
+          setArchiveTarget(field);
+        }}
+        onEditField={openEditForm}
+      />
+    </div>
+  );
+}
+
 function FieldsTable({
   fields,
   blocksById,
+  onEditField,
+  onArchiveField,
 }: {
   fields: FormFieldRead[];
   blocksById: Map<string, FormBlockRead>;
+  onEditField: (field: FormFieldRead) => void;
+  onArchiveField: (field: FormFieldRead) => void;
 }) {
   return (
     <div className="table-wrap">
@@ -387,6 +1083,8 @@ function FieldsTable({
             <th>{uiText.block}</th>
             <th>{uiText.type}</th>
             <th>{uiText.options}</th>
+            <th>{uiText.status}</th>
+            <th>{uiText.action}</th>
           </tr>
         </thead>
         <tbody>
@@ -397,10 +1095,30 @@ function FieldsTable({
               <td>{blocksById.get(field.block_id)?.title ?? shortId(field.block_id)}</td>
               <td>{fieldTypeLabel(field.field_type)}</td>
               <td>{optionsSourceLabel(field.options_source_type)}</td>
+              <td>{activityLabel(field.is_active)}</td>
+              <td>
+                <div className="row-actions">
+                  <button type="button" className="ghost-button" onClick={() => onEditField(field)}>
+                    {uiText.editFormField} {field.label}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onArchiveField(field)}
+                  >
+                    {uiText.archiveFormField} {field.label}
+                  </button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function positionNumber(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
 }

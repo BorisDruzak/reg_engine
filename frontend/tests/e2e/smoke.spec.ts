@@ -518,7 +518,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Реестры" }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Статус" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Карточки" }).click();
   await expect(page.getByText("Карточка актива")).toBeVisible();

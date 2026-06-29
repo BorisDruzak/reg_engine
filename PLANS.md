@@ -47,6 +47,7 @@ Completed phases:
 - Phase 2L.2: User Management UI.
 - Phase 2L.3: Access Grant Management UI.
 - Phase 2L.4: Registry Management UI.
+- Phase 2L.5: Schema Builder UI.
 
 Current stop point:
 
@@ -66,10 +67,11 @@ Current stop point:
 - Phase 2L.2 User Management UI is completed.
 - Phase 2L.3 Access Grant Management UI is completed.
 - Phase 2L.4 Registry Management UI is completed.
+- Phase 2L.5 Schema Builder UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.5 Schema Builder UI is the next implementation slice.
+- Phase 2L.6 Reference List Management UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -109,8 +111,8 @@ The current authenticated frontend is not yet a complete admin workspace:
 - access grants can be issued and revoked through Russian-first UI with
   explicit organization/registry/descendant scope summary;
 - registries can be created, updated, and archived through Russian-first UI;
-  registry schema is still read-only, so block/field/reference-list editing is
-  not exposed as UI workflows;
+  registry schema block/field create, update, and archive workflows are exposed
+  through Russian-first UI; reference-list editing is not exposed yet;
 - cards are listed and existing field values can be edited, but card creation,
   card metadata edit, archive, repeatable block-instance management, and bulk
   save workflows are incomplete;
@@ -709,6 +711,8 @@ Completion evidence:
 
 ### Phase 2L.5: Schema Builder UI
 
+Status: completed.
+
 Required work:
 
 - Add block create/update/archive controls.
@@ -724,6 +728,43 @@ Acceptance criteria:
 - Adding a new field keeps old cards valid with empty values.
 - Frontend tests cover block/field create/update/archive and locked-field
   denial states.
+
+Completion evidence:
+
+- Added Russian-first schema builder controls for form block create, metadata
+  update, and archive.
+- Added Russian-first schema builder controls for form field create, metadata
+  update, active/inactive update, and archive.
+- Field creation exposes all dynamic field types currently supported by the
+  backend Core Schema v1 contract, excluding deferred `file_ref`.
+- Block creation supports repeatable flag, public visibility/editability flags,
+  and position/order input where the current API supports them.
+- Field creation supports public visibility/editability flags, optional
+  reference-list ID wiring, dynamic field type, and position/order input where
+  the current API supports them.
+- Locked/system blocks and fields remain protected by backend services; the
+  frontend reflects backend-denied locked/system operations through localized
+  Russian error text instead of raw service errors.
+- Added frontend tests for block create/update/archive, field
+  create/update/archive, dynamic field type payloads, no hardcoded employee/HR
+  fields, and locked-field denial handling.
+- Verified `pnpm -C frontend test:run`, `pnpm -C frontend lint`,
+  `pnpm -C frontend typecheck`, and
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Verified `pnpm -C frontend e2e` and
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, MCP, or `file_ref` implementation was added.
+
+Known limitations:
+
+- `required_mode`, `is_locked`, and `is_system` exist in backend
+  model/service behavior but are not exposed in the current
+  `FormBlockRead`/`FormFieldRead` API schemas. Phase 2L.5 therefore does not
+  add proactive required-mode controls or lock/system badges; backend denial is
+  still the security boundary.
+- Full reference-list create/update/archive and select/multi_select list
+  selection UX remains Phase 2L.6.
 
 ### Phase 2L.6: Reference List Management UI
 

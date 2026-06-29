@@ -7,6 +7,8 @@ import type {
   AccessGrantRead,
   AttachmentRead,
   DocumentTemplateRead,
+  FormBlockRead,
+  FormFieldRead,
   GeneratedDocumentRead,
   OrganizationRead,
   RegistryRead,
@@ -292,6 +294,9 @@ let publicStatusValue = "drafted";
 let organizationItems: OrganizationRead[];
 let registryItems: RegistryRead[];
 let denyNextRegistryUpdate = false;
+let schemaBlockItems: FormBlockRead[];
+let schemaFieldItems: FormFieldRead[];
+let denyNextFieldArchive = false;
 let userItems: UserRead[];
 let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
@@ -309,6 +314,9 @@ beforeEach(() => {
   organizationItems = [...apiPayloads.organizations.items];
   registryItems = [...apiPayloads.registries.items];
   denyNextRegistryUpdate = false;
+  schemaBlockItems = [...apiPayloads.schema.blocks];
+  schemaFieldItems = [...apiPayloads.schema.fields];
+  denyNextFieldArchive = false;
   userItems = [...apiPayloads.users.items];
   denyNextUserUpdate = false;
   grantItems = [...apiPayloads.grants.items];
@@ -533,6 +541,130 @@ beforeEach(() => {
         }
         return jsonResponse({ items: grantItems });
       }
+      if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/blocks")) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            title: string;
+            description?: string | null;
+            position?: number;
+            is_repeatable?: boolean;
+            public_visible?: boolean;
+            public_editable?: boolean;
+          };
+          const created: FormBlockRead = {
+            id: "26262626-2626-4262-8262-262626262626",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            code: payload.code,
+            title: payload.title,
+            description: payload.description ?? null,
+            position: payload.position ?? 0,
+            is_repeatable: payload.is_repeatable ?? false,
+            is_active: true,
+            public_visible: payload.public_visible ?? true,
+            public_editable: payload.public_editable ?? false,
+          };
+          schemaBlockItems = [...schemaBlockItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+      }
+      if (url.includes("/api/v1/blocks/") && url.endsWith("/fields")) {
+        const blockId = url.split("/api/v1/blocks/")[1].split("/fields")[0];
+        const block = schemaBlockItems.find((item) => item.id === blockId);
+        if (!block) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            label: string;
+            field_type: string;
+            description?: string | null;
+            position?: number;
+            options_source_type?: string | null;
+            options_source_id?: string | null;
+            public_visible?: boolean;
+            public_editable?: boolean;
+          };
+          const created: FormFieldRead = {
+            id: "27272727-2727-4272-8272-272727272727",
+            block_id: blockId,
+            code: payload.code,
+            label: payload.label,
+            description: payload.description ?? null,
+            field_type: payload.field_type,
+            position: payload.position ?? 0,
+            options_source_type: payload.options_source_type ?? null,
+            options_source_id: payload.options_source_id ?? null,
+            is_active: true,
+            public_visible: payload.public_visible ?? true,
+            public_editable: payload.public_editable ?? false,
+          };
+          schemaFieldItems = [...schemaFieldItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+      }
+      if (url.includes("/api/v1/blocks/")) {
+        const blockId = url.split("/api/v1/blocks/")[1];
+        const current = schemaBlockItems.find((item) => item.id === blockId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            title?: string | null;
+            description?: string | null;
+            position?: number | null;
+          };
+          const updated: FormBlockRead = {
+            ...current,
+            title: payload.title ?? current.title,
+            description: payload.description ?? current.description,
+            position: payload.position ?? current.position,
+          };
+          schemaBlockItems = schemaBlockItems.map((item) => (item.id === blockId ? updated : item));
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, is_active: false };
+          schemaBlockItems = schemaBlockItems.filter((item) => item.id !== blockId);
+          schemaFieldItems = schemaFieldItems.filter((item) => item.block_id !== blockId);
+          return jsonResponse(archived);
+        }
+      }
+      if (url.includes("/api/v1/fields/")) {
+        const fieldId = url.split("/api/v1/fields/")[1];
+        const current = schemaFieldItems.find((item) => item.id === fieldId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            label?: string | null;
+            description?: string | null;
+            position?: number | null;
+            is_active?: boolean | null;
+          };
+          const updated: FormFieldRead = {
+            ...current,
+            label: payload.label ?? current.label,
+            description: payload.description ?? current.description,
+            position: payload.position ?? current.position,
+            is_active: payload.is_active ?? current.is_active,
+          };
+          schemaFieldItems = schemaFieldItems.map((item) => (item.id === fieldId ? updated : item));
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          if (denyNextFieldArchive) {
+            denyNextFieldArchive = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const archived = { ...current, is_active: false };
+          schemaFieldItems = schemaFieldItems.filter((item) => item.id !== fieldId);
+          return jsonResponse(archived);
+        }
+      }
       if (
         url.includes("/api/v1/registries/") &&
         !url.endsWith("/schema") &&
@@ -593,7 +725,7 @@ beforeEach(() => {
         return jsonResponse({ items: registryItems });
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
-        return jsonResponse(apiPayloads.schema);
+        return jsonResponse(currentRegistrySchema());
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
         return jsonResponse(apiPayloads.cards);
@@ -821,6 +953,14 @@ function currentCardRead() {
         value: cardApprovedValue,
       },
     },
+  };
+}
+
+function currentRegistrySchema() {
+  return {
+    ...apiPayloads.schema,
+    blocks: schemaBlockItems,
+    fields: schemaFieldItems,
   };
 }
 
@@ -1469,6 +1609,243 @@ test("shows localized registry mutation denial text", async () => {
 
   expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
   expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+});
+
+test("creates edits and archives schema blocks and fields in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  const blockPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/blocks",
+          ) && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать блок формы" }));
+  const blockPostCountBeforeValidation = blockPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(blockPostCount()).toBe(blockPostCountBeforeValidation);
+
+  fireEvent.change(screen.getByLabelText("Код блока формы"), { target: { value: "details" } });
+  fireEvent.change(screen.getByLabelText("Название блока формы"), {
+    target: { value: "Детали карточки" },
+  });
+  fireEvent.change(screen.getByLabelText("Описание блока формы"), {
+    target: { value: "Дополнительные данные" },
+  });
+  fireEvent.change(screen.getByLabelText("Позиция блока формы"), { target: { value: "10" } });
+  await user.click(screen.getByLabelText("Повторяемый блок"));
+  await user.click(screen.getByLabelText("Редактировать блок в публичной ссылке"));
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Блок формы создан")).toBeInTheDocument();
+  expect(screen.getByText("Детали карточки")).toBeInTheDocument();
+  expect(screen.getAllByText("Да").length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", { name: "Редактировать блок формы Детали карточки" }),
+  );
+  const blockTitleInput = await screen.findByLabelText("Название блока формы");
+  fireEvent.change(blockTitleInput, { target: { value: "Детали карточки обновлены" } });
+  const blockDescriptionInput = screen.getByLabelText("Описание блока формы");
+  fireEvent.change(blockDescriptionInput, { target: { value: "Обновленное описание" } });
+  fireEvent.change(screen.getByLabelText("Позиция блока формы"), { target: { value: "11" } });
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Блок формы обновлен")).toBeInTheDocument();
+  expect(screen.getByText("Детали карточки обновлены")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
+  await user.selectOptions(screen.getByLabelText("Блок формы"), [
+    "26262626-2626-4262-8262-262626262626",
+  ]);
+  fireEvent.change(screen.getByLabelText("Код поля формы"), { target: { value: "amount" } });
+  fireEvent.change(screen.getByLabelText("Название поля формы"), { target: { value: "Сумма" } });
+  fireEvent.change(screen.getByLabelText("Описание поля формы"), {
+    target: { value: "Числовое значение" },
+  });
+  await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["number"]);
+  fireEvent.change(screen.getByLabelText("Позиция поля формы"), { target: { value: "20" } });
+  await user.click(screen.getByLabelText("Редактировать поле в публичной ссылке"));
+  expect(screen.getByRole("option", { name: "Ссылка на организацию" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
+  expect(screen.getByText("Сумма")).toBeInTheDocument();
+  expect(screen.getByText("Число")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Редактировать поле формы Сумма" }));
+  const fieldLabelInput = await screen.findByLabelText("Название поля формы");
+  fireEvent.change(fieldLabelInput, { target: { value: "Сумма обновленная" } });
+  const fieldDescriptionInput = screen.getByLabelText("Описание поля формы");
+  fireEvent.change(fieldDescriptionInput, {
+    target: { value: "Обновленное числовое значение" },
+  });
+  fireEvent.change(screen.getByLabelText("Позиция поля формы"), { target: { value: "21" } });
+  await user.click(screen.getByLabelText("Активное поле"));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Поле формы обновлено")).toBeInTheDocument();
+  expect(screen.getByText("Сумма обновленная")).toBeInTheDocument();
+  expect(screen.getAllByText("Неактивно").length).toBeGreaterThan(0);
+
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать поле формы Сумма обновленная" }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать поле формы" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Поле формы архивировано")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Сумма обновленная")).not.toBeInTheDocument());
+
+  await user.click(
+    screen.getByRole("button", {
+      name: "Архивировать блок формы Детали карточки обновлены",
+    }),
+  );
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать блок формы" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Блок формы архивирован")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.queryByText("Детали карточки обновлены")).not.toBeInTheDocument(),
+  );
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    const createBlockCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/blocks") &&
+        init?.method === "POST",
+    );
+    expect(createBlockCall).toBeTruthy();
+    const createBlockBody = JSON.parse(String(createBlockCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(createBlockBody).toEqual({
+      code: "details",
+      title: "Детали карточки",
+      description: "Дополнительные данные",
+      position: 10,
+      is_repeatable: true,
+      public_visible: true,
+      public_editable: true,
+    });
+
+    const createFieldCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/blocks/26262626-2626-4262-8262-262626262626/fields") &&
+        init?.method === "POST",
+    );
+    expect(createFieldCall).toBeTruthy();
+    const createFieldBody = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(createFieldBody).toEqual({
+      code: "amount",
+      label: "Сумма",
+      field_type: "number",
+      description: "Числовое значение",
+      position: 20,
+      options_source_type: null,
+      options_source_id: null,
+      public_visible: true,
+      public_editable: true,
+    });
+
+    for (const body of [createBlockBody, createFieldBody]) {
+      for (const forbiddenField of [
+        "employees",
+        "employee",
+        "full_name",
+        "birth_date",
+        "education",
+        "qualification",
+        "experience",
+      ]) {
+        expect(body).not.toHaveProperty(forbiddenField);
+      }
+    }
+
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/blocks/26262626-2626-4262-8262-262626262626") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return body.title === "Детали карточки обновлены" && body.position === 11;
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/fields/27272727-2727-4272-8272-272727272727") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.label === "Сумма обновленная" && body.position === 21 && body.is_active === false
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/27272727-2727-4272-8272-272727272727") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/26262626-2626-4262-8262-262626262626") &&
+          init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("shows localized locked schema field denial text", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  denyNextFieldArchive = true;
+  await user.click(screen.getByRole("button", { name: "Архивировать поле формы Статус" }));
+  expect(
+    await screen.findByRole("dialog", { name: "Архивировать поле формы" }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
 });
 
 test("shows localized login error text", async () => {
