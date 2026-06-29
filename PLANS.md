@@ -1283,6 +1283,11 @@ Completed scope:
   PDF generation/download, binary-template rejection, and frontend UI flow.
 - Verified PostgreSQL-backed PDF service/API tests on disposable
   `*_test` database.
+- Deployed commit `74b90ae` to the configured server checkout; no production
+  migration was required because Phase 2N adds no schema changes. Frontend
+  dist was deployed, backend service was restarted, same-origin frontend/API
+  smoke passed, `scripts/server-check.ps1` passed, and production Alembic
+  remained at `0009_document_template_versions` head.
 
 Known limitations:
 
