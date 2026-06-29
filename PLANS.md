@@ -55,6 +55,7 @@ Completed phases:
 - Phase 2J.0: `file_ref` Planning And ADR.
 - Phase 2J.1: `file_ref` Database And Model Foundation.
 - Phase 2J.2: `file_ref` Backend Service Support.
+- Phase 2J.3: `file_ref` Transfer Behavior.
 
 Current stop point:
 
@@ -79,6 +80,10 @@ Current stop point:
   wrong-card and archived attachment selections are rejected; archived
   referenced attachment metadata remains readable; public-link `file_ref`
   editing remains blocked.
+- Phase 2J.3 `file_ref` transfer behavior is completed: active referenced
+  attachments are copied as target-card attachment links pointing to the same
+  stored file, while archived references are cleared and recorded in transfer
+  audit metadata.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -93,9 +98,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.3 Transfer Behavior for `file_ref`: transferred
-  cards must get their own target-card attachment link and must not point at
-  the old card's `card_attachments.id`.
+- Next planned work is Phase 2J.4 API Support for `file_ref`: authenticated
+  card field value endpoints must accept `card_attachment.id`/`null` and return
+  safe attachment metadata.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -191,10 +196,16 @@ Completed Phase 2 work:
   public-link edit blocking. Transfer behavior, REST value API metadata,
   frontend UI, generated document rendering, import/export, PDF, reports, and
   MCP remain deferred.
+- Phase 2J.3 added transfer behavior for active `file_ref` values by creating
+  a new target-card `card_attachments` link that points to the same
+  `stored_file_id`; archived `file_ref` references are cleared on transfer and
+  recorded in transfer audit metadata. REST value API metadata, frontend UI,
+  generated document rendering, import/export, PDF, reports, and MCP remain
+  deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0, Phase 2J.1, and Phase 2J.2 are completed and Phase 2J.3 is the next planned implementation slice.
+Status: in progress; Phase 2J.0 through Phase 2J.3 are completed and Phase 2J.4 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -308,6 +319,8 @@ Completion evidence:
 
 ### Phase 2J.3: Transfer Behavior
 
+Status: completed.
+
 Required behavior:
 
 - When a card transfer copies dynamic values, `file_ref` must not point from the new card to the old card's `card_attachment.id`.
@@ -319,6 +332,25 @@ Acceptance criteria:
 - Transfer tests prove the new card has its own `card_attachment` link.
 - New card `file_ref` points to the new attachment link, not the old one.
 - Old and new attachment links may share the same `stored_file_id`; binary bytes are not duplicated.
+- Archived referenced attachments are cleared on the new card and recorded in
+  transfer audit metadata.
+
+Completion evidence:
+
+- `CardService.transfer_card_for_actor` creates new target-card
+  `card_attachments` rows for active `file_ref` values.
+- Copied target attachment links reuse the same `stored_file_id` and copy
+  title, description, and position; binary bytes are not duplicated.
+- New card `field_values.value_attachment_id` points to the new target-card
+  attachment link, not the old source-card attachment link.
+- Archived or invalid source attachment references are cleared on the target
+  value and listed in `cleared_file_ref_attachment_ids` on the transfer audit
+  event.
+- Transfer tests cover active copy, target-link independence, shared stored
+  file metadata, archived-reference clearing, and audit metadata.
+- No REST value API metadata, frontend UI, generated document rendering,
+  import/export, PDF, reports, MCP, or business-specific document-field
+  implementation was added in Phase 2J.3.
 
 ### Phase 2J.4: API Support
 

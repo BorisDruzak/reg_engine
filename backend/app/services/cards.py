@@ -98,6 +98,18 @@ class _FieldAssignment:
 
 
 @dataclass(frozen=True)
+class _CopiedFileRefAttachment:
+    source_attachment_id: UUID
+    target_attachment_id: UUID
+
+
+@dataclass
+class _CopyCardValuesResult:
+    copied_file_ref_attachments: list[_CopiedFileRefAttachment] = field(default_factory=list)
+    cleared_file_ref_attachment_ids: list[UUID] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class BulkFieldValueInput:
     field_id: UUID
     value: object
@@ -503,21 +515,34 @@ class CardService:
             created_by=actor_user_id,
         )
         self.session.add(relation)
-        self._copy_card_values(
+        copy_result = self._copy_card_values(
             source_card_id=old_card.id,
             target_card_id=new_card.id,
             actor_user_id=actor_user_id,
         )
         self.session.flush()
+        new_data_json: dict[str, object] = {
+            "new_card_id": str(new_card.id),
+            "target_organization_id": str(target_organization_id),
+        }
+        if copy_result.copied_file_ref_attachments:
+            new_data_json["copied_file_ref_attachments"] = [
+                {
+                    "source_attachment_id": str(item.source_attachment_id),
+                    "target_attachment_id": str(item.target_attachment_id),
+                }
+                for item in copy_result.copied_file_ref_attachments
+            ]
+        if copy_result.cleared_file_ref_attachment_ids:
+            new_data_json["cleared_file_ref_attachment_ids"] = [
+                str(attachment_id) for attachment_id in copy_result.cleared_file_ref_attachment_ids
+            ]
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="transfer",
             object_type="card",
             object_id=old_card.id,
-            new_data_json={
-                "new_card_id": str(new_card.id),
-                "target_organization_id": str(target_organization_id),
-            },
+            new_data_json=new_data_json,
         )
         return new_card
 
@@ -1104,9 +1129,11 @@ class CardService:
         source_card_id: UUID,
         target_card_id: UUID,
         actor_user_id: UUID,
-    ) -> None:
+    ) -> _CopyCardValuesResult:
+        copy_result = _CopyCardValuesResult()
         source_instances = self._block_instances_for_card(source_card_id)
         instance_map: dict[UUID, UUID] = {}
+        attachment_map: dict[UUID, UUID] = {}
         for instances in source_instances.values():
             for source_instance in instances:
                 target_instance = CardBlockInstance(
@@ -1122,6 +1149,14 @@ class CardService:
         for source_value in self.session.scalars(
             select(FieldValue).where(FieldValue.card_id == source_card_id)
         ):
+            value_attachment_id = self._copy_file_ref_attachment(
+                source_value.value_attachment_id,
+                source_card_id=source_card_id,
+                target_card_id=target_card_id,
+                actor_user_id=actor_user_id,
+                attachment_map=attachment_map,
+                copy_result=copy_result,
+            )
             copied_value = FieldValue(
                 card_id=target_card_id,
                 block_instance_id=instance_map[source_value.block_instance_id],
@@ -1138,6 +1173,7 @@ class CardService:
                 value_organization_id=source_value.value_organization_id,
                 value_org_unit_id=source_value.value_org_unit_id,
                 value_registry_id=source_value.value_registry_id,
+                value_attachment_id=value_attachment_id,
                 created_by=actor_user_id,
                 updated_by=actor_user_id,
             )
@@ -1155,3 +1191,55 @@ class CardService:
                         position=item.position,
                     )
                 )
+        return copy_result
+
+    def _copy_file_ref_attachment(
+        self,
+        source_attachment_id: UUID | None,
+        *,
+        source_card_id: UUID,
+        target_card_id: UUID,
+        actor_user_id: UUID,
+        attachment_map: dict[UUID, UUID],
+        copy_result: _CopyCardValuesResult,
+    ) -> UUID | None:
+        if source_attachment_id is None:
+            return None
+        if source_attachment_id in attachment_map:
+            return attachment_map[source_attachment_id]
+
+        source_attachment = self.session.get(CardAttachment, source_attachment_id)
+        stored_file = (
+            self.session.get(StoredFile, source_attachment.stored_file_id)
+            if source_attachment is not None
+            else None
+        )
+        if (
+            source_attachment is None
+            or source_attachment.card_id != source_card_id
+            or source_attachment.archived_at is not None
+            or stored_file is None
+            or stored_file.archived_at is not None
+        ):
+            if source_attachment_id not in copy_result.cleared_file_ref_attachment_ids:
+                copy_result.cleared_file_ref_attachment_ids.append(source_attachment_id)
+            return None
+
+        target_attachment = CardAttachment(
+            card_id=target_card_id,
+            stored_file_id=source_attachment.stored_file_id,
+            title=source_attachment.title,
+            description=source_attachment.description,
+            position=source_attachment.position,
+            created_by=actor_user_id,
+        )
+        self.session.add(target_attachment)
+        self.session.flush()
+        attachment_map[source_attachment_id] = target_attachment.id
+        copy_result.copied_file_ref_attachments.append(
+            _CopiedFileRefAttachment(
+                source_attachment_id=source_attachment_id,
+                target_attachment_id=target_attachment.id,
+            )
+        )
+        return target_attachment.id

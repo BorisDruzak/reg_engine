@@ -18,6 +18,7 @@ from app.models import (
     AuditEvent,
     CardAttachment,
     CardPublicLink,
+    FieldValue,
     Permission,
     Role,
     StoredFile,
@@ -1395,3 +1396,134 @@ def test_public_link_cannot_edit_file_ref_fields(
         )
 
     assert public_token.public_link.used_count == 0
+
+
+def test_transfer_copies_active_file_ref_to_new_card_attachment_link(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-transfer")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_transfer_block",
+        title="File Ref Transfer Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_transfer",
+        label="File Ref Transfer",
+        field_type="file_ref",
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="transfer-file-ref.txt",
+        content_type="text/plain",
+        content=b"transfer file ref",
+        title="Transfer file ref",
+        description="Copied link only",
+    )
+    card_service = CardService(db_session)
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=attachment.id,
+    )
+
+    new_card = card_service.transfer_card_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=context["card"].id,
+        target_organization_id=context["sibling"].id,
+    )
+
+    copied_value = db_session.scalar(
+        select(FieldValue).where(
+            FieldValue.card_id == new_card.id,
+            FieldValue.field_id == field.id,
+        )
+    )
+    assert copied_value is not None
+    assert copied_value.value_attachment_id is not None
+    assert copied_value.value_attachment_id != attachment.id
+    copied_attachment = db_session.get(CardAttachment, copied_value.value_attachment_id)
+    assert copied_attachment is not None
+    assert copied_attachment.card_id == new_card.id
+    assert copied_attachment.stored_file_id == attachment.stored_file_id
+    assert copied_attachment.title == attachment.title
+    assert copied_attachment.description == attachment.description
+    assert copied_attachment.position == attachment.position
+
+
+def test_transfer_clears_archived_file_ref_without_copying_attachment_link(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-transfer-archived")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_transfer_archived_block",
+        title="File Ref Transfer Archived Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_transfer_archived",
+        label="File Ref Transfer Archived",
+        field_type="file_ref",
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="transfer-archived-file-ref.txt",
+        content_type="text/plain",
+        content=b"transfer archived file ref",
+    )
+    card_service = CardService(db_session)
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=attachment.id,
+    )
+    attachment_service.archive_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        attachment_id=attachment.id,
+    )
+
+    new_card = card_service.transfer_card_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=context["card"].id,
+        target_organization_id=context["sibling"].id,
+    )
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "card",
+            AuditEvent.object_id == context["card"].id,
+            AuditEvent.action == "transfer",
+        )
+    )
+
+    copied_value = db_session.scalar(
+        select(FieldValue).where(
+            FieldValue.card_id == new_card.id,
+            FieldValue.field_id == field.id,
+        )
+    )
+    copied_attachment = db_session.scalar(
+        select(CardAttachment).where(
+            CardAttachment.card_id == new_card.id,
+            CardAttachment.stored_file_id == attachment.stored_file_id,
+        )
+    )
+    assert copied_value is not None
+    assert copied_value.value_attachment_id is None
+    assert copied_attachment is None
+    assert audit_event is not None
+    assert audit_event.new_data_json is not None
+    assert audit_event.new_data_json["cleared_file_ref_attachment_ids"] == [str(attachment.id)]
