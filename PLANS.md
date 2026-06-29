@@ -51,6 +51,7 @@ Completed phases:
 - Phase 2L.6: Reference List Management UI.
 - Phase 2L.7: Card Create, Metadata, And Editor UI.
 - Phase 2L.8: Public Link Admin Controls UI.
+- Phase 2L.9: Admin UI Live Validation.
 
 Current stop point:
 
@@ -63,8 +64,8 @@ Current stop point:
 - Phase 2K.4 Bulk Card Values Update API is completed.
 - Phase 2K.5 API Coverage And Live Validation is completed.
 - Phase 2K Core Backend API Completeness is completed.
-- Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
-  deferred behind Phase 2L core admin workflows unless explicitly reprioritized.
+- Phase 2J remains planned for the `file_ref` dynamic field type, but it
+  requires explicit prioritization before implementation.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -74,11 +75,14 @@ Current stop point:
 - Phase 2L.6 Reference List Management UI is completed.
 - Phase 2L.7 Card Create, Metadata, And Editor UI is completed.
 - Phase 2L.8 Public Link Admin Controls UI is completed.
-- Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
-  for organizations, users, access grants, registries, schema builder,
-  reference lists, and cards.
-- Phase 2L.9 Admin UI Live Validation is the next implementation
-  slice.
+- Phase 2L.9 Admin UI Live Validation is completed.
+- Phase 2L core admin UI product-completeness phase is completed: full admin
+  CRUD UI for organizations, users, access grants, registries, schema builder,
+  reference lists, cards, attachments, generated documents, public links, and
+  audit has browser validation coverage.
+- Next planned work requires explicit prioritization: Phase 2J `file_ref`,
+  Phase 2M binary `.docx` template upload/versioning, Phase 2N PDF conversion,
+  Phase 3 import/export, Phase 4 reports, or Phase 5 MCP.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -106,7 +110,8 @@ and audit reads. Phase 2K.0 records the API readiness matrix in
 and live validation checkpoint. No planned Phase 2K backend API gaps remain
 before Phase 2L.
 
-The current authenticated frontend is not yet a complete admin workspace:
+The current authenticated frontend now covers the complete core admin
+workspace:
 
 - Phase 2L.0 now provides shared admin mutation API client functions, reusable
   Russian-first form/dialog/confirmation/feedback components, localized error
@@ -126,7 +131,10 @@ The current authenticated frontend is not yet a complete admin workspace:
   repeatable block-instance add/archive controls;
 - authenticated public-link list/create/disable controls are available on the
   card workspace and expose separate attachment-upload limit semantics;
-- the remaining Phase 2L work is the full browser live-validation pass.
+- Phase 2L.9 added a full browser validation path that creates organization,
+  user, access grant, registry, schema, reference list/items, card, field
+  values, attachment, generated document, public link, and audit evidence from
+  the Russian UI without Swagger/manual API calls.
 
 Phase 2L exists to close the remaining frontend workflow gaps before advanced
 document, import/export, report, or MCP phases.
@@ -907,6 +915,8 @@ Completion evidence:
 
 ### Phase 2L.9: Admin UI Live Validation
 
+Status: completed.
+
 Required work:
 
 - Use disposable or explicitly approved test data.
@@ -923,6 +933,23 @@ Acceptance criteria:
 - `scripts/check.ps1 -SkipRemote` passes.
 - Frontend e2e and browser smoke pass.
 - Server deployment and same-origin frontend serving remain working.
+
+Completion evidence:
+
+- Added Playwright browser coverage for the full Russian admin setup path using
+  disposable mock API state:
+  organization create, user create, access grant issue, registry create, schema
+  block/field create, reference-list/item create, card create, bulk field-value
+  save, attachment upload, generated-document generation, public-link create,
+  and audit verification.
+- The Phase 2L.9 scenario asserts first-screen rendering, page title, Russian
+  admin shell visibility, no unhandled API routes, and no browser console/page
+  errors.
+- Verified targeted e2e with `pnpm -C frontend exec playwright test
+  tests/e2e/smoke.spec.ts --project=chromium -g "complete admin setup"`.
+- No backend code, migrations, production data changes, import/export,
+  `file_ref`, PDF conversion, reports, MCP, or business-specific HR UI was
+  added.
 
 ## Planned Phases After Core Admin UI
 
