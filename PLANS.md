@@ -43,6 +43,7 @@ Completed phases:
 - Phase 2K.5: API Coverage And Live Validation.
 - Phase 2K: Core Backend API Completeness.
 - Phase 2L.0: Admin UI Mutation Foundation.
+- Phase 2L.1: Organization Management UI.
 
 Current stop point:
 
@@ -58,10 +59,11 @@ Current stop point:
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind Phase 2L core admin workflows unless explicitly reprioritized.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
+- Phase 2L.1 Organization Management UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.1 Organization Management UI is the next implementation slice.
+- Phase 2L.2 User Management UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -95,7 +97,7 @@ The current authenticated frontend is not yet a complete admin workspace:
   Russian-first form/dialog/confirmation/feedback components, localized error
   mapping, and an E2E smoke path that opens every admin section without console
   errors;
-- organizations are listed but cannot be created, edited, or archived in UI;
+- organizations can be created, edited, and archived through Russian-first UI;
 - users, roles, and permissions are listed, but users cannot be created,
   edited, password-reset, or archived in UI;
 - access grants are listed, but grants cannot be issued or revoked in UI;
@@ -538,6 +540,8 @@ Completion evidence:
 
 ### Phase 2L.1: Organization Management UI
 
+Status: completed.
+
 Required work:
 
 - Add create organization form.
@@ -553,6 +557,22 @@ Acceptance criteria:
 - User can edit allowed organization metadata through UI.
 - User can archive an organization with confirmation.
 - Frontend tests cover create/edit/archive success and validation errors.
+
+Completion evidence:
+
+- Added Russian-first create organization form with code, name, parent
+  organization, and type fields.
+- Added edit organization form for metadata supported by the backend API.
+- Added archive organization confirmation using the shared Phase 2L.0
+  mutation dialog/confirmation components.
+- Organization mutations invalidate organization and audit query data after
+  success.
+- Added frontend test coverage for create, validation error without POST,
+  edit, archive confirmation, and archive success.
+- Verified `pnpm -C frontend test:run`, `pnpm -C frontend lint`, and
+  `pnpm -C frontend typecheck`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, or MCP work was added.
 
 ### Phase 2L.2: User Management UI
 

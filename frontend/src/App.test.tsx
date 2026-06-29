@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { App } from "@/App";
-import type { AttachmentRead, DocumentTemplateRead, GeneratedDocumentRead } from "@/api/types";
+import type {
+  AttachmentRead,
+  DocumentTemplateRead,
+  GeneratedDocumentRead,
+  OrganizationRead,
+} from "@/api/types";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -281,6 +286,7 @@ const apiPayloads = {
 let cardStatusValue = "drafted";
 let cardApprovedValue = false;
 let publicStatusValue = "drafted";
+let organizationItems: OrganizationRead[];
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
@@ -291,6 +297,7 @@ beforeEach(() => {
   cardStatusValue = "drafted";
   cardApprovedValue = false;
   publicStatusValue = "drafted";
+  organizationItems = [...apiPayloads.organizations.items];
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
@@ -357,8 +364,53 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/auth/me")) {
         return jsonResponse(apiPayloads.login.user);
       }
+      if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
+        const organizationId = url.split("/api/v1/organizations/")[1];
+        const current = organizationItems.find((item) => item.id === organizationId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            name?: string;
+            organization_type?: string;
+          };
+          const updated = {
+            ...current,
+            name: payload.name ?? current.name,
+            type: payload.organization_type ?? current.type,
+          };
+          organizationItems = organizationItems.map((item) =>
+            item.id === organizationId ? updated : item,
+          );
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, is_active: false };
+          organizationItems = organizationItems.filter((item) => item.id !== organizationId);
+          return jsonResponse(archived);
+        }
+      }
       if (url.endsWith("/api/v1/organizations")) {
-        return jsonResponse(apiPayloads.organizations);
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            parent_id: string | null;
+            organization_type: string;
+          };
+          const created = {
+            id: "23232323-2323-4232-8232-232323232323",
+            parent_id: payload.parent_id,
+            code: payload.code,
+            name: payload.name,
+            type: payload.organization_type,
+            is_active: true,
+          };
+          organizationItems = [...organizationItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: organizationItems });
       }
       if (url.endsWith("/api/v1/users")) {
         return jsonResponse(apiPayloads.users);
@@ -720,6 +772,101 @@ test("logs in and renders authenticated admin workspace", async () => {
           body.block_instance_id === null
         );
       }),
+    ).toBe(true);
+  });
+});
+
+test("creates edits and archives organizations in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Организации" }));
+
+  const organizationPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Создать организацию" }));
+  const postCountBeforeValidation = organizationPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(organizationPostCount()).toBe(postCountBeforeValidation);
+
+  await user.type(screen.getByLabelText("Код организации"), "branch");
+  await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
+  await user.selectOptions(screen.getByLabelText("Родительская организация"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Организация создана")).toBeInTheDocument();
+  expect(screen.getByText("Дочерняя организация")).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Редактировать организацию Дочерняя организация" }),
+  );
+  const editNameInput = await screen.findByLabelText("Название организации");
+  await user.clear(editNameInput);
+  await user.type(editNameInput, "Обновленная организация");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Организация обновлена")).toBeInTheDocument();
+  expect(screen.getByText("Обновленная организация")).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать организацию Обновленная организация" }),
+  );
+  expect(await screen.findByRole("dialog", { name: "Архивировать организацию" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать" }));
+
+  expect(await screen.findByText("Организация архивирована")).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText("Обновленная организация")).not.toBeInTheDocument());
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          code?: string;
+          name?: string;
+          parent_id?: string | null;
+          organization_type?: string;
+        };
+        return (
+          String(input).endsWith("/api/v1/organizations") &&
+          init?.method === "POST" &&
+          body.code === "branch" &&
+          body.name === "Дочерняя организация" &&
+          body.parent_id === "22222222-2222-4222-8222-222222222222" &&
+          body.organization_type === "organization"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { name?: string };
+        return (
+          String(input).endsWith("/api/v1/organizations/23232323-2323-4232-8232-232323232323") &&
+          init?.method === "PATCH" &&
+          body.name === "Обновленная организация"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/organizations/23232323-2323-4232-8232-232323232323",
+          ) && init?.method === "DELETE",
+      ),
     ).toBe(true);
   });
 });

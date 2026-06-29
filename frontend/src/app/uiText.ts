@@ -19,6 +19,16 @@ export const uiText = {
   primaryNavigation: "Основная навигация",
   summary: "Сводка",
   organizationName: "Название",
+  organizationCode: "Код организации",
+  organizationType: "Тип организации",
+  parentOrganization: "Родительская организация",
+  noParentOrganization: "Без родительской организации",
+  createOrganization: "Создать организацию",
+  editOrganization: "Редактировать организацию",
+  archiveOrganization: "Архивировать организацию",
+  organizationCreated: "Организация создана",
+  organizationUpdated: "Организация обновлена",
+  organizationArchived: "Организация архивирована",
   displayName: "Имя",
   code: "Код",
   type: "Тип",
@@ -58,6 +68,7 @@ export const uiText = {
   expires: "Действует до",
   noEditablePublicFields: "В этой публичной ссылке нет редактируемых полей.",
   requestFailed: "Запрос не выполнен",
+  requiredFields: "Заполните обязательные поля",
   noData: "Нет данных",
   invalidEmailOrPassword: "Неверная электронная почта или пароль.",
   bearerTokenRequired: "Нужен действующий сеанс. Войдите снова.",
@@ -324,7 +335,11 @@ export function apiErrorMessageLabel(message: string) {
 }
 
 export function runtimeErrorMessageLabel(message: string) {
-  const localMessages = new Set<string>([uiText.jsonObjectRequired, uiText.numberRequired]);
+  const localMessages = new Set<string>([
+    uiText.jsonObjectRequired,
+    uiText.numberRequired,
+    uiText.requiredFields,
+  ]);
   return localMessages.has(message) ? message : apiErrorMessageLabel(message);
 }
 

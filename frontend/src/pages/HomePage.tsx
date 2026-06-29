@@ -202,7 +202,7 @@ export function HomePage() {
           />
         )}
         {activeSection === "organizations" && (
-          <OrganizationsTable organizations={organizationsQuery.data?.items ?? []} />
+          <OrganizationsTable organizations={organizationsQuery.data?.items ?? []} token={token} />
         )}
         {activeSection === "registries" && (
           <RegistriesAndSchema

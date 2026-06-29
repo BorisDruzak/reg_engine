@@ -433,6 +433,30 @@ tr:last-child td {
   line-height: 1.4;
 }
 
+.panel-toolbar,
+.panel-form,
+.panel-feedback {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.panel-feedback {
+  display: grid;
+  gap: 8px;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.panel-feedback:empty {
+  display: none;
+}
+
 .selectable-list {
   display: grid;
   margin: 0;
