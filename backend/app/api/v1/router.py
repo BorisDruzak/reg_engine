@@ -11,6 +11,7 @@ from app.api.v1.endpoints.import_export import router as import_export_router
 from app.api.v1.endpoints.organizations import router as organizations_router
 from app.api.v1.endpoints.public_links import router as public_links_router
 from app.api.v1.endpoints.registries import router as registries_router
+from app.api.v1.endpoints.reports import router as reports_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router)
@@ -23,4 +24,5 @@ api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(registries_router)
 api_v1_router.include_router(cards_router)
 api_v1_router.include_router(public_links_router)
+api_v1_router.include_router(reports_router)
 api_v1_router.include_router(audit_router)

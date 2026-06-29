@@ -8,6 +8,7 @@ from app.models.organization import AccessGrant, Organization, OrganizationClosu
 from app.models.public_link import CardPublicLink
 from app.models.reference import ReferenceItem, ReferenceList
 from app.models.registry_schema import FormBlock, FormField, Registry
+from app.models.report import ReportRun, ReportTemplate
 
 __all__ = [
     "AccessGrant",
@@ -32,6 +33,8 @@ __all__ = [
     "ReferenceItem",
     "ReferenceList",
     "Registry",
+    "ReportRun",
+    "ReportTemplate",
     "Role",
     "StoredFile",
     "User",

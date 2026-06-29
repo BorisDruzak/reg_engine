@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 03:40:53 +05:00
+- Generated: 2026-06-30 04:04:26 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -44,6 +44,7 @@
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/public_links.py`
 - `backend/app/api/v1/endpoints/registries.py`
+- `backend/app/api/v1/endpoints/reports.py`
 - `backend/app/api/v1/router.py`
 - `backend/app/cli/__init__.py`
 - `backend/app/cli/bootstrap.py`
@@ -66,6 +67,7 @@
 - `backend/app/models/public_link.py`
 - `backend/app/models/reference.py`
 - `backend/app/models/registry_schema.py`
+- `backend/app/models/report.py`
 - `backend/app/repositories/__init__.py`
 - `backend/app/schemas/__init__.py`
 - `backend/app/schemas/access_management.py`
@@ -78,6 +80,7 @@
 - `backend/app/schemas/organizations.py`
 - `backend/app/schemas/public_links.py`
 - `backend/app/schemas/registries.py`
+- `backend/app/schemas/reports.py`
 - `backend/app/services/__init__.py`
 - `backend/app/services/attachments.py`
 - `backend/app/services/audit.py`
@@ -91,6 +94,7 @@
 - `backend/app/services/public_links.py`
 - `backend/app/services/references.py`
 - `backend/app/services/registry_schema.py`
+- `backend/app/services/reports.py`
 - `backend/app/services/user_access.py`
 - `backend/migrations/env.py`
 - `backend/migrations/script.py.mako`
@@ -103,6 +107,7 @@
 - `backend/migrations/versions/0007_public_link_attachment_limits.py`
 - `backend/migrations/versions/0008_file_ref_field_values.py`
 - `backend/migrations/versions/0009_document_template_versions.py`
+- `backend/migrations/versions/0010_reports.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -113,6 +118,7 @@
 - `backend/tests/test_api_phase_2d_documents.py`
 - `backend/tests/test_api_phase_2k.py`
 - `backend/tests/test_api_phase_3_import_export.py`
+- `backend/tests/test_api_phase_4_reports.py`
 - `backend/tests/test_attachment_services.py`
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`

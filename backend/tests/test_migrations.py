@@ -37,6 +37,8 @@ EXPECTED_TABLES = {
     "reference_items",
     "reference_lists",
     "registries",
+    "report_runs",
+    "report_templates",
     "role_permissions",
     "roles",
     "stored_files",
@@ -60,6 +62,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
         assert f"CREATE TABLE {table_name}" in sql or f"CREATE TABLE public.{table_name}" in sql
     assert "0008_file_ref_field_values" in sql
     assert "0009_document_template_versions" in sql
+    assert "0010_reports" in sql
     assert (
         "CREATE TABLE document_template_versions" in sql
         or "CREATE TABLE public.document_template_versions" in sql
@@ -68,6 +71,8 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "'docx_binary_v1'" in sql
     assert "value_attachment_id UUID" in sql
     assert "fk_field_values_value_attachment_id_card_attachments" in sql
+    assert "CREATE TABLE report_templates" in sql or "CREATE TABLE public.report_templates" in sql
+    assert "CREATE TABLE report_runs" in sql or "CREATE TABLE public.report_runs" in sql
     assert "ix_field_values_field_attachment" in sql
     assert "'file_ref'" in sql
     assert "CREATE TABLE employees" not in sql

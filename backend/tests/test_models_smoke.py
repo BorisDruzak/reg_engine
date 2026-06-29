@@ -25,6 +25,8 @@ EXPECTED_TABLES = {
     "reference_items",
     "reference_lists",
     "registries",
+    "report_runs",
+    "report_templates",
     "role_permissions",
     "roles",
     "stored_files",
@@ -183,6 +185,50 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
         "archive_reason",
     }:
         assert column_name in generated_documents.c
+
+
+def test_report_metadata_tables_use_required_columns() -> None:
+    report_templates = Base.metadata.tables["report_templates"]
+    report_runs = Base.metadata.tables["report_runs"]
+
+    for column_name in {
+        "registry_id",
+        "code",
+        "name",
+        "description",
+        "report_type",
+        "parameters_schema_json",
+        "default_parameters_json",
+        "output_format",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in report_templates.c
+
+    for column_name in {
+        "report_template_id",
+        "registry_id",
+        "card_id",
+        "stored_file_id",
+        "report_type",
+        "run_status",
+        "parameters_json",
+        "summary_json",
+        "row_count",
+        "output_filename",
+        "output_content_type",
+        "generated_by",
+        "started_at",
+        "finished_at",
+        "archived_at",
+        "archived_by",
+        "archive_reason",
+    }:
+        assert column_name in report_runs.c
 
 
 def test_public_link_attachment_limit_columns_are_explicit() -> None:

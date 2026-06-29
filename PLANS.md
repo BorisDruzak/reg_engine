@@ -145,11 +145,16 @@ Current stop point:
   backend API slice: CSV commit reuses preview validation, applies atomic
   create/update batches, groups new-card rows by optional `import_key`, and
   writes import audit.
-- Next planned work is Phase 4 reports unless an explicit XLSX/frontend
-  import-export polish slice is approved first.
-- Later explicit phases remain reports and Phase 5 MCP.
+- Phase 4A Report Foundation is the active implementation checkpoint:
+  migration `0010_reports`, backend report templates/runs, JSON report output
+  storage, scoped reads/downloads, and audit are implemented locally and have
+  passed disposable PostgreSQL verification. Production migration/deploy
+  evidence is still pending.
+- Later explicit phases remain report frontend UI/polish, non-JSON report
+  outputs, and Phase 5 MCP.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, reports, and MCP remain deferred until their explicit phases.
+  export, report frontend UI/polish, non-JSON report outputs, and MCP remain
+  deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1504,12 +1509,81 @@ Known limitations:
 
 Purpose: add report definitions and report runs.
 
-Planned scope:
+Status: in progress.
+
+Planned overall scope:
 
 - Report templates.
 - Registry/card reports.
 - Period reports.
 - Report output storage and audit.
+
+### Phase 4A: Report Foundation API
+
+Status: implementation complete locally; deploy and production migration
+pending.
+
+Purpose: add the first backend/API report slice without frontend report UI,
+XLSX/PDF report outputs, scheduled jobs, public report workflows, binary
+attachment/document export, or MCP.
+
+Completed local scope:
+
+- Added migration `0010_reports`.
+- Added `report_templates` and `report_runs` SQLAlchemy models.
+- Added constraints/indexes for report type, output format, run status,
+  template code uniqueness per registry, stored output linkage, and report
+  lookup.
+- Added authenticated REST API:
+  `POST /api/v1/registries/{registry_id}/report-templates`,
+  `GET /api/v1/registries/{registry_id}/report-templates`,
+  `DELETE /api/v1/report-templates/{template_id}`,
+  `POST /api/v1/report-templates/{template_id}/runs`,
+  `GET /api/v1/registries/{registry_id}/report-runs`,
+  `GET /api/v1/report-runs/{report_run_id}`,
+  `GET /api/v1/report-runs/{report_run_id}/content`, and
+  `DELETE /api/v1/report-runs/{report_run_id}`.
+- Added report types `registry_cards`, `card_detail`, and `period_summary`.
+- Stored generated JSON report output through the existing storage abstraction
+  under the `reports` prefix.
+- Kept API response metadata safe by omitting storage keys, filesystem paths,
+  checksums, and stored-file ids from report run responses.
+- Enforced backend scope through existing registry schema permissions, card
+  management permissions, and card visibility reads.
+- Added audit events for report template create/archive and report run
+  generate/download/archive.
+
+Verification so far:
+
+- Targeted model/schema/migration tests passed locally.
+- `ruff check` passed for the Phase 4A files.
+- `mypy app` passed.
+- Offline Alembic SQL render passed locally.
+- Disposable PostgreSQL database `reg_engine_phase4a_test` passed clean
+  `alembic upgrade head` through `0010_reports`.
+- PostgreSQL-backed `tests/test_api_phase_4_reports.py` passed on the same
+  disposable database.
+
+Production migration checkpoint:
+
+- `0010_reports` is explicitly part of the active Phase 4A plan.
+- Production migration may be applied only after this implementation is pushed
+  to `origin/main`, the server checkout is synchronized, a fresh production
+  backup is created, preflight checks confirm the intentional `reg_engine`
+  target and current Alembic revision, and post-checks confirm
+  `report_templates`, `report_runs`, constraints, indexes, service health, and
+  server checks.
+
+Known limitations:
+
+- JSON is the only report output format in Phase 4A.
+- No frontend report UI yet.
+- No XLSX/PDF report outputs.
+- No scheduled/background report jobs.
+- No charts or visual report builder.
+- No public-link report workflows.
+- No binary attachment/generated-document report export.
+- No MCP.
 
 ### Phase 5: MCP Over API Only
 

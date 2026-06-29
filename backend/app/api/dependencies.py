@@ -21,6 +21,7 @@ from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkError
 from app.services.references import ReferenceListError
 from app.services.registry_schema import RegistrySchemaError
+from app.services.reports import ReportServiceError
 from app.services.user_access import (
     UserAccessConflictError,
     UserAccessError,
@@ -137,6 +138,7 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             PublicLinkError,
             ReferenceListError,
             RegistrySchemaError,
+            ReportServiceError,
             UserAccessError,
         ),
     ):
