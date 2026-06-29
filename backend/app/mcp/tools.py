@@ -155,7 +155,7 @@ def call_tool(
     args = arguments or {}
     try:
         payload = _call_tool_or_raise(name, args, client)
-    except RegEngineApiError as exc:
+    except (RegEngineApiError, ValueError) as exc:
         return {
             "content": [{"type": "text", "text": str(exc)}],
             "isError": True,

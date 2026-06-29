@@ -30,6 +30,8 @@ class McpJsonRpcHandler:
                 return _response(request_id, {"tools": MCP_TOOL_DEFINITIONS})
             if method == "tools/call":
                 return _response(request_id, self._call_tool_result(message))
+        except ValueError as exc:
+            return _error(request_id, -32602, str(exc))
         except Exception as exc:
             return _error(request_id, -32603, str(exc))
 
@@ -68,11 +70,21 @@ def serve_stdio(
     for line in input_stream:
         if not line.strip():
             continue
-        response = rpc_handler.handle(json.loads(line))
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            _write_response(output_stream, _error(None, -32700, "Parse error."))
+            continue
+        if not isinstance(message, dict):
+            _write_response(
+                output_stream,
+                _error(None, -32600, "JSON-RPC request must be an object."),
+            )
+            continue
+        response = rpc_handler.handle(message)
         if response is None:
             continue
-        output_stream.write(json.dumps(response, ensure_ascii=False) + "\n")
-        output_stream.flush()
+        _write_response(output_stream, response)
 
 
 def main() -> None:
@@ -89,6 +101,11 @@ def _error(request_id: object, code: int, message: str) -> dict[str, Any]:
         "id": request_id,
         "error": {"code": code, "message": message},
     }
+
+
+def _write_response(output_stream: TextIO, response: dict[str, Any]) -> None:
+    output_stream.write(json.dumps(response, ensure_ascii=False) + "\n")
+    output_stream.flush()
 
 
 if __name__ == "__main__":

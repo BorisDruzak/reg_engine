@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 MCP_SOURCE_HEADER = "X-Reg-Engine-Source"
@@ -75,7 +75,7 @@ class RegEngineApiClient:
         transport: HttpTransport | None = None,
         timeout_seconds: float = 30.0,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _validate_base_url(base_url)
         self.token = token.strip() if token is not None and token.strip() else None
         self.transport = transport or UrllibHttpTransport()
         self.timeout_seconds = timeout_seconds
@@ -120,6 +120,14 @@ def create_api_client_from_env() -> RegEngineApiClient:
         token=os.environ.get("REG_ENGINE_API_TOKEN"),
         timeout_seconds=float(os.environ.get("REG_ENGINE_MCP_TIMEOUT_SECONDS", "30")),
     )
+
+
+def _validate_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("REG_ENGINE_API_BASE_URL must be an http(s) URL.")
+    return normalized
 
 
 def _query_value(value: object) -> str:

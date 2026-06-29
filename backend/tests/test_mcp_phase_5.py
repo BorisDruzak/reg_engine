@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import ast
+import io
 import json
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from fastapi import Request
 
 from app.api.dependencies import get_request_metadata
@@ -114,6 +116,21 @@ def test_mcp_api_client_uses_get_bearer_token_and_mcp_source_header() -> None:
     ]
 
 
+@pytest.mark.parametrize("base_url", ["", "file:///tmp/reg_engine", "api.local"])
+def test_mcp_api_client_rejects_non_http_base_urls(base_url: str) -> None:
+    from app.mcp.api_client import RegEngineApiClient
+
+    with pytest.raises(ValueError, match="http"):
+        RegEngineApiClient(base_url=base_url, token=None, transport=RecordingTransport())
+
+
+@pytest.mark.parametrize("base_url", ["http://api.local", "https://api.local/"])
+def test_mcp_api_client_accepts_http_and_https_base_urls(base_url: str) -> None:
+    from app.mcp.api_client import RegEngineApiClient
+
+    RegEngineApiClient(base_url=base_url, token=None, transport=RecordingTransport())
+
+
 def test_mcp_tool_definitions_are_read_only_and_call_existing_api_paths() -> None:
     from app.mcp.api_client import RegEngineApiClient
     from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
@@ -153,6 +170,22 @@ def test_mcp_tool_definitions_are_read_only_and_call_existing_api_paths() -> Non
     )
 
 
+def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token=None,
+        transport=RecordingTransport(),
+    )
+
+    result = call_tool("reg_engine_read_card", {}, client=client)
+
+    assert result["isError"] is True
+    assert "card_id" in result["content"][0]["text"]
+
+
 def test_mcp_json_rpc_handler_supports_initialize_list_and_call() -> None:
     from app.mcp.api_client import RegEngineApiClient
     from app.mcp.server import MCP_PROTOCOL_VERSION, McpJsonRpcHandler
@@ -184,6 +217,48 @@ def test_mcp_json_rpc_handler_supports_initialize_list_and_call() -> None:
         }
     )
     assert called["result"]["structuredContent"] == {"status": "ok", "service": "reg_engine"}
+
+
+def test_mcp_json_rpc_handler_returns_invalid_params_for_bad_tool_call_params() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.server import McpJsonRpcHandler
+
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token=None,
+        transport=RecordingTransport(),
+    )
+    handler = McpJsonRpcHandler(api_client=client)
+
+    response = handler.handle({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {}})
+
+    assert response is not None
+    assert response["error"]["code"] == -32602
+    assert "name" in response["error"]["message"]
+
+
+def test_mcp_stdio_parse_error_does_not_crash_and_continues() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.server import MCP_PROTOCOL_VERSION, McpJsonRpcHandler, serve_stdio
+
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token=None,
+        transport=RecordingTransport(),
+    )
+    handler = McpJsonRpcHandler(api_client=client)
+    input_stream = io.StringIO(
+        'not-json\n{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+    )
+    output_stream = io.StringIO()
+
+    serve_stdio(input_stream=input_stream, output_stream=output_stream, handler=handler)
+
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+    assert responses[0]["id"] is None
+    assert responses[0]["error"]["code"] == -32700
+    assert responses[1]["id"] == 1
+    assert responses[1]["result"]["protocolVersion"] == MCP_PROTOCOL_VERSION
 
 
 def test_mcp_package_does_not_import_database_models_or_service_layer() -> None:

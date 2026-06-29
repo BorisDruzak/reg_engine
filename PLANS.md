@@ -161,14 +161,18 @@ Current stop point:
 - Production PostgreSQL is migrated to `0011_mcp_audit_source` after fresh
   backup, preflight, disposable PostgreSQL verification, Alembic upgrade,
   post-checks, backend service restart, live MCP sanity, and server check.
-- Next planned work requires explicit prioritization: MCP hardening/config,
-  MCP write tools, report UI/polish, non-JSON reports, XLSX workflows, or
+- Phase 5B MCP Hardening And Config is in progress locally: the read-only
+  MCP stdio gateway validates API base URLs, returns JSON-RPC parse/invalid
+  params errors without terminating the server loop, and returns tool argument
+  failures as MCP tool errors. No migration is required.
+- Next planned work requires explicit prioritization: MCP write tools,
+  report UI/polish, non-JSON reports, XLSX workflows, or
   another deferred phase.
 - Later explicit phases remain report frontend UI/polish, non-JSON report
-  outputs, and Phase 5 MCP.
+  outputs, and MCP write tools.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, report frontend UI/polish, non-JSON report outputs, and MCP remain
-  deferred until their explicit phases.
+  export, report frontend UI/polish, non-JSON report outputs, and MCP write
+  tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1688,6 +1692,56 @@ Known limitations:
 - No standalone MCP auth model; Phase 5A uses an existing API bearer token.
 - The stdio gateway is a minimal JSON-RPC handler; packaged MCP SDK adoption
   can be considered later if needed.
+
+### Phase 5B: MCP Hardening And Config
+
+Status: in progress.
+
+Purpose: harden the Phase 5A read-only MCP gateway before considering any
+write tools, report UI, non-JSON reports, or XLSX workflows.
+
+Scope:
+
+- Keep MCP read-only and API-only.
+- Keep all MCP API calls as HTTP `GET`.
+- Validate `REG_ENGINE_API_BASE_URL` as an absolute `http://` or `https://`
+  URL before sending requests.
+- Return JSON-RPC parse error `-32700` for malformed stdio input and continue
+  serving the next message.
+- Return JSON-RPC invalid params error `-32602` for malformed `tools/call`
+  request params.
+- Return missing/invalid tool arguments as MCP tool results with
+  `isError=true` instead of crashing the JSON-RPC handler.
+- Keep guardrail coverage proving MCP code does not import SQLAlchemy,
+  Alembic, database sessions, backend models, or backend services.
+
+Acceptance criteria:
+
+- Malformed stdio JSON does not terminate `python -m app.mcp.server`.
+- Invalid `tools/call` params return `-32602`, not internal error `-32603`.
+- Tool argument errors return `isError=true` tool results.
+- Non-http(s) API base URLs are rejected early.
+- No migrations, models, services, REST endpoints, frontend, direct DB access,
+  public-link workflows, binary downloads, standalone MCP auth, or write tools
+  are added.
+
+Verification so far:
+
+- RED tests failed locally before implementation for non-http(s) API base URLs,
+  uncaught tool argument errors, invalid params returning `-32603`, and
+  malformed stdio JSON terminating the server loop.
+- GREEN targeted tests passed locally with
+  `backend/.venv/Scripts/python.exe -m pytest tests/test_mcp_phase_5.py -q`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy app/mcp` passed.
+
+Known limitations:
+
+- Still no MCP write tools.
+- Still no standalone MCP auth model; MCP uses an existing API bearer token.
+- Still no MCP-side permission shortcuts; API remains the authorization
+  boundary.
+- Still no public-link MCP workflows.
+- Still no binary attachment/generated-document download tools.
 
 ## Verification
 
