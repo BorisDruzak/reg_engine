@@ -52,6 +52,7 @@ Completed phases:
 - Phase 2L.7: Card Create, Metadata, And Editor UI.
 - Phase 2L.8: Public Link Admin Controls UI.
 - Phase 2L.9: Admin UI Live Validation.
+- Phase 2J.0: `file_ref` Planning And ADR.
 
 Current stop point:
 
@@ -64,8 +65,8 @@ Current stop point:
 - Phase 2K.4 Bulk Card Values Update API is completed.
 - Phase 2K.5 API Coverage And Live Validation is completed.
 - Phase 2K Core Backend API Completeness is completed.
-- Phase 2J remains planned for the `file_ref` dynamic field type, but it
-  requires explicit prioritization before implementation.
+- Phase 2J.0 `file_ref` planning and ADR is completed and recorded in
+  `docs/ADR/0007-file-ref-dynamic-field.md`.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -80,9 +81,12 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work requires explicit prioritization: Phase 2J `file_ref`,
-  Phase 2M binary `.docx` template upload/versioning, Phase 2N PDF conversion,
-  Phase 3 import/export, Phase 4 reports, or Phase 5 MCP.
+- Next planned work is Phase 2J.1 Database And Model Foundation for `file_ref`.
+  This is a migration/model checkpoint and must follow the project migration
+  rules before touching any production database.
+- Later explicit phases remain Phase 2M binary `.docx` template
+  upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
+  reports, and Phase 5 MCP.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -163,16 +167,17 @@ Completed Phase 2 work:
 - Phase 2G added authenticated Russian-first template creation and archive controls for existing `docx_text_v1` document templates.
 - Phase 2H added public-link attachment list/upload/download for active public edit links without adding public archive/delete, generated-document controls, `file_ref`, PDF conversion, import/export, MCP, or a new migration.
 - Phase 2I separated public field-edit usage limits from public attachment upload limits, added rollback storage cleanup, clarified download streaming deferral, and fixed public no-file UI validation text.
+- Phase 2J.0 accepted the `file_ref` dynamic field type ADR without adding backend code, frontend code, API endpoints, or migrations.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: planned, can be deferred behind Phase 2K/2L admin usability work.
+Status: in progress; Phase 2J.0 is completed and Phase 2J.1 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
 ### Phase 2J.0: Planning And ADR
 
-Status: planned next.
+Status: completed.
 
 Required decisions:
 
@@ -185,9 +190,23 @@ Required decisions:
 
 Acceptance criteria:
 
-- ADR records the decisions above before code starts.
+- ADR records the decisions above before code starts:
+  `docs/ADR/0007-file-ref-dynamic-field.md`.
 - PLANS.md states all sub-phases, tests, non-goals, and transfer behavior.
 - No backend, frontend, migration, or API implementation starts in Phase 2J.0.
+
+Completion evidence:
+
+- `docs/ADR/0007-file-ref-dynamic-field.md` was added.
+- Phase 2J transfer behavior is fixed: active referenced attachments are copied
+  as new target-card `card_attachments` rows pointing at the same stored file;
+  archived referenced attachments are cleared on the target with audit metadata.
+- Phase 2J generated document behavior is fixed: render title/original filename
+  text only; do not embed files or links.
+- No backend, frontend, migration, API, PDF, import/export, reports, MCP, or
+  business-specific document-field implementation was added in Phase 2J.0.
+- Verification on 2026-06-30: `git diff --check`,
+  `scripts/format.ps1 -Check`, and `scripts/check.ps1 -SkipRemote` passed.
 
 ### Phase 2J.1: Database And Model Foundation
 

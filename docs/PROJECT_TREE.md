@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-29 18:32:15 +05:00
+- Generated: 2026-06-30 00:40:30 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -131,6 +131,7 @@
 - `docs/ADR/0004-phase-2-documents-scope.md`
 - `docs/ADR/0005-attachment-storage-architecture.md`
 - `docs/ADR/0006-generated-document-templates.md`
+- `docs/ADR/0007-file-ref-dynamic-field.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
