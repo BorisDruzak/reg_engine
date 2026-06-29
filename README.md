@@ -521,6 +521,19 @@ DELETE /api/v1/org-units/{org_unit_id}
 
 Org units are filters/reference data and are not RBAC boundaries in v1. Reads use organization visibility scope. Create, update, and archive require `organizations.manage` in organization scope or superuser access.
 
+Registry API:
+
+```powershell
+GET    /api/v1/registries
+POST   /api/v1/registries
+GET    /api/v1/registries/{registry_id}
+PATCH  /api/v1/registries/{registry_id}
+DELETE /api/v1/registries/{registry_id}
+GET    /api/v1/registries/{registry_id}/schema
+```
+
+`PATCH /api/v1/registries/{registry_id}` supports safe metadata updates: `name`, `description`, and draft/active `lifecycle_status`. Use `DELETE /api/v1/registries/{registry_id}` for soft archive; archived registries can be read through list/read archive scope with `include_archive=true`.
+
 ## Bootstrap Commands
 
 Seed core permissions and roles:
@@ -586,4 +599,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, and Phase 2K.1 added organization unit management API. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, Phase 2K.1 added organization unit management API, and Phase 2K.2 added registry update/archive API. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.

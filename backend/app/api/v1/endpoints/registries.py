@@ -24,6 +24,7 @@ from app.schemas.registries import (
     RegistryListRead,
     RegistryRead,
     RegistrySchemaRead,
+    RegistryUpdate,
 )
 from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
@@ -53,10 +54,12 @@ def create_registry(
 def list_registries(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    include_archive: Annotated[bool, Query()] = False,
 ) -> RegistryListRead:
     try:
         registries = RegistrySchemaService(session).list_registries_for_actor(
             actor_user_id=actor_user_id,
+            include_archive=include_archive,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -70,9 +73,47 @@ def read_registry(
     registry_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    include_archive: Annotated[bool, Query()] = False,
 ) -> RegistryRead:
     try:
         registry = RegistrySchemaService(session).read_registry_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            include_archive=include_archive,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return RegistryRead.model_validate(registry)
+
+
+@router.patch("/registries/{registry_id}", response_model=RegistryRead)
+def update_registry(
+    registry_id: UUID,
+    payload: RegistryUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> RegistryRead:
+    try:
+        registry = RegistrySchemaService(session).update_registry_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            name=payload.name,
+            description=payload.description,
+            lifecycle_status=payload.lifecycle_status,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return RegistryRead.model_validate(registry)
+
+
+@router.delete("/registries/{registry_id}", response_model=RegistryRead)
+def archive_registry(
+    registry_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> RegistryRead:
+    try:
+        registry = RegistrySchemaService(session).archive_registry_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
         )

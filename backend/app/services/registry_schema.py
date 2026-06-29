@@ -18,15 +18,19 @@ class RegistrySchemaService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def list_registries_for_actor(self, *, actor_user_id: UUID) -> list[Registry]:
-        statement = (
-            select(Registry)
-            .where(
+    def list_registries_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        include_archive: bool = False,
+    ) -> list[Registry]:
+        criteria = []
+        if not include_archive:
+            criteria = [
                 Registry.archived_at.is_(None),
                 Registry.lifecycle_status != "archived",
-            )
-            .order_by(Registry.code, Registry.id)
-        )
+            ]
+        statement = select(Registry).where(*criteria).order_by(Registry.code, Registry.id)
         registries = list(self.session.scalars(statement).all())
         permissions = PermissionService(self.session)
         if permissions.is_superuser(actor_user_id):
@@ -75,9 +79,76 @@ class RegistrySchemaService:
         )
         return registry
 
-    def read_registry_for_actor(self, *, actor_user_id: UUID, registry_id: UUID) -> Registry:
-        registry = self._get_active_registry(registry_id)
+    def read_registry_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        include_archive: bool = False,
+    ) -> Registry:
+        registry = self._get_registry(registry_id, include_archive=include_archive)
         self._require_registry_read_permission(actor_user_id, registry.id)
+        return registry
+
+    def update_registry_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        name: str | None = None,
+        description: str | None = None,
+        lifecycle_status: str | None = None,
+    ) -> Registry:
+        registry = self._get_active_registry(registry_id)
+        self._require_schema_permission(actor_user_id, registry.id)
+        if lifecycle_status == "archived":
+            raise RegistrySchemaError("Use archive endpoint to archive registries.")
+        if lifecycle_status is not None and lifecycle_status not in {"draft", "active"}:
+            raise RegistrySchemaError(f"Unsupported registry lifecycle status: {lifecycle_status}")
+
+        old_data = {
+            "name": registry.name,
+            "description": registry.description,
+            "lifecycle_status": registry.lifecycle_status,
+        }
+        if name is not None:
+            registry.name = name
+        if description is not None:
+            registry.description = description
+        if lifecycle_status is not None:
+            registry.lifecycle_status = lifecycle_status
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="registry",
+            object_id=registry.id,
+            old_data_json=old_data,
+            new_data_json={
+                "name": registry.name,
+                "description": registry.description,
+                "lifecycle_status": registry.lifecycle_status,
+            },
+        )
+        return registry
+
+    def archive_registry_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+    ) -> Registry:
+        registry = self._get_active_registry(registry_id)
+        self._require_schema_permission(actor_user_id, registry.id)
+        registry.archived_at = datetime.now(UTC)
+        registry.lifecycle_status = "archived"
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="registry",
+            object_id=registry.id,
+        )
         return registry
 
     def read_schema_for_actor(
@@ -369,11 +440,13 @@ class RegistrySchemaService:
         raise PermissionDeniedError("Actor cannot read registry.")
 
     def _get_active_registry(self, registry_id: UUID) -> Registry:
+        return self._get_registry(registry_id, include_archive=False)
+
+    def _get_registry(self, registry_id: UUID, *, include_archive: bool) -> Registry:
         registry = self.session.get(Registry, registry_id)
-        if (
-            registry is None
-            or registry.archived_at is not None
-            or registry.lifecycle_status == "archived"
+        if registry is None or (
+            not include_archive
+            and (registry.archived_at is not None or registry.lifecycle_status == "archived")
         ):
             raise RegistrySchemaError("Registry was not found.")
         return registry

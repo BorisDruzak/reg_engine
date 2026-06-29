@@ -37,6 +37,7 @@ Completed phases:
 - Phase 2I: Public-link attachment limit semantics and bugfixes.
 - Phase 2K.0: Admin workflow API gap audit.
 - Phase 2K.1: Organization Units API.
+- Phase 2K.2: Registry Update And Archive API.
 
 Current stop point:
 
@@ -44,9 +45,10 @@ Current stop point:
 - Phase 2K.0 admin workflow API gap audit is completed and recorded in
   `docs/PHASE_2K_ADMIN_API_READINESS.md`.
 - Phase 2K.1 Organization Units API is completed.
+- Phase 2K.2 Registry Update And Archive API is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind core admin workflows if product usability is the priority.
-- Phase 2K.2 Registry Update And Archive API is the next backend/API
+- Phase 2K.3 Card Block Instance Archive API is the next backend/API
   implementation slice.
 - Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
@@ -75,7 +77,6 @@ documents, public links, and audit reads. Phase 2K.0 records the current API
 readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. Remaining backend
 gaps before a complete admin workspace are:
 
-- registry update/archive API;
 - repeatable `card_block_instances` archive API;
 - atomic bulk card values update API.
 
@@ -355,6 +356,8 @@ Completion evidence:
 
 ### Phase 2K.2: Registry Update And Archive API
 
+Status: completed.
+
 Required work:
 
 - Add registry update endpoint for safe metadata changes such as name/description/status where supported.
@@ -366,6 +369,17 @@ Acceptance criteria:
 
 - Registry update/archive tests cover permission boundaries.
 - Archived registries do not disappear from audit/history-sensitive reads where archive scope is requested.
+
+Completion evidence:
+
+- Added `PATCH /api/v1/registries/{registry_id}` for safe metadata updates:
+  name, description, and draft/active lifecycle status.
+- Added `DELETE /api/v1/registries/{registry_id}` for soft archive.
+- Added `include_archive` support for registry list/read.
+- Registry archive sets `lifecycle_status=archived` and `archived_at`.
+- Registry update/archive require `registry.schema.manage`.
+- Create/update/archive write `audit_events` with `object_type=registry`.
+- Tests added in `backend/tests/test_api_phase_2k.py`.
 
 ### Phase 2K.3: Card Block Instance Archive API
 

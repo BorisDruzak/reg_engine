@@ -168,7 +168,8 @@ def _grant_access(
     *,
     user_id: UUID,
     role_id: UUID,
-    organization_id: UUID,
+    organization_id: UUID | None = None,
+    registry_id: UUID | None = None,
     include_descendants: bool = True,
     created_by: UUID | None = None,
 ) -> AccessGrant:
@@ -176,6 +177,7 @@ def _grant_access(
         user_id=user_id,
         role_id=role_id,
         organization_id=organization_id,
+        registry_id=registry_id,
         include_descendants=include_descendants,
         created_by=created_by,
     )
@@ -222,6 +224,14 @@ def test_phase_2k_org_unit_routes_are_registered_without_database() -> None:
 
     assert "/api/v1/organizations/{organization_id}/org-units" in paths
     assert "/api/v1/org-units/{org_unit_id}" in paths
+
+
+def test_phase_2k_registry_update_archive_routes_are_registered_without_database() -> None:
+    app = create_app()
+    registry_path = app.openapi()["paths"]["/api/v1/registries/{registry_id}"]
+
+    assert "patch" in registry_path
+    assert "delete" in registry_path
 
 
 def test_system_admin_can_manage_org_units(
@@ -386,3 +396,142 @@ def test_org_admin_can_manage_units_in_descendant_scope_but_not_siblings(
         headers=_actor_headers(outsider.id),
     )
     assert outsider_response.status_code == 403, outsider_response.text
+
+
+def test_registry_admin_can_update_and_archive_registry(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-registry-system@example.test",
+        is_superuser=True,
+    )
+    registry_admin = _create_user(db_session, "phase2k-registry-admin@example.test")
+    role = _create_role_with_permissions(
+        db_session,
+        "phase2k_registry_admin",
+        ["registry.schema.manage"],
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {
+            "code": "phase2k-registry-update",
+            "name": "Registry Before",
+            "description": "Before",
+        },
+        actor_id=system_admin.id,
+    )
+    _grant_access(
+        db_session,
+        user_id=registry_admin.id,
+        role_id=role.id,
+        organization_id=None,
+        registry_id=UUID(registry["id"]),
+        created_by=system_admin.id,
+    )
+
+    updated = _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/registries/{registry['id']}",
+        actor_id=registry_admin.id,
+        payload={
+            "name": "Registry After",
+            "description": "After",
+            "lifecycle_status": "draft",
+        },
+    )
+    assert updated["name"] == "Registry After"
+    assert updated["description"] == "After"
+    assert updated["lifecycle_status"] == "draft"
+
+    archived = _request_json(
+        api_client,
+        "DELETE",
+        f"/api/v1/registries/{registry['id']}",
+        actor_id=registry_admin.id,
+    )
+    assert archived["id"] == registry["id"]
+    assert archived["lifecycle_status"] == "archived"
+
+    normal_list = _request_json(api_client, "GET", "/api/v1/registries", actor_id=system_admin.id)
+    assert registry["id"] not in {item["id"] for item in normal_list["items"]}
+
+    archive_list = _request_json(
+        api_client,
+        "GET",
+        "/api/v1/registries?include_archive=true",
+        actor_id=system_admin.id,
+    )
+    assert registry["id"] in {item["id"] for item in archive_list["items"]}
+
+    archive_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/registries/{registry['id']}?include_archive=true",
+        actor_id=registry_admin.id,
+    )
+    assert archive_read["lifecycle_status"] == "archived"
+
+    audit_actions = {
+        event.action
+        for event in db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.object_type == "registry",
+                AuditEvent.object_id == UUID(registry["id"]),
+            )
+        )
+    }
+    assert {"create", "update", "archive"} <= audit_actions
+
+
+def test_registry_update_and_archive_require_schema_permission(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-registry-denied-system@example.test",
+        is_superuser=True,
+    )
+    card_admin = _create_user(db_session, "phase2k-registry-denied-card-admin@example.test")
+    role = _create_role_with_permissions(
+        db_session,
+        "phase2k_registry_card_admin",
+        ["cards.manage"],
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-registry-denied", "name": "Denied Registry"},
+        actor_id=system_admin.id,
+    )
+    _grant_access(
+        db_session,
+        user_id=card_admin.id,
+        role_id=role.id,
+        organization_id=None,
+        registry_id=UUID(registry["id"]),
+        created_by=system_admin.id,
+    )
+
+    read_response = api_client.get(
+        f"/api/v1/registries/{registry['id']}",
+        headers=_actor_headers(card_admin.id),
+    )
+    assert read_response.status_code == 200, read_response.text
+
+    update_response = api_client.patch(
+        f"/api/v1/registries/{registry['id']}",
+        json={"name": "Blocked"},
+        headers=_actor_headers(card_admin.id),
+    )
+    assert update_response.status_code == 403, update_response.text
+
+    archive_response = api_client.delete(
+        f"/api/v1/registries/{registry['id']}",
+        headers=_actor_headers(card_admin.id),
+    )
+    assert archive_response.status_code == 403, archive_response.text

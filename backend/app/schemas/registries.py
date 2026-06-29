@@ -25,6 +25,12 @@ class RegistryListRead(BaseModel):
     items: list[RegistryRead]
 
 
+class RegistryUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    lifecycle_status: str | None = None
+
+
 class RegistrySchemaRead(BaseModel):
     registry: RegistryRead
     blocks: list["FormBlockRead"]
