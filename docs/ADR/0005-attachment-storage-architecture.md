@@ -71,13 +71,18 @@ Attachment authorization follows card authorization:
 - public links cannot upload or download attachments in the first Phase 2 slice.
 
 For Phase 2H, a public link may list, upload, and download active attachments
-only when the link is active, not expired, not usage-exhausted, `can_edit=true`,
-and the linked card has `public_edit_enabled=true`. Archived and superseded
-cards remain blocked. Public-link attachment responses must not expose
+only when the link is active, not expired, `can_edit=true`, and the linked card
+has `public_edit_enabled=true`. Archived and superseded cards remain blocked.
+Public-link attachment responses must not expose
 `stored_file_id`, `checksum_sha256`, storage keys, storage roots, or filesystem
 paths. Public upload/download actions write `audit_events` with
-`actor_type=public_link`; successful upload increments public-link `used_count`,
-while list/download do not.
+`actor_type=public_link`.
+
+Phase 2I separates field-edit usage from attachment-upload usage. `max_uses` /
+`used_count` apply to public field edits. `max_attachment_uploads` /
+`attachment_upload_count` apply to public attachment uploads. Successful upload
+increments only `attachment_upload_count`; list/download do not increment usage
+counters.
 
 Frontend visibility is only a UX hint. Backend services and API routes must enforce the rules.
 

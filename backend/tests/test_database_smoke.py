@@ -178,7 +178,7 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0006_generated_documents"
+    assert version == "0007_public_link_limits"
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:

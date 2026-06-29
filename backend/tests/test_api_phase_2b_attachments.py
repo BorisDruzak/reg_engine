@@ -506,6 +506,48 @@ def test_api_public_link_attachment_upload_list_and_download(
     assert {event.actor_type for event in audit_events} == {"public_link"}
 
 
+def test_api_public_link_attachment_workflows_ignore_field_edit_usage_limit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _attachment_api_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+    )
+    public_token.public_link.max_uses = 1
+    public_token.public_link.used_count = 1
+    public_token.public_link.max_attachment_uploads = 2
+    db_session.flush()
+
+    upload_response = api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": public_token.raw_token, "title": "After field limit"},
+        files={"file": ("after-limit.txt", b"after-limit", "text/plain")},
+    )
+    assert upload_response.status_code == 201, upload_response.text
+    upload_payload = upload_response.json()
+
+    list_response = api_client.post(
+        "/api/v1/public-links/attachments",
+        json={"raw_token": public_token.raw_token},
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert [item["id"] for item in list_response.json()["items"]] == [upload_payload["id"]]
+
+    download_response = api_client.post(
+        f"/api/v1/public-links/attachments/{upload_payload['id']}/content",
+        json={"raw_token": public_token.raw_token},
+    )
+    assert download_response.status_code == 200, download_response.text
+    assert download_response.content == b"after-limit"
+
+    db_session.refresh(public_token.public_link)
+    assert public_token.public_link.used_count == 1
+    assert public_token.public_link.attachment_upload_count == 1
+
+
 def test_api_public_link_attachment_upload_respects_card_public_edit_toggle(
     api_client: TestClient,
     db_session: Session,

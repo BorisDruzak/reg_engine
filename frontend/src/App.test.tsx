@@ -901,6 +901,9 @@ test("edits a public-link card without authentication", async () => {
   expect(screen.queryByRole("heading", { name: "Документы" })).not.toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Шаблоны документов" })).not.toBeInTheDocument();
 
+  await user.click(screen.getByRole("button", { name: "Загрузить файл" }));
+  expect(await screen.findByText("Выберите файл")).toBeInTheDocument();
+
   await user.type(screen.getByLabelText("Название файла"), "Публичный акт");
   await user.upload(
     screen.getByLabelText("Файл"),

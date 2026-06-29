@@ -55,7 +55,11 @@ def test_important_check_constraints_exist() -> None:
         "card_attachments": {"ck_card_attachments_position_non_negative"},
         "document_templates": {"ck_document_templates_template_format"},
         "generated_documents": {"ck_generated_documents_render_status"},
-        "card_public_links": {"ck_card_public_links_status"},
+        "card_public_links": {
+            "ck_card_public_links_status",
+            "ck_card_public_links_max_attachment_uploads_non_negative",
+            "ck_card_public_links_attachment_upload_count_non_negative",
+        },
         "audit_events": {"ck_audit_events_actor_type", "ck_audit_events_source"},
     }
 

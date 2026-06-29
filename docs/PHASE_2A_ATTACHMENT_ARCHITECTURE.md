@@ -160,7 +160,7 @@ Public-link edit remains limited to direct field editing already allowed by the 
 Phase 2H public-link attachment rules:
 
 - public-link list/upload/download require an active public link that is not
-  expired, not disabled, not usage-exhausted, and has `can_edit=true`;
+  expired, not disabled, and has `can_edit=true`;
 - the linked card must have `public_edit_enabled=true`;
 - archived and superseded cards are blocked for public-link upload/download;
 - public-link list/download only return active attachments for the linked card;
@@ -171,12 +171,16 @@ Phase 2H public-link attachment rules:
   as authenticated downloads;
 - public-link attachment responses omit `stored_file_id`, `checksum_sha256`,
   storage keys, storage roots, and filesystem paths;
+- Phase 2I separates field-edit usage from attachment-upload usage:
+  `max_uses` / `used_count` apply to field edits, while
+  `max_attachment_uploads` / `attachment_upload_count` apply to public
+  attachment upload;
 - public-link upload records `scanner_status`, writes an `attachment_create`
-  audit event with `actor_type=public_link`, and increments public-link
-  `used_count` only after successful attachment creation;
+  audit event with `actor_type=public_link`, and increments
+  `attachment_upload_count` only after successful attachment creation;
 - public-link download writes an `attachment_download` audit event with
   `actor_type=public_link`;
-- public-link list/download do not increment `used_count`;
+- public-link list/download do not increment usage counters;
 - public-link archive/delete, generated-document workflows, template
   management, `file_ref`, PDF conversion, import/export, MCP, and new migrations
   remain outside Phase 2H.
@@ -271,13 +275,15 @@ Phase 2H must add automated tests with these behaviors:
 
 - public-link upload, list, and download succeed for an active public edit link;
 - public-link upload writes `scanner_status`, creates attachment metadata, and
-  increments `used_count`;
+  increments `attachment_upload_count`;
 - public-link download writes an audit event with `actor_type=public_link`;
-- public-link list/download do not increment `used_count`;
+- public-link list/download do not increment usage counters;
 - public-link responses do not expose `stored_file_id`, `checksum_sha256`,
   storage keys, storage roots, or filesystem paths;
-- public-link workflows reject disabled, expired, usage-exhausted, non-editable,
-  archived, superseded, and wrong-card states;
+- public-link workflows reject disabled, expired, non-editable, archived,
+  superseded, and wrong-card states; exhausted attachment upload usage blocks
+  upload only, while exhausted field-edit usage does not block attachment
+  list/download;
 - public-link UI exposes Russian-first attachment upload/list/download controls;
 - public-link UI does not expose archive/delete, generated-document, template,
   `file_ref`, PDF, import/export, or MCP controls.

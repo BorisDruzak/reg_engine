@@ -139,7 +139,7 @@ def list_public_link_attachments(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> PublicLinkAttachmentListRead:
     try:
-        public_link = PublicLinkService(session).validate_public_edit_token(
+        public_link = PublicLinkService(session).validate_public_attachment_token(
             raw_token=payload.raw_token,
         )
         service = _attachment_service(session)
@@ -167,7 +167,9 @@ async def create_public_link_attachment(
     description: Annotated[str | None, Form()] = None,
 ) -> PublicLinkAttachmentRead:
     try:
-        public_link = PublicLinkService(session).validate_public_edit_token(raw_token=raw_token)
+        public_link = PublicLinkService(session).validate_public_attachment_token(
+            raw_token=raw_token,
+        )
         service = _attachment_service(session)
         content = await _read_upload_bytes_with_limit(
             file,
@@ -196,7 +198,7 @@ def read_public_link_attachment_content(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> Response:
     try:
-        public_link = PublicLinkService(session).validate_public_edit_token(
+        public_link = PublicLinkService(session).validate_public_attachment_token(
             raw_token=payload.raw_token,
         )
         service = _attachment_service(session)
@@ -228,6 +230,8 @@ def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
         expires_at=public_link.expires_at,
         max_uses=public_link.max_uses,
         used_count=public_link.used_count,
+        max_attachment_uploads=public_link.max_attachment_uploads,
+        attachment_upload_count=public_link.attachment_upload_count,
         disabled_at=public_link.disabled_at,
     )
 

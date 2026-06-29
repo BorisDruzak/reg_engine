@@ -160,10 +160,15 @@ class PublicLinkService:
         return public_link
 
     def validate_public_edit_token(self, *, raw_token: str) -> CardPublicLink:
-        return self._get_usable_public_link(raw_token)
+        public_link = self._get_active_public_link(raw_token)
+        self._require_field_edit_usage_available(public_link)
+        return public_link
+
+    def validate_public_attachment_token(self, *, raw_token: str) -> CardPublicLink:
+        return self._get_active_public_link(raw_token)
 
     def preview_public_link(self, *, raw_token: str) -> PublicLinkPreview:
-        public_link = self._get_usable_public_link(raw_token)
+        public_link = self._get_active_public_link(raw_token)
         card = self._get_active_card(public_link.card_id)
         if not public_link.can_edit or not card.public_edit_enabled:
             raise PermissionDeniedError("Public editing is disabled for this card.")
@@ -234,7 +239,8 @@ class PublicLinkService:
         value: object,
         block_instance_id: UUID | None = None,
     ) -> FieldValue:
-        public_link = self._get_usable_public_link(raw_token)
+        public_link = self._get_active_public_link(raw_token)
+        self._require_field_edit_usage_available(public_link)
         card = self._get_active_card(public_link.card_id)
         field = self._get_active_public_field(field_id)
         block = self._get_public_block(field.block_id)
@@ -268,7 +274,7 @@ class PublicLinkService:
         )
         return field_value
 
-    def _get_usable_public_link(self, raw_token: str) -> CardPublicLink:
+    def _get_active_public_link(self, raw_token: str) -> CardPublicLink:
         token_hash = hash_public_token(raw_token)
         public_link = self.session.scalars(
             select(CardPublicLink).where(CardPublicLink.token_hash == token_hash)
@@ -282,9 +288,11 @@ class PublicLinkService:
                 public_link.status = "expired"
                 self.session.flush()
             raise PermissionDeniedError("Public link is not active.")
+        return public_link
+
+    def _require_field_edit_usage_available(self, public_link: CardPublicLink) -> None:
         if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
             raise PermissionDeniedError("Public link usage limit is exhausted.")
-        return public_link
 
     def _get_active_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)

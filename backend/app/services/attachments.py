@@ -4,10 +4,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Protocol, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, event, select
 from sqlalchemy.orm import Session
 
 from app.models import Card, CardAttachment, CardPublicLink, StoredFile
@@ -55,6 +55,61 @@ class AttachmentStorage(Protocol):
     def delete_bytes(self, storage_key: str) -> None:
         """Delete a stored object after failed metadata persistence."""
         ...
+
+
+@dataclass(frozen=True)
+class PendingStoredObjectCleanup:
+    storage: AttachmentStorage
+    storage_key: str
+
+
+_PENDING_ATTACHMENT_STORAGE_CLEANUPS = "reg_engine_pending_attachment_storage_cleanups"
+
+
+def _pending_storage_cleanups(session: Session) -> list[PendingStoredObjectCleanup]:
+    pending = session.info.setdefault(_PENDING_ATTACHMENT_STORAGE_CLEANUPS, [])
+    return cast(list[PendingStoredObjectCleanup], pending)
+
+
+def _remember_pending_storage_cleanup(
+    session: Session,
+    *,
+    storage: AttachmentStorage,
+    storage_key: str,
+) -> PendingStoredObjectCleanup:
+    pending_cleanup = PendingStoredObjectCleanup(storage=storage, storage_key=storage_key)
+    _pending_storage_cleanups(session).append(pending_cleanup)
+    return pending_cleanup
+
+
+def _forget_pending_storage_cleanup(
+    session: Session,
+    pending_cleanup: PendingStoredObjectCleanup,
+) -> None:
+    pending = session.info.get(_PENDING_ATTACHMENT_STORAGE_CLEANUPS)
+    if not isinstance(pending, list):
+        return
+    with suppress(ValueError):
+        pending.remove(pending_cleanup)
+    if not pending:
+        session.info.pop(_PENDING_ATTACHMENT_STORAGE_CLEANUPS, None)
+
+
+@event.listens_for(Session, "after_commit")
+def _clear_pending_storage_cleanups_after_commit(session: Session) -> None:
+    session.info.pop(_PENDING_ATTACHMENT_STORAGE_CLEANUPS, None)
+
+
+@event.listens_for(Session, "after_rollback")
+def _run_pending_storage_cleanups_after_rollback(session: Session) -> None:
+    pending = session.info.pop(_PENDING_ATTACHMENT_STORAGE_CLEANUPS, [])
+    if not isinstance(pending, list):
+        return
+    for pending_cleanup in pending:
+        if not isinstance(pending_cleanup, PendingStoredObjectCleanup):
+            continue
+        with suppress(Exception):
+            pending_cleanup.storage.delete_bytes(pending_cleanup.storage_key)
 
 
 class MalwareScanner(Protocol):
@@ -194,6 +249,11 @@ class AttachmentService:
         self._validate_content_type(content_type)
 
         stored_info = self.storage.write_bytes(content)
+        pending_cleanup = _remember_pending_storage_cleanup(
+            self.session,
+            storage=self.storage,
+            storage_key=stored_info.storage_key,
+        )
         try:
             scan_result = self.scanner.scan(
                 storage=self.storage,
@@ -241,6 +301,7 @@ class AttachmentService:
         except Exception:
             with suppress(Exception):
                 self.storage.delete_bytes(stored_info.storage_key)
+            _forget_pending_storage_cleanup(self.session, pending_cleanup)
             raise
 
     def list_attachments_for_actor(
@@ -351,6 +412,7 @@ class AttachmentService:
         description: str | None = None,
     ) -> CardAttachment:
         public_link = self._get_public_attachment_link(actor_public_link_id)
+        self._require_public_attachment_upload_available(public_link)
         card = self._get_public_attachment_card(public_link, card_id=card_id)
         created_by_user_id = self._public_link_created_by(public_link)
         clean_original_filename = normalize_attachment_filename(original_filename)
@@ -366,7 +428,7 @@ class AttachmentService:
             audit_actor_user_id=None,
             audit_public_link_id=public_link.id,
         )
-        public_link.used_count += 1
+        public_link.attachment_upload_count += 1
         self.session.flush()
         return attachment
 
@@ -463,11 +525,19 @@ class AttachmentService:
                 public_link.status = "expired"
                 self.session.flush()
             raise PermissionDeniedError("Public link is not active.")
-        if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
-            raise PermissionDeniedError("Public link usage limit is exhausted.")
         if not public_link.can_edit:
             raise PermissionDeniedError("Public editing is disabled for this card.")
         return public_link
+
+    def _require_public_attachment_upload_available(
+        self,
+        public_link: CardPublicLink,
+    ) -> None:
+        if (
+            public_link.max_attachment_uploads is not None
+            and public_link.attachment_upload_count >= public_link.max_attachment_uploads
+        ):
+            raise PermissionDeniedError("Public link attachment upload limit is exhausted.")
 
     def _get_public_attachment_card(
         self,

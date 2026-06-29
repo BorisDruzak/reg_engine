@@ -34,13 +34,12 @@ Completed phases:
 - Phase 2D: Frontend document workflows.
 - Phase 2G: Document template management UI.
 - Phase 2H: Public-link attachment workflows.
+- Phase 2I: Public-link attachment limit semantics and bugfixes.
 
 Current stop point:
 
 - Phase 2H public-link attachment workflows are completed.
-- Phase 2I is the next bugfix/hardening slice.
-- Phase 2I uses option C: separate field-edit usage and attachment-upload usage
-  semantics.
+- Phase 2I public-link attachment limit semantics and bugfixes are completed.
 - PDF conversion, `file_ref`, binary `.docx` upload/versioning,
   import/export, reports, and MCP remain deferred.
 
@@ -84,11 +83,14 @@ Completed Phase 2 work:
 - Phase 2H added public-link attachment list/upload/download for active public
   edit links without adding public archive/delete, generated-document controls,
   `file_ref`, PDF conversion, import/export, MCP, or a new migration.
+- Phase 2I separated public field-edit usage limits from public attachment
+  upload limits, added rollback storage cleanup, clarified download streaming
+  deferral, and fixed public no-file UI validation text.
 
 Active Phase 2 work:
 
-- Phase 2I is planned next as a bugfix/hardening slice before `file_ref`, PDF,
-  import/export, reports, or MCP.
+- No active Phase 2 implementation slice is open. Next work requires an
+  explicit approved phase.
 
 ## Review Findings After Phase 2E
 
@@ -319,7 +321,9 @@ Scope decisions:
   slice; public view-only file pages remain future work.
 - Public-link upload stores `created_by` as the user that created the public
   link, while audit events use `actor_type=public_link`.
-- Public-link upload increments public-link `used_count`; list/download do not.
+- Phase 2I supersedes the original Phase 2H counter behavior: public-link
+  upload increments `attachment_upload_count`, while `used_count` remains scoped
+  to public field edits.
 - Public-link archive/delete is not exposed in this phase.
 - Archived and superseded cards remain blocked for public-link upload/download.
 
@@ -344,13 +348,14 @@ Delivered:
   `raw_token` and never expose storage internals.
 - Kept public-link uploads behind active edit-link checks:
   `public_link.can_edit=true`, `card.public_edit_enabled=true`, non-expired,
-  non-disabled, non-usage-exhausted, non-archived, non-superseded card.
+  non-disabled, non-archived, non-superseded card.
 - Reused authenticated attachment hardening: bounded multipart reads, MIME
   allow-list enforcement, filename normalization, scanner hook, storage cleanup,
   and safe download headers.
 - Recorded public-link upload/download audit events with
-  `actor_type=public_link`; upload increments `used_count`, while list and
-  download do not.
+  `actor_type=public_link`; Phase 2I later changed upload counting to
+  `attachment_upload_count`, while list and download do not increment usage
+  counters.
 - Added Russian-first public-link attachment UI for upload/list/download.
 
 Verification evidence:
@@ -375,8 +380,10 @@ Acceptance criteria:
   recorded.
 - Active public edit links can download active attachment content with safe
   download headers.
-- Disabled, expired, usage-exhausted, non-editable, archived, and superseded
-  public-link/card states cannot upload or download.
+- Disabled, expired, non-editable, archived, and superseded public-link/card
+  states cannot upload or download. Phase 2I later clarified that exhausted
+  field-edit usage does not block attachment list/download, while exhausted
+  attachment upload usage blocks upload only.
 - Public-link upload/download write `audit_events` with `actor_type=public_link`.
 - Public-link screens still do not expose generated document, template,
   archive/delete, `file_ref`, PDF, import/export, or MCP controls.
@@ -384,7 +391,7 @@ Acceptance criteria:
 
 ### Phase 2I: Public-Link Attachment Limit Semantics And Bugfixes
 
-Status: planned next.
+Status: completed.
 
 Purpose: fix public-link attachment workflow edge cases before moving to
 `file_ref`, PDF, import/export, reports, or MCP.
@@ -414,8 +421,10 @@ Required work for implementation phase:
      `attachment_upload_count`;
    - or implement an equivalent separate policy without overloading
      `used_count`.
+   Completed with explicit `max_attachment_uploads` and
+   `attachment_upload_count` fields.
 2. If schema change is required, create Alembic migration and follow migration
-   approval rules.
+   approval rules. Completed with migration `0007_public_link_limits`.
 3. Add regression tests:
    - public link with field-edit max usage exhausted can still list/download
      existing attachments if link is active;
@@ -424,10 +433,44 @@ Required work for implementation phase:
    - successful upload increments only the attachment upload counter;
    - disabled/expired/superseded/archived states still deny public attachment
      operations.
+   Completed.
 4. Fix public-link no-file UI validation message:
    - show a clear Russian message such as `Выберите файл`.
-5. Verify frontend public-link upload/list/download still works.
-6. Update README, PLANS.md, PROJECT_TREE.md and docs as needed.
+   Completed.
+5. Verify frontend public-link upload/list/download still works. Completed.
+6. Update README, PLANS.md, PROJECT_TREE.md and docs as needed. Completed.
+
+Delivered:
+
+- Added explicit public attachment upload limit fields:
+  `card_public_links.max_attachment_uploads` and
+  `card_public_links.attachment_upload_count`.
+- Kept `max_uses` and `used_count` scoped to public field-edit usage.
+- Public attachment list/download no longer fail solely because field-edit
+  `max_uses` is exhausted.
+- Public attachment upload increments only `attachment_upload_count`.
+- Exhausted attachment upload limit blocks upload only; list/download remain
+  available while the link is active and the card is public-editable.
+- Disabled, expired, archived, superseded, and non-editable card/link states
+  still deny public attachment operations.
+- Added pending storage cleanup on SQLAlchemy transaction rollback so stored
+  bytes written before a failed/rolled-back transaction are removed.
+- Fixed public-link no-file validation to show `Выберите файл`.
+- Evaluated `StreamingResponse` for attachment downloads. It remains deferred
+  because the current storage abstraction exposes only `read_bytes`; real
+  streaming should be implemented together with a streaming/open-file storage
+  boundary instead of wrapping already-loaded bytes.
+
+Verification evidence:
+
+- Added service regression tests for field-edit max usage exhaustion,
+  attachment upload limit exhaustion, list/download counter behavior, successful
+  upload counter behavior, and transaction rollback storage cleanup.
+- Added API regression test for public upload followed by list/download when
+  field-edit `max_uses` is already reached.
+- Added frontend regression test for no-file public upload validation.
+- Added metadata/schema tests for explicit public attachment upload limit
+  columns and constraints.
 
 Phase 2I must not implement:
 

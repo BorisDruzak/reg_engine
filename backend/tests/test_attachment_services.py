@@ -90,7 +90,8 @@ def db_session(migrated_test_engine: Engine) -> Iterator[Session]:
         yield session
     finally:
         session.close()
-        transaction.rollback()
+        if transaction.is_active:
+            transaction.rollback()
         connection.close()
 
 
@@ -406,6 +407,31 @@ def test_attachment_storage_is_cleaned_when_post_write_work_fails(
     assert storage.deleted_keys == ["attachments/test/cleanup"]
 
 
+def test_attachment_storage_is_cleaned_when_transaction_rolls_back(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    context = _attachment_context(db_session)
+    storage = LocalFilesystemAttachmentStorage(tmp_path)
+    attachment_service = AttachmentService(db_session, storage=storage)
+
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="rollback.txt",
+        content_type="text/plain",
+        content=b"rollback",
+    )
+    stored_file = db_session.get(StoredFile, attachment.stored_file_id)
+    assert stored_file is not None
+    storage_key = stored_file.storage_key
+    assert storage.exists(storage_key)
+
+    db_session.rollback()
+
+    assert not storage.exists(storage_key)
+
+
 def test_attachment_filename_metadata_is_normalized(
     db_session: Session,
     attachment_service: AttachmentService,
@@ -708,12 +734,128 @@ def test_public_link_can_upload_list_and_download_attachment_with_audit(
     assert stored_file is not None
     assert stored_file.created_by == context["child_admin"].id
     assert attachment.created_by == context["child_admin"].id
-    assert public_token.public_link.used_count == 1
+    assert public_token.public_link.used_count == 0
+    assert public_token.public_link.attachment_upload_count == 1
     assert {row.action for row in audit_rows} == {
         "attachment_create",
         "attachment_download",
     }
     assert {row.actor_type for row in audit_rows} == {"public_link"}
+
+
+def test_public_link_field_edit_usage_limit_does_not_block_attachment_list_or_download(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    public_token.public_link.max_uses = 1
+    public_token.public_link.used_count = 1
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="field-limit.txt",
+        content_type="text/plain",
+        content=b"field-limit",
+    )
+    db_session.flush()
+
+    listed = attachment_service.list_attachments_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        card_id=context["card"].id,
+    )
+    content = attachment_service.read_attachment_content_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        attachment_id=attachment.id,
+    )
+
+    assert [item.id for item in listed] == [attachment.id]
+    assert content == b"field-limit"
+    assert public_token.public_link.used_count == 1
+    assert public_token.public_link.attachment_upload_count == 0
+
+
+def test_public_link_attachment_upload_limit_blocks_upload_only(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    public_token.public_link.max_attachment_uploads = 0
+    existing_attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="existing.txt",
+        content_type="text/plain",
+        content=b"existing",
+    )
+    db_session.flush()
+
+    with pytest.raises(PermissionDeniedError):
+        attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=public_token.public_link.id,
+            card_id=context["card"].id,
+            original_filename="blocked-upload.txt",
+            content_type="text/plain",
+            content=b"blocked",
+        )
+
+    listed = attachment_service.list_attachments_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        card_id=context["card"].id,
+    )
+    content = attachment_service.read_attachment_content_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        attachment_id=existing_attachment.id,
+    )
+
+    assert [item.id for item in listed] == [existing_attachment.id]
+    assert content == b"existing"
+    assert public_token.public_link.used_count == 0
+    assert public_token.public_link.attachment_upload_count == 0
+
+
+def test_public_link_attachment_upload_increments_only_attachment_upload_counter(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    public_token.public_link.max_uses = 1
+    public_token.public_link.used_count = 1
+    public_token.public_link.max_attachment_uploads = 2
+    db_session.flush()
+
+    attachment = attachment_service.create_attachment_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        card_id=context["card"].id,
+        original_filename="counter.txt",
+        content_type="text/plain",
+        content=b"counter",
+    )
+    attachment_service.list_attachments_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        card_id=context["card"].id,
+    )
+    attachment_service.read_attachment_content_from_public_link(
+        actor_public_link_id=public_token.public_link.id,
+        attachment_id=attachment.id,
+    )
+
+    assert public_token.public_link.used_count == 1
+    assert public_token.public_link.attachment_upload_count == 1
 
 
 def test_public_link_attachment_workflow_respects_edit_link_state(

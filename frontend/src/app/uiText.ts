@@ -89,6 +89,7 @@ export const uiText = {
   outputFilenameTemplate: "Шаблон имени файла",
   fileTitle: "Название файла",
   file: "Файл",
+  selectFile: "Выберите файл",
   fileName: "Имя файла",
   fileSize: "Размер",
   fileType: "Тип файла",

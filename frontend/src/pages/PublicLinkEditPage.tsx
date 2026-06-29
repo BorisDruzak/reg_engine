@@ -111,7 +111,7 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!file) {
-        throw new Error(uiText.file);
+        throw new Error(uiText.selectFile);
       }
       return uploadPublicLinkAttachment(rawToken, { file, title });
     },
@@ -138,6 +138,11 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!file) {
+      setMessage(null);
+      setLocalError(uiText.selectFile);
+      return;
+    }
     uploadMutation.mutate();
   }
 
@@ -156,14 +161,13 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
           <input
             aria-label={uiText.file}
             type="file"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              setFile(event.target.files?.[0] ?? null);
+              setLocalError(null);
+            }}
           />
         </label>
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={!file || uploadMutation.isPending}
-        >
+        <button type="submit" className="primary-button" disabled={uploadMutation.isPending}>
           {uiText.uploadFile}
         </button>
       </form>

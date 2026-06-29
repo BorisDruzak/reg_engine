@@ -611,6 +611,8 @@ card_public_links
   expires_at timestamptz not null
   max_uses integer nullable
   used_count integer not null default 0
+  max_attachment_uploads integer nullable
+  attachment_upload_count integer not null default 0
 
   allowed_blocks_json jsonb nullable
   allowed_fields_json jsonb nullable

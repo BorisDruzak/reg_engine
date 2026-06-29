@@ -27,6 +27,8 @@ class PublicLinkRead(BaseModel):
     expires_at: datetime
     max_uses: int | None
     used_count: int
+    max_attachment_uploads: int | None
+    attachment_upload_count: int
     disabled_at: datetime | None
 
 

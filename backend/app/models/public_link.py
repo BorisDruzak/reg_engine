@@ -27,6 +27,14 @@ class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         UniqueConstraint("token_hash", name="uq_card_public_links_token_hash"),
         CheckConstraint(f"status in ({quoted(PUBLIC_LINK_STATUSES)})", name="status"),
         CheckConstraint("used_count >= 0", name="used_count_non_negative"),
+        CheckConstraint(
+            "max_attachment_uploads is null or max_attachment_uploads >= 0",
+            name="max_attachment_uploads_non_negative",
+        ),
+        CheckConstraint(
+            "attachment_upload_count >= 0",
+            name="attachment_upload_count_non_negative",
+        ),
         Index("ix_card_public_links_card_id", "card_id"),
         Index("ix_card_public_links_token_hash", "token_hash"),
         Index("ix_card_public_links_expires_at", "expires_at"),
@@ -40,6 +48,12 @@ class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    max_attachment_uploads: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attachment_upload_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+    )
     allowed_blocks_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     allowed_fields_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))

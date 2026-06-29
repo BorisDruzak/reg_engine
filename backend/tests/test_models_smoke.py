@@ -137,3 +137,13 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
         "archive_reason",
     }:
         assert column_name in generated_documents.c
+
+
+def test_public_link_attachment_limit_columns_are_explicit() -> None:
+    card_public_links = Base.metadata.tables["card_public_links"]
+
+    for column_name in {
+        "max_attachment_uploads",
+        "attachment_upload_count",
+    }:
+        assert column_name in card_public_links.c
