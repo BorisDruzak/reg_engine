@@ -35,14 +35,17 @@ Completed phases:
 - Phase 2G: Document template management UI.
 - Phase 2H: Public-link attachment workflows.
 - Phase 2I: Public-link attachment limit semantics and bugfixes.
+- Phase 2K.0: Admin workflow API gap audit.
 
 Current stop point:
 
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
+- Phase 2K.0 admin workflow API gap audit is completed and recorded in
+  `docs/PHASE_2K_ADMIN_API_READINESS.md`.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind core admin workflows if product usability is the priority.
-- Phase 2K is the next backend/API gap-closure phase for remaining registry
-  administration operations.
+- Phase 2K.1 Organization Units API is the next backend/API implementation
+  slice.
 - Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
@@ -65,9 +68,17 @@ Current stop point:
 ## Current Admin UI Gap
 
 The backend already exposes most core REST operations for organizations, users,
-access grants, registries, blocks, fields, reference lists, cards, attachments,
-documents, public links, and audit reads. The current authenticated frontend is
-not yet a complete admin workspace:
+access grants, blocks, fields, reference lists/items, cards, attachments,
+documents, public links, and audit reads. Phase 2K.0 records the current API
+readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. Remaining backend
+gaps before a complete admin workspace are:
+
+- `org_units` management API;
+- registry update/archive API;
+- repeatable `card_block_instances` archive API;
+- atomic bulk card values update API.
+
+The current authenticated frontend is not yet a complete admin workspace:
 
 - organizations are listed but cannot be created, edited, or archived in UI;
 - users, roles, and permissions are listed, but users cannot be created,
@@ -81,7 +92,7 @@ not yet a complete admin workspace:
 - current UI is useful for inspection and partial editing, not yet for full
   setup from an empty database.
 
-Phase 2K and Phase 2L exist to close this gap before advanced document,
+Phase 2K and Phase 2L exist to close these gaps before advanced document,
 import/export, report, or MCP phases.
 
 ## Phase 2: Documents And Attachments
@@ -269,7 +280,7 @@ Phase 2J must not implement:
 
 ## Phase 2K: Core Backend API Completeness
 
-Status: planned next for backend/API gaps that block full admin UI.
+Status: in progress.
 
 Purpose: close remaining non-document backend API gaps that are needed for a complete registry administration workflow before moving to advanced documents, import/export, reports, or MCP.
 
@@ -286,6 +297,8 @@ Phase 2K must not implement:
 
 ### Phase 2K.0: Admin Workflow API Gap Audit
 
+Status: completed.
+
 Required work:
 
 - Verify the actual API surface needed by Phase 2L:
@@ -301,6 +314,13 @@ Acceptance criteria:
 - PLANS.md or a linked implementation note lists the API readiness matrix.
 - No new business-specific tables or HR-specific fields are introduced.
 - No frontend implementation is added in this audit step.
+
+Completion evidence:
+
+- API readiness matrix: `docs/PHASE_2K_ADMIN_API_READINESS.md`.
+- Backend gaps confirmed for Phase 2K: org units API, registry update/archive,
+  card block instance archive, and atomic bulk card values update.
+- Frontend-only gaps remain assigned to Phase 2L.
 
 ### Phase 2K.1: Organization Units API
 

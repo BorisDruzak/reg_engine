@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-29 15:03:48 +05:00
+- Generated: 2026-06-29 15:59:48 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -139,6 +139,7 @@
 - `docs/PHASE_2_APPROVAL_CHECKLIST.md`
 - `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
 - `docs/PHASE_2C_GENERATED_DOCUMENT_TEMPLATES.md`
+- `docs/PHASE_2K_ADMIN_API_READINESS.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_TREE.md`
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`
