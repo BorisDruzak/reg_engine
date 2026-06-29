@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -336,7 +336,10 @@ class CardService:
             ).all()
         }
         item_ids_by_value_id = self._multi_select_item_ids(list(values_by_instance_field.values()))
-        block_instances = self._block_instances_for_card(card.id)
+        block_instances = self._block_instances_for_card(
+            card.id,
+            include_archive=include_archive,
+        )
         field_code_counts: dict[str, int] = {}
         for _, schema_field in schema_rows:
             field_code_counts[schema_field.code] = field_code_counts.get(schema_field.code, 0) + 1
@@ -494,7 +497,7 @@ class CardService:
         existing = self._existing_block_instances(card.id, block.id)
         if existing and not block.is_repeatable:
             raise CardServiceError("Non-repeatable block already has an instance.")
-        next_ordinal = max((instance.ordinal for instance in existing), default=-1) + 1
+        next_ordinal = self._next_block_instance_ordinal(card.id, block.id)
         block_instance = CardBlockInstance(
             card_id=card.id,
             block_id=block.id,
@@ -506,6 +509,42 @@ class CardService:
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="create",
+            object_type="card_block_instance",
+            object_id=block_instance.id,
+            new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
+        )
+        return block_instance
+
+    def archive_block_instance_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        block_instance_id: UUID,
+    ) -> CardBlockInstance:
+        block_instance = self._get_active_block_instance(block_instance_id)
+        card = self._get_editable_card(block_instance.card_id)
+        block = self._get_active_block(block_instance.block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Block instance does not belong to the card registry.")
+        if not block.is_repeatable:
+            raise CardServiceError("Non-repeatable block instances cannot be archived.")
+        if block.is_system or block.is_locked:
+            raise CardServiceError("System or locked block instances cannot be archived here.")
+        active_instances = self._existing_block_instances(card.id, block.id)
+        min_instances = block.min_instances or 0
+        if len(active_instances) <= min_instances:
+            raise CardServiceError("Required block instance minimum would be violated.")
+        self._require_card_permission(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        )
+
+        block_instance.archived_at = datetime.now(UTC)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
             object_type="card_block_instance",
             object_id=block_instance.id,
             new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
@@ -552,6 +591,12 @@ class CardService:
         if block is None or block.archived_at is not None or not block.is_active:
             raise CardServiceError("Form block was not found.")
         return block
+
+    def _get_active_block_instance(self, block_instance_id: UUID) -> CardBlockInstance:
+        block_instance = self.session.get(CardBlockInstance, block_instance_id)
+        if block_instance is None or block_instance.archived_at is not None:
+            raise CardServiceError("Card block instance was not found.")
+        return block_instance
 
     def _get_active_field(self, field_id: UUID) -> FormField:
         field_model = self.session.get(FormField, field_id)
@@ -879,14 +924,28 @@ class CardService:
             ).all()
         )
 
-    def _block_instances_for_card(self, card_id: UUID) -> dict[UUID, list[CardBlockInstance]]:
+    def _next_block_instance_ordinal(self, card_id: UUID, block_id: UUID) -> int:
+        current_max = self.session.scalar(
+            select(func.max(CardBlockInstance.ordinal)).where(
+                CardBlockInstance.card_id == card_id,
+                CardBlockInstance.block_id == block_id,
+            )
+        )
+        return (current_max if current_max is not None else -1) + 1
+
+    def _block_instances_for_card(
+        self,
+        card_id: UUID,
+        *,
+        include_archive: bool = False,
+    ) -> dict[UUID, list[CardBlockInstance]]:
         instances: dict[UUID, list[CardBlockInstance]] = {}
+        criteria = [CardBlockInstance.card_id == card_id]
+        if not include_archive:
+            criteria.append(CardBlockInstance.archived_at.is_(None))
         for instance in self.session.scalars(
             select(CardBlockInstance)
-            .where(
-                CardBlockInstance.card_id == card_id,
-                CardBlockInstance.archived_at.is_(None),
-            )
+            .where(*criteria)
             .order_by(CardBlockInstance.block_id, CardBlockInstance.ordinal)
         ):
             instances.setdefault(instance.block_id, []).append(instance)

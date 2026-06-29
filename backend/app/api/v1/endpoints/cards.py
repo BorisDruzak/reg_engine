@@ -178,6 +178,29 @@ def create_card_block_instance(
     )
 
 
+@router.delete(
+    "/card-block-instances/{block_instance_id}", response_model=CardBlockInstanceSummaryRead
+)
+def archive_card_block_instance(
+    block_instance_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardBlockInstanceSummaryRead:
+    try:
+        block_instance = CardService(session).archive_block_instance_for_actor(
+            actor_user_id=actor_user_id,
+            block_instance_id=block_instance_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardBlockInstanceSummaryRead(
+        id=block_instance.id,
+        card_id=block_instance.card_id,
+        block_id=block_instance.block_id,
+        ordinal=block_instance.ordinal,
+    )
+
+
 @router.post(
     "/cards/{card_id}/transfer",
     response_model=CardSummaryRead,

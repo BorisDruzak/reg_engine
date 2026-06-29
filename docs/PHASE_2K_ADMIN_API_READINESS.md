@@ -1,6 +1,6 @@
 # Phase 2K Admin API Readiness
 
-Status: completed audit for Phase 2K.0. Updated after Phase 2K.2.
+Status: completed audit for Phase 2K.0. Updated after Phase 2K.3.
 
 Purpose: record the current backend API surface and separate true backend gaps
 from frontend-only gaps before the full Russian-first admin CRUD UI work in
@@ -32,7 +32,7 @@ or MCP.
 | Form fields | Ready for basic schema builder create/update/archive: `POST /api/v1/blocks/{block_id}/fields`, `PATCH/DELETE /api/v1/fields/{field_id}` exist. Supported field types are validated by backend constants. Update currently omits field type, options source, public flags, required/default/validation fields, and list behavior. | Fields are displayed read-only; no field builder controls. | Frontend work in Phase 2L.5; `required_mode`/advanced field-setting exposure is a follow-up backend decision if required by the UI. |
 | Reference lists/items | Ready for basic reference management: reference lists have create/list/read/update/archive endpoints; reference items have create/list/read/update/archive endpoints in `backend/app/api/v1/endpoints/registries.py`. Reference-list update currently covers name and description, not code/owner/inheritance/system flags. | Only reference item reads are used by card select/multi-select controls. No reference-list/item management UI. | Frontend work in Phase 2L.6; broaden update payloads later only if needed. |
 | Cards | Ready for create/list/read/metadata update/archive and single field updates: `GET/POST /api/v1/registries/{registry_id}/cards`, `GET/PATCH/DELETE /api/v1/cards/{card_id}`, and `PATCH /api/v1/cards/{card_id}/fields/{field_id}` exist. Metadata update currently omits org unit and lifecycle status changes. | Card list/read and per-field edit exist in `frontend/src/features/cards/CardsWorkspace.tsx`; no create, metadata edit, archive, or bulk-save UI. | Mostly frontend work in Phase 2L.7; bulk values API remains Phase 2K.4. |
-| Card block instances | Create endpoint exists: `POST /api/v1/cards/{card_id}/blocks/{block_id}/instances`. No archive endpoint exists for repeatable block instances. | No repeatable instance add/archive UI. | Backend gap in Phase 2K.3; frontend controls in Phase 2L.7. |
+| Card block instances | Ready for repeatable instance add/archive after Phase 2K.3: `POST /api/v1/cards/{card_id}/blocks/{block_id}/instances` and `DELETE /api/v1/card-block-instances/{block_instance_id}` exist. Archive is soft; normal card reads hide archived instances and `include_archive=true` includes them with retained values. Non-repeatable/system/locked/required-minimum guardrails are backend-enforced. | No repeatable instance add/archive UI. | Frontend controls in Phase 2L.7. |
 | Public links | Authenticated create/list/disable exists: `GET/POST /api/v1/cards/{card_id}/public-links`, `DELETE /api/v1/public-links/{public_link_id}`. Public preview/edit and public attachment operations exist. `max_attachment_uploads` is accepted on create. | Public-link edit page exists for token users. Authenticated admin create/list/disable controls are missing in card workspace. | Frontend work in Phase 2L.8. |
 | Attachments | Authenticated card attachment upload/list/read/download/archive API exists. Public-link attachment list/upload/download exists for active public edit links. | Authenticated card attachment panel and public-link attachment UI exist. | No Phase 2K backend gap for current admin UI. |
 | Generated documents and templates | `docx_text_v1` template create/list/archive and generated document generate/list/read/download/archive APIs exist. | Authenticated template management and generated-document card panel exist. Public generated-document workflows remain deferred. | No Phase 2K backend gap for current admin UI. |
@@ -45,12 +45,12 @@ Completed after the initial audit:
 
 1. Phase 2K.1: Organization Units API.
 2. Phase 2K.2: Registry Update And Archive API.
+3. Phase 2K.3: Card Block Instance Archive API.
 
 Remaining backend gaps:
 
-1. Phase 2K.3: add Card Block Instance archive API.
-2. Phase 2K.4: add atomic bulk Card Values update API.
-3. Phase 2K.5: add coverage/live validation for the items above.
+1. Phase 2K.4: add atomic bulk Card Values update API.
+2. Phase 2K.5: add coverage/live validation for the items above.
 
 Additional audit findings that are not current Phase 2K blockers:
 

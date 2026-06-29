@@ -38,6 +38,7 @@ Completed phases:
 - Phase 2K.0: Admin workflow API gap audit.
 - Phase 2K.1: Organization Units API.
 - Phase 2K.2: Registry Update And Archive API.
+- Phase 2K.3: Card Block Instance Archive API.
 
 Current stop point:
 
@@ -46,9 +47,10 @@ Current stop point:
   `docs/PHASE_2K_ADMIN_API_READINESS.md`.
 - Phase 2K.1 Organization Units API is completed.
 - Phase 2K.2 Registry Update And Archive API is completed.
+- Phase 2K.3 Card Block Instance Archive API is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind core admin workflows if product usability is the priority.
-- Phase 2K.3 Card Block Instance Archive API is the next backend/API
+- Phase 2K.4 Bulk Card Values Update API is the next backend/API
   implementation slice.
 - Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
@@ -77,7 +79,6 @@ documents, public links, and audit reads. Phase 2K.0 records the current API
 readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. Remaining backend
 gaps before a complete admin workspace are:
 
-- repeatable `card_block_instances` archive API;
 - atomic bulk card values update API.
 
 The current authenticated frontend is not yet a complete admin workspace:
@@ -383,6 +384,8 @@ Completion evidence:
 
 ### Phase 2K.3: Card Block Instance Archive API
 
+Status: completed.
+
 Required work:
 
 - Add archive endpoint for repeatable `card_block_instances`.
@@ -392,6 +395,19 @@ Required work:
 Acceptance criteria:
 
 - Tests cover repeatable instance archive, non-repeatable/system guardrails, and value retention.
+
+Completion evidence:
+
+- Added `DELETE /api/v1/card-block-instances/{block_instance_id}`.
+- Repeatable block instances can be soft-archived.
+- Non-repeatable, system, locked, and required-minimum instances are guarded.
+- Normal card reads hide archived instances.
+- `include_archive=true` card reads include archived instances and retained
+  field values.
+- New repeatable instances allocate ordinals above archived rows to avoid unique
+  constraint conflicts.
+- Archive writes `audit_events` with `object_type=card_block_instance`.
+- Tests added in `backend/tests/test_api_phase_2k.py`.
 
 ### Phase 2K.4: Bulk Card Values Update API
 

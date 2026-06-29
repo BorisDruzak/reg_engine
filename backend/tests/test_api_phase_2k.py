@@ -17,7 +17,16 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_permissions
+from app.models import (
+    AccessGrant,
+    AuditEvent,
+    CardBlockInstance,
+    FormBlock,
+    Permission,
+    Role,
+    User,
+    role_permissions,
+)
 
 
 def _require_test_database_url() -> str:
@@ -232,6 +241,13 @@ def test_phase_2k_registry_update_archive_routes_are_registered_without_database
 
     assert "patch" in registry_path
     assert "delete" in registry_path
+
+
+def test_phase_2k_block_instance_archive_route_is_registered_without_database() -> None:
+    app = create_app()
+    paths = set(app.openapi()["paths"])
+
+    assert "/api/v1/card-block-instances/{block_instance_id}" in paths
 
 
 def test_system_admin_can_manage_org_units(
@@ -535,3 +551,190 @@ def test_registry_update_and_archive_require_schema_permission(
         headers=_actor_headers(card_admin.id),
     )
     assert archive_response.status_code == 403, archive_response.text
+
+
+def test_repeatable_block_instance_archive_hides_normal_read_and_preserves_archive_scope(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-block-instance-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-block-instance-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-block-instance-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "history", "title": "History", "is_repeatable": True},
+        actor_id=system_admin.id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "note", "label": "Note", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+    first_instance = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/blocks/{block['id']}/instances",
+        {},
+        actor_id=system_admin.id,
+    )
+    second_instance = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/blocks/{block['id']}/instances",
+        {},
+        actor_id=system_admin.id,
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}",
+        actor_id=system_admin.id,
+        payload={"block_instance_id": first_instance["id"], "value": "first"},
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}",
+        actor_id=system_admin.id,
+        payload={"block_instance_id": second_instance["id"], "value": "second"},
+    )
+
+    archived = _request_json(
+        api_client,
+        "DELETE",
+        f"/api/v1/card-block-instances/{second_instance['id']}",
+        actor_id=system_admin.id,
+    )
+    assert archived["id"] == second_instance["id"]
+    assert db_session.get(CardBlockInstance, UUID(second_instance["id"])).archived_at is not None
+
+    normal_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{card['id']}",
+        actor_id=system_admin.id,
+    )
+    normal_instance_ids = [
+        item["block_instance_id"] for item in normal_read["blocks"]["history"]["instances"]
+    ]
+    assert second_instance["id"] not in normal_instance_ids
+
+    archive_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{card['id']}?include_archive=true",
+        actor_id=system_admin.id,
+    )
+    archive_instances = archive_read["blocks"]["history"]["instances"]
+    assert second_instance["id"] in {item["block_instance_id"] for item in archive_instances}
+    archived_values = {
+        item["block_instance_id"]: item["fields"]["note"]["value"] for item in archive_instances
+    }
+    assert archived_values[second_instance["id"]] == "second"
+
+    replacement_instance = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/blocks/{block['id']}/instances",
+        {},
+        actor_id=system_admin.id,
+    )
+    assert replacement_instance["ordinal"] == 2
+
+    audit_actions = {
+        event.action
+        for event in db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.object_type == "card_block_instance",
+                AuditEvent.object_id == UUID(second_instance["id"]),
+            )
+        )
+    }
+    assert "archive" in audit_actions
+
+
+def test_block_instance_archive_rejects_non_repeatable_and_system_blocks(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-block-instance-guard-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-block-instance-guard-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-block-instance-guard-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    non_repeatable_block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    system_block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "system-history", "title": "System History", "is_repeatable": True},
+        actor_id=system_admin.id,
+    )
+    stored_system_block = db_session.get(FormBlock, UUID(system_block["id"]))
+    stored_system_block.is_system = True
+    db_session.flush()
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+    non_repeatable_instance = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/blocks/{non_repeatable_block['id']}/instances",
+        {},
+        actor_id=system_admin.id,
+    )
+    system_instance = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/blocks/{system_block['id']}/instances",
+        {},
+        actor_id=system_admin.id,
+    )
+
+    non_repeatable_response = api_client.delete(
+        f"/api/v1/card-block-instances/{non_repeatable_instance['id']}",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert non_repeatable_response.status_code == 400, non_repeatable_response.text
+
+    system_response = api_client.delete(
+        f"/api/v1/card-block-instances/{system_instance['id']}",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert system_response.status_code == 400, system_response.text
