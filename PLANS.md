@@ -71,6 +71,8 @@ Current stop point:
 - Phase 2J.1 `file_ref` database and model foundation is completed:
   migration `0008_file_ref_field_values`, metadata support, and model smoke
   tests are in place.
+- Production PostgreSQL is migrated to `0008_file_ref_field_values` after
+  backup, preflight, disposable PostgreSQL verification, and post-checks.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -247,6 +249,11 @@ Completion evidence:
   value-setting/read service semantics, REST value API metadata behavior,
   frontend UI, public-link `file_ref` editing, import/export, PDF, reports, MCP,
   or HR-specific document model was added in Phase 2J.1.
+- Verification on 2026-06-30: targeted model/migration tests passed; local
+  `scripts/check.ps1 -SkipRemote` passed; disposable PostgreSQL `*_test` smoke
+  passed; production migration moved from `0007_public_link_limits` to
+  `0008_file_ref_field_values` after backup/preflight/post-checks; backend
+  service restart and `scripts/server-check.ps1` passed.
 
 ### Phase 2J.2: Backend Service Support
 
