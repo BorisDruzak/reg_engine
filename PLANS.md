@@ -54,6 +54,7 @@ Completed phases:
 - Phase 2L.9: Admin UI Live Validation.
 - Phase 2J.0: `file_ref` Planning And ADR.
 - Phase 2J.1: `file_ref` Database And Model Foundation.
+- Phase 2J.2: `file_ref` Backend Service Support.
 
 Current stop point:
 
@@ -73,6 +74,11 @@ Current stop point:
   tests are in place.
 - Production PostgreSQL is migrated to `0008_file_ref_field_values` after
   backup, preflight, disposable PostgreSQL verification, and post-checks.
+- Phase 2J.2 `file_ref` backend service support is completed: authenticated
+  card editors can set/read/clear same-card active attachment references;
+  wrong-card and archived attachment selections are rejected; archived
+  referenced attachment metadata remains readable; public-link `file_ref`
+  editing remains blocked.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -87,9 +93,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.2 Backend Service Support for `file_ref`.
-  Service code must keep public-link edit blocked/deferred and must reject
-  wrong-card or archived attachment selections.
+- Next planned work is Phase 2J.3 Transfer Behavior for `file_ref`: transferred
+  cards must get their own target-card attachment link and must not point at
+  the old card's `card_attachments.id`.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -179,10 +185,16 @@ Completed Phase 2 work:
   added model/migration smoke coverage. Type registration supports schema
   persistence, but value-setting/read service semantics, endpoints, frontend UI,
   public-link editing, import/export, PDF, reports, and MCP remain deferred.
+- Phase 2J.2 added backend service support for authenticated `file_ref`
+  set/read/clear behavior, same-card active attachment validation, archived
+  referenced attachment metadata reads, safe audit behavior, and explicit
+  public-link edit blocking. Transfer behavior, REST value API metadata,
+  frontend UI, generated document rendering, import/export, PDF, reports, and
+  MCP remain deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 and Phase 2J.1 are completed and Phase 2J.2 is the next planned implementation slice.
+Status: in progress; Phase 2J.0, Phase 2J.1, and Phase 2J.2 are completed and Phase 2J.3 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -257,6 +269,8 @@ Completion evidence:
 
 ### Phase 2J.2: Backend Service Support
 
+Status: completed.
+
 Required work:
 
 - Allow registry admins to create `form_fields.field_type=file_ref`.
@@ -271,6 +285,26 @@ Acceptance criteria:
 
 - Service tests cover set, read, clear, wrong-card rejection, archived-attachment rejection, and archived-reference read behavior.
 - Audit records field value changes without exposing storage keys or filesystem paths.
+- Public-link `file_ref` edits are denied without consuming public-link field
+  edit usage.
+
+Completion evidence:
+
+- `CardService` stores `file_ref` in `field_values.value_attachment_id`.
+- `CardService` returns safe `FileRefValueRead` metadata with attachment id,
+  title, original filename, content type, content length, scanner status, and
+  `archived_at`.
+- Service validation rejects wrong-card attachment ids and archived attachment
+  ids for new values.
+- Clearing with `null` removes the `file_ref` value.
+- Archived referenced attachment metadata remains readable.
+- `PublicLinkService` denies public-link `file_ref` edits.
+- Service tests cover set/read/clear, wrong-card rejection, archived-attachment
+  rejection, archived-reference read behavior, public-link denial, and audit
+  safety without storage keys, checksums, stored file ids, or filesystem paths.
+- No REST value API metadata, frontend UI, generated document rendering,
+  transfer behavior, import/export, PDF, reports, MCP, or business-specific
+  document-field implementation was added in Phase 2J.2.
 
 ### Phase 2J.3: Transfer Behavior
 

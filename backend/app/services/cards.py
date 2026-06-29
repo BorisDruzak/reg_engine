@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Card,
+    CardAttachment,
     CardBlockInstance,
     CardRelation,
     FieldValue,
@@ -19,6 +20,7 @@ from app.models import (
     Organization,
     OrgUnit,
     Registry,
+    StoredFile,
     User,
 )
 from app.services.audit import AuditService
@@ -40,6 +42,17 @@ class CardFieldRead:
     code: str
     field_type: str
     value: object | None
+
+
+@dataclass(frozen=True)
+class FileRefValueRead:
+    attachment_id: UUID
+    title: str
+    original_filename: str
+    content_type: str
+    content_length_bytes: int
+    scanner_status: str
+    archived_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -80,6 +93,7 @@ class _FieldAssignment:
     value_organization_id: UUID | None = None
     value_org_unit_id: UUID | None = None
     value_registry_id: UUID | None = None
+    value_attachment_id: UUID | None = None
     item_ids: list[UUID] = field(default_factory=list)
 
 
@@ -213,6 +227,7 @@ class CardService:
         assignment = self._coerce_field_assignment(
             field_model,
             value,
+            card_id=card.id,
             actor_user_id=actor_user_id,
         )
         block_instance = self._resolve_block_instance_for_value(
@@ -276,6 +291,7 @@ class CardService:
         assignment = self._coerce_field_assignment(
             field_model,
             value,
+            card_id=card.id,
             public_context=True,
         )
         block_instance = self._resolve_block_instance_for_value(
@@ -718,6 +734,7 @@ class CardService:
         field_model: FormField,
         value: object,
         *,
+        card_id: UUID | None = None,
         actor_user_id: UUID | None = None,
         public_context: bool = False,
     ) -> _FieldAssignment:
@@ -804,6 +821,20 @@ class CardService:
             self._ensure_active_registry_reference(registry_id)
             return _FieldAssignment(value_registry_id=registry_id)
 
+        if field_model.field_type == "file_ref":
+            if public_context:
+                raise InvalidFieldValueError("Public links cannot edit file reference fields.")
+            if value is None:
+                return _FieldAssignment(value_attachment_id=None)
+            if card_id is None:
+                raise InvalidFieldValueError("File reference fields require a card context.")
+            attachment_id = self._ensure_uuid(
+                value,
+                "File reference fields require an attachment id.",
+            )
+            self._ensure_active_attachment_reference(attachment_id, card_id=card_id)
+            return _FieldAssignment(value_attachment_id=attachment_id)
+
         raise InvalidFieldValueError(f"Unsupported field type: {field_model.field_type}")
 
     def _ensure_uuid(self, value: object, message: str) -> UUID:
@@ -888,6 +919,18 @@ class CardService:
         ):
             raise InvalidFieldValueError("Registry reference target was not found.")
 
+    def _ensure_active_attachment_reference(self, attachment_id: UUID, *, card_id: UUID) -> None:
+        attachment = self.session.get(CardAttachment, attachment_id)
+        if (
+            attachment is None
+            or attachment.card_id != card_id
+            or attachment.archived_at is not None
+        ):
+            raise InvalidFieldValueError("File reference attachment target was not found.")
+        stored_file = self.session.get(StoredFile, attachment.stored_file_id)
+        if stored_file is None or stored_file.archived_at is not None:
+            raise InvalidFieldValueError("File reference attachment content was not found.")
+
     def _apply_assignment(
         self,
         field_value: FieldValue,
@@ -907,6 +950,7 @@ class CardService:
         field_value.value_organization_id = assignment.value_organization_id
         field_value.value_org_unit_id = assignment.value_org_unit_id
         field_value.value_registry_id = assignment.value_registry_id
+        field_value.value_attachment_id = assignment.value_attachment_id
         field_value.updated_by = actor_user_id
 
         self.session.execute(
@@ -1031,7 +1075,28 @@ class CardService:
             return field_value.value_card_id
         if field_model.field_type == "registry_ref":
             return field_value.value_registry_id
+        if field_model.field_type == "file_ref":
+            return self._read_file_ref_value(field_value.value_attachment_id)
         return None
+
+    def _read_file_ref_value(self, attachment_id: UUID | None) -> FileRefValueRead | None:
+        if attachment_id is None:
+            return None
+        attachment = self.session.get(CardAttachment, attachment_id)
+        if attachment is None:
+            return None
+        stored_file = self.session.get(StoredFile, attachment.stored_file_id)
+        if stored_file is None:
+            return None
+        return FileRefValueRead(
+            attachment_id=attachment.id,
+            title=attachment.title,
+            original_filename=stored_file.original_filename,
+            content_type=stored_file.content_type,
+            content_length_bytes=stored_file.content_length_bytes,
+            scanner_status=stored_file.scanner_status,
+            archived_at=attachment.archived_at,
+        )
 
     def _copy_card_values(
         self,

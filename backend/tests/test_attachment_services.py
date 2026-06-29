@@ -32,7 +32,7 @@ from app.services.attachments import (
     MalwareScanResult,
     StoredObjectInfo,
 )
-from app.services.cards import CardService
+from app.services.cards import CardService, FileRefValueRead, InvalidFieldValueError
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkService
@@ -1123,3 +1123,275 @@ def test_superseded_card_attachment_is_read_only(
             content_type="text/plain",
             content=b"blocked",
         )
+
+
+def test_file_ref_can_reference_active_same_card_attachment_and_read_safe_metadata(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-read")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_block",
+        title="File Ref Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref",
+        label="File Ref",
+        field_type="file_ref",
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="safe-file-ref.txt",
+        content_type="text/plain",
+        content=b"safe file ref",
+        title="Safe file ref",
+    )
+
+    field_value = CardService(db_session).set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=attachment.id,
+    )
+    card_read = CardService(db_session).read_card_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+    audit_event = db_session.scalar(
+        select(AuditEvent)
+        .where(
+            AuditEvent.object_type == "field_value",
+            AuditEvent.object_id == field_value.id,
+            AuditEvent.action == "update",
+        )
+        .order_by(AuditEvent.created_at.desc())
+    )
+
+    value = card_read.fields["file_ref"].value
+    assert field_value.value_attachment_id == attachment.id
+    assert isinstance(value, FileRefValueRead)
+    assert value.attachment_id == attachment.id
+    assert value.title == "Safe file ref"
+    assert value.original_filename == "safe-file-ref.txt"
+    assert value.content_type == "text/plain"
+    assert value.content_length_bytes == len(b"safe file ref")
+    assert value.scanner_status == "deferred"
+    assert value.archived_at is None
+    assert not hasattr(value, "storage_key")
+    assert not hasattr(value, "checksum_sha256")
+    assert audit_event is not None
+    assert "storage_key" not in str(audit_event.new_data_json)
+    assert "checksum_sha256" not in str(audit_event.new_data_json)
+    assert "stored_file_id" not in str(audit_event.new_data_json)
+
+
+def test_file_ref_can_be_cleared_with_null(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-clear")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_clear_block",
+        title="File Ref Clear Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_clear",
+        label="File Ref Clear",
+        field_type="file_ref",
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="clear-file-ref.txt",
+        content_type="text/plain",
+        content=b"clear file ref",
+    )
+    card_service = CardService(db_session)
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=attachment.id,
+    )
+
+    cleared = card_service.set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=None,
+    )
+    card_read = card_service.read_card_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    assert cleared.value_attachment_id is None
+    assert card_read.fields["file_ref_clear"].value is None
+
+
+def test_file_ref_rejects_wrong_card_and_archived_attachment(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-reject")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_reject_block",
+        title="File Ref Reject Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_reject",
+        label="File Ref Reject",
+        field_type="file_ref",
+    )
+    other_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["child_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Other file ref card",
+    )
+    other_attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=other_card.id,
+        original_filename="other-file-ref.txt",
+        content_type="text/plain",
+        content=b"other",
+    )
+    archived_attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="archived-file-ref.txt",
+        content_type="text/plain",
+        content=b"archived",
+    )
+    attachment_service.archive_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        attachment_id=archived_attachment.id,
+    )
+    card_service = CardService(db_session)
+
+    with pytest.raises(InvalidFieldValueError):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["child_admin"].id,
+            card_id=context["card"].id,
+            field_id=field.id,
+            value=other_attachment.id,
+        )
+    with pytest.raises(InvalidFieldValueError):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["child_admin"].id,
+            card_id=context["card"].id,
+            field_id=field.id,
+            value=archived_attachment.id,
+        )
+
+
+def test_file_ref_read_preserves_archived_attachment_metadata(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-archive-read")
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_archive_block",
+        title="File Ref Archive Block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_archive",
+        label="File Ref Archive",
+        field_type="file_ref",
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="archived-read-file-ref.txt",
+        content_type="text/plain",
+        content=b"archived read",
+        title="Archived read file ref",
+    )
+    card_service = CardService(db_session)
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        field_id=field.id,
+        value=attachment.id,
+    )
+    attachment_service.archive_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        attachment_id=attachment.id,
+    )
+
+    card_read = card_service.read_card_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    value = card_read.fields["file_ref_archive"].value
+    assert isinstance(value, FileRefValueRead)
+    assert value.attachment_id == attachment.id
+    assert value.title == "Archived read file ref"
+    assert value.original_filename == "archived-read-file-ref.txt"
+    assert value.archived_at is not None
+
+
+def test_public_link_cannot_edit_file_ref_fields(
+    db_session: Session,
+    attachment_service: AttachmentService,
+) -> None:
+    context = _attachment_context(db_session, suffix="-file-ref-public")
+    context["card"].public_edit_enabled = True
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="file_ref_public_block",
+        title="File Ref Public Block",
+        public_editable=True,
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="file_ref_public",
+        label="File Ref Public",
+        field_type="file_ref",
+        public_editable=True,
+    )
+    attachment = attachment_service.create_attachment_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+        original_filename="public-file-ref.txt",
+        content_type="text/plain",
+        content=b"public file ref",
+    )
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["child_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        PublicLinkService(db_session).edit_card_field_with_token(
+            raw_token=public_token.raw_token,
+            field_id=field.id,
+            value=attachment.id,
+        )
+
+    assert public_token.public_link.used_count == 0

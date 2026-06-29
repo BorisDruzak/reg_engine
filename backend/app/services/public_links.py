@@ -260,6 +260,8 @@ class PublicLinkService:
             raise PermissionDeniedError("Public link cannot edit this block.")
         if not self._public_link_allows(public_link.allowed_fields_json, field.id):
             raise PermissionDeniedError("Public link cannot edit this field.")
+        if field.field_type == "file_ref":
+            raise PermissionDeniedError("Public links cannot edit file reference fields.")
 
         field_value = CardService(self.session).set_field_value_from_public_link(
             actor_public_link_id=public_link.id,
