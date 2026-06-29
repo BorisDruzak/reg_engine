@@ -63,6 +63,7 @@ Completed phases:
 - Phase 2M: Binary `.docx` Template Upload And Template Versioning.
 - Phase 2N: PDF Conversion.
 - Phase 3A: Card Export Foundation.
+- Phase 3B: Import Preview And Mapping.
 
 Current stop point:
 
@@ -135,10 +136,14 @@ Current stop point:
   slice: JSON and CSV card export use card visibility scope, preserve
   schema-driven block/instance/field structure, export attachment/generated
   document metadata only, and write audit events.
-- Next planned work is Phase 3B import preview and mapping.
-- Later explicit phases remain Phase 3B/3C import/export completion, Phase 4
+- Phase 3B Import Preview And Mapping is completed as an authenticated backend
+  API slice: CSV preview maps rows by `block_code.field_code`, validates
+  organization/card scope and dynamic values through card service rules, returns
+  row-level errors, and does not mutate cards, field values, files, or audit.
+- Next planned work is Phase 3C import commit and export polish.
+- Later explicit phases remain Phase 3C import/export completion, Phase 4
   reports, and Phase 5 MCP.
-- XLSX export, CSV/XLSX import commit, import/export frontend UI, binary
+- XLSX export, CSV/XLSX import commit UI, import/export frontend UI, binary
   attachment/document export, reports, and MCP remain deferred until their
   explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
@@ -1380,7 +1385,7 @@ Known limitations:
 
 ### Phase 3B: Import Preview And Mapping
 
-Status: planned next.
+Status: completed.
 
 Purpose: add safe import preview before any data mutation.
 
@@ -1394,9 +1399,47 @@ Planned scope:
 - Return row-level validation errors without mutating cards.
 - Do not upload binary attachments/documents through import in this phase.
 
+Completed scope:
+
+- Added authenticated API:
+  `POST /api/v1/registries/{registry_id}/imports/cards/preview`.
+- Preview accepts CSV content with required columns `card_id`,
+  `organization_id`, `display_name`, `block_code`, `field_code`, and `value`.
+- Rows with `card_id` are previewed as updates; rows without `card_id` are
+  previewed as new-card rows requiring `organization_id` and `display_name`.
+- Field mapping uses `block_code.field_code` against the active registry
+  schema.
+- Preview validates editable card scope, create organization scope, and typed
+  dynamic field values through `CardService.validate_field_value_for_actor`.
+- Preview returns row-level status, action, parsed values, and validation
+  errors.
+- Preview does not create cards, update field values, upload binaries, attach
+  documents, or write audit events.
+- Added PostgreSQL-backed API regression tests for valid update/create preview,
+  invalid numeric values, inaccessible sibling branch update/create, invalid
+  reference-list item, unknown field mapping, required CSV columns, and no
+  mutation of `cards`, `field_values`, or `audit_events`.
+- Verification on 2026-06-30: RED failed with `405 Method Not Allowed` before
+  implementation on disposable `reg_engine_phase3b_test`; GREEN passed with
+  `4 passed` after implementation on the same disposable PostgreSQL strategy;
+  `scripts/check.ps1 -SkipRemote` passed with backend pytest `61 passed,
+  126 skipped`, frontend unit tests `29 passed`, frontend build, and project
+  tree check; `pnpm -C frontend e2e` passed with `3 passed`.
+
+Known limitations:
+
+- No import commit in this slice.
+- No XLSX preview in this slice.
+- No frontend import UI in this slice.
+- No binary attachment/document import in this slice.
+- Preview is row-oriented; grouping multiple rows into one future card is
+  deferred to Phase 3C matching/commit rules.
+- Reference labels are not resolved in preview responses yet; values use stored
+  ids.
+
 ### Phase 3C: Import Commit And Export Polish
 
-Status: planned.
+Status: planned next.
 
 Planned scope:
 

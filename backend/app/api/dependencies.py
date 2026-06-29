@@ -15,6 +15,7 @@ from app.services.attachments import AttachmentServiceError
 from app.services.auth import AuthError, AuthService
 from app.services.cards import CardServiceError, InvalidFieldValueError
 from app.services.documents import DocumentServiceError
+from app.services.import_export import ImportExportServiceError
 from app.services.organizations import OrganizationNotFoundError
 from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkError
@@ -132,6 +133,7 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             AttachmentServiceError,
             DocumentServiceError,
             InvalidFieldValueError,
+            ImportExportServiceError,
             PublicLinkError,
             ReferenceListError,
             RegistrySchemaError,

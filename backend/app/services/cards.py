@@ -285,6 +285,52 @@ class CardService:
             ]
         return field_values
 
+    def validate_field_value_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        organization_id: UUID,
+        field_id: UUID,
+        value: object,
+        card_id: UUID | None = None,
+    ) -> None:
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != registry_id:
+            raise CardServiceError("Field does not belong to the card registry.")
+
+        card_context_id = card_id
+        if card_id is not None:
+            card = self._get_editable_card(card_id)
+            if card.registry_id != registry_id:
+                raise CardServiceError("Card does not belong to the import registry.")
+            if card.organization_id != organization_id:
+                raise CardServiceError("Card organization does not match the import row.")
+            self._require_card_permission(
+                actor_user_id,
+                card.organization_id,
+                registry_id=card.registry_id,
+            )
+            card_context_id = card.id
+        else:
+            self._require_card_permission(
+                actor_user_id,
+                organization_id,
+                registry_id=registry_id,
+            )
+            if field_model.field_type == "file_ref" and value is not None:
+                raise InvalidFieldValueError(
+                    "File reference import preview requires an existing card attachment."
+                )
+
+        self._coerce_field_assignment(
+            field_model,
+            value,
+            card_id=card_context_id,
+            actor_user_id=actor_user_id,
+        )
+
     def set_field_value_from_public_link(
         self,
         *,

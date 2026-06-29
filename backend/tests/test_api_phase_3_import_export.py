@@ -10,7 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
@@ -18,8 +18,10 @@ from app.main import create_app
 from app.models import (
     AccessGrant,
     AuditEvent,
+    Card,
     CardAttachment,
     DocumentTemplate,
+    FieldValue,
     GeneratedDocument,
     Permission,
     Role,
@@ -29,6 +31,7 @@ from app.models import (
 )
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
+from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -451,3 +454,147 @@ def test_card_csv_export_uses_block_field_rows_for_duplicate_field_codes(
     assert "storage_key" not in response.text
     assert "checksum_sha256" not in response.text
     assert "stored_file_id" not in response.text
+
+
+def _phase_3_import_context(db_session: Session) -> dict[str, Any]:
+    context = _phase_3_export_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    reference_service = ReferenceListService(db_session)
+
+    metrics_block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="metrics",
+        title="Metrics",
+    )
+    priority_field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=metrics_block.id,
+        code="priority",
+        label="Priority",
+        field_type="number",
+    )
+    states = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="phase3_import_states",
+        name="Phase 3 Import States",
+    )
+    ready = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=states.id,
+        code="ready",
+        label="Ready",
+    )
+    other_states = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="phase3_import_other_states",
+        name="Phase 3 Import Other States",
+    )
+    invalid_state = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=other_states.id,
+        code="invalid",
+        label="Invalid",
+    )
+    state_field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=metrics_block.id,
+        code="state",
+        label="State",
+        field_type="select",
+        options_source_type="reference_list",
+        options_source_id=states.id,
+    )
+    context.update(
+        {
+            "priority_field": priority_field,
+            "state_field": state_field,
+            "ready_item": ready,
+            "invalid_state_item": invalid_state,
+        }
+    )
+    return context
+
+
+def test_card_csv_import_preview_validates_mapping_scope_values_and_does_not_mutate(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    card_count_before = db_session.scalar(select(func.count()).select_from(Card))
+    value_count_before = db_session.scalar(select(func.count()).select_from(FieldValue))
+    audit_count_before = db_session.scalar(select(func.count()).select_from(AuditEvent))
+    csv_content = "\n".join(
+        [
+            "card_id,organization_id,display_name,block_code,field_code,value",
+            (f"{context['child_card'].id},,,main,status,valid update preview"),
+            (f",{context['child_card'].organization_id},Preview create,metrics,priority,42.5"),
+            (f"{context['child_card'].id},,,metrics,state,{context['ready_item'].id}"),
+            (f"{context['child_card'].id},,,metrics,priority,not-a-number"),
+            (f"{context['sibling_card'].id},,,main,status,forbidden sibling update"),
+            (
+                f",{context['sibling_card'].organization_id},Forbidden create,"
+                "main,status,forbidden create"
+            ),
+            (f"{context['child_card'].id},,,metrics,state,{context['invalid_state_item'].id}"),
+            f"{context['child_card'].id},,,unknown,status,unknown field",
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        json={"csv_content": csv_content},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["format_version"] == "card_import_preview_v1"
+    assert payload["summary"] == {
+        "total_rows": 8,
+        "valid_rows": 3,
+        "invalid_rows": 5,
+        "would_create_rows": 1,
+        "would_update_rows": 2,
+    }
+    rows_by_number = {row["row_number"]: row for row in payload["rows"]}
+    assert rows_by_number[2]["status"] == "valid"
+    assert rows_by_number[2]["action"] == "update"
+    assert rows_by_number[2]["field_path"] == "main.status"
+    assert rows_by_number[3]["status"] == "valid"
+    assert rows_by_number[3]["action"] == "create"
+    assert rows_by_number[3]["parsed_value"] == "42.5"
+    assert rows_by_number[4]["status"] == "valid"
+    assert rows_by_number[4]["field_path"] == "metrics.state"
+    assert rows_by_number[5]["status"] == "invalid"
+    assert rows_by_number[5]["errors"] == ["Number fields require a numeric value."]
+    assert rows_by_number[6]["status"] == "invalid"
+    assert rows_by_number[7]["status"] == "invalid"
+    assert rows_by_number[8]["status"] == "invalid"
+    assert rows_by_number[8]["errors"] == ["Reference item does not belong to the configured list."]
+    assert rows_by_number[9]["status"] == "invalid"
+    assert rows_by_number[9]["errors"] == ["Import field mapping was not found."]
+    assert db_session.scalar(select(func.count()).select_from(Card)) == card_count_before
+    assert db_session.scalar(select(func.count()).select_from(FieldValue)) == value_count_before
+    assert db_session.scalar(select(func.count()).select_from(AuditEvent)) == audit_count_before
+
+
+def test_card_csv_import_preview_rejects_missing_required_columns(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        json={"csv_content": "card_id,block_code,value\n,,x"},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == (
+        "CSV import preview requires columns: block_code, card_id, display_name, "
+        "field_code, organization_id, value."
+    )

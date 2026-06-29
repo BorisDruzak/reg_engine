@@ -6,7 +6,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
-from app.services.import_export import CardExportService
+from app.schemas.import_export import CardImportPreviewRead, CardImportPreviewRequest
+from app.services.import_export import CardExportService, CardImportPreviewService
 
 router = APIRouter(tags=["import-export"])
 
@@ -50,3 +51,24 @@ def export_cards(
         content=payload,
         headers={"Content-Disposition": 'attachment; filename="registry-cards-export.json"'},
     )
+
+
+@router.post(
+    "/registries/{registry_id}/imports/cards/preview",
+    response_model=CardImportPreviewRead,
+)
+def preview_card_import(
+    registry_id: UUID,
+    payload: CardImportPreviewRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardImportPreviewRead:
+    try:
+        preview = CardImportPreviewService(session).preview_cards_csv_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            csv_content=payload.csv_content,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardImportPreviewRead.model_validate(preview)
