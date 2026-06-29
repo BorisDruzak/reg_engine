@@ -240,6 +240,8 @@ export function HomePage() {
             users={usersQuery.data?.items ?? []}
             roles={rolesQuery.data?.items ?? []}
             organizations={organizationsQuery.data?.items ?? []}
+            registries={registriesQuery.data?.items ?? []}
+            token={token}
           />
         )}
         {activeSection === "audit" && <AuditTable auditEvents={auditQuery.data?.items ?? []} />}

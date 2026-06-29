@@ -45,6 +45,7 @@ Completed phases:
 - Phase 2L.0: Admin UI Mutation Foundation.
 - Phase 2L.1: Organization Management UI.
 - Phase 2L.2: User Management UI.
+- Phase 2L.3: Access Grant Management UI.
 
 Current stop point:
 
@@ -62,10 +63,11 @@ Current stop point:
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
+- Phase 2L.3 Access Grant Management UI is completed.
 - Phase 2L is the current frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
-- Phase 2L.3 Access Grant Management UI is the next implementation slice.
+- Phase 2L.4 Registry Management UI is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -102,7 +104,8 @@ The current authenticated frontend is not yet a complete admin workspace:
 - organizations can be created, edited, and archived through Russian-first UI;
 - users can be created, edited, password-reset, and archived through
   Russian-first UI; roles and permissions remain read-only in this phase;
-- access grants are listed, but grants cannot be issued or revoked in UI;
+- access grants can be issued and revoked through Russian-first UI with
+  explicit organization/registry/descendant scope summary;
 - registries and schemas are displayed, but registry create/update/archive and
   block/field/reference-list editing are not exposed as UI workflows;
 - cards are listed and existing field values can be edited, but card creation,
@@ -621,6 +624,8 @@ Completion evidence:
 
 ### Phase 2L.3: Access Grant Management UI
 
+Status: completed.
+
 Required work:
 
 - Add create access grant workflow:
@@ -637,6 +642,29 @@ Acceptance criteria:
 - Org admin descendant-scope rules remain backend-enforced.
 - Frontend tests cover global, organization-scoped, descendant, registry-scoped,
   and denied grant flows where supported by API.
+
+Completion evidence:
+
+- Added Russian-first access grant create form with user, role, optional
+  organization, optional registry, include-descendants toggle, and validity
+  dates.
+- Added an explicit Russian scope summary before save so global,
+  organization-scoped, descendant, and registry-scoped grants are not ambiguous.
+- Added access grant revoke confirmation and success/error feedback using the
+  shared Phase 2L.0 mutation patterns.
+- Access-grant mutations invalidate access-grant and audit query data after
+  success.
+- Added frontend tests for required-field validation, global grant, descendant
+  organization grant, registry-scoped grant, revoke flow, request payloads, and
+  backend-denied localized error handling.
+- Verified `pnpm -C frontend exec vitest run src/App.test.tsx`,
+  `pnpm -C frontend test:run`, `pnpm -C frontend lint`, and
+  `pnpm -C frontend typecheck`.
+- Verified `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`,
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`, and
+  `pnpm -C frontend e2e`.
+- No backend code, migrations, hardcoded employee fields, import/export, PDF
+  conversion, reports, or MCP work was added.
 
 ### Phase 2L.4: Registry Management UI
 

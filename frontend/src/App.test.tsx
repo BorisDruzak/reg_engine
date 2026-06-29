@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { App } from "@/App";
 import type {
+  AccessGrantRead,
   AttachmentRead,
   DocumentTemplateRead,
   GeneratedDocumentRead,
@@ -290,6 +291,8 @@ let publicStatusValue = "drafted";
 let organizationItems: OrganizationRead[];
 let userItems: UserRead[];
 let denyNextUserUpdate = false;
+let grantItems: AccessGrantRead[];
+let denyNextGrantCreate = false;
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
@@ -303,6 +306,8 @@ beforeEach(() => {
   organizationItems = [...apiPayloads.organizations.items];
   userItems = [...apiPayloads.users.items];
   denyNextUserUpdate = false;
+  grantItems = [...apiPayloads.grants.items];
+  denyNextGrantCreate = false;
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
@@ -479,8 +484,49 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/permissions")) {
         return jsonResponse(apiPayloads.permissions);
       }
+      if (url.includes("/api/v1/access-grants/")) {
+        const grantId = url.split("/api/v1/access-grants/")[1];
+        const current = grantItems.find((item) => item.id === grantId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, archived_at: "2026-06-28T12:07:00Z" };
+          grantItems = grantItems.filter((item) => item.id !== grantId);
+          return jsonResponse(archived);
+        }
+      }
       if (url.endsWith("/api/v1/access-grants")) {
-        return jsonResponse(apiPayloads.grants);
+        if (init?.method === "POST") {
+          if (denyNextGrantCreate) {
+            denyNextGrantCreate = false;
+            return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+          }
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            user_id: string;
+            role_id: string;
+            registry_id?: string | null;
+            organization_id?: string | null;
+            include_descendants?: boolean;
+            valid_from?: string | null;
+            valid_to?: string | null;
+          };
+          const created: AccessGrantRead = {
+            id: `grant-${grantItems.length + 1}`,
+            user_id: payload.user_id,
+            role_id: payload.role_id,
+            registry_id: payload.registry_id ?? null,
+            organization_id: payload.organization_id ?? null,
+            include_descendants: payload.include_descendants ?? false,
+            valid_from: payload.valid_from ?? null,
+            valid_to: payload.valid_to ?? null,
+            created_by: "11111111-1111-4111-8111-111111111111",
+            archived_at: null,
+          };
+          grantItems = [...grantItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: grantItems });
       }
       if (url.endsWith("/api/v1/registries")) {
         return jsonResponse(apiPayloads.registries);
@@ -1074,6 +1120,163 @@ test("shows localized user mutation denial text", async () => {
   await user.type(editNameInput, "Запрещенное изменение");
   denyNextUserUpdate = true;
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+});
+
+test("issues and revokes access grants in Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Доступ" }));
+
+  const grantPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/access-grants") && init?.method === "POST",
+      ).length;
+
+  await user.click(screen.getByRole("button", { name: "Выдать право доступа" }));
+  const postCountBeforeValidation = grantPostCount();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(grantPostCount()).toBe(postCountBeforeValidation);
+
+  await user.selectOptions(screen.getByLabelText("Пользователь для доступа"), [
+    "11111111-1111-4111-8111-111111111111",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Роль для доступа"), [
+    "33333333-3333-4333-8333-333333333333",
+  ]);
+  expect(screen.getByText("Область доступа: Глобально")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Право доступа выдано")).toBeInTheDocument();
+  expect(screen.getAllByText("Глобально").length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: "Выдать право доступа" }));
+  await user.selectOptions(screen.getByLabelText("Пользователь для доступа"), [
+    "11111111-1111-4111-8111-111111111111",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Роль для доступа"), [
+    "33333333-3333-4333-8333-333333333333",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Организация доступа"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+  await user.click(screen.getByLabelText("Включить дочерние организации"));
+  fireEvent.change(screen.getByLabelText("Действует с"), { target: { value: "2026-07-01" } });
+  fireEvent.change(screen.getByLabelText("Действует до"), { target: { value: "2026-07-31" } });
+  expect(
+    screen.getByText("Область доступа: Главная организация, с дочерними организациями"),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Право доступа выдано")).toBeInTheDocument();
+  expect(screen.getAllByText("С потомками").length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("button", { name: "Выдать право доступа" }));
+  await user.selectOptions(screen.getByLabelText("Пользователь для доступа"), [
+    "11111111-1111-4111-8111-111111111111",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Роль для доступа"), [
+    "33333333-3333-4333-8333-333333333333",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Реестр доступа"), [
+    "77777777-7777-4777-8777-777777777777",
+  ]);
+  expect(
+    screen.getByText("Область доступа: Глобально; реестр: Реестр активов"),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Право доступа выдано")).toBeInTheDocument();
+  expect(screen.getAllByText("Реестр активов").length).toBeGreaterThan(0);
+
+  const revokeButtons = screen.getAllByRole("button", { name: /Отозвать право доступа/ });
+  await user.click(revokeButtons[revokeButtons.length - 1]);
+  expect(await screen.findByRole("dialog", { name: "Отозвать право доступа" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Отозвать" }));
+
+  expect(await screen.findByText("Право доступа отозвано")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (!String(input).endsWith("/api/v1/access-grants") || init?.method !== "POST") {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.user_id === "11111111-1111-4111-8111-111111111111" &&
+          body.role_id === "33333333-3333-4333-8333-333333333333" &&
+          body.registry_id === null &&
+          body.organization_id === null &&
+          body.include_descendants === false
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (!String(input).endsWith("/api/v1/access-grants") || init?.method !== "POST") {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.organization_id === "22222222-2222-4222-8222-222222222222" &&
+          body.include_descendants === true &&
+          body.valid_from === "2026-07-01" &&
+          body.valid_to === "2026-07-31"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (!String(input).endsWith("/api/v1/access-grants") || init?.method !== "POST") {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.registry_id === "77777777-7777-4777-8777-777777777777" &&
+          body.organization_id === null
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/access-grants/grant-4") && init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("shows localized access grant denial text", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Доступ" }));
+
+  await user.click(screen.getByRole("button", { name: "Выдать право доступа" }));
+  await user.selectOptions(screen.getByLabelText("Пользователь для доступа"), [
+    "11111111-1111-4111-8111-111111111111",
+  ]);
+  await user.selectOptions(screen.getByLabelText("Роль для доступа"), [
+    "33333333-3333-4333-8333-333333333333",
+  ]);
+  denyNextGrantCreate = true;
+  await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
   expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
