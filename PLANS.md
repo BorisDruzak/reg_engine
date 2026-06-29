@@ -67,6 +67,7 @@ Completed phases:
 - Phase 3C: Import Commit And Export Polish.
 - Phase 4A: Report Foundation API.
 - Phase 5A: MCP Read-Only Gateway.
+- Phase 5B: MCP Hardening And Config.
 
 Current stop point:
 
@@ -161,10 +162,11 @@ Current stop point:
 - Production PostgreSQL is migrated to `0011_mcp_audit_source` after fresh
   backup, preflight, disposable PostgreSQL verification, Alembic upgrade,
   post-checks, backend service restart, live MCP sanity, and server check.
-- Phase 5B MCP Hardening And Config is in progress locally: the read-only
-  MCP stdio gateway validates API base URLs, returns JSON-RPC parse/invalid
-  params errors without terminating the server loop, and returns tool argument
-  failures as MCP tool errors. No migration is required.
+- Phase 5B MCP Hardening And Config is completed: the read-only MCP stdio
+  gateway validates API base URLs, returns JSON-RPC parse/invalid params errors
+  without terminating the server loop, and returns tool argument failures as
+  MCP tool errors. It is implemented, pushed, deployed, and verified on the
+  server. No migration was required.
 - Next planned work requires explicit prioritization: MCP write tools,
   report UI/polish, non-JSON reports, XLSX workflows, or
   another deferred phase.
@@ -1570,7 +1572,7 @@ Completed local scope:
 - Added audit events for report template create/archive and report run
   generate/download/archive.
 
-Verification so far:
+Verification:
 
 - Targeted model/schema/migration tests passed locally.
 - `ruff check` passed for the Phase 4A files.
@@ -1695,7 +1697,7 @@ Known limitations:
 
 ### Phase 5B: MCP Hardening And Config
 
-Status: in progress.
+Status: completed.
 
 Purpose: harden the Phase 5A read-only MCP gateway before considering any
 write tools, report UI, non-JSON reports, or XLSX workflows.
@@ -1733,6 +1735,23 @@ Verification so far:
 - GREEN targeted tests passed locally with
   `backend/.venv/Scripts/python.exe -m pytest tests/test_mcp_phase_5.py -q`.
 - Targeted `ruff check`, `ruff format --check`, and `mypy app/mcp` passed.
+- Full backend pytest passed locally with `77 passed, 130 skipped`.
+- `ruff check .`, `ruff format --check .`, and `mypy app` passed locally.
+- `scripts/check.ps1 -SkipRemote` passed with backend pytest, frontend lint,
+  frontend typecheck, frontend unit tests, frontend build, and project-map
+  check.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- Local MCP stdio smoke passed for malformed JSON followed by `initialize`.
+- Deployed commit `4e17290` to the configured server checkout.
+- Server checks passed after deploy.
+- Server MCP stdio sanity passed for malformed JSON, `initialize`, and
+  `reg_engine_health`.
+- Production Alembic remained at `0011_mcp_audit_source (head)`; no production
+  migration was required.
+
+Production migration checkpoint:
+
+- Not required for Phase 5B.
 
 Known limitations:
 
