@@ -58,6 +58,7 @@ Completed phases:
 - Phase 2J.3: `file_ref` Transfer Behavior.
 - Phase 2J.4: `file_ref` API Support.
 - Phase 2J.5: `file_ref` Frontend Authenticated Editor.
+- Phase 2J.6: `file_ref` Generated Document Rendering.
 
 Current stop point:
 
@@ -94,6 +95,10 @@ Current stop point:
   Russian card editor lists existing card attachments, allows selecting and
   clearing a `file_ref`, shows empty and archived states, and keeps inline file
   upload out of the `file_ref` control.
+- Phase 2J.6 `file_ref` generated document rendering is completed:
+  `docx_text_v1` renders active references as attachment title/original
+  filename text, empty values as empty text, and archived references with an
+  `(архив)` marker, without embedding files or adding download URLs.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -108,9 +113,8 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.6 Generated Document Rendering for
-  `file_ref`: render attachment title/original filename text in
-  `docx_text_v1` outputs without embedding files or links.
+- Next planned work is Phase 2J.7 Live Validation for `file_ref`: verify the
+  full file-ref flow on disposable PostgreSQL and temporary storage.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -204,9 +208,10 @@ Completed Phase 2 work:
 - Phase 2J.2 added backend service support for authenticated `file_ref`
   set/read/clear behavior, same-card active attachment validation, archived
   referenced attachment metadata reads, safe audit behavior, and explicit
-  public-link edit blocking. Transfer behavior and REST value API metadata
-  were completed in later Phase 2J slices; frontend UI, generated document
-  rendering, import/export, PDF, reports, and MCP remain deferred.
+  public-link edit blocking. Transfer behavior, REST value API metadata,
+  frontend UI, and generated document rendering were completed in later Phase
+  2J slices; public-link `file_ref` editing, import/export, PDF, reports, and
+  MCP remain deferred.
 - Phase 2J.3 added transfer behavior for active `file_ref` values by creating
   a new target-card `card_attachments` link that points to the same
   `stored_file_id`; archived `file_ref` references are cleared on transfer and
@@ -219,12 +224,17 @@ Completed Phase 2 work:
   The schema builder exposes the generic `file_ref` field type, the card editor
   lists existing card attachments as selectable candidates, supports clear,
   shows empty/archived states, excludes `file_ref` from bulk save, and keeps
-  inline upload out of the `file_ref` control. Generated document rendering,
+  inline upload out of the `file_ref` control. Public-link `file_ref` editing,
   import/export, PDF, reports, and MCP remain deferred.
+- Phase 2J.6 added generated document rendering for `file_ref` in
+  `docx_text_v1`: active references render as attachment title/original
+  filename text, empty values render as empty text, and archived references
+  render with an `(архив)` marker. Generated documents still do not embed
+  attachment bytes or add download URLs.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 through Phase 2J.5 are completed and Phase 2J.6 is the next planned implementation slice.
+Status: in progress; Phase 2J.0 through Phase 2J.6 are completed and Phase 2J.7 is the next planned live-validation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -448,6 +458,8 @@ Completion evidence:
 
 ### Phase 2J.6: Generated Document Rendering
 
+Status: completed.
+
 Required work:
 
 - `docx_text_v1` renders `file_ref` as attachment title/original filename text.
@@ -461,6 +473,22 @@ Acceptance criteria:
 
 - Generated document tests cover active file ref, empty file ref, and archived file ref rendering.
 - Rendering remains schema-driven and does not assume HR templates.
+
+Completion evidence:
+
+- `DocumentService` formats `FileRefValueRead` as safe text for
+  `docx_text_v1` placeholders.
+- Active references render as attachment title plus original filename when
+  they differ.
+- Empty `file_ref` values render as empty text.
+- Archived referenced attachments render with an `(архив)` marker.
+- Generated documents do not embed referenced attachment bytes and do not add
+  attachment download URLs.
+- Tests cover active, empty, archived, no dataclass/UUID leakage, and no
+  download-link output.
+- No database migration, API endpoint, frontend change, public-link
+  `file_ref` editing, PDF conversion, import/export, reports, MCP, or
+  business-specific document field was added.
 
 ### Phase 2J.7: Live Validation
 

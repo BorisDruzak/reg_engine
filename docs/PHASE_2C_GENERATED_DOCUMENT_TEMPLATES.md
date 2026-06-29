@@ -1,8 +1,9 @@
 # Phase 2C Generated Document Templates
 
 Phase 2C adds the backend foundation for generated `.docx` documents. It does
-not add frontend UI, public-link file flows, PDF conversion, `file_ref`,
-import/export, MCP, MDB migration, or service desk integration.
+not add frontend UI, public-link file flows, PDF conversion, import/export,
+MCP, MDB migration, or service desk integration. Phase 2J.6 later added
+`file_ref` text rendering to the existing `docx_text_v1` renderer.
 
 ## Metadata Schema
 
@@ -69,6 +70,13 @@ SQL, shell commands, Jinja expressions, or arbitrary code.
 
 The default output filename template is `{{ card.display_name }}.docx`.
 
+`file_ref` fields render as safe attachment text only. Active references render
+as attachment title plus original filename when they differ, for example
+`Скан заявления (statement.pdf)`. Empty `file_ref` values render as empty text.
+Archived referenced attachments keep rendering metadata with an `(архив)`
+marker. The renderer does not embed attachment binaries or add download URLs for
+`file_ref`.
+
 ## Service Boundary
 
 ### `DocumentService`
@@ -111,7 +119,9 @@ Implemented Phase 2C regression tests include:
 - `test_generated_document_does_not_render_superseded_card`
 - `test_archived_template_cannot_render_and_writes_audit`
 - `test_generated_document_archive_preserves_stored_file_and_writes_audit`
+- `test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text`
+- `test_docx_text_v1_renders_empty_file_ref_as_empty_text`
+- `test_docx_text_v1_renders_archived_file_ref_with_archive_marker`
 
 Migration and metadata tests also cover `document_templates`,
 `generated_documents`, indexes, constraints, and Alembic head.
-

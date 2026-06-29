@@ -16,7 +16,13 @@ from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS
 from app.models import Card, DocumentTemplate, GeneratedDocument, Registry, StoredFile
 from app.services.attachments import AttachmentStorage, normalize_attachment_filename
 from app.services.audit import AuditService
-from app.services.cards import CardFieldRead, CardRead, CardService, CardServiceError
+from app.services.cards import (
+    CardFieldRead,
+    CardRead,
+    CardService,
+    CardServiceError,
+    FileRefValueRead,
+)
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 
@@ -342,6 +348,8 @@ class DocumentService:
     def _format_render_value(self, value: object | None) -> str:
         if value is None:
             return ""
+        if isinstance(value, FileRefValueRead):
+            return self._format_file_ref_value(value)
         if isinstance(value, UUID):
             return str(value)
         if isinstance(value, datetime | date):
@@ -353,6 +361,17 @@ class DocumentService:
         if isinstance(value, dict):
             return json.dumps(value, ensure_ascii=False, sort_keys=True)
         return str(value)
+
+    def _format_file_ref_value(self, value: FileRefValueRead) -> str:
+        title = value.title.strip()
+        original_filename = value.original_filename.strip()
+        if title and original_filename and title != original_filename:
+            rendered = f"{title} ({original_filename})"
+        else:
+            rendered = title or original_filename
+        if value.archived_at is not None:
+            return f"{rendered} (архив)" if rendered else "(архив)"
+        return rendered
 
     def _build_docx_from_text(self, rendered_text: str) -> bytes:
         body = "\n".join(self._paragraph_xml(line) for line in rendered_text.splitlines())

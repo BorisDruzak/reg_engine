@@ -1,9 +1,10 @@
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
@@ -15,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.models import AccessGrant, AuditEvent, Permission, Role, StoredFile, User, role_permissions
 from app.services.attachments import LocalFilesystemAttachmentStorage
-from app.services.cards import CardService
-from app.services.documents import DocumentService, DocumentServiceError
+from app.services.cards import CardFieldRead, CardRead, CardService, FileRefValueRead
+from app.services.documents import DocumentService, DocumentServiceError, _RenderContext
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.registry_schema import RegistrySchemaService
@@ -57,6 +58,31 @@ def _reset_public_schema(engine: Engine) -> None:
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
         connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
+
+
+def _render_docx_xml_from_card(template_body: str, card: CardRead) -> str:
+    service = object.__new__(DocumentService)
+    rendered_text = service._render_plain_text_template(template_body, _RenderContext(card=card))
+    content = service._build_docx_from_text(rendered_text)
+    with ZipFile(BytesIO(content)) as docx:
+        return docx.read("word/document.xml").decode("utf-8")
+
+
+def _card_read_with_file_ref(value: FileRefValueRead | None) -> CardRead:
+    return CardRead(
+        card_id=uuid4(),
+        registry_id=uuid4(),
+        organization_id=uuid4(),
+        display_name="File ref render card",
+        fields={
+            "main.support_file": CardFieldRead(
+                field_id=uuid4(),
+                code="support_file",
+                field_type="file_ref",
+                value=value,
+            )
+        },
+    )
 
 
 @pytest.fixture(scope="module")
@@ -264,6 +290,62 @@ def document_service(db_session: Session, tmp_path: Path) -> DocumentService:
         db_session,
         storage=LocalFilesystemAttachmentStorage(tmp_path, key_prefix="generated_documents"),
     )
+
+
+def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:
+    attachment_id = uuid4()
+    card = _card_read_with_file_ref(
+        FileRefValueRead(
+            attachment_id=attachment_id,
+            title="Скан заявления",
+            original_filename="statement.pdf",
+            content_type="application/pdf",
+            content_length_bytes=128,
+            scanner_status="deferred",
+            archived_at=None,
+        )
+    )
+
+    rendered_xml = _render_docx_xml_from_card("Файл: {{ fields.main.support_file }}", card)
+
+    assert "Файл: Скан заявления (statement.pdf)" in rendered_xml
+    assert str(attachment_id) not in rendered_xml
+    assert "FileRefValueRead" not in rendered_xml
+    assert "stored_file" not in rendered_xml
+    assert "w:hyperlink" not in rendered_xml
+    assert "/api/v1/attachments" not in rendered_xml
+    assert "/attachments/" not in rendered_xml
+
+
+def test_docx_text_v1_renders_empty_file_ref_as_empty_text() -> None:
+    card = _card_read_with_file_ref(None)
+
+    rendered_xml = _render_docx_xml_from_card("Файл: {{ fields.main.support_file }}", card)
+
+    assert "Файл: " in rendered_xml
+    assert "None" not in rendered_xml
+    assert "FileRefValueRead" not in rendered_xml
+
+
+def test_docx_text_v1_renders_archived_file_ref_with_archive_marker() -> None:
+    attachment_id = uuid4()
+    card = _card_read_with_file_ref(
+        FileRefValueRead(
+            attachment_id=attachment_id,
+            title="Архивная справка",
+            original_filename="old-reference.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            content_length_bytes=256,
+            scanner_status="deferred",
+            archived_at=datetime(2026, 6, 30, tzinfo=UTC),
+        )
+    )
+
+    rendered_xml = _render_docx_xml_from_card("Файл: {{ fields.main.support_file }}", card)
+
+    assert "Файл: Архивная справка (old-reference.docx) (архив)" in rendered_xml
+    assert str(attachment_id) not in rendered_xml
+    assert "FileRefValueRead" not in rendered_xml
 
 
 def test_document_template_creation_requires_schema_permission_and_writes_audit(
