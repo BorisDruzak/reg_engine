@@ -42,7 +42,7 @@ Target system:
 - Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, and public-link attachment list/upload/download APIs.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, and public-link attachment list/upload/download APIs.
 - Current frontend scope has a bearer-authenticated admin shell for organizations, users, roles, permissions, access grants, registry list/schema reads, card list/read/edit workflows, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, audit reads, public-link card editing, and public-link attachment list/upload/download.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Phase 2J makes public attachment upload limits configurable at public-link creation time and protects quota consumption with row-level locking. `file_ref`, PDF conversion, binary `.docx` template upload, and template versioning remain deferred.
 - Import/export, reports, PDF conversion, and MCP are later phases.
@@ -509,6 +509,18 @@ DELETE /api/v1/access-grants/{grant_id}
 
 User/access endpoints require bearer auth. `system_admin` is represented by `users.is_superuser=true`; scoped admins use `users.manage`, `roles.read`, `permissions.read`, and `access_grants.manage` grants inside organization scope.
 
+Organization unit API:
+
+```powershell
+GET    /api/v1/organizations/{organization_id}/org-units
+POST   /api/v1/organizations/{organization_id}/org-units
+GET    /api/v1/org-units/{org_unit_id}
+PATCH  /api/v1/org-units/{org_unit_id}
+DELETE /api/v1/org-units/{org_unit_id}
+```
+
+Org units are filters/reference data and are not RBAC boundaries in v1. Reads use organization visibility scope. Create, update, and archive require `organizations.manage` in organization scope or superuser access.
+
 ## Bootstrap Commands
 
 Seed core permissions and roles:
@@ -574,4 +586,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, and Phase 2K.1 added organization unit management API. Import/export, PDF conversion, `file_ref`, binary `.docx` template upload/versioning, and MCP remain later phases and require explicit approval before implementation.

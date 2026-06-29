@@ -36,16 +36,18 @@ Completed phases:
 - Phase 2H: Public-link attachment workflows.
 - Phase 2I: Public-link attachment limit semantics and bugfixes.
 - Phase 2K.0: Admin workflow API gap audit.
+- Phase 2K.1: Organization Units API.
 
 Current stop point:
 
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
 - Phase 2K.0 admin workflow API gap audit is completed and recorded in
   `docs/PHASE_2K_ADMIN_API_READINESS.md`.
+- Phase 2K.1 Organization Units API is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
   deferred behind core admin workflows if product usability is the priority.
-- Phase 2K.1 Organization Units API is the next backend/API implementation
-  slice.
+- Phase 2K.2 Registry Update And Archive API is the next backend/API
+  implementation slice.
 - Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
@@ -73,7 +75,6 @@ documents, public links, and audit reads. Phase 2K.0 records the current API
 readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. Remaining backend
 gaps before a complete admin workspace are:
 
-- `org_units` management API;
 - registry update/archive API;
 - repeatable `card_block_instances` archive API;
 - atomic bulk card values update API.
@@ -324,6 +325,8 @@ Completion evidence:
 
 ### Phase 2K.1: Organization Units API
 
+Status: completed.
+
 Required work:
 
 - Add API for `org_units` management:
@@ -339,6 +342,16 @@ Acceptance criteria:
 
 - Org-unit API tests cover allowed and denied access paths.
 - Org-unit list can be used by frontend filters and dynamic `org_unit_ref` fields.
+
+Completion evidence:
+
+- Added `GET/POST /api/v1/organizations/{organization_id}/org-units`.
+- Added `GET/PATCH/DELETE /api/v1/org-units/{org_unit_id}`.
+- Org units remain filters/reference data and are not RBAC boundaries.
+- Reads use organization visibility scope; create/update/archive require
+  `organizations.manage` in organization scope or superuser.
+- Create/update/archive write `audit_events` with `object_type=org_unit`.
+- Tests added in `backend/tests/test_api_phase_2k_org_units.py`.
 
 ### Phase 2K.2: Registry Update And Archive API
 

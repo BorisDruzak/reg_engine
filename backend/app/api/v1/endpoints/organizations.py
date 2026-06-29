@@ -13,13 +13,17 @@ from app.schemas.organizations import (
     OrganizationTreeNodeRead,
     OrganizationTreeRead,
     OrganizationUpdate,
+    OrgUnitCreate,
+    OrgUnitListRead,
+    OrgUnitRead,
+    OrgUnitUpdate,
 )
 from app.services.organizations import OrganizationService
 
-router = APIRouter(prefix="/organizations", tags=["organizations"])
+router = APIRouter(tags=["organizations"])
 
 
-@router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
+@router.post("/organizations", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
 def create_organization(
     payload: OrganizationCreate,
     session: Annotated[Session, Depends(get_db_session)],
@@ -47,7 +51,7 @@ def create_organization(
     return OrganizationRead.model_validate(organization)
 
 
-@router.get("", response_model=OrganizationListRead)
+@router.get("/organizations", response_model=OrganizationListRead)
 def list_organizations(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
@@ -63,7 +67,7 @@ def list_organizations(
     )
 
 
-@router.get("/tree", response_model=OrganizationTreeRead)
+@router.get("/organizations/tree", response_model=OrganizationTreeRead)
 def read_organization_tree(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
@@ -77,7 +81,7 @@ def read_organization_tree(
     return OrganizationTreeRead(items=_organization_tree_nodes(organizations))
 
 
-@router.get("/{organization_id}", response_model=OrganizationRead)
+@router.get("/organizations/{organization_id}", response_model=OrganizationRead)
 def read_organization(
     organization_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
@@ -93,7 +97,7 @@ def read_organization(
     return OrganizationRead.model_validate(organization)
 
 
-@router.patch("/{organization_id}", response_model=OrganizationRead)
+@router.patch("/organizations/{organization_id}", response_model=OrganizationRead)
 def update_organization(
     organization_id: UUID,
     payload: OrganizationUpdate,
@@ -112,7 +116,7 @@ def update_organization(
     return OrganizationRead.model_validate(organization)
 
 
-@router.delete("/{organization_id}", response_model=OrganizationRead)
+@router.delete("/organizations/{organization_id}", response_model=OrganizationRead)
 def archive_organization(
     organization_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
@@ -126,6 +130,98 @@ def archive_organization(
     except Exception as exc:
         raise_service_http_error(exc)
     return OrganizationRead.model_validate(organization)
+
+
+@router.post(
+    "/organizations/{organization_id}/org-units",
+    response_model=OrgUnitRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_org_unit(
+    organization_id: UUID,
+    payload: OrgUnitCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrgUnitRead:
+    try:
+        org_unit = OrganizationService(session).create_org_unit_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            code=payload.code,
+            name=payload.name,
+            parent_id=payload.parent_id,
+            unit_type=payload.unit_type,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrgUnitRead.model_validate(org_unit)
+
+
+@router.get("/organizations/{organization_id}/org-units", response_model=OrgUnitListRead)
+def list_org_units(
+    organization_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrgUnitListRead:
+    try:
+        org_units = OrganizationService(session).list_org_units_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrgUnitListRead(items=[OrgUnitRead.model_validate(org_unit) for org_unit in org_units])
+
+
+@router.get("/org-units/{org_unit_id}", response_model=OrgUnitRead)
+def read_org_unit(
+    org_unit_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrgUnitRead:
+    try:
+        org_unit = OrganizationService(session).read_org_unit_for_actor(
+            actor_user_id=actor_user_id,
+            org_unit_id=org_unit_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrgUnitRead.model_validate(org_unit)
+
+
+@router.patch("/org-units/{org_unit_id}", response_model=OrgUnitRead)
+def update_org_unit(
+    org_unit_id: UUID,
+    payload: OrgUnitUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrgUnitRead:
+    try:
+        org_unit = OrganizationService(session).update_org_unit_for_actor(
+            actor_user_id=actor_user_id,
+            org_unit_id=org_unit_id,
+            name=payload.name,
+            unit_type=payload.unit_type,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrgUnitRead.model_validate(org_unit)
+
+
+@router.delete("/org-units/{org_unit_id}", response_model=OrgUnitRead)
+def archive_org_unit(
+    org_unit_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> OrgUnitRead:
+    try:
+        org_unit = OrganizationService(session).archive_org_unit_for_actor(
+            actor_user_id=actor_user_id,
+            org_unit_id=org_unit_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return OrgUnitRead.model_validate(org_unit)
 
 
 def _organization_tree_nodes(organizations: list[Organization]) -> list[OrganizationTreeNodeRead]:

@@ -36,3 +36,31 @@ class OrganizationTreeNodeRead(OrganizationRead):
 
 class OrganizationTreeRead(BaseModel):
     items: list[OrganizationTreeNodeRead]
+
+
+class OrgUnitCreate(BaseModel):
+    code: str
+    name: str
+    parent_id: UUID | None = None
+    unit_type: str | None = None
+
+
+class OrgUnitRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    parent_id: UUID | None
+    code: str
+    name: str
+    type: str | None
+    is_active: bool
+
+
+class OrgUnitUpdate(BaseModel):
+    name: str | None = None
+    unit_type: str | None = None
+
+
+class OrgUnitListRead(BaseModel):
+    items: list[OrgUnitRead]

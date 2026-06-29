@@ -13,6 +13,10 @@ class OrganizationNotFoundError(ValueError):
     """Raised when an organization operation references a missing or archived organization."""
 
 
+class OrgUnitNotFoundError(OrganizationNotFoundError):
+    """Raised when an org unit operation references a missing or archived org unit."""
+
+
 class OrganizationService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -284,8 +288,8 @@ class OrganizationService:
     ) -> OrgUnit:
         self._get_active_organization(organization_id)
         if parent_id is not None:
-            parent_unit = self.session.get(OrgUnit, parent_id)
-            if parent_unit is None or parent_unit.organization_id != organization_id:
+            parent_unit = self._get_active_org_unit(parent_id)
+            if parent_unit.organization_id != organization_id:
                 raise OrganizationNotFoundError("Parent org unit was not found in organization.")
 
         org_unit = OrgUnit(
@@ -298,6 +302,20 @@ class OrganizationService:
         )
         self.session.add(org_unit)
         self.session.flush()
+        if created_by is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=created_by,
+                action="create",
+                object_type="org_unit",
+                object_id=org_unit.id,
+                new_data_json={
+                    "organization_id": str(organization_id),
+                    "parent_id": str(parent_id) if parent_id is not None else None,
+                    "code": code,
+                    "name": name,
+                    "type": unit_type,
+                },
+            )
         return org_unit
 
     def list_org_units(self, organization_id: UUID) -> list[OrgUnit]:
@@ -313,6 +331,105 @@ class OrganizationService:
             ).all()
         )
 
+    def create_org_unit_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        code: str,
+        name: str,
+        parent_id: UUID | None = None,
+        unit_type: str | None = None,
+    ) -> OrgUnit:
+        self._require_org_unit_manage_permission(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+        )
+        return self.create_org_unit(
+            organization_id=organization_id,
+            code=code,
+            name=name,
+            parent_id=parent_id,
+            unit_type=unit_type,
+            created_by=actor_user_id,
+        )
+
+    def list_org_units_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+    ) -> list[OrgUnit]:
+        self._require_org_unit_read_permission(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+        )
+        return self.list_org_units(organization_id)
+
+    def read_org_unit_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        org_unit_id: UUID,
+    ) -> OrgUnit:
+        org_unit = self._get_active_org_unit(org_unit_id)
+        self._require_org_unit_read_permission(
+            actor_user_id=actor_user_id,
+            organization_id=org_unit.organization_id,
+        )
+        return org_unit
+
+    def update_org_unit_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        org_unit_id: UUID,
+        name: str | None = None,
+        unit_type: str | None = None,
+    ) -> OrgUnit:
+        org_unit = self._get_active_org_unit(org_unit_id)
+        self._require_org_unit_manage_permission(
+            actor_user_id=actor_user_id,
+            organization_id=org_unit.organization_id,
+        )
+        old_data = {"name": org_unit.name, "type": org_unit.type}
+        if name is not None:
+            org_unit.name = name
+        if unit_type is not None:
+            org_unit.type = unit_type
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="org_unit",
+            object_id=org_unit.id,
+            old_data_json=old_data,
+            new_data_json={"name": org_unit.name, "type": org_unit.type},
+        )
+        return org_unit
+
+    def archive_org_unit_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        org_unit_id: UUID,
+    ) -> OrgUnit:
+        org_unit = self._get_active_org_unit(org_unit_id)
+        self._require_org_unit_manage_permission(
+            actor_user_id=actor_user_id,
+            organization_id=org_unit.organization_id,
+        )
+        org_unit.archived_at = datetime.now(UTC)
+        org_unit.is_active = False
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="org_unit",
+            object_id=org_unit.id,
+        )
+        return org_unit
+
     def _get_active_organization(self, organization_id: UUID) -> Organization:
         organization = self.session.get(Organization, organization_id)
         if (
@@ -322,3 +439,38 @@ class OrganizationService:
         ):
             raise OrganizationNotFoundError("Organization was not found.")
         return organization
+
+    def _get_active_org_unit(self, org_unit_id: UUID) -> OrgUnit:
+        org_unit = self.session.get(OrgUnit, org_unit_id)
+        if org_unit is None or org_unit.archived_at is not None or not org_unit.is_active:
+            raise OrgUnitNotFoundError("Org unit was not found.")
+        return org_unit
+
+    def _require_org_unit_read_permission(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+    ) -> None:
+        self._get_active_organization(organization_id)
+        permissions = PermissionService(self.session)
+        if not permissions.is_superuser(actor_user_id) and not permissions.can_see_organization(
+            actor_user_id,
+            organization_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read org units in this organization.")
+
+    def _require_org_unit_manage_permission(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+    ) -> None:
+        self._get_active_organization(organization_id)
+        permissions = PermissionService(self.session)
+        if not permissions.is_superuser(actor_user_id) and not permissions.has_permission(
+            actor_user_id,
+            "organizations.manage",
+            organization_id=organization_id,
+        ):
+            raise PermissionDeniedError("Actor cannot manage org units in this organization.")

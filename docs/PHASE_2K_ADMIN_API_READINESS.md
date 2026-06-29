@@ -1,6 +1,6 @@
 # Phase 2K Admin API Readiness
 
-Status: completed audit for Phase 2K.0.
+Status: completed audit for Phase 2K.0. Updated after Phase 2K.1.
 
 Purpose: record the current backend API surface and separate true backend gaps
 from frontend-only gaps before the full Russian-first admin CRUD UI work in
@@ -23,7 +23,7 @@ or MCP.
 | Domain | Backend API status | Frontend/UI status | Phase target |
 | --- | --- | --- | --- |
 | Organizations | Ready for UI CRUD: `GET/POST /api/v1/organizations`, `GET/PATCH/DELETE /api/v1/organizations/{organization_id}`, and `GET /api/v1/organizations/tree` exist in `backend/app/api/v1/endpoints/organizations.py`. Archive is soft behavior through service layer. Reparenting, code updates, and archived/history read scope are not exposed. | List-only table exists in `frontend/src/features/organizations/OrganizationsTable.tsx`; no create/edit/archive controls or API client mutations. | Frontend work in Phase 2L.1. |
-| Organization units | Model and service helpers exist, and dynamic `org_unit_ref` values are supported, but no `/org-units` API is exposed. | No org-unit UI or API client functions. | Backend gap in Phase 2K.1, then frontend wiring in Phase 2L.1/2L.7. |
+| Organization units | Ready for UI CRUD after Phase 2K.1: `GET/POST /api/v1/organizations/{organization_id}/org-units` and `GET/PATCH/DELETE /api/v1/org-units/{org_unit_id}` exist. Org units remain filters/reference data, not RBAC boundaries. Reads use organization visibility scope; create/update/archive require `organizations.manage` or superuser. | No org-unit UI or API client functions. | Frontend wiring in Phase 2L.1/2L.7. |
 | Users | Ready for UI CRUD: `GET/POST /api/v1/users`, `GET/PATCH/DELETE /api/v1/users/{user_id}` exist in `backend/app/api/v1/endpoints/access_management.py`. `PATCH` includes password update/reset payload support. | Users are listed in `frontend/src/features/users/UsersAndRoles.tsx`; no create/edit/password/archive controls or client mutations. | Frontend work in Phase 2L.2. |
 | Roles and permissions | Read-only API exists: `GET /api/v1/roles`, `GET /api/v1/roles/{role_id}`, `GET /api/v1/permissions`. Role/permission CRUD is not required for v1 admin UI. | Roles and permissions are displayed read-only. | Sufficient for Phase 2L.3 grant selection. |
 | Access grants | Ready for UI grant issue/revoke: `GET/POST /api/v1/access-grants` and `DELETE /api/v1/access-grants/{grant_id}` exist. Query filters support user, organization, and archive scope. | Grants are listed only in `frontend/src/features/access/AccessGrantsTable.tsx`; no issue/revoke controls or client mutations. | Frontend work in Phase 2L.3. |
@@ -41,11 +41,16 @@ or MCP.
 
 ## Backend Gaps For Phase 2K
 
-1. Phase 2K.1: add Organization Units API.
-2. Phase 2K.2: add Registry update and archive API.
-3. Phase 2K.3: add Card Block Instance archive API.
-4. Phase 2K.4: add atomic bulk Card Values update API.
-5. Phase 2K.5: add coverage/live validation for the items above.
+Completed after the initial audit:
+
+1. Phase 2K.1: Organization Units API.
+
+Remaining backend gaps:
+
+1. Phase 2K.2: add Registry update and archive API.
+2. Phase 2K.3: add Card Block Instance archive API.
+3. Phase 2K.4: add atomic bulk Card Values update API.
+4. Phase 2K.5: add coverage/live validation for the items above.
 
 Additional audit findings that are not current Phase 2K blockers:
 
