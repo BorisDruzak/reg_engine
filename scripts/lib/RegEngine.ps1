@@ -22,6 +22,10 @@ function Get-RegEngineConfig {
         ServerUser   = $serverUser
         ServerTarget = $serverTarget
         ServerRepo   = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServerRepo" -EnvName "REG_ENGINE_SERVER_REPO" -Default ""
+        ServiceName  = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServiceName" -EnvName "REG_ENGINE_SERVICE_NAME" -Default "reg-engine"
+        ServiceHost  = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServiceHost" -EnvName "REG_ENGINE_SERVICE_HOST" -Default "0.0.0.0"
+        ServicePort  = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServicePort" -EnvName "REG_ENGINE_SERVICE_PORT" -Default "8000"
+        ServiceEnvFile = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "ServiceEnvFile" -EnvName "REG_ENGINE_SERVICE_ENV_FILE" -Default "/etc/reg_engine/reg_engine.env"
         PgHost       = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgHost" -EnvName "REG_ENGINE_PGHOST" -Default ""
         PgPort       = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgPort" -EnvName "REG_ENGINE_PGPORT" -Default "5432"
         PgDatabase   = Get-RegEngineConfigValue -LocalConfig $localConfig -Key "PgDatabase" -EnvName "REG_ENGINE_PGDATABASE" -Default "reg_engine"
@@ -61,15 +65,25 @@ function Get-RegEngineConfigValue {
 }
 
 function Assert-RegEngineRemoteConfig {
+    Assert-RegEngineServerConfig
     $config = Get-RegEngineConfig
     $missing = @()
-    if ([string]::IsNullOrWhiteSpace($config.ServerTarget)) { $missing += "REG_ENGINE_SERVER_HOST or REG_ENGINE_SERVER_TARGET" }
-    if ([string]::IsNullOrWhiteSpace($config.ServerRepo)) { $missing += "REG_ENGINE_SERVER_REPO" }
     if ([string]::IsNullOrWhiteSpace($config.PgHost)) { $missing += "REG_ENGINE_PGHOST" }
     if ([string]::IsNullOrWhiteSpace($config.PgUser)) { $missing += "REG_ENGINE_PGUSER" }
 
     if ($missing.Count -gt 0) {
         throw "Remote configuration is missing: $($missing -join ', '). Set environment variables or create ignored scripts/local.reg_engine.psd1 from scripts/local.reg_engine.example.psd1."
+    }
+}
+
+function Assert-RegEngineServerConfig {
+    $config = Get-RegEngineConfig
+    $missing = @()
+    if ([string]::IsNullOrWhiteSpace($config.ServerTarget)) { $missing += "REG_ENGINE_SERVER_HOST or REG_ENGINE_SERVER_TARGET" }
+    if ([string]::IsNullOrWhiteSpace($config.ServerRepo)) { $missing += "REG_ENGINE_SERVER_REPO" }
+
+    if ($missing.Count -gt 0) {
+        throw "Server configuration is missing: $($missing -join ', '). Set environment variables or create ignored scripts/local.reg_engine.psd1 from scripts/local.reg_engine.example.psd1."
     }
 }
 
@@ -138,7 +152,7 @@ function Invoke-RegEngineServerScript {
     )
 
     $config = Get-RegEngineConfig
-    Assert-RegEngineRemoteConfig
+    Assert-RegEngineServerConfig
     Write-RegEngineStep "ssh $($config.ServerTarget) bash -s"
     $Script | & ssh -o BatchMode=yes $config.ServerTarget "tr -d '\r' | bash -s"
     $exitCode = if ($null -eq $global:LASTEXITCODE) { 0 } else { $global:LASTEXITCODE }

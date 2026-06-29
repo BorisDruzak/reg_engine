@@ -370,6 +370,7 @@ Runtime commands must be executed on the configured runtime server, not from the
 - `scripts/dev-backend.ps1` starts the FastAPI dev server.
 - `scripts/dev-frontend.ps1` starts the Vite dev server.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, database access, and attachment storage configuration.
+- `scripts/service.ps1` installs and controls the configured server systemd API service; use `-Command start`, `status`, `logs`, `restart`, or `stop`.
 - `scripts/push-git.ps1 -Message "<message>"` stages, commits, and pushes local changes to `origin/main`.
 - `scripts/deploy.ps1` updates the configured server checkout from `origin/main` and runs server checks.
 - `scripts/dev-cycle.ps1 -Message "<message>"` runs the normal full loop on `main`: check, push, deploy, server-check.

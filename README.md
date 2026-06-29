@@ -87,6 +87,9 @@ pnpm -C frontend exec playwright install chromium
 | Frontend dev server | `powershell -ExecutionPolicy Bypass -File scripts/dev-frontend.ps1` |
 | Project map | `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1` |
 | Server check | `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` |
+| Server service status | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command status` |
+| Server service start | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command start` |
+| Server service stop | `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command stop` |
 | Bootstrap | `powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Command seed` |
 | Push main | `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "<message>"` |
 | Deploy main | `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` |
@@ -442,12 +445,30 @@ Supported local config keys and matching environment variables:
 | `ServerUser` | `REG_ENGINE_SERVER_USER` |
 | `ServerTarget` | `REG_ENGINE_SERVER_TARGET` |
 | `ServerRepo` | `REG_ENGINE_SERVER_REPO` |
+| `ServiceName` | `REG_ENGINE_SERVICE_NAME` |
+| `ServiceHost` | `REG_ENGINE_SERVICE_HOST` |
+| `ServicePort` | `REG_ENGINE_SERVICE_PORT` |
+| `ServiceEnvFile` | `REG_ENGINE_SERVICE_ENV_FILE` |
 | `PgHost` | `REG_ENGINE_PGHOST` |
 | `PgPort` | `REG_ENGINE_PGPORT` |
 | `PgDatabase` | `REG_ENGINE_PGDATABASE` |
 | `PgUser` | `REG_ENGINE_PGUSER` |
 
 The local config file is ignored by Git and must remain machine-local.
+
+## Server Service Commands
+
+`scripts/service.ps1` installs and controls the backend API systemd service on the configured server. By default it manages `reg-engine.service`, runs `backend/.venv/bin/python -m uvicorn app.main:app`, reads `/etc/reg_engine/reg_engine.env`, and listens on port `8000`.
+
+```powershell
+cd C:\Users\admin-2\Documents\reg_engine
+powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command start
+powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command status
+powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command logs
+powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command stop
+```
+
+Use `-Command restart` after deploying new backend code. Use `-NoInstall` with `start` or `restart` only when the existing unit file should not be refreshed.
 
 Access management API:
 

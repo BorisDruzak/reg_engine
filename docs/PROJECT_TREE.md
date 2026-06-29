@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-29 12:39:42 +05:00
+- Generated: 2026-06-29 14:50:56 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -204,6 +204,7 @@
 - `scripts/project-map.ps1`
 - `scripts/push-git.ps1`
 - `scripts/server-check.ps1`
+- `scripts/service.ps1`
 - `scripts/test.ps1`
 - `scripts/tree.ps1`
 - `scripts/typecheck.ps1`
