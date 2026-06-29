@@ -5,10 +5,16 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 from uuid import UUID
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 
+from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.lib.units import mm  # type: ignore[import-untyped]
+from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
+from reportlab.pdfbase.ttfonts import TTFont  # type: ignore[import-untyped]
+from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -47,6 +53,15 @@ class _RenderContext:
 
 
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([A-Za-z0-9_.]+)\s*}}")
+_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_PDF_CONTENT_TYPE = "application/pdf"
+_PDF_FONT_NAME = "RegEngineDejaVuSans"
+_PDF_FONT_CANDIDATES = (
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+    Path("C:/Windows/Fonts/DejaVuSans.ttf"),
+    Path("C:/Windows/Fonts/arial.ttf"),
+)
 
 
 class DocumentService:
@@ -72,9 +87,7 @@ class DocumentService:
         description: str | None = None,
         template_format: str = "docx_text_v1",
         output_filename_template: str = "{{ card.display_name }}.docx",
-        output_content_type: str = (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        output_content_type: str = _DOCX_CONTENT_TYPE,
     ) -> DocumentTemplate:
         self._require_schema_permission(actor_user_id, registry_id)
         self._validate_template_format(template_format)
@@ -159,9 +172,7 @@ class DocumentService:
                     output_filename_template,
                     "output filename template",
                 ),
-                output_content_type=(
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                ),
+                output_content_type=_DOCX_CONTENT_TYPE,
                 created_by=actor_user_id,
                 updated_by=actor_user_id,
             )
@@ -394,6 +405,104 @@ class DocumentService:
             AuditService(self.session).record_user_event(
                 actor_user_id=actor_user_id,
                 action="generated_document_generate",
+                object_type="generated_document",
+                object_id=generated.id,
+                new_data_json={
+                    "card_id": str(card_read.card_id),
+                    "template_id": str(template.id),
+                    "template_version_id": (
+                        str(template_version.id) if template_version is not None else None
+                    ),
+                    "stored_file_id": str(stored_file.id),
+                    "content_type": stored_file.content_type,
+                },
+            )
+            return generated
+        except Exception:
+            with suppress(Exception):
+                self.storage.delete_bytes(stored_info.storage_key)
+            raise
+
+    def generate_pdf_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        card_id: UUID,
+        title: str | None = None,
+    ) -> GeneratedDocument:
+        template = self._get_active_template(template_id)
+        try:
+            card_read = CardService(self.session).read_card_for_actor(
+                actor_user_id=actor_user_id,
+                card_id=card_id,
+            )
+        except CardServiceError as exc:
+            raise DocumentServiceError(str(exc)) from exc
+        if template.registry_id != card_read.registry_id:
+            raise DocumentServiceError("Document template does not belong to the card registry.")
+        self._require_card_manage_permission(
+            actor_user_id,
+            card_read.organization_id,
+            registry_id=card_read.registry_id,
+        )
+
+        template_version = self._latest_template_version(template.id)
+        template_format = (
+            template_version.template_format
+            if template_version is not None
+            else template.template_format
+        )
+        if template_format != "docx_text_v1":
+            raise DocumentServiceError(
+                "PDF conversion supports docx_text_v1 templates only in this phase."
+            )
+
+        render_context = _RenderContext(card=card_read)
+        output_filename = self._pdf_output_filename(
+            self._render_plain_text_template(
+                template.output_filename_template,
+                render_context,
+            )
+        )
+        template_body = (
+            template_version.template_body
+            if template_version is not None
+            else template.template_body
+        )
+        rendered_text = self._render_plain_text_template(template_body or "", render_context)
+        content = self._build_pdf_from_text(rendered_text)
+        stored_info = self.storage.write_bytes(content)
+        try:
+            stored_file = StoredFile(
+                storage_backend=self.storage.backend_name,
+                storage_key=stored_info.storage_key,
+                original_filename=output_filename,
+                content_type=_PDF_CONTENT_TYPE,
+                content_length_bytes=stored_info.content_length_bytes,
+                checksum_sha256=stored_info.checksum_sha256,
+                scanner_status="deferred",
+                scanner_details_json={"source": "generated_document_pdf_v1"},
+                created_by=actor_user_id,
+            )
+            self.session.add(stored_file)
+            self.session.flush()
+            generated = GeneratedDocument(
+                card_id=card_read.card_id,
+                template_id=template.id,
+                template_version_id=(template_version.id if template_version is not None else None),
+                stored_file_id=stored_file.id,
+                title=self._document_title(title, template.name),
+                output_filename=output_filename,
+                content_type=_PDF_CONTENT_TYPE,
+                render_status="generated",
+                generated_by=actor_user_id,
+            )
+            self.session.add(generated)
+            self.session.flush()
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="generated_document_pdf_generate",
                 object_type="generated_document",
                 object_id=generated.id,
                 new_data_json={
@@ -773,6 +882,95 @@ class DocumentService:
             archive.writestr("word/document.xml", document_xml)
         return buffer.getvalue()
 
+    def _build_pdf_from_text(self, rendered_text: str) -> bytes:
+        buffer = BytesIO()
+        page_width = float(A4[0])
+        page_height = float(A4[1])
+        margin_x = float(20 * mm)
+        margin_y = float(20 * mm)
+        font_name = self._pdf_font_name()
+        font_size = 11.0
+        line_height = 15.0
+        max_width = page_width - (margin_x * 2)
+        y_position = page_height - margin_y
+
+        pdf_canvas = canvas.Canvas(buffer, pagesize=A4)
+        pdf_canvas.setTitle("Generated document")
+        pdf_canvas.setFont(font_name, font_size)
+
+        source_lines = rendered_text.splitlines() or [""]
+        for source_line in source_lines:
+            for line in self._wrap_pdf_line(source_line, max_width, font_name, font_size):
+                if y_position < margin_y:
+                    pdf_canvas.showPage()
+                    pdf_canvas.setFont(font_name, font_size)
+                    y_position = page_height - margin_y
+                pdf_canvas.drawString(margin_x, y_position, line)
+                y_position -= line_height
+
+        pdf_canvas.save()
+        return buffer.getvalue()
+
+    def _pdf_font_name(self) -> str:
+        with suppress(KeyError):
+            pdfmetrics.getFont(_PDF_FONT_NAME)
+            return _PDF_FONT_NAME
+        for candidate in _PDF_FONT_CANDIDATES:
+            if candidate.is_file():
+                pdfmetrics.registerFont(TTFont(_PDF_FONT_NAME, str(candidate)))
+                return _PDF_FONT_NAME
+        return "Helvetica"
+
+    def _wrap_pdf_line(
+        self,
+        line: str,
+        max_width: float,
+        font_name: str,
+        font_size: float,
+    ) -> list[str]:
+        if not line:
+            return [""]
+
+        wrapped: list[str] = []
+        current = ""
+        for word in line.split(" "):
+            candidate = word if not current else f"{current} {word}"
+            if pdfmetrics.stringWidth(candidate, font_name, font_size) <= max_width:
+                current = candidate
+                continue
+            if current:
+                wrapped.append(current)
+            if pdfmetrics.stringWidth(word, font_name, font_size) <= max_width:
+                current = word
+                continue
+            chunks = self._split_pdf_word(word, max_width, font_name, font_size)
+            wrapped.extend(chunks[:-1])
+            current = chunks[-1] if chunks else ""
+
+        if current or not wrapped:
+            wrapped.append(current)
+        return wrapped
+
+    def _split_pdf_word(
+        self,
+        word: str,
+        max_width: float,
+        font_name: str,
+        font_size: float,
+    ) -> list[str]:
+        chunks: list[str] = []
+        current = ""
+        for character in word:
+            candidate = f"{current}{character}"
+            if current and pdfmetrics.stringWidth(candidate, font_name, font_size) > max_width:
+                chunks.append(current)
+                current = character
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+        return chunks
+
     def _paragraph_xml(self, text: str) -> str:
         return f'<w:p><w:r><w:t xml:space="preserve">{escape(text)}</w:t></w:r></w:p>'
 
@@ -859,6 +1057,19 @@ class DocumentService:
         if title is not None and title.strip():
             return title.strip()
         return template_name
+
+    def _pdf_output_filename(self, rendered_output_filename: str) -> str:
+        clean_filename = normalize_attachment_filename(rendered_output_filename)
+        lower_filename = clean_filename.lower()
+        if lower_filename.endswith(".docx"):
+            base_name = clean_filename[:-5]
+        elif lower_filename.endswith(".pdf"):
+            base_name = clean_filename[:-4]
+        else:
+            base_name = clean_filename
+        if not base_name.strip("._ "):
+            base_name = "document"
+        return normalize_attachment_filename(f"{base_name}.pdf")
 
     def _clean_required_text(self, value: str, label: str) -> str:
         cleaned = value.strip()

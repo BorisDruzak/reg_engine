@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import pytest
 from alembic import command
 from alembic.config import Config
+from pypdf import PdfReader
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
@@ -66,6 +67,45 @@ def _render_docx_xml_from_card(template_body: str, card: CardRead) -> str:
     content = service._build_docx_from_text(rendered_text)
     with ZipFile(BytesIO(content)) as docx:
         return docx.read("word/document.xml").decode("utf-8")
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    reader = PdfReader(BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def _binary_docx_bytes(body_text: str) -> bytes:
+    escaped_text = body_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    document_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        f'<w:body><w:p><w:r><w:t xml:space="preserve">{escaped_text}</w:t></w:r></w:p>'
+        "</w:body></w:document>"
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.'
+            'wordprocessingml.document.main+xml"/>'
+            "</Types>",
+        )
+        archive.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+            'relationships"><Relationship Id="rId1" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+            'officeDocument" Target="word/document.xml"/></Relationships>',
+        )
+        archive.writestr("word/document.xml", document_xml)
+    return buffer.getvalue()
 
 
 def _card_read_with_file_ref(value: FileRefValueRead | None) -> CardRead:
@@ -292,6 +332,17 @@ def document_service(db_session: Session, tmp_path: Path) -> DocumentService:
     )
 
 
+def test_pdf_renderer_supports_cyrillic_text() -> None:
+    service = object.__new__(DocumentService)
+
+    content = service._build_pdf_from_text("Карточка: Тест\nПоле: Значение")
+
+    assert content.startswith(b"%PDF")
+    extracted_text = _extract_pdf_text(content)
+    assert "Карточка: Тест" in extracted_text
+    assert "Поле: Значение" in extracted_text
+
+
 def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:
     attachment_id = uuid4()
     card = _card_read_with_file_ref(
@@ -435,6 +486,88 @@ def test_generated_document_renders_schema_driven_card_data_to_storage(
         )
     )
     assert audit_event is not None
+
+
+def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
+    db_session: Session,
+    document_service: DocumentService,
+) -> None:
+    context = _document_context(db_session)
+    template = document_service.create_template_for_actor(
+        actor_user_id=context["schema_admin"].id,
+        registry_id=context["registry"].id,
+        code="card-summary-pdf",
+        name="PDF summary",
+        template_body=(
+            "Карточка: {{ card.display_name }}\n"
+            "Поле: {{ fields.main.full_name }}\n"
+            "ID: {{ card.id }}"
+        ),
+        output_filename_template="{{ card.display_name }}.docx",
+    )
+
+    generated = document_service.generate_pdf_for_actor(
+        actor_user_id=context["card_admin"].id,
+        template_id=template.id,
+        card_id=context["card"].id,
+        title="PDF summary",
+    )
+
+    stored_file = db_session.get(StoredFile, generated.stored_file_id)
+    card_read = CardService(db_session).read_card_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+    )
+    field_value = card_read.fields["main.full_name"].value
+    assert stored_file is not None
+    assert generated.card_id == context["card"].id
+    assert generated.template_id == template.id
+    assert generated.content_type == "application/pdf"
+    assert generated.output_filename == f"{context['card'].display_name}.pdf"
+    assert stored_file.original_filename == f"{context['card'].display_name}.pdf"
+    assert stored_file.content_type == "application/pdf"
+
+    content = document_service.read_generated_document_content_for_actor(
+        actor_user_id=context["card_admin"].id,
+        generated_document_id=generated.id,
+    )
+    assert content.startswith(b"%PDF")
+    extracted_text = _extract_pdf_text(content)
+    assert f"Карточка: {context['card'].display_name}" in extracted_text
+    assert f"Поле: {field_value}" in extracted_text
+    assert str(context["card"].id) in extracted_text
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "generated_document",
+            AuditEvent.object_id == generated.id,
+            AuditEvent.action == "generated_document_pdf_generate",
+        )
+    )
+    assert audit_event is not None
+
+
+def test_generated_pdf_rejects_binary_template_until_converter_boundary(
+    db_session: Session,
+    document_service: DocumentService,
+) -> None:
+    context = _document_context(db_session)
+    template, _version = document_service.create_binary_template_for_actor(
+        actor_user_id=context["schema_admin"].id,
+        registry_id=context["registry"].id,
+        code="binary-pdf",
+        name="Binary PDF",
+        original_filename="binary-template.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        content=_binary_docx_bytes("Binary {{ card.display_name }}"),
+    )
+
+    with pytest.raises(DocumentServiceError, match="PDF conversion supports docx_text_v1"):
+        document_service.generate_pdf_for_actor(
+            actor_user_id=context["card_admin"].id,
+            template_id=template.id,
+            card_id=context["card"].id,
+        )
 
 
 def test_generated_document_rejects_unknown_placeholder(

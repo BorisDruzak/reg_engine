@@ -708,7 +708,7 @@ tr:last-child td {
 }
 
 .document-generator {
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
 }
 
 .template-manager {

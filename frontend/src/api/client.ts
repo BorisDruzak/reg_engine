@@ -680,6 +680,19 @@ export async function generateDocument(
   });
 }
 
+export async function generatePdfDocument(
+  token: string,
+  cardId: string,
+  templateId: string,
+  title?: string,
+) {
+  return apiRequest<GeneratedDocumentRead>(`/api/v1/cards/${cardId}/generated-documents/pdf`, {
+    method: "POST",
+    token,
+    body: { template_id: templateId, title: title?.trim() ? title.trim() : null },
+  });
+}
+
 export async function downloadGeneratedDocumentContent(token: string, generatedDocumentId: string) {
   return downloadFile(
     `/api/v1/generated-documents/${generatedDocumentId}/content`,

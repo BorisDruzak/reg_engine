@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 02:25:21 +05:00
+- Generated: 2026-06-30 02:50:49 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -135,6 +135,7 @@
 - `docs/ADR/0006-generated-document-templates.md`
 - `docs/ADR/0007-file-ref-dynamic-field.md`
 - `docs/ADR/0008-binary-docx-template-versioning.md`
+- `docs/ADR/0009-pdf-conversion.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`

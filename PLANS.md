@@ -61,6 +61,7 @@ Completed phases:
 - Phase 2J.6: `file_ref` Generated Document Rendering.
 - Phase 2J.7: `file_ref` Live Validation.
 - Phase 2M: Binary `.docx` Template Upload And Template Versioning.
+- Phase 2N: PDF Conversion.
 
 Current stop point:
 
@@ -126,10 +127,13 @@ Current stop point:
   `0009_document_template_versions` after fresh backup, preflight,
   disposable PostgreSQL verification, Alembic upgrade, post-checks, backend
   service restart, and server check.
-- Next planned work is Phase 2N PDF conversion.
-- Later explicit phases remain Phase 2N PDF conversion, Phase 3
-  import/export, Phase 4 reports, and Phase 5 MCP.
-- PDF conversion, import/export, reports, and MCP remain deferred until their explicit phases.
+- Phase 2N PDF conversion is completed for authenticated `docx_text_v1`
+  generated documents. Binary `.docx` layout conversion to PDF and public
+  generated-document workflows remain deferred.
+- Next planned work is Phase 3 import/export.
+- Later explicit phases remain Phase 3 import/export, Phase 4 reports, and
+  Phase 5 MCP.
+- Import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -250,9 +254,14 @@ Completed Phase 2 work:
   `0009_document_template_versions`, authenticated binary `.docx` template
   upload, binary version upload/list API, generated-document
   `template_version_id`, and latest-version rendering for `docx_binary_v1`.
-  Public document workflows, binary template download, PDF conversion,
-  advanced Word run/content-control templating, import/export, reports, and MCP
-  remain deferred.
+  Public document workflows, binary template download, binary `.docx` layout
+  conversion to PDF, advanced Word run/content-control templating,
+  import/export, reports, and MCP remain deferred.
+- Phase 2N added authenticated PDF generation for `docx_text_v1` templates.
+  PDFs are rendered directly from schema-driven text placeholders, stored
+  through the generated-document storage abstraction, listed/downloaded through
+  existing generated-document workflows, exposed in the Russian card document
+  UI, and audited with `generated_document_pdf_generate`.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
@@ -1250,20 +1259,37 @@ Known limitations:
   parts when placeholders are contiguous text; advanced Word run merging,
   content controls, tables/repeated sections, and conditional blocks are
   deferred.
-- PDF conversion, public generated-document workflows, import/export, reports,
-  and MCP remain deferred.
+- Binary `.docx` layout conversion to PDF, public generated-document
+  workflows, import/export, reports, and MCP remain deferred.
 
 ### Phase 2N: PDF Conversion
 
+Status: completed.
+
 Purpose: add PDF generation after generated-document and template boundaries are stable.
 
-Planned scope:
+Completed scope:
 
-- Decide renderer/converter strategy.
-- Add PDF generation for supported generated documents.
-- Store generated PDFs through storage abstraction.
-- Add audit and access checks.
-- Avoid adding direct public-link PDF flows unless explicitly approved.
+- Accepted ADR `docs/ADR/0009-pdf-conversion.md`.
+- Chose a direct backend PDF renderer for `docx_text_v1` templates.
+- Added authenticated API:
+  `POST /api/v1/cards/{card_id}/generated-documents/pdf`.
+- Stored generated PDFs through the existing generated-document storage
+  abstraction and `generated_documents` metadata.
+- Kept the same `cards.manage` generation permission and generated-document
+  read/download/archive rules.
+- Added Russian-first card document UI control `Сформировать PDF`.
+- Added tests for Cyrillic PDF rendering, service-level PDF generation, API
+  PDF generation/download, binary-template rejection, and frontend UI flow.
+- Verified PostgreSQL-backed PDF service/API tests on disposable
+  `*_test` database.
+
+Known limitations:
+
+- Binary `.docx` layout-faithful conversion to PDF is not implemented.
+- Public-link PDF generation/download is not exposed.
+- Advanced Word layout, headers/footers, tables, images, content controls, and
+  repeated sections remain deferred to a future converter boundary.
 
 ### Phase 3: Import And Export
 

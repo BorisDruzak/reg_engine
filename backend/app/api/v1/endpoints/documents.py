@@ -230,6 +230,30 @@ def generate_document(
     return _generated_document_to_read(generated)
 
 
+@router.post(
+    "/cards/{card_id}/generated-documents/pdf",
+    response_model=GeneratedDocumentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def generate_pdf_document(
+    card_id: UUID,
+    payload: GeneratedDocumentCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> GeneratedDocumentRead:
+    service = _document_service(session)
+    try:
+        generated = service.generate_pdf_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=payload.template_id,
+            card_id=card_id,
+            title=payload.title,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _generated_document_to_read(generated)
+
+
 @router.get("/cards/{card_id}/generated-documents", response_model=GeneratedDocumentListRead)
 def list_generated_documents(
     card_id: UUID,

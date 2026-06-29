@@ -44,8 +44,8 @@ Target system:
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, and public-link attachment list/upload/download APIs.
 - Current frontend scope has a bearer-authenticated admin shell with organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive, repeatable block-instance add/archive, per-field and bulk dynamic value editing workflows, authenticated public-link list/create/disable controls with attachment-upload limits, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, audit reads, public-link card editing, public-link attachment list/upload/download, and full Russian UI browser validation for the core admin setup path.
-- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. PDF conversion remains deferred until its implementation phase.
-- Import/export, reports, PDF conversion, and MCP are later phases.
+- Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
+- Import/export, reports, and MCP are later phases.
 
 ## Local Setup
 
@@ -231,7 +231,7 @@ The current logout flow clears browser storage in the frontend and validates the
 
 ## Phase 2 Attachment Storage Decision
 
-Phase 2 starts with card-level attachments. Generated `.docx` documents now have backend APIs and authenticated card-workspace UI. Public-link attachment list/upload/download is available for active public edit links. Authenticated REST card value endpoints and Russian-first authenticated card editor support `file_ref` set/clear/read metadata through existing card attachments. `docx_text_v1` renders `file_ref` values as safe attachment title/original filename text, including an archive marker for archived referenced attachments. Binary `.docx` template upload and template versioning are available through authenticated API. PDF conversion and public generated-document workflows remain deferred.
+Phase 2 starts with card-level attachments. Generated `.docx` documents now have backend APIs and authenticated card-workspace UI. Public-link attachment list/upload/download is available for active public edit links. Authenticated REST card value endpoints and Russian-first authenticated card editor support `file_ref` set/clear/read metadata through existing card attachments. `docx_text_v1` renders `file_ref` values as safe attachment title/original filename text, including an archive marker for archived referenced attachments. Binary `.docx` template upload and template versioning are available through authenticated API. Authenticated PDF generation is available for `docx_text_v1` templates. Binary `.docx` layout conversion to PDF and public generated-document workflows remain deferred.
 
 The approved storage direction is a backend storage abstraction with a local filesystem backend configured outside Git. Runtime storage roots and limits must be set through environment variables or external runtime env files, never committed defaults.
 
@@ -325,6 +325,7 @@ Architecture references:
 - `docs/ADR/0006-generated-document-templates.md`
 - `docs/ADR/0007-file-ref-dynamic-field.md`
 - `docs/ADR/0008-binary-docx-template-versioning.md`
+- `docs/ADR/0009-pdf-conversion.md`
 - `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
 - `docs/PHASE_2C_GENERATED_DOCUMENT_TEMPLATES.md`
 
@@ -353,8 +354,7 @@ and registry scope. Generated document reads use card visibility.
 
 Do not commit template files, generated documents, or real personal data.
 Generated outputs use storage prefix `generated_documents`. Public-link document
-generate/upload/download, PDF conversion, and binary `.docx` template upload
-remain deferred. Phase 2J.0 records
+generate/upload/download remains deferred. Phase 2J.0 records
 the accepted `file_ref` design in
 `docs/ADR/0007-file-ref-dynamic-field.md`; Phase 2J.1 adds the database,
 SQLAlchemy metadata, migration, and schema type registration foundation.
@@ -379,6 +379,7 @@ DELETE /api/v1/document-templates/{template_id}
 GET    /api/v1/document-templates/{template_id}/versions
 POST   /api/v1/document-templates/{template_id}/versions/upload
 POST   /api/v1/cards/{card_id}/generated-documents
+POST   /api/v1/cards/{card_id}/generated-documents/pdf
 GET    /api/v1/cards/{card_id}/generated-documents
 GET    /api/v1/generated-documents/{generated_document_id}
 GET    /api/v1/generated-documents/{generated_document_id}/content
@@ -407,8 +408,8 @@ the existing authenticated API.
 
 Public-link screens expose attachment list/upload/download in Phase 2H, but do
 not expose template management, document generation, generated-document download,
-or attachment archive/delete controls. Binary `.docx` template upload, template
-versioning, PDF conversion, and `file_ref` remain deferred.
+or attachment archive/delete controls. Binary `.docx` layout conversion to PDF
+and public generated-document workflows remain deferred.
 
 ## Phase 2H Public-Link Attachment Workflows
 
@@ -513,9 +514,11 @@ the storage abstraction under the `document_templates` prefix. Version read
 responses expose safe metadata and omit storage keys, checksums, and stored file
 ids. Generated documents record the `template_version_id` used for rendering.
 The first binary renderer replaces supported placeholders in `.docx` XML parts
-when placeholders are contiguous text; PDF conversion, public document flows,
-template download, and advanced Word run/content-control templating remain
-deferred.
+when placeholders are contiguous text. Authenticated PDF generation renders
+`docx_text_v1` templates directly to `application/pdf` and stores them as
+generated documents. Binary `.docx` layout conversion to PDF, public document
+flows, template download, and advanced Word run/content-control templating
+remain deferred.
 
 After deployment, open the server service root URL in a browser. The API docs
 remain available at `/docs`.
@@ -641,8 +644,8 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No import/export.
 - No public-link attachment archive/delete.
 - No public generated-document workflows.
-- No PDF conversion.
+- No binary `.docx` layout conversion to PDF.
 - No MCP.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, Phase 2K.1 added organization unit management API, Phase 2K.2 added registry update/archive API, Phase 2K.3 added card block instance archive API, Phase 2K.4 added atomic bulk card values API, and Phase 2K.5 completed API coverage/live validation. Phase 2L.0 added the shared admin mutation frontend foundation, Phase 2L.1 added organization create/edit/archive UI, Phase 2L.2 added user create/edit/password-reset/archive UI, Phase 2L.3 added access-grant issue/revoke UI, Phase 2L.4 added registry create/update/archive UI, Phase 2L.5 added schema builder UI for form blocks and fields, Phase 2L.6 added reference-list/item management UI plus select/multi_select reference-list wiring, Phase 2L.7 added card create/metadata/archive, repeatable block-instance, and bulk field-value UI, Phase 2L.8 added authenticated public-link list/create/disable controls with separate attachment-upload limit UI, Phase 2L.9 added browser validation for the full Russian admin setup path, Phase 2J.0 accepted the `file_ref` dynamic field type ADR, Phase 2J.1 added the `file_ref` database/model foundation, Phase 2J.2 added backend service set/read/clear behavior, Phase 2J.3 added transfer behavior, Phase 2J.4 added REST card value API support, Phase 2J.5 added authenticated frontend editing, Phase 2J.6 added generated-document text rendering for `file_ref`, Phase 2J.7 completed live validation, and Phase 2M added binary `.docx` template upload/versioning through authenticated API. Import/export, PDF conversion, reports, and MCP remain later phases and require explicit approval before implementation.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card field editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, Phase 2K.1 added organization unit management API, Phase 2K.2 added registry update/archive API, Phase 2K.3 added card block instance archive API, Phase 2K.4 added atomic bulk card values API, and Phase 2K.5 completed API coverage/live validation. Phase 2L.0 added the shared admin mutation frontend foundation, Phase 2L.1 added organization create/edit/archive UI, Phase 2L.2 added user create/edit/password-reset/archive UI, Phase 2L.3 added access-grant issue/revoke UI, Phase 2L.4 added registry create/update/archive UI, Phase 2L.5 added schema builder UI for form blocks and fields, Phase 2L.6 added reference-list/item management UI plus select/multi_select reference-list wiring, Phase 2L.7 added card create/metadata/archive, repeatable block-instance, and bulk field-value UI, Phase 2L.8 added authenticated public-link list/create/disable controls with separate attachment-upload limit UI, Phase 2L.9 added browser validation for the full Russian admin setup path, Phase 2J.0 accepted the `file_ref` dynamic field type ADR, Phase 2J.1 added the `file_ref` database/model foundation, Phase 2J.2 added backend service set/read/clear behavior, Phase 2J.3 added transfer behavior, Phase 2J.4 added REST card value API support, Phase 2J.5 added authenticated frontend editing, Phase 2J.6 added generated-document text rendering for `file_ref`, Phase 2J.7 completed live validation, Phase 2M added binary `.docx` template upload/versioning through authenticated API, and Phase 2N added authenticated PDF generation for `docx_text_v1` templates. Import/export, reports, and MCP remain later phases and require explicit approval before implementation.

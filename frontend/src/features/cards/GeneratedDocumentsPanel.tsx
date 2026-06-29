@@ -7,6 +7,7 @@ import {
   createDocumentTemplate,
   downloadGeneratedDocumentContent,
   generateDocument,
+  generatePdfDocument,
   listDocumentTemplates,
   listGeneratedDocuments,
 } from "@/api/client";
@@ -46,6 +47,9 @@ export function GeneratedDocumentsPanel({
     enabled: Boolean(token && cardId),
   });
   const selectedTemplateId = templateId || templatesQuery.data?.items[0]?.id || "";
+  const selectedTemplate = (templatesQuery.data?.items ?? []).find(
+    (template) => template.id === selectedTemplateId,
+  );
   const canCreateTemplate = Boolean(
     templateCode.trim() &&
     templateName.trim() &&
@@ -98,6 +102,22 @@ export function GeneratedDocumentsPanel({
     },
     onError: (error) => setLocalError(errorText(error)),
   });
+  const generatePdfMutation = useMutation({
+    mutationFn: () =>
+      generatePdfDocument(
+        token,
+        cardId,
+        selectedTemplateId,
+        selectedTemplate ? `${selectedTemplate.name} PDF` : undefined,
+      ),
+    onSuccess: async () => {
+      setMessage(uiText.pdfGenerated);
+      setLocalError(null);
+      await queryClient.invalidateQueries({ queryKey: ["generated-documents", token, cardId] });
+      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+    },
+    onError: (error) => setLocalError(errorText(error)),
+  });
   const downloadMutation = useMutation({
     mutationFn: (document: GeneratedDocumentRead) =>
       downloadGeneratedDocumentContent(token, document.id),
@@ -142,6 +162,14 @@ export function GeneratedDocumentsPanel({
           onClick={() => generateMutation.mutate()}
         >
           {uiText.generateDocument}
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!selectedTemplateId || generatePdfMutation.isPending}
+          onClick={() => generatePdfMutation.mutate()}
+        >
+          {uiText.generatePdfDocument}
         </button>
       </div>
       {templatesQuery.data?.items.length === 0 && (

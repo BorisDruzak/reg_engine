@@ -10,6 +10,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from pypdf import PdfReader
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
@@ -155,6 +156,11 @@ def _binary_docx_bytes(body_text: str) -> bytes:
         )
         archive.writestr("word/document.xml", document_xml)
     return buffer.getvalue()
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    reader = PdfReader(BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 def _create_user(session: Session, email: str, *, is_superuser: bool = False) -> User:
@@ -485,3 +491,62 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         ).all()
     )
     assert {"document_template_create", "document_template_version_create"} <= audit_actions
+
+
+def test_generated_document_api_supports_pdf_generation_for_text_template(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _document_api_context(db_session)
+
+    template_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/document-templates",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "code": "summary-pdf",
+            "name": "PDF summary",
+            "template_body": "Карточка: {{ card.display_name }}\nПоле: {{ fields.main.title }}",
+        },
+    )
+    assert template_response.status_code == 201, template_response.text
+    template_payload = template_response.json()
+
+    pdf_response = api_client.post(
+        f"/api/v1/cards/{context['card'].id}/generated-documents/pdf",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"template_id": template_payload["id"], "title": "PDF summary"},
+    )
+    assert pdf_response.status_code == 201, pdf_response.text
+    pdf_payload = pdf_response.json()
+    assert pdf_payload["card_id"] == str(context["card"].id)
+    assert pdf_payload["template_id"] == template_payload["id"]
+    assert pdf_payload["content_type"] == "application/pdf"
+    assert pdf_payload["output_filename"] == f"{context['card'].display_name}.pdf"
+    assert pdf_payload["archived_at"] is None
+
+    download_response = api_client.get(
+        f"/api/v1/generated-documents/{pdf_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert download_response.status_code == 200, download_response.text
+    assert download_response.headers["content-type"] == "application/pdf"
+    assert download_response.headers["x-document-filename"].endswith(".pdf")
+    assert not download_response.headers["x-document-filename"].endswith(".docx")
+    assert download_response.content.startswith(b"%PDF")
+    extracted_text = _extract_pdf_text(download_response.content)
+    card_read = CardService(db_session).read_card_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+    )
+    field_value = card_read.fields["main.title"].value
+    assert f"Карточка: {context['card'].display_name}" in extracted_text
+    assert f"Поле: {field_value}" in extracted_text
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "generated_document",
+            AuditEvent.object_id == UUID(pdf_payload["id"]),
+            AuditEvent.action == "generated_document_pdf_generate",
+        )
+    )
+    assert audit_event is not None

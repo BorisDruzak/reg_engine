@@ -1299,6 +1299,32 @@ beforeEach(() => {
         }
         return jsonResponse({ items: generatedDocumentItems });
       }
+      if (
+        url.endsWith(
+          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents/pdf",
+        )
+      ) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            template_id: string;
+            title: string | null;
+          };
+          const created = {
+            id: "56565656-5656-4656-8656-565656565656",
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            template_id: payload.template_id,
+            stored_file_id: "78787878-7878-4787-8787-787878787878",
+            title: payload.title ?? "Сводка карточки PDF",
+            output_filename: "Карточка актива.pdf",
+            content_type: "application/pdf",
+            render_status: "generated",
+            created_at: "2026-06-28T12:04:00Z",
+            archived_at: null,
+          };
+          generatedDocumentItems = [created, ...generatedDocumentItems];
+          return jsonResponse(created, { status: 201 });
+        }
+      }
       if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/generated-documents")) {
         return jsonResponse({ items: [] });
       }
@@ -3040,6 +3066,11 @@ test("manages card attachments and generated documents in Russian UI", async () 
   expect(
     screen.getByRole("button", { name: "Скачать документ Сводка карточки" }),
   ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сформировать PDF" }));
+  expect(await screen.findByText("PDF сформирован")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Скачать документ Сводка карточки PDF" }),
+  ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать документ Сводка карточки" }));
   expect(await screen.findByText("Документ скачан")).toBeInTheDocument();
 
@@ -3074,6 +3105,27 @@ test("manages card attachments and generated documents in Russian UI", async () 
         }
         const body = JSON.parse(String(init.body ?? "{}")) as { template_id?: string };
         return body.template_id === "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents/pdf",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          template_id?: string;
+          title?: string;
+        };
+        return (
+          body.template_id === "dddddddd-dddd-4ddd-8ddd-dddddddddddd" &&
+          body.title === "Сводка карточки PDF"
+        );
       }),
     ).toBe(true);
   });

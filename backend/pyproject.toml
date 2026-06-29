@@ -16,6 +16,7 @@ dependencies = [
     "alembic>=1.13,<2.0",
     "psycopg[binary]>=3.2,<4.0",
     "python-multipart>=0.0.20,<1.0",
+    "reportlab>=4.2,<5.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,7 @@ dev = [
     "httpx>=0.27,<1.0",
     "ruff>=0.6,<1.0",
     "mypy>=1.11,<2.0",
+    "pypdf>=5.0,<7.0",
     "pre-commit>=3.8,<5.0",
 ]
 

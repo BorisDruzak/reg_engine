@@ -38,6 +38,7 @@ else
   git branch --set-upstream-to="origin/$Branch" "$Branch" >/dev/null 2>&1 || true
   git pull --ff-only origin "$Branch"
 fi
+backend/.venv/bin/python -m pip install -e backend
 git status --short --branch
 git log --oneline -1
 "@
