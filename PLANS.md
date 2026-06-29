@@ -40,6 +40,8 @@ Completed phases:
 - Phase 2K.2: Registry Update And Archive API.
 - Phase 2K.3: Card Block Instance Archive API.
 - Phase 2K.4: Bulk Card Values Update API.
+- Phase 2K.5: API Coverage And Live Validation.
+- Phase 2K: Core Backend API Completeness.
 
 Current stop point:
 
@@ -50,13 +52,14 @@ Current stop point:
 - Phase 2K.2 Registry Update And Archive API is completed.
 - Phase 2K.3 Card Block Instance Archive API is completed.
 - Phase 2K.4 Bulk Card Values Update API is completed.
+- Phase 2K.5 API Coverage And Live Validation is completed.
+- Phase 2K Core Backend API Completeness is completed.
 - Phase 2J remains planned for the `file_ref` dynamic field type, but it may be
-  deferred behind core admin workflows if product usability is the priority.
-- Phase 2K.5 API Coverage And Live Validation is the next backend/API
-  validation slice.
-- Phase 2L is the next frontend product-completeness phase: full admin CRUD UI
+  deferred behind Phase 2L core admin workflows unless explicitly reprioritized.
+- Phase 2L is the current next frontend product-completeness phase: full admin CRUD UI
   for organizations, users, access grants, registries, schema builder, and
   cards.
+- Phase 2L.0 Admin UI Mutation Foundation is the next implementation slice.
 - PDF conversion, binary `.docx` template upload/versioning, import/export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -75,11 +78,14 @@ Current stop point:
 
 ## Current Admin UI Gap
 
-The backend already exposes most core REST operations for organizations, users,
-access grants, blocks, fields, reference lists/items, cards, attachments,
-documents, public links, and audit reads. Phase 2K.0 records the current API
-readiness matrix in `docs/PHASE_2K_ADMIN_API_READINESS.md`. No planned Phase 2K
-backend API gaps remain before the Phase 2K.5 validation slice.
+The backend exposes the core REST operations needed for Phase 2L admin UI
+foundation: organizations, org units, users, roles, permissions, access grants,
+registries, blocks, fields, reference lists/items, cards, repeatable block
+instances, bulk card values, attachments, generated documents, public links,
+and audit reads. Phase 2K.0 records the API readiness matrix in
+`docs/PHASE_2K_ADMIN_API_READINESS.md`. Phase 2K.5 completed the API coverage
+and live validation checkpoint. No planned Phase 2K backend API gaps remain
+before Phase 2L.
 
 The current authenticated frontend is not yet a complete admin workspace:
 
@@ -95,8 +101,8 @@ The current authenticated frontend is not yet a complete admin workspace:
 - current UI is useful for inspection and partial editing, not yet for full
   setup from an empty database.
 
-Phase 2K and Phase 2L exist to close these gaps before advanced document,
-import/export, report, or MCP phases.
+Phase 2L exists to close the remaining frontend workflow gaps before advanced
+document, import/export, report, or MCP phases.
 
 ## Phase 2: Documents And Attachments
 
@@ -283,7 +289,7 @@ Phase 2J must not implement:
 
 ## Phase 2K: Core Backend API Completeness
 
-Status: in progress.
+Status: completed.
 
 Purpose: close remaining non-document backend API gaps that are needed for a complete registry administration workflow before moving to advanced documents, import/export, reports, or MCP.
 
@@ -437,6 +443,8 @@ Completion evidence:
 
 ### Phase 2K.5: API Coverage And Live Validation
 
+Status: completed.
+
 Required work:
 
 - Add integration tests for org units, registry update/archive, block-instance archive, and bulk card values.
@@ -448,6 +456,21 @@ Acceptance criteria:
 - Local backend checks pass.
 - PostgreSQL-backed tests pass against disposable database.
 - No unrelated document/import/report/MCP work is introduced.
+
+Completion evidence:
+
+- Local full check passed with `scripts/check.ps1 -SkipRemote` after Phase
+  2K.4 implementation.
+- Disposable PostgreSQL validation passed against `reg_engine_test` with
+  `backend/tests/test_api_phase_2k.py -q`: 13 tests passed.
+- Server checkout was synchronized to `origin/main` at commit `e834482e`.
+- Server healthcheck passed after service restart.
+- Live OpenAPI validation confirmed Phase 2K routes for org units, registry
+  update/archive, card block instance archive, and bulk card values update.
+- No migration was required for Phase 2K.5; production database schema was not
+  changed in this validation slice.
+- No frontend implementation, import/export, PDF conversion, reports, or MCP
+  work was introduced.
 
 ## Phase 2L: Core Admin CRUD UI
 
