@@ -1,13 +1,23 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
-from app.schemas.import_export import CardImportPreviewRead, CardImportPreviewRequest
-from app.services.import_export import CardExportService, CardImportPreviewService
+from app.schemas.import_export import (
+    CardImportCommitRead,
+    CardImportCommitRequest,
+    CardImportPreviewRead,
+    CardImportPreviewRequest,
+)
+from app.services.import_export import (
+    CardExportService,
+    CardImportCommitService,
+    CardImportCommitValidationError,
+    CardImportPreviewService,
+)
 
 router = APIRouter(tags=["import-export"])
 
@@ -72,3 +82,27 @@ def preview_card_import(
     except Exception as exc:
         raise_service_http_error(exc)
     return CardImportPreviewRead.model_validate(preview)
+
+
+@router.post(
+    "/registries/{registry_id}/imports/cards/commit",
+    response_model=CardImportCommitRead,
+)
+def commit_card_import(
+    registry_id: UUID,
+    payload: CardImportCommitRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardImportCommitRead:
+    try:
+        result = CardImportCommitService(session).commit_cards_csv_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            csv_content=payload.csv_content,
+        )
+    except CardImportCommitValidationError as exc:
+        detail = CardImportPreviewRead.model_validate(exc.preview).model_dump(mode="json")
+        raise HTTPException(status_code=400, detail=detail) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardImportCommitRead.model_validate(result)

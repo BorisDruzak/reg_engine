@@ -2,6 +2,7 @@ import csv
 import io
 import os
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -597,4 +598,136 @@ def test_card_csv_import_preview_rejects_missing_required_columns(
     assert response.json()["detail"] == (
         "CSV import preview requires columns: block_code, card_id, display_name, "
         "field_code, organization_id, value."
+    )
+
+
+def test_card_csv_import_commit_creates_updates_and_records_audit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    csv_content = "\n".join(
+        [
+            "import_key,card_id,organization_id,display_name,block_code,field_code,value",
+            f",{context['child_card'].id},,,main,status,committed update",
+            (
+                f"new-1,,{context['child_card'].organization_id},Committed import card,"
+                "metrics,priority,10.5"
+            ),
+            (
+                f"new-1,,{context['child_card'].organization_id},Committed import card,"
+                "main,status,created status"
+            ),
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/commit",
+        json={"csv_content": csv_content},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["format_version"] == "card_import_commit_v1"
+    assert payload["summary"] == {
+        "total_rows": 3,
+        "committed_rows": 3,
+        "created_cards": 1,
+        "updated_cards": 1,
+        "field_values_written": 3,
+    }
+
+    card_service = CardService(db_session)
+    updated_card = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=context["child_card"].id,
+    )
+    assert updated_card.blocks["main"].instances[0].fields["status"].value == "committed update"
+
+    created_card = db_session.scalar(
+        select(Card).where(
+            Card.registry_id == context["registry"].id,
+            Card.display_name == "Committed import card",
+        )
+    )
+    assert created_card is not None
+    created_read = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=created_card.id,
+    )
+    assert created_read.blocks["main"].instances[0].fields["status"].value == "created status"
+    assert created_read.blocks["metrics"].instances[0].fields["priority"].value == Decimal("10.5")
+    assert payload["cards"] == [
+        {"card_id": str(context["child_card"].id), "action": "update", "import_key": None},
+        {"card_id": str(created_card.id), "action": "create", "import_key": "new-1"},
+    ]
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "import_commit",
+            AuditEvent.object_type == "registry",
+            AuditEvent.object_id == context["registry"].id,
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.new_data_json == {
+        "import_type": "cards",
+        "format": "csv",
+        "total_rows": 3,
+        "committed_rows": 3,
+        "created_cards": 1,
+        "updated_cards": 1,
+        "field_values_written": 3,
+    }
+
+
+def test_card_csv_import_commit_rejects_invalid_batch_without_partial_writes(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    card_count_before = db_session.scalar(select(func.count()).select_from(Card))
+    field_value_count_before = db_session.scalar(select(func.count()).select_from(FieldValue))
+    audit_count_before = db_session.scalar(
+        select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "import_commit")
+    )
+    csv_content = "\n".join(
+        [
+            "import_key,card_id,organization_id,display_name,block_code,field_code,value",
+            f",{context['child_card'].id},,,main,status,should not persist",
+            (
+                f"new-1,,{context['child_card'].organization_id},Rejected import card,"
+                "metrics,priority,not-a-number"
+            ),
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/commit",
+        json={"csv_content": csv_content},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 400, response.text
+    detail = response.json()["detail"]
+    assert detail["format_version"] == "card_import_preview_v1"
+    assert detail["summary"]["invalid_rows"] == 1
+    assert detail["rows"][1]["errors"] == ["Number fields require a numeric value."]
+
+    card_service = CardService(db_session)
+    updated_card = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=context["child_card"].id,
+    )
+    assert updated_card.blocks["main"].instances[0].fields["status"].value == "ready"
+    assert db_session.scalar(select(func.count()).select_from(Card)) == card_count_before
+    assert (
+        db_session.scalar(select(func.count()).select_from(FieldValue)) == field_value_count_before
+    )
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "import_commit")
+        )
+        == audit_count_before
     )

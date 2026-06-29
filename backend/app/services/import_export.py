@@ -25,6 +25,7 @@ from app.services.registry_schema import RegistrySchemaService
 
 CARD_EXPORT_FORMAT_VERSION = "card_export_v1"
 CARD_IMPORT_PREVIEW_FORMAT_VERSION = "card_import_preview_v1"
+CARD_IMPORT_COMMIT_FORMAT_VERSION = "card_import_commit_v1"
 CARD_IMPORT_REQUIRED_COLUMNS = {
     "card_id",
     "organization_id",
@@ -37,6 +38,14 @@ CARD_IMPORT_REQUIRED_COLUMNS = {
 
 class ImportExportServiceError(ValueError):
     """Raised when import/export operations receive invalid parameters."""
+
+
+class CardImportCommitValidationError(ImportExportServiceError):
+    """Raised when an import commit batch has preview validation errors."""
+
+    def __init__(self, preview: dict[str, Any]) -> None:
+        super().__init__("CSV import contains invalid rows.")
+        self.preview = preview
 
 
 class CardExportService:
@@ -361,7 +370,10 @@ class CardImportPreviewService:
             required = ", ".join(sorted(CARD_IMPORT_REQUIRED_COLUMNS))
             raise ImportExportServiceError(f"CSV import preview requires columns: {required}.")
         return [
-            (index, {key: (value or "").strip() for key, value in row.items()})
+            (
+                index,
+                {key: (value or "").strip() for key, value in row.items() if key is not None},
+            )
             for index, row in enumerate(reader, start=2)
         ]
 
@@ -441,9 +453,12 @@ class CardImportPreviewService:
             "card_id": str(card_id) if card_id else None,
             "organization_id": str(organization_id) if organization_id else None,
             "display_name": row["display_name"] or None,
+            "import_key": row.get("import_key") or None,
+            "field_id": field_model.id if field_model is not None else None,
             "field_path": field_path,
             "field_type": field_type,
             "raw_value": row["value"],
+            "parsed_value_for_commit": parsed_value if not errors else None,
             "parsed_value": _serialize_export_value(parsed_value) if not errors else None,
             "errors": errors,
         }
@@ -463,6 +478,147 @@ class CardImportPreviewService:
             errors.append("Card does not belong to the import registry.")
             return None
         return card.organization_id
+
+
+class CardImportCommitService:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def commit_cards_csv_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        csv_content: str,
+    ) -> dict[str, Any]:
+        preview = CardImportPreviewService(self.session).preview_cards_csv_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            csv_content=csv_content,
+        )
+        if preview["summary"]["invalid_rows"]:
+            raise CardImportCommitValidationError(preview)
+
+        groups = self._commit_groups(preview["rows"])
+        committed_cards: list[dict[str, Any]] = []
+        created_cards = 0
+        updated_cards = 0
+        field_values_written = 0
+        card_service = CardService(self.session)
+
+        with self.session.begin_nested():
+            for group in groups:
+                if group["action"] == "create":
+                    card = card_service.create_card_for_actor(
+                        actor_user_id=actor_user_id,
+                        registry_id=registry_id,
+                        organization_id=group["organization_id"],
+                        display_name=group["display_name"],
+                    )
+                    created_cards += 1
+                    committed_cards.append(
+                        {
+                            "card_id": str(card.id),
+                            "action": "create",
+                            "import_key": group["import_key"],
+                        }
+                    )
+                    target_card_id = card.id
+                else:
+                    target_card_id = group["card_id"]
+                    updated_cards += 1
+                    committed_cards.append(
+                        {
+                            "card_id": str(target_card_id),
+                            "action": "update",
+                            "import_key": None,
+                        }
+                    )
+
+                for row in group["rows"]:
+                    card_service.set_field_value_for_actor(
+                        actor_user_id=actor_user_id,
+                        card_id=target_card_id,
+                        field_id=row["field_id"],
+                        value=row["parsed_value_for_commit"],
+                    )
+                    field_values_written += 1
+
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="import_commit",
+                object_type="registry",
+                object_id=registry_id,
+                new_data_json={
+                    "import_type": "cards",
+                    "format": "csv",
+                    "total_rows": preview["summary"]["total_rows"],
+                    "committed_rows": field_values_written,
+                    "created_cards": created_cards,
+                    "updated_cards": updated_cards,
+                    "field_values_written": field_values_written,
+                },
+            )
+
+        return {
+            "format_version": CARD_IMPORT_COMMIT_FORMAT_VERSION,
+            "registry_id": str(registry_id),
+            "summary": {
+                "total_rows": preview["summary"]["total_rows"],
+                "committed_rows": field_values_written,
+                "created_cards": created_cards,
+                "updated_cards": updated_cards,
+                "field_values_written": field_values_written,
+            },
+            "cards": committed_cards,
+        }
+
+    def _commit_groups(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        groups: list[dict[str, Any]] = []
+        groups_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+
+        for row in rows:
+            if row["action"] == "update":
+                key = ("update", str(row["card_id"]))
+                group = groups_by_key.get(key)
+                if group is None:
+                    group = {
+                        "action": "update",
+                        "card_id": UUID(str(row["card_id"])),
+                        "import_key": None,
+                        "rows": [],
+                    }
+                    groups_by_key[key] = group
+                    groups.append(group)
+                group["rows"].append(row)
+                continue
+
+            import_key = row["import_key"] or f"row:{row['row_number']}"
+            key = ("create", import_key)
+            organization_id = UUID(str(row["organization_id"]))
+            display_name = str(row["display_name"])
+            group = groups_by_key.get(key)
+            if group is None:
+                group = {
+                    "action": "create",
+                    "card_id": None,
+                    "import_key": row["import_key"],
+                    "organization_id": organization_id,
+                    "display_name": display_name,
+                    "rows": [],
+                }
+                groups_by_key[key] = group
+                groups.append(group)
+            elif (
+                group["organization_id"] != organization_id or group["display_name"] != display_name
+            ):
+                raise ImportExportServiceError(
+                    "Import rows for the same import_key must use one organization_id "
+                    "and display_name."
+                )
+            group["rows"].append(row)
+
+        return groups
 
 
 def _serialize_export_value(value: object | None) -> object | None:

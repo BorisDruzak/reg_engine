@@ -64,6 +64,7 @@ Completed phases:
 - Phase 2N: PDF Conversion.
 - Phase 3A: Card Export Foundation.
 - Phase 3B: Import Preview And Mapping.
+- Phase 3C: Import Commit And Export Polish.
 
 Current stop point:
 
@@ -140,12 +141,15 @@ Current stop point:
   API slice: CSV preview maps rows by `block_code.field_code`, validates
   organization/card scope and dynamic values through card service rules, returns
   row-level errors, and does not mutate cards, field values, files, or audit.
-- Next planned work is Phase 3C import commit and export polish.
-- Later explicit phases remain Phase 3C import/export completion, Phase 4
-  reports, and Phase 5 MCP.
-- XLSX export, CSV/XLSX import commit UI, import/export frontend UI, binary
-  attachment/document export, reports, and MCP remain deferred until their
-  explicit phases.
+- Phase 3C Import Commit And Export Polish is completed as an authenticated
+  backend API slice: CSV commit reuses preview validation, applies atomic
+  create/update batches, groups new-card rows by optional `import_key`, and
+  writes import audit.
+- Next planned work is Phase 4 reports unless an explicit XLSX/frontend
+  import-export polish slice is approved first.
+- Later explicit phases remain reports and Phase 5 MCP.
+- XLSX export/import, import/export frontend UI, binary attachment/document
+  export, reports, and MCP remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1312,13 +1316,15 @@ Known limitations:
 
 Purpose: add controlled data exchange.
 
-Status: in progress.
+Status: completed for the current approved backend API slices; XLSX and
+frontend import/export workflows are deferred until explicitly approved.
 
-Planned scope:
+Approved/current scope:
 
-- CSV/XLSX import with mapping, preview, validation, and audit.
-- CSV/XLSX/JSON export with permission checks.
+- CSV import with mapping, preview, validation, commit, and audit.
+- JSON/CSV export with permission checks.
 - Export of attachment/document metadata only first; binary export requires separate approval.
+- XLSX import/export remains a later explicit phase if needed.
 
 Decisions:
 
@@ -1334,6 +1340,12 @@ Decisions:
 - Export actions write `audit_events` with `action=export`.
 - Import preview and import commit must validate against existing registry
   schema instead of creating hardcoded business fields.
+- Import commit uses the preview contract as its validation gate: any invalid
+  row rejects the whole batch before mutation.
+- CSV import matching rules are explicit: rows with `card_id` update that
+  editable card; rows without `card_id` create cards, and create rows sharing
+  the same optional `import_key` are grouped into one new card.
+- Successful import commits write `audit_events` with `action=import_commit`.
 
 ### Phase 3A: Card Export Foundation
 
@@ -1445,14 +1457,42 @@ Known limitations:
 
 ### Phase 3C: Import Commit And Export Polish
 
-Status: planned next.
+Status: completed.
 
-Planned scope:
+Completed scope:
 
-- Commit validated import batches with audit.
-- Decide create-vs-update matching rules.
-- Add XLSX export if needed.
-- Add frontend import/export controls after backend semantics are stable.
+- Added authenticated API:
+  `POST /api/v1/registries/{registry_id}/imports/cards/commit`.
+- Commit accepts the Phase 3B CSV columns plus optional `import_key`.
+- Rows with `card_id` update an existing editable card.
+- Rows without `card_id` create a new card; multiple create rows with the same
+  `import_key` are grouped into one card and must share the same
+  `organization_id` and `display_name`.
+- Commit reuses preview validation before mutating data. If any row is invalid,
+  the API returns the preview payload in `detail` with row-level errors and
+  does not create cards, update field values, or write import audit events.
+- Valid commits run inside a nested transaction, create/update schema-driven
+  card values through `CardService`, and write one registry-level
+  `audit_events` row with `action=import_commit`.
+- Added PostgreSQL-backed API regression tests for successful create/update
+  import commit, import audit, `import_key` grouping, invalid-batch rejection,
+  and no partial writes on validation failure.
+- Verification on 2026-06-30: RED failed with `405 Method Not Allowed` before
+  implementation on disposable `reg_engine_phase3c_test`; GREEN passed with
+  `2 passed` for the new commit tests and `6 passed` for the full
+  `test_api_phase_3_import_export.py` suite on the same disposable PostgreSQL
+  strategy; `scripts/check.ps1 -SkipRemote` passed with backend pytest
+  `61 passed, 128 skipped`, frontend unit tests `29 passed`, frontend build,
+  and project tree check; `pnpm -C frontend e2e` passed with `3 passed`.
+
+Known limitations:
+
+- No XLSX import/export in this slice.
+- No frontend import/export UI in this slice.
+- No binary attachment/document import/export.
+- Reference values are still accepted/exported as stored ids; label enrichment
+  remains deferred.
+- No production migration was required because Phase 3C adds no schema changes.
 
 ### Phase 4: Reports
 

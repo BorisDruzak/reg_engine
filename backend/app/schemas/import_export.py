@@ -34,3 +34,28 @@ class CardImportPreviewRead(BaseModel):
     registry_id: str
     summary: CardImportPreviewSummaryRead
     rows: list[CardImportPreviewRowRead]
+
+
+class CardImportCommitRequest(BaseModel):
+    csv_content: str
+
+
+class CardImportCommitSummaryRead(BaseModel):
+    total_rows: int
+    committed_rows: int
+    created_cards: int
+    updated_cards: int
+    field_values_written: int
+
+
+class CardImportCommitCardRead(BaseModel):
+    card_id: str
+    action: Literal["create", "update"]
+    import_key: str | None
+
+
+class CardImportCommitRead(BaseModel):
+    format_version: str
+    registry_id: str
+    summary: CardImportCommitSummaryRead
+    cards: list[CardImportCommitCardRead]
