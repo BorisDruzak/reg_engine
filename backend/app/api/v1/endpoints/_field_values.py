@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import FieldValue, FieldValueItem, FormField
+from app.models import CardAttachment, FieldValue, FieldValueItem, FormField, StoredFile
 from app.schemas.cards import FieldValueRead
 
 
@@ -68,6 +68,10 @@ def coerce_api_field_value(session: Session, field_id: UUID, value: Any) -> obje
         "registry_ref",
     }:
         return _coerce_uuid(value, f"{field.field_type} fields require a UUID string.")
+    if field.field_type == "file_ref":
+        if value is None:
+            return None
+        return _coerce_uuid(value, "file_ref fields require a UUID string.")
     if field.field_type == "multi_select":
         if not isinstance(value, list):
             raise HTTPException(
@@ -140,4 +144,26 @@ def _read_field_value(session: Session, field: FormField, field_value: FieldValu
         return field_value.value_org_unit_id
     if field.field_type == "registry_ref":
         return field_value.value_registry_id
+    if field.field_type == "file_ref":
+        return _read_file_ref_value(session, field_value.value_attachment_id)
     return None
+
+
+def _read_file_ref_value(session: Session, attachment_id: UUID | None) -> dict[str, object] | None:
+    if attachment_id is None:
+        return None
+    attachment = session.get(CardAttachment, attachment_id)
+    if attachment is None:
+        return None
+    stored_file = session.get(StoredFile, attachment.stored_file_id)
+    if stored_file is None:
+        return None
+    return {
+        "attachment_id": attachment.id,
+        "title": attachment.title,
+        "original_filename": stored_file.original_filename,
+        "content_type": stored_file.content_type,
+        "content_length_bytes": stored_file.content_length_bytes,
+        "scanner_status": stored_file.scanner_status,
+        "archived_at": attachment.archived_at,
+    }

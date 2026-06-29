@@ -23,7 +23,8 @@ from app.schemas.cards import (
     FieldValuesBulkUpdate,
     FieldValueUpdate,
 )
-from app.services.cards import BulkFieldValueInput, CardService
+from app.services.cards import BulkFieldValueInput, CardService, FileRefValueRead
+from app.services.cards import CardFieldRead as ServiceCardFieldRead
 from app.services.cards import CardRead as ServiceCardRead
 
 router = APIRouter(tags=["cards"])
@@ -268,12 +269,7 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
                         block_instance_id=instance.block_instance_id,
                         ordinal=instance.ordinal,
                         fields={
-                            field_code: CardFieldRead(
-                                field_id=field.field_id,
-                                code=field.code,
-                                field_type=field.field_type,
-                                value=field.value,
-                            )
+                            field_code: _card_field_read_to_schema(field)
                             for field_code, field in instance.fields.items()
                         },
                     )
@@ -283,15 +279,33 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
             for block_code, block in card_read.blocks.items()
         },
         fields={
-            field_code: CardFieldRead(
-                field_id=field.field_id,
-                code=field.code,
-                field_type=field.field_type,
-                value=field.value,
-            )
+            field_code: _card_field_read_to_schema(field)
             for field_code, field in card_read.fields.items()
         },
     )
+
+
+def _card_field_read_to_schema(field: ServiceCardFieldRead) -> CardFieldRead:
+    return CardFieldRead(
+        field_id=field.field_id,
+        code=field.code,
+        field_type=field.field_type,
+        value=_serialize_field_value(field.value),
+    )
+
+
+def _serialize_field_value(value: object | None) -> object | None:
+    if isinstance(value, FileRefValueRead):
+        return {
+            "attachment_id": value.attachment_id,
+            "title": value.title,
+            "original_filename": value.original_filename,
+            "content_type": value.content_type,
+            "content_length_bytes": value.content_length_bytes,
+            "scanner_status": value.scanner_status,
+            "archived_at": value.archived_at,
+        }
+    return value
 
 
 def _card_to_summary(card: Card) -> CardSummaryRead:

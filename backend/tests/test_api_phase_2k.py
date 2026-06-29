@@ -96,9 +96,15 @@ def db_session(migrated_test_engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture()
-def api_client(db_session: Session) -> Iterator[TestClient]:
+def api_client(db_session: Session, tmp_path: Path) -> Iterator[TestClient]:
     previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    previous_storage_root = os.environ.get("REG_ENGINE_STORAGE_ROOT")
+    previous_max_bytes = os.environ.get("REG_ENGINE_MAX_ATTACHMENT_BYTES")
+    previous_allowed_types = os.environ.get("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES")
     os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    os.environ["REG_ENGINE_STORAGE_ROOT"] = str(tmp_path)
+    os.environ["REG_ENGINE_MAX_ATTACHMENT_BYTES"] = "1024"
+    os.environ.pop("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", None)
     get_settings.cache_clear()
     app = create_app()
 
@@ -125,11 +131,18 @@ def api_client(db_session: Session) -> Iterator[TestClient]:
         with TestClient(app) as client:
             yield client
     finally:
-        if previous_allow_dev_actor is None:
-            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
-        else:
-            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        _restore_env("ALLOW_DEV_ACTOR_HEADER", previous_allow_dev_actor)
+        _restore_env("REG_ENGINE_STORAGE_ROOT", previous_storage_root)
+        _restore_env("REG_ENGINE_MAX_ATTACHMENT_BYTES", previous_max_bytes)
+        _restore_env("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", previous_allowed_types)
         get_settings.cache_clear()
+
+
+def _restore_env(name: str, value: str | None) -> None:
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
 
 
 def _actor_headers(user_id: UUID) -> dict[str, str]:
@@ -944,3 +957,216 @@ def test_bulk_card_values_update_requires_card_permission(
     )
 
     assert response.status_code == 403, response.text
+
+
+def _create_file_ref_api_setup(
+    api_client: TestClient,
+    actor_id: UUID,
+    suffix: str,
+) -> dict[str, Any]:
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": f"phase2j4-file-ref-{suffix}-org", "name": f"File Ref {suffix} Org"},
+        actor_id=actor_id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": f"phase2j4-file-ref-{suffix}-registry", "name": f"File Ref {suffix} Registry"},
+        actor_id=actor_id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "documents", "title": "Documents"},
+        actor_id=actor_id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "supporting_file", "label": "Supporting File", "field_type": "file_ref"},
+        actor_id=actor_id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": f"File Ref {suffix} Card"},
+        actor_id=actor_id,
+    )
+    return {
+        "organization": organization,
+        "registry": registry,
+        "block": block,
+        "field": field,
+        "card": card,
+    }
+
+
+def _upload_card_attachment(
+    api_client: TestClient,
+    *,
+    card_id: str,
+    actor_id: UUID,
+    filename: str = "evidence.txt",
+    content: bytes = b"file-ref evidence",
+    title: str = "Evidence",
+) -> dict[str, Any]:
+    response = api_client.post(
+        f"/api/v1/cards/{card_id}/attachments",
+        headers=_actor_headers(actor_id),
+        files={"file": (filename, content, "text/plain")},
+        data={"title": title},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _assert_file_ref_metadata(
+    value: dict[str, Any],
+    attachment: dict[str, Any],
+    *,
+    archived: bool,
+) -> None:
+    assert value["attachment_id"] == attachment["id"]
+    assert value["title"] == attachment["title"]
+    assert value["original_filename"] == attachment["original_filename"]
+    assert value["content_type"] == attachment["content_type"]
+    assert value["content_length_bytes"] == attachment["content_length_bytes"]
+    assert value["scanner_status"] == attachment["scanner_status"]
+    if archived:
+        assert value["archived_at"] is not None
+    else:
+        assert value["archived_at"] is None
+    forbidden_keys = {"stored_file_id", "checksum_sha256", "storage_key", "storage_root", "path"}
+    assert forbidden_keys.isdisjoint(value)
+
+
+def test_file_ref_api_sets_clears_and_reads_safe_metadata(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2j4-file-ref-api-system@example.test",
+        is_superuser=True,
+    )
+    setup = _create_file_ref_api_setup(api_client, system_admin.id, "set-clear")
+    attachment = _upload_card_attachment(
+        api_client,
+        card_id=setup["card"]["id"],
+        actor_id=system_admin.id,
+    )
+
+    updated = _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['field']['id']}",
+        actor_id=system_admin.id,
+        payload={"value": attachment["id"]},
+    )
+    _assert_file_ref_metadata(updated["value"], attachment, archived=False)
+
+    card_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{setup['card']['id']}",
+        actor_id=system_admin.id,
+    )
+    flat_value = card_read["fields"]["documents.supporting_file"]["value"]
+    block_value = card_read["blocks"]["documents"]["instances"][0]["fields"]["supporting_file"][
+        "value"
+    ]
+    _assert_file_ref_metadata(flat_value, attachment, archived=False)
+    _assert_file_ref_metadata(block_value, attachment, archived=False)
+
+    cleared = _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['field']['id']}",
+        actor_id=system_admin.id,
+        payload={"value": None},
+    )
+    assert cleared["value"] is None
+
+    cleared_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{setup['card']['id']}",
+        actor_id=system_admin.id,
+    )
+    assert cleared_read["fields"]["documents.supporting_file"]["value"] is None
+
+
+def test_file_ref_api_rejects_wrong_card_and_reads_archived_reference_metadata(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2j4-file-ref-api-guards-system@example.test",
+        is_superuser=True,
+    )
+    setup = _create_file_ref_api_setup(api_client, system_admin.id, "guards")
+    other_card = _post_json(
+        api_client,
+        f"/api/v1/registries/{setup['registry']['id']}/cards",
+        {"organization_id": setup["organization"]["id"], "display_name": "Other File Ref Card"},
+        actor_id=system_admin.id,
+    )
+    other_attachment = _upload_card_attachment(
+        api_client,
+        card_id=other_card["id"],
+        actor_id=system_admin.id,
+        filename="other.txt",
+        title="Other Evidence",
+    )
+
+    wrong_card_response = api_client.patch(
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['field']['id']}",
+        headers=_actor_headers(system_admin.id),
+        json={"value": other_attachment["id"]},
+    )
+    assert wrong_card_response.status_code == 400, wrong_card_response.text
+
+    attachment = _upload_card_attachment(
+        api_client,
+        card_id=setup["card"]["id"],
+        actor_id=system_admin.id,
+        filename="archivable.txt",
+        title="Archivable Evidence",
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['field']['id']}",
+        actor_id=system_admin.id,
+        payload={"value": attachment["id"]},
+    )
+
+    archived_attachment = _request_json(
+        api_client,
+        "DELETE",
+        f"/api/v1/attachments/{attachment['id']}",
+        actor_id=system_admin.id,
+    )
+    assert archived_attachment["archived_at"] is not None
+
+    card_read = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/cards/{setup['card']['id']}",
+        actor_id=system_admin.id,
+    )
+    _assert_file_ref_metadata(
+        card_read["fields"]["documents.supporting_file"]["value"],
+        archived_attachment,
+        archived=True,
+    )
+
+    archived_set_response = api_client.patch(
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['field']['id']}",
+        headers=_actor_headers(system_admin.id),
+        json={"value": attachment["id"]},
+    )
+    assert archived_set_response.status_code == 400, archived_set_response.text

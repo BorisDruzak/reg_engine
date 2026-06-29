@@ -56,6 +56,7 @@ Completed phases:
 - Phase 2J.1: `file_ref` Database And Model Foundation.
 - Phase 2J.2: `file_ref` Backend Service Support.
 - Phase 2J.3: `file_ref` Transfer Behavior.
+- Phase 2J.4: `file_ref` API Support.
 
 Current stop point:
 
@@ -84,6 +85,10 @@ Current stop point:
   attachments are copied as target-card attachment links pointing to the same
   stored file, while archived references are cleared and recorded in transfer
   audit metadata.
+- Phase 2J.4 `file_ref` API support is completed: authenticated card field
+  value endpoints accept `card_attachment.id`/`null` and card reads return safe
+  attachment metadata without storage keys, filesystem paths, checksums, or
+  stored-file ids.
 - Phase 2L.0 Admin UI Mutation Foundation is completed.
 - Phase 2L.1 Organization Management UI is completed.
 - Phase 2L.2 User Management UI is completed.
@@ -98,9 +103,9 @@ Current stop point:
   CRUD UI for organizations, users, access grants, registries, schema builder,
   reference lists, cards, attachments, generated documents, public links, and
   audit has browser validation coverage.
-- Next planned work is Phase 2J.4 API Support for `file_ref`: authenticated
-  card field value endpoints must accept `card_attachment.id`/`null` and return
-  safe attachment metadata.
+- Next planned work is Phase 2J.5 Frontend Authenticated Editor for
+  `file_ref`: expose existing card attachments as selectable candidates in the
+  schema-driven card editor.
 - Later explicit phases remain Phase 2M binary `.docx` template
   upload/versioning, Phase 2N PDF conversion, Phase 3 import/export, Phase 4
   reports, and Phase 5 MCP.
@@ -188,24 +193,28 @@ Completed Phase 2 work:
 - Phase 2J.1 added `field_values.value_attachment_id`, registered the generic
   `file_ref` field type, added migration `0008_file_ref_field_values`, and
   added model/migration smoke coverage. Type registration supports schema
-  persistence, but value-setting/read service semantics, endpoints, frontend UI,
+  persistence. Value-setting/read service semantics, transfer behavior, and
+  REST API metadata were completed in later Phase 2J slices; frontend UI,
   public-link editing, import/export, PDF, reports, and MCP remain deferred.
 - Phase 2J.2 added backend service support for authenticated `file_ref`
   set/read/clear behavior, same-card active attachment validation, archived
   referenced attachment metadata reads, safe audit behavior, and explicit
-  public-link edit blocking. Transfer behavior, REST value API metadata,
-  frontend UI, generated document rendering, import/export, PDF, reports, and
-  MCP remain deferred.
+  public-link edit blocking. Transfer behavior and REST value API metadata
+  were completed in later Phase 2J slices; frontend UI, generated document
+  rendering, import/export, PDF, reports, and MCP remain deferred.
 - Phase 2J.3 added transfer behavior for active `file_ref` values by creating
   a new target-card `card_attachments` link that points to the same
   `stored_file_id`; archived `file_ref` references are cleared on transfer and
-  recorded in transfer audit metadata. REST value API metadata, frontend UI,
-  generated document rendering, import/export, PDF, reports, and MCP remain
-  deferred.
+  recorded in transfer audit metadata.
+- Phase 2J.4 added authenticated REST card value API support for `file_ref`.
+  Single-field and card-read responses expose safe metadata with attachment id,
+  title, original filename, content type, content length, scanner status, and
+  archive status. Frontend UI, generated document rendering, import/export,
+  PDF, reports, and MCP remain deferred.
 
 ## Phase 2J: `file_ref` Dynamic Field Type
 
-Status: in progress; Phase 2J.0 through Phase 2J.3 are completed and Phase 2J.4 is the next planned implementation slice.
+Status: in progress; Phase 2J.0 through Phase 2J.4 are completed and Phase 2J.5 is the next planned implementation slice.
 
 Purpose: add a generic dynamic field type that references an existing card attachment from the same card, without adding new storage, public-link file-ref editing, PDF conversion, import/export, reports, or MCP.
 
@@ -354,6 +363,8 @@ Completion evidence:
 
 ### Phase 2J.4: API Support
 
+Status: completed.
+
 Required work:
 
 - Existing card field update endpoint accepts `file_ref` values as `card_attachment.id` or `null`.
@@ -365,6 +376,24 @@ Acceptance criteria:
 
 - API tests cover set, clear, read metadata, wrong-card rejection, and archived-reference read behavior.
 - API responses do not expose storage key, filesystem path, or storage root.
+
+Completion evidence:
+
+- `PATCH /api/v1/cards/{card_id}/fields/{field_id}` accepts a
+  same-card `card_attachment.id` UUID for `file_ref` and accepts `null` to
+  clear the value.
+- `GET /api/v1/cards/{card_id}` returns `file_ref` values as safe attachment
+  metadata in both flat `fields` and nested `blocks -> instances -> fields`
+  structures.
+- Returned metadata is limited to `attachment_id`, `title`,
+  `original_filename`, `content_type`, `content_length_bytes`,
+  `scanner_status`, and `archived_at`.
+- API tests cover set, clear, card read metadata, wrong-card rejection,
+  archived-reference metadata reads, archived-reference set rejection, and
+  absence of storage keys, filesystem paths, checksums, and stored-file ids.
+- No frontend UI, public-link `file_ref` editing, generated document
+  rendering, import/export, PDF, reports, MCP, migration, or business-specific
+  document-field behavior was added.
 
 ### Phase 2J.5: Frontend Authenticated Editor
 
