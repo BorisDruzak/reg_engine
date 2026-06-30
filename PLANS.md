@@ -93,6 +93,7 @@ Completed phases:
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 - Phase 5C: MCP Mutation Client Foundation.
+- Phase 5D: MCP Registry Create Write Tool.
 
 Current stop point:
 
@@ -216,6 +217,12 @@ Current stop point:
   pushed, the server checkout is synchronized to `origin/main`, server checks
   passed, server MCP targeted tests passed, live MCP stdio sanity passed, and
   Alembic remains at `0014_report_pdf_output (head)`.
+- Phase 5D MCP Registry Create Write Tool is completed locally and pending
+  deploy: `reg_engine_create_registry` is exposed as the first non-destructive
+  MCP write tool and calls the existing REST `POST /api/v1/registries`
+  endpoint, so system-admin permission checks and audit remain API-enforced.
+  No direct DB access, backend service imports, destructive MCP tools, frontend
+  UI, database schema changes, or Alembic migrations are included.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4032,6 +4039,85 @@ Production migration checkpoint:
 
 - Not required for Phase 5C; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5D: MCP Registry Create Write Tool
+
+Status: completed locally; deploy pending.
+
+Purpose: add the first narrow MCP write tool using the existing API-only MCP
+boundary, starting with non-destructive registry creation.
+
+Tool set:
+
+- `reg_engine_create_registry`
+
+Argument schema:
+
+- `code`: required string.
+- `name`: required string.
+- `description`: optional string.
+- `additionalProperties=false`.
+
+API endpoint:
+
+- `POST /api/v1/registries`
+
+Security and audit decisions:
+
+- The MCP tool calls only the REST API through `RegEngineApiClient.post_json`.
+- System-admin permission checks remain in
+  `RegistrySchemaService.create_registry_for_actor`.
+- Registry create audit remains API-side with `audit_events.source=mcp` through
+  the existing `X-Reg-Engine-Source: mcp` request header.
+- This create action is non-destructive, so no separate destructive-action
+  confirmation argument is required in this phase.
+
+Scope:
+
+- Expose `reg_engine_create_registry` in `MCP_TOOL_DEFINITIONS` with
+  `readOnlyHint=false`.
+- Preserve all existing read-only tools with `readOnlyHint=true`.
+- Reuse existing argument validation helpers and MCP tool-error behavior.
+- Do not add registry update/archive, schema mutation, card mutation, import,
+  document, report, public-link, binary download, or destructive MCP tools.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes `reg_engine_create_registry` as a write tool.
+- Calling `reg_engine_create_registry` sends `POST /api/v1/registries` with
+  `code`, `name`, and optional `description`.
+- The request includes bearer auth and `X-Reg-Engine-Source: mcp` through the
+  existing MCP API client.
+- Existing read-only tools remain read-only.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Only registry creation is exposed as an MCP write tool.
+- Registry update/archive and other mutations remain future explicit phases.
+- Production live smoke must avoid creating throwaway production registries
+  unless a disposable production-safe target is explicitly approved.
+
+Verification so far:
+
+- RED targeted test failed before implementation because
+  `reg_engine_create_registry` was absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted create-registry MCP tool test passed.
+- Full MCP Phase 5 test file passed locally with `16 passed`.
+- Targeted `ruff check` and `mypy app/mcp` passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `82 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5D; no backend schema changes are included.
 
 ## Verification
 

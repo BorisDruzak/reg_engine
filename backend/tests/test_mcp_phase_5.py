@@ -171,11 +171,11 @@ def test_mcp_api_client_accepts_http_and_https_base_urls(base_url: str) -> None:
     RegEngineApiClient(base_url=base_url, token=None, transport=RecordingTransport())
 
 
-def test_mcp_tool_definitions_are_read_only_and_call_existing_api_paths() -> None:
+def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_paths() -> None:
     from app.mcp.api_client import RegEngineApiClient
     from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
 
-    tool_names = {tool["name"] for tool in MCP_TOOL_DEFINITIONS}
+    tools_by_name = {tool["name"]: tool for tool in MCP_TOOL_DEFINITIONS}
     assert {
         "reg_engine_health",
         "reg_engine_list_registries",
@@ -183,8 +183,11 @@ def test_mcp_tool_definitions_are_read_only_and_call_existing_api_paths() -> Non
         "reg_engine_list_cards",
         "reg_engine_read_card",
         "reg_engine_list_audit_events",
-    } <= tool_names
-    assert all(tool["annotations"]["readOnlyHint"] is True for tool in MCP_TOOL_DEFINITIONS)
+    } <= tools_by_name.keys()
+    read_only_tools = [
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] != "reg_engine_create_registry"
+    ]
+    assert all(tool["annotations"]["readOnlyHint"] is True for tool in read_only_tools)
 
     registry_id = str(uuid4())
     transport = RecordingTransport()
@@ -208,6 +211,58 @@ def test_mcp_tool_definitions_are_read_only_and_call_existing_api_paths() -> Non
         transport.requests[0]["url"] == f"http://api.local/api/v1/registries/{registry_id}/cards"
         "?include_archive=true&q=%D0%9A%D0%B0%D1%80%D1%82%D0%BE%D1%87%D0%BA%D0%B0"
     )
+
+
+def test_mcp_create_registry_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_create_registry"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["code", "name"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    registry_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": registry_id,
+            "code": "incidents",
+            "name": "Инциденты",
+            "description": "Операционный реестр",
+            "lifecycle_status": "draft",
+            "schema_version": 1,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_registry",
+        {
+            "code": "incidents",
+            "name": "Инциденты",
+            "description": "Операционный реестр",
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == registry_id
+    assert transport.requests[0]["method"] == "POST"
+    assert transport.requests[0]["url"] == "http://api.local/api/v1/registries"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "code": "incidents",
+        "name": "Инциденты",
+        "description": "Операционный реестр",
+    }
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:

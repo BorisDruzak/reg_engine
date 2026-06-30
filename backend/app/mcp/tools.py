@@ -143,6 +143,25 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": True},
     },
+    {
+        "name": "reg_engine_create_registry",
+        "title": "Create registry",
+        "description": (
+            "Create a registry through the Registry Engine API. Requires the "
+            "authenticated API user to be a system admin."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["code", "name"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -226,6 +245,15 @@ def _call_tool_or_raise(
             f"/api/v1/report-runs/{report_run_id}",
             {"include_archive": _bool_arg(arguments, "include_archive", False)},
         )
+    if name == "reg_engine_create_registry":
+        payload: dict[str, Any] = {
+            "code": _required_str_arg(arguments, "code"),
+            "name": _required_str_arg(arguments, "name"),
+        }
+        description = _optional_str_arg(arguments, "description")
+        if description is not None:
+            payload["description"] = description
+        return client.post_json("/api/v1/registries", payload)
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
