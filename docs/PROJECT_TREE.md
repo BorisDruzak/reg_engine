@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 06:47:16 +05:00
+- Generated: 2026-06-30 07:35:22 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -203,6 +203,7 @@
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
 - `frontend/src/features/overview/Overview.tsx`
 - `frontend/src/features/registry/.gitkeep`
+- `frontend/src/features/registry/ImportExportPanel.tsx`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
 - `frontend/src/features/registry/ReportsPanel.tsx`
 - `frontend/src/features/users/UsersAndRoles.tsx`

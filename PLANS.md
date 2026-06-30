@@ -65,6 +65,7 @@ Completed phases:
 - Phase 3A: Card Export Foundation.
 - Phase 3B: Import Preview And Mapping.
 - Phase 3C: Import Commit And Export Polish.
+- Phase 3D: Import Export Frontend UI.
 - Phase 4A: Report Foundation API.
 - Phase 4B: Report Frontend UI.
 - Phase 4C: Report Template Settings Edit.
@@ -153,6 +154,11 @@ Current stop point:
   backend API slice: CSV commit reuses preview validation, applies atomic
   create/update batches, groups new-card rows by optional `import_key`, and
   writes import audit.
+- Phase 3D Import Export Frontend UI is in progress as a frontend-only slice:
+  authenticated registry admins can download JSON/CSV card exports and run
+  CSV import preview/commit through the existing Phase 3 REST API. No backend
+  code, models, migrations, XLSX workflows, binary import/export, or MCP write
+  tools are added.
 - Phase 4A Report Foundation API is completed: migration `0010_reports`,
   backend report templates/runs, JSON report output storage, scoped
   reads/downloads, and audit are implemented, pushed, deployed, and migrated in
@@ -207,7 +213,7 @@ Current stop point:
   passed, and server checks passed. No migration was required.
 - Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
   additional report polish.
-- XLSX export/import, import/export frontend UI, binary attachment/document
+- XLSX export/import, binary attachment/document
   export, XLSX/PDF report outputs, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
@@ -1559,6 +1565,79 @@ Known limitations:
 - Reference values are still accepted/exported as stored ids; label enrichment
   remains deferred.
 - No production migration was required because Phase 3C adds no schema changes.
+
+### Phase 3D: Import Export Frontend UI
+
+Status: in progress.
+
+Purpose: expose the existing authenticated Phase 3 CSV/JSON import/export API
+in the Russian registry workspace without adding backend behavior, migrations,
+XLSX workflows, binary attachment/document import/export, or MCP write tools.
+
+Scope:
+
+- Add a Russian-first `Импорт и экспорт` panel to the authenticated registry
+  workspace.
+- Allow authenticated users to download card exports as `JSON` or `CSV` through
+  `GET /api/v1/registries/{registry_id}/exports/cards?format=json|csv`.
+- Allow users to paste CSV import content, run preview through
+  `POST /api/v1/registries/{registry_id}/imports/cards/preview`, and inspect
+  summary plus row-level valid/invalid results.
+- Allow commit only after the latest preview has zero invalid rows and the CSV
+  content has not changed since preview.
+- Send commit through
+  `POST /api/v1/registries/{registry_id}/imports/cards/commit`, display the
+  commit summary, and refresh card/audit data after successful commit.
+- Keep all security and validation in the existing backend API.
+- Do not add backend code, database schema changes, migrations, XLSX workflows,
+  binary attachment/document import/export, report changes, public-link flows,
+  or MCP write tools.
+
+Acceptance criteria:
+
+- Export buttons call the existing API with bearer auth and download the
+  returned JSON/CSV payload.
+- Preview sends the textarea CSV content to the existing preview endpoint and
+  renders Russian summary text.
+- Invalid preview rows keep commit disabled and show row errors.
+- Valid preview rows enable commit only while the CSV content remains unchanged.
+- Commit sends the same CSV content to the existing commit endpoint, displays a
+  Russian summary, and invalidates card/audit queries.
+- Frontend tests cover export, preview, invalid preview blocking, commit
+  payloads, and Russian UI labels.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- CSV is pasted into a text area in this slice; file upload can be later UI
+  polish.
+- XLSX import/export remains deferred.
+- Binary attachment/document import/export remains deferred.
+- Reference label enrichment remains deferred.
+- No backend changes and no MCP write tools.
+
+Verification so far:
+
+- RED frontend test failed before implementation because the registry workspace
+  had no `Импорт и экспорт` panel.
+- GREEN targeted frontend test passed:
+  `npm test -- --run src/App.test.tsx --testNamePattern "exports and imports cards"`.
+- Targeted frontend API/client regression test passed:
+  `npm test -- --run src/api/adminMutations.test.ts`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e`.
+
+Production migration checkpoint:
+
+- Not required for Phase 3D.
+
+Deployment checkpoint:
+
+- Pending implementation, checks, push, frontend deploy, and server check.
 
 ### Phase 4: Reports
 

@@ -46,6 +46,7 @@ import {
 import { Panel, SelectableList } from "@/components/common/DataSurfaces";
 import { shortId } from "@/components/common/dataUtils";
 
+import { ImportExportPanel } from "./ImportExportPanel";
 import { ReportsPanel } from "./ReportsPanel";
 
 type RegistryFormState = {
@@ -398,6 +399,7 @@ export function RegistriesAndSchema({
           token={token}
         />
       </Panel>
+      <ImportExportPanel selectedRegistryId={selectedRegistryId} token={token} />
       <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
     </div>
   );

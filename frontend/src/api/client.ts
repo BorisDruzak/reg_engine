@@ -7,6 +7,10 @@ import type {
   AttachmentRead,
   CardBlockInstanceSummaryRead,
   CardCreatePayload,
+  CardImportCommitPayload,
+  CardImportCommitRead,
+  CardImportPreviewPayload,
+  CardImportPreviewRead,
   CardListRead,
   CardRead,
   CardSummaryRead,
@@ -320,6 +324,59 @@ export async function archiveCardBlockInstance(token: string, blockInstanceId: s
 
 export async function transferCard(token: string, cardId: string, payload: CardTransferPayload) {
   return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}/transfer`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function downloadCardExport(
+  token: string,
+  registryId: string,
+  exportFormat: "json" | "csv",
+) {
+  const response = await fetch(
+    `${apiBaseUrl.replace(/\/$/, "")}/api/v1/registries/${registryId}/exports/cards?format=${exportFormat}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const message = await errorMessage(response);
+    throw new ApiError(message, response.status);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: `registry-cards-export.${exportFormat}`,
+  };
+}
+
+export async function previewCardImport(
+  token: string,
+  registryId: string,
+  payload: CardImportPreviewPayload,
+) {
+  return apiRequest<CardImportPreviewRead>(
+    `/api/v1/registries/${registryId}/imports/cards/preview`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function commitCardImport(
+  token: string,
+  registryId: string,
+  payload: CardImportCommitPayload,
+) {
+  return apiRequest<CardImportCommitRead>(`/api/v1/registries/${registryId}/imports/cards/commit`, {
     method: "POST",
     token,
     body: payload,

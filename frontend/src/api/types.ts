@@ -257,6 +257,64 @@ export type CardTransferPayload = {
   target_organization_id: string;
 };
 
+export type CardImportPreviewPayload = {
+  csv_content: string;
+};
+
+export type CardImportPreviewSummaryRead = {
+  total_rows: number;
+  valid_rows: number;
+  invalid_rows: number;
+  would_create_rows: number;
+  would_update_rows: number;
+};
+
+export type CardImportPreviewRowRead = {
+  row_number: number;
+  status: "valid" | "invalid";
+  action: "create" | "update";
+  card_id: string | null;
+  organization_id: string | null;
+  display_name: string | null;
+  field_path: string;
+  field_type: string | null;
+  raw_value: string;
+  parsed_value: unknown;
+  errors: string[];
+};
+
+export type CardImportPreviewRead = {
+  format_version: string;
+  registry_id: string;
+  summary: CardImportPreviewSummaryRead;
+  rows: CardImportPreviewRowRead[];
+};
+
+export type CardImportCommitPayload = {
+  csv_content: string;
+};
+
+export type CardImportCommitSummaryRead = {
+  total_rows: number;
+  committed_rows: number;
+  created_cards: number;
+  updated_cards: number;
+  field_values_written: number;
+};
+
+export type CardImportCommitCardRead = {
+  card_id: string;
+  action: "create" | "update";
+  import_key: string | null;
+};
+
+export type CardImportCommitRead = {
+  format_version: string;
+  registry_id: string;
+  summary: CardImportCommitSummaryRead;
+  cards: CardImportCommitCardRead[];
+};
+
 export type CardFieldRead = {
   field_id: string;
   code: string;

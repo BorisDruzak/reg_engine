@@ -21,6 +21,8 @@ import type {
   ReportRunRead,
   ReportTemplateRead,
   UserRead,
+  CardImportCommitRead,
+  CardImportPreviewRead,
 } from "@/api/types";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
@@ -1140,6 +1142,116 @@ beforeEach(() => {
         };
         reportRunItems = reportRunItems.map((item) => (item.id === archived.id ? archived : item));
         return jsonResponse(archived);
+      }
+      if (
+        url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=json",
+        )
+      ) {
+        return new Response('{"format_version":"cards_export_v1","cards":[]}', {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (
+        url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=csv",
+        )
+      ) {
+        return new Response(
+          "card_id,display_name,block_code,field_code,value\naaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,Карточка актива,main,status,drafted\n",
+          {
+            status: 200,
+            headers: { "Content-Type": "text/csv; charset=utf-8" },
+          },
+        );
+      }
+      if (
+        url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/preview",
+        )
+      ) {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as { csv_content: string };
+        const hasInvalidRow = payload.csv_content.includes("invalid-number");
+        const preview: CardImportPreviewRead = {
+          format_version: "card_import_preview_v1",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          summary: {
+            total_rows: hasInvalidRow ? 2 : 1,
+            valid_rows: hasInvalidRow ? 1 : 1,
+            invalid_rows: hasInvalidRow ? 1 : 0,
+            would_create_rows: 0,
+            would_update_rows: hasInvalidRow ? 1 : 1,
+          },
+          rows: hasInvalidRow
+            ? [
+                {
+                  row_number: 2,
+                  status: "valid",
+                  action: "update",
+                  card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  organization_id: null,
+                  display_name: "Карточка актива",
+                  field_path: "main.status",
+                  field_type: "text",
+                  raw_value: "submitted",
+                  parsed_value: "submitted",
+                  errors: [],
+                },
+                {
+                  row_number: 3,
+                  status: "invalid",
+                  action: "update",
+                  card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  organization_id: null,
+                  display_name: "Карточка актива",
+                  field_path: "main.amount",
+                  field_type: "number",
+                  raw_value: "invalid-number",
+                  parsed_value: null,
+                  errors: ["Числовое поле должно содержать число."],
+                },
+              ]
+            : [
+                {
+                  row_number: 2,
+                  status: "valid",
+                  action: "update",
+                  card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  organization_id: null,
+                  display_name: "Карточка актива",
+                  field_path: "main.status",
+                  field_type: "text",
+                  raw_value: "submitted",
+                  parsed_value: "submitted",
+                  errors: [],
+                },
+              ],
+        };
+        return jsonResponse(preview);
+      }
+      if (
+        url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/commit")
+      ) {
+        const commit: CardImportCommitRead = {
+          format_version: "card_import_commit_v1",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          summary: {
+            total_rows: 1,
+            committed_rows: 1,
+            created_cards: 0,
+            updated_cards: 1,
+            field_values_written: 1,
+          },
+          cards: [
+            {
+              card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              action: "update",
+              import_key: null,
+            },
+          ],
+        };
+        return jsonResponse(commit);
       }
       if (
         url.includes("/api/v1/registries/") &&
@@ -3468,6 +3580,115 @@ test("creates and archives document templates in Russian UI", async () => {
           url.endsWith("/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab") &&
           init?.method === "DELETE"
         );
+      }),
+    ).toBe(true);
+  });
+});
+
+test("exports and imports cards through Russian registry UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(await screen.findByRole("heading", { name: "Импорт и экспорт" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Скачать JSON" }));
+  expect(await screen.findByText("Экспорт скачан")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать CSV" }));
+  expect(await screen.findByText("Экспорт скачан")).toBeInTheDocument();
+
+  const invalidCsv =
+    "card_id,organization_id,display_name,block_code,field_code,value\n" +
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,,Карточка актива,main,status,submitted\n" +
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,,Карточка актива,main,amount,invalid-number\n";
+  fireEvent.change(screen.getByLabelText("CSV для импорта"), {
+    target: { value: invalidCsv },
+  });
+  await user.click(screen.getByRole("button", { name: "Проверить импорт" }));
+
+  expect(await screen.findByText("Предпросмотр импорта готов")).toBeInTheDocument();
+  expect(screen.getByText("Всего строк: 2 / корректных: 1 / ошибок: 1")).toBeInTheDocument();
+  expect(screen.getByText("Строка 3 / main.amount / Ошибка")).toBeInTheDocument();
+  expect(screen.getByText("Числовое поле должно содержать число.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Применить импорт" })).toBeDisabled();
+
+  const validCsv =
+    "card_id,organization_id,display_name,block_code,field_code,value\n" +
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,,Карточка актива,main,status,submitted\n";
+  fireEvent.change(screen.getByLabelText("CSV для импорта"), {
+    target: { value: validCsv },
+  });
+  await user.click(screen.getByRole("button", { name: "Проверить импорт" }));
+
+  expect(await screen.findByText("Можно применить импорт")).toBeInTheDocument();
+  expect(screen.getByText("Всего строк: 1 / корректных: 1 / ошибок: 0")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Применить импорт" }));
+
+  expect(await screen.findByText("Импорт применен")).toBeInTheDocument();
+  expect(
+    screen.getByText("Строк применено: 1 / создано карточек: 0 / обновлено карточек: 1"),
+  ).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=json",
+          ) &&
+          init?.method === "GET" &&
+          headers?.Authorization === "Bearer test-token"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=csv",
+          ) &&
+          init?.method === "GET" &&
+          headers?.Authorization === "Bearer test-token"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/preview",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as { csv_content?: string };
+        return body.csv_content === invalidCsv;
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/commit",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as { csv_content?: string };
+        return body.csv_content === validCsv;
       }),
     ).toBe(true);
   });

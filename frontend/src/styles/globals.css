@@ -740,6 +740,17 @@ tr:last-child td {
   border-top: 1px solid #edf0f4;
 }
 
+.import-export-result {
+  display: grid;
+  gap: 8px;
+}
+
+.import-export-result > strong {
+  color: #101828;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
 .public-link-token {
   display: grid;
   gap: 5px;
