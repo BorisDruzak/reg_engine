@@ -81,6 +81,7 @@ Completed phases:
 - Phase 4L: Report Run Visual Parameter Form.
 - Phase 4M: Report Run Enum Parameter Controls.
 - Phase 4N: Report Run Enum Option Labels.
+- Phase 4O: Report Run Default Parameter Payload.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -292,6 +293,10 @@ Current stop point:
   synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
+- Phase 4O Report Run Default Parameter Payload is completed locally:
+  report generation now sends the selected template `default_parameters_json`
+  when the manual run parameter JSON field is empty, while manual JSON still
+  overrides defaults. Deployment evidence is pending.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -2952,6 +2957,68 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4N; no backend schema changes are included.
+
+### Phase 4O: Report Run Default Parameter Payload
+
+Status: completed locally; deployment pending.
+
+Purpose: close a report-polish bug where the Russian run form displayed
+template default parameters but generated a report with `parameters=null` when
+the manual run parameter JSON field was left empty.
+
+Scope:
+
+- Use the selected report template `default_parameters_json` as the report run
+  payload when `Параметры запуска JSON` is empty.
+- Preserve manual run JSON override behavior when that field is non-empty.
+- Preserve existing visual parameter controls, enum/`oneOf` labels, output
+  format selection, archive controls, downloads, and report metadata display.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A selected report template with `default_parameters_json` generates a report
+  run with those default parameters when manual run JSON is empty.
+- Non-empty manual run JSON still overrides template defaults.
+- Invalid non-empty manual run JSON still uses the existing validation error
+  path.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This phase only fixes the payload fallback semantics. It does not add nested
+  schema controls, schema validation UI, report scheduling, charts,
+  public-link report workflows, binary attachment/document report export, a
+  full visual report builder, or MCP write tools.
+- Backend remains the API/security boundary; frontend default fallback is a
+  usability consistency layer over existing report template fields.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because the
+  generated report run POST body did not include template default parameters
+  when the manual JSON field was empty.
+- GREEN targeted default-parameter frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report template default parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `32 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4O; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

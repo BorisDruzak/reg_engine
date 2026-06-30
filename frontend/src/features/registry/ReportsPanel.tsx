@@ -154,7 +154,10 @@ export function ReportsPanel({
   const generateRunMutation = useMutation({
     mutationFn: () =>
       generateReportRun(token, selectedTemplateId, {
-        parameters: parseJsonObjectOrNull(runParametersJson),
+        parameters: parseReportRunParameters(
+          runParametersJson,
+          selectedTemplate?.default_parameters_json,
+        ),
       }),
     onSuccess: async () => {
       setMessage(uiText.reportGenerated);
@@ -670,6 +673,16 @@ function parseJsonObjectOrNull(value: string) {
     throw new Error(uiText.jsonObjectRequired);
   }
   return parsed as Record<string, unknown>;
+}
+
+function parseReportRunParameters(
+  value: string,
+  defaultParameters: Record<string, unknown> | null | undefined,
+) {
+  if (value.trim()) {
+    return parseJsonObjectOrNull(value);
+  }
+  return defaultParameters ?? null;
 }
 
 function parseJsonObjectForDisplay(value: string) {

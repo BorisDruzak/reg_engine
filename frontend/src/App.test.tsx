@@ -1089,13 +1089,13 @@ beforeEach(() => {
         );
         return jsonResponse(archived);
       }
-      if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252/runs")) {
+      const reportRunTemplateMatch = url.match(/\/api\/v1\/report-templates\/([^/]+)\/runs$/);
+      if (reportRunTemplateMatch) {
+        const reportTemplateId = reportRunTemplateMatch[1]!;
         const payload = JSON.parse(String(init?.body ?? "{}")) as {
           parameters: Record<string, unknown> | null;
         };
-        const template = reportTemplateItems.find(
-          (item) => item.id === "52525252-5252-4252-8252-525252525252",
-        )!;
+        const template = reportTemplateItems.find((item) => item.id === reportTemplateId)!;
         const outputFormat = template.output_format;
         const outputFilename = `report.${outputFormat}`;
         const outputContentTypes: Record<string, string> = {
@@ -1106,7 +1106,7 @@ beforeEach(() => {
         };
         const created: ReportRunRead = {
           id: "53535353-5353-4353-8353-535353535353",
-          report_template_id: "52525252-5252-4252-8252-525252525252",
+          report_template_id: reportTemplateId,
           registry_id: "77777777-7777-4777-8777-777777777777",
           card_id: null,
           report_type: template.report_type,
@@ -4084,6 +4084,63 @@ test("manages report templates and report runs in Russian registry UI", async ()
           init?.method === "GET" &&
           headers?.Authorization === "Bearer test-token"
         );
+      }),
+    ).toBe(true);
+  });
+}, 15000);
+
+test("uses report template default parameters when run JSON is empty", async () => {
+  reportTemplateItems = [
+    {
+      ...apiPayloads.reportTemplates.items[0],
+      parameters_schema_json: {
+        type: "object",
+        properties: {
+          limit: { type: "integer", title: "Лимит" },
+          section: {
+            type: "string",
+            title: "Раздел",
+            oneOf: [
+              { const: "cards", title: "Карточки" },
+              { const: "summary", title: "Сводка" },
+            ],
+          },
+        },
+      },
+      default_parameters_json: { limit: 30, section: "cards" },
+      output_format: "csv",
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(await screen.findByLabelText("Лимит")).toHaveValue(30);
+  expect(screen.getByLabelText("Раздел")).toHaveValue("cards");
+  expect(screen.getByLabelText("Параметры запуска JSON")).toHaveValue("");
+
+  await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
+
+  expect(await screen.findByText("Отчет сформирован")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith("/api/v1/report-templates/51515151-5151-4151-8151-515151515151/runs") ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          parameters?: { limit?: unknown; section?: unknown } | null;
+        };
+        return body.parameters?.limit === 30 && body.parameters.section === "cards";
       }),
     ).toBe(true);
   });
