@@ -318,13 +318,14 @@ Current stop point:
   frontend dist is deployed, healthcheck passed, and server checks passed. No
   backend code, migrations, endpoints, report formats, full visual report
   builder, or MCP write tools are included.
-- Phase 4R Report Run Schema Default Parameters is completed locally:
+- Phase 4R Report Run Schema Default Parameters is completed and deployed:
   report run parameter controls now use valid scalar JSON Schema property
   `default` values when template `default_parameters_json` does not override
   them, and empty manual run JSON sends those defaults in the existing report
-  run payload. Deployment evidence is pending. No backend code, migrations,
-  endpoints, report formats, full visual report builder, or MCP write tools are
-  included.
+  run payload. Commit `1b23ffc` is pushed, the server checkout is synchronized
+  to `origin/main`, frontend dist is deployed, healthcheck passed, and server
+  checks passed. No backend code, migrations, endpoints, report formats, full
+  visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3205,7 +3206,7 @@ Production migration checkpoint:
 
 ### Phase 4R: Report Run Schema Default Parameters
 
-Status: completed locally; deployment pending.
+Status: completed.
 
 Purpose: continue report-polish by using JSON Schema property defaults as the
 initial run parameter payload when a template does not provide explicit default
@@ -3272,6 +3273,16 @@ Verification so far:
   `35 passed`, frontend build, and project tree check.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `1b23ffc` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=1b23ffc`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-CPhHZgdq.js` with `/assets/index-Be0bM7I8.css`.
 
 Production migration checkpoint:
 
