@@ -260,12 +260,13 @@ Current stop point:
   `origin/main`, frontend dist is deployed, healthcheck passed, and server
   checks passed. No backend code, migrations, endpoints, report formats, or
   MCP write tools are included.
-- Phase 4K Report Template Parameter Schema UI is completed locally: the
+- Phase 4K Report Template Parameter Schema UI is completed and deployed: the
   Russian report template create/edit forms now expose existing
   `parameters_schema_json` API support so registry admins can save a template
-  parameter schema JSON alongside default parameter JSON. Local checks passed;
-  server synchronization is pending. No backend code, migrations, endpoints,
-  report formats, or MCP write tools are included.
+  parameter schema JSON alongside default parameter JSON. Commit `ed718d1` is
+  pushed, the server checkout is synchronized to `origin/main`, frontend dist
+  is deployed, healthcheck passed, and server checks passed. No backend code,
+  migrations, endpoints, report formats, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1815,8 +1816,7 @@ Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
 template type/format edit slices, and report run parameters/summary visibility.
-Report template parameter schema UI is completed locally; additional report
-polish remains deferred.
+report template parameter schema UI. Additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2635,7 +2635,7 @@ Production migration checkpoint:
 
 ### Phase 4K: Report Template Parameter Schema UI
 
-Status: completed locally.
+Status: completed.
 
 Purpose: close a report template settings polish gap by exposing the existing
 `parameters_schema_json` API field in the authenticated Russian report UI.
@@ -2686,6 +2686,16 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `ed718d1` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=ed718d1`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-1TXp2QWI.js`.
 
 Production migration checkpoint:
 
