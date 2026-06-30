@@ -76,6 +76,7 @@ Completed phases:
 - Phase 4G: XLSX Report Output.
 - Phase 4H: PDF Report Output.
 - Phase 4I: Report Template Type And Format Edit.
+- Phase 4J: Report Run Parameters And Summary Visibility.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -250,6 +251,11 @@ Current stop point:
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, disposable PostgreSQL-backed API verification passed,
   healthcheck passed, and server checks passed. No migration was required.
+- Phase 4J Report Run Parameters And Summary Visibility is completed locally:
+  generated report rows now show run parameters and summary metadata in the
+  Russian report UI using existing `parameters_json` and `summary_json` API
+  fields. Local checks passed; server synchronization is pending. No backend
+  code, migrations, endpoints, report formats, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1798,7 +1804,8 @@ Purpose: add report definitions and report runs.
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
-template type/format edit slices. Additional report polish remains deferred.
+template type/format edit slices. Report run parameters/summary visibility is
+completed locally; additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2550,6 +2557,60 @@ Production migration checkpoint:
 
 - Not required for Phase 4I; production Alembic remained
   `0014_report_pdf_output (head)`.
+
+### Phase 4J: Report Run Parameters And Summary Visibility
+
+Status: completed locally.
+
+Purpose: close a small report UI polish gap by making generated report run
+inputs and summary metadata visible in the existing Russian report run list.
+
+Scope:
+
+- Show existing `parameters_json` for generated report runs as Russian
+  "Параметры запуска" metadata.
+- Show existing `summary_json` for generated report runs as Russian
+  "Сводка отчета" metadata.
+- Keep archived report runs readable and downloadable with the same metadata.
+- Use compact JSON display and `Нет данных` for empty metadata.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, visual report builder, or MCP write tools.
+
+Acceptance criteria:
+
+- Generated report rows show run parameters in the Russian UI.
+- Generated report rows show report summary metadata in the Russian UI.
+- Archived report rows keep the same metadata visible.
+- Existing report create/edit/generate/download/archive behavior remains intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is list visibility polish only; it does not add a detailed report run
+  page or visual report builder.
+- JSON metadata is displayed compactly and remains technical metadata.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because the run list
+  did not contain `Параметры запуска: {"limit":20}`.
+- GREEN targeted frontend report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4J; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

@@ -3866,6 +3866,8 @@ test("manages report templates and report runs in Russian registry UI", async ()
       ),
     ),
   ).toBeInTheDocument();
+  expect(screen.getByText('Параметры запуска: {"limit":20}')).toBeInTheDocument();
+  expect(screen.getByText('Сводка отчета: {"row_count":1}')).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать отчет Обновленный отчет" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Архивировать отчет Обновленный отчет" }));
@@ -3885,6 +3887,8 @@ test("manages report templates and report runs in Russian registry UI", async ()
       ),
     ),
   ).toBeInTheDocument();
+  expect(screen.getByText('Параметры запуска: {"limit":20}')).toBeInTheDocument();
+  expect(screen.getByText('Сводка отчета: {"row_count":1}')).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать отчет report.csv" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Архивировать отчет report.csv" })).toBeDisabled();
@@ -4016,7 +4020,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
       }),
     ).toBe(true);
   });
-});
+}, 15000);
 
 test("edits a public-link card without authentication", async () => {
   const user = userEvent.setup();

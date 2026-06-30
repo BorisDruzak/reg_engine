@@ -495,6 +495,8 @@ function ReportRunList({
                 {formatUiDateTime(run.created_at)}
                 {isArchived ? ` / ${uiText.archived}` : ""}
               </span>
+              <span>Параметры запуска: {formatJsonObjectInline(run.parameters_json)}</span>
+              <span>Сводка отчета: {formatJsonObjectInline(run.summary_json)}</span>
             </div>
             <div className="row-actions">
               <button
@@ -552,6 +554,10 @@ function parseJsonObjectOrNull(value: string) {
 
 function formatJsonObjectForEdit(value: Record<string, unknown> | null) {
   return value ? JSON.stringify(value, null, 2) : "";
+}
+
+function formatJsonObjectInline(value: Record<string, unknown> | null) {
+  return value ? JSON.stringify(value) : uiText.noData;
 }
 
 function reportOutputFormatLabel(format: string) {
