@@ -154,11 +154,14 @@ Current stop point:
   backend API slice: CSV commit reuses preview validation, applies atomic
   create/update batches, groups new-card rows by optional `import_key`, and
   writes import audit.
-- Phase 3D Import Export Frontend UI is in progress as a frontend-only slice:
-  authenticated registry admins can download JSON/CSV card exports and run
-  CSV import preview/commit through the existing Phase 3 REST API. No backend
-  code, models, migrations, XLSX workflows, binary import/export, or MCP write
-  tools are added.
+- Phase 3D Import Export Frontend UI is completed and deployed as a
+  frontend-only slice: authenticated registry admins can download JSON/CSV
+  card exports and run CSV import preview/commit through the existing Phase 3
+  REST API. No backend code, models, migrations, XLSX workflows, binary
+  import/export, or MCP write tools were added. Commit `fe8163c` is pushed,
+  the server checkout is synchronized to `origin/main`, frontend dist is
+  deployed, healthcheck passed, Alembic remains at
+  `0012_report_csv_output (head)`, and server checks passed.
 - Phase 4A Report Foundation API is completed: migration `0010_reports`,
   backend report templates/runs, JSON report output storage, scoped
   reads/downloads, and audit are implemented, pushed, deployed, and migrated in
@@ -1568,7 +1571,7 @@ Known limitations:
 
 ### Phase 3D: Import Export Frontend UI
 
-Status: in progress.
+Status: completed.
 
 Purpose: expose the existing authenticated Phase 3 CSV/JSON import/export API
 in the Russian registry workspace without adding backend behavior, migrations,
@@ -1616,7 +1619,7 @@ Known limitations:
 - Reference label enrichment remains deferred.
 - No backend changes and no MCP write tools.
 
-Verification so far:
+Verification:
 
 - RED frontend test failed before implementation because the registry workspace
   had no `Импорт и экспорт` panel.
@@ -1637,7 +1640,20 @@ Production migration checkpoint:
 
 Deployment checkpoint:
 
-- Pending implementation, checks, push, frontend deploy, and server check.
+- Commit `fe8163c` (`Add CSV import export UI`) is pushed to `origin/main`.
+- Server checkout was synchronized to implementation commit `fe8163c` for the
+  frontend deployment.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`
+  rebuilt and deployed frontend dist; same-origin smoke returned
+  `/assets/index-Bfr1WPpC.js`.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed:
+  server checkout clean, PostgreSQL reachable on localhost/LAN, database access
+  works for runtime checks, and attachment storage is configured.
+- Server healthcheck passed:
+  `curl -fsS http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
+- Production Alembic status was checked and remains
+  `0012_report_csv_output (head)`; no Phase 3D migration was required.
 
 ### Phase 4: Reports
 
