@@ -94,6 +94,7 @@ Completed phases:
 - Phase 5B: MCP Hardening And Config.
 - Phase 5C: MCP Mutation Client Foundation.
 - Phase 5D: MCP Registry Create Write Tool.
+- Phase 5E: MCP Registry Update And Archive Write Tools.
 
 Current stop point:
 
@@ -228,6 +229,11 @@ Current stop point:
   `0014_report_pdf_output (head)`. No direct DB access, backend service
   imports, destructive MCP tools, frontend UI, database schema changes, or
   Alembic migrations are included.
+- Phase 5E MCP Registry Update And Archive Write Tools is completed locally
+  and pending deploy: registry update/archive MCP tools call existing REST
+  `PATCH /api/v1/registries/{registry_id}` and
+  `DELETE /api/v1/registries/{registry_id}` endpoints, require explicit
+  `confirm_archive=true` for archive, and keep permissions/audit API-enforced.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4137,6 +4143,95 @@ Production migration checkpoint:
 
 - Not required for Phase 5D; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5E: MCP Registry Update And Archive Write Tools
+
+Status: completed locally; deploy pending.
+
+Purpose: extend the narrow API-only MCP registry write surface with registry
+settings update and guarded archive.
+
+Tool set:
+
+- `reg_engine_update_registry`
+- `reg_engine_archive_registry`
+
+Argument schemas:
+
+- `reg_engine_update_registry`:
+  - `registry_id`: required string.
+  - `name`: optional string.
+  - `description`: optional string.
+  - `lifecycle_status`: optional string, passed to the existing API.
+  - `additionalProperties=false`.
+- `reg_engine_archive_registry`:
+  - `registry_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `PATCH /api/v1/registries/{registry_id}`
+- `DELETE /api/v1/registries/{registry_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Registry update/archive permission checks remain in the existing backend
+  registry schema service.
+- Registry update/archive audit remains API-side with `audit_events.source=mcp`
+  through the existing `X-Reg-Engine-Source: mcp` request header.
+- Registry archive is destructive in user workflow terms, even though the
+  backend uses archive semantics instead of physical delete; therefore
+  `confirm_archive=true` is required before the MCP tool sends `DELETE`.
+
+Scope:
+
+- Expose the two tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and `reg_engine_create_registry` behavior.
+- Reject archive calls unless `confirm_archive=true`.
+- Reject update calls with no update fields before sending a request.
+- Do not add schema mutation, card mutation, import, document, report,
+  public-link, binary download, or other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as write tools.
+- `reg_engine_update_registry` sends `PATCH /api/v1/registries/{registry_id}`
+  with only provided update fields.
+- `reg_engine_archive_registry` sends `DELETE /api/v1/registries/{registry_id}`
+  only when `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not archive or mutate real production registries
+  without a disposable production-safe target.
+- Schema/card/report/document/public-link MCP write tools remain future phases.
+
+Verification so far:
+
+- RED targeted tests failed before implementation because
+  `reg_engine_update_registry` and `reg_engine_archive_registry` were absent
+  from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted update/archive MCP tool tests passed.
+- Full MCP Phase 5 test file passed locally with `18 passed`.
+- Targeted `ruff check` and `mypy app/mcp` passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `84 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5E; no backend schema changes are included.
 
 ## Verification
 

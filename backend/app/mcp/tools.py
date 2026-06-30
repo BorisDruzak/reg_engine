@@ -162,6 +162,40 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_update_registry",
+        "title": "Update registry",
+        "description": "Update registry settings through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "lifecycle_status": {"type": "string"},
+            },
+            "required": ["registry_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_registry",
+        "title": "Archive registry",
+        "description": (
+            "Archive a registry through the Registry Engine API. Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["registry_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -254,6 +288,21 @@ def _call_tool_or_raise(
         if description is not None:
             payload["description"] = description
         return client.post_json("/api/v1/registries", payload)
+    if name == "reg_engine_update_registry":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        payload = {}
+        for key in ("name", "description", "lifecycle_status"):
+            value = _optional_str_arg(arguments, key)
+            if value is not None:
+                payload[key] = value
+        if not payload:
+            raise ValueError("At least one registry update field is required.")
+        return client.patch_json(f"/api/v1/registries/{registry_id}", payload)
+    if name == "reg_engine_archive_registry":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/registries/{registry_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
