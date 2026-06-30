@@ -27,6 +27,7 @@ type ReportParameterField = {
   code: string;
   label: string;
   description: string | null;
+  required: boolean;
   type: ReportParameterFieldType;
   inputType: "date" | "number" | "text";
   options: ReportParameterOption[];
@@ -242,6 +243,27 @@ export function ReportsPanel({
     setRunParametersJson(JSON.stringify(nextParameters));
   }
 
+  function generateReportFromCurrentParameters() {
+    let parameters: Record<string, unknown> | null;
+    try {
+      parameters = parseReportRunParameters(runParametersJson, selectedTemplateDefaultParameters);
+    } catch (error) {
+      setMessage(null);
+      setLocalError(errorText(error));
+      return;
+    }
+    const validationError = validateReportRunParameters(
+      selectedTemplate?.parameters_schema_json ?? null,
+      parameters,
+    );
+    if (validationError) {
+      setMessage(null);
+      setLocalError(validationError);
+      return;
+    }
+    generateRunMutation.mutate();
+  }
+
   return (
     <Panel title={uiText.reports}>
       <section className="template-manager" aria-labelledby="report-templates-heading">
@@ -445,7 +467,7 @@ export function ReportsPanel({
           type="button"
           className="primary-button"
           disabled={!selectedTemplateId || generateRunMutation.isPending}
-          onClick={() => generateRunMutation.mutate()}
+          onClick={generateReportFromCurrentParameters}
         >
           {uiText.generateReport}
         </button>
@@ -503,6 +525,7 @@ function ReportRunParameterFields({
           {field.type === "boolean" ? (
             <input
               aria-label={field.label}
+              aria-required={field.required || undefined}
               type="checkbox"
               checked={Boolean(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.checked)}
@@ -510,6 +533,7 @@ function ReportRunParameterFields({
           ) : field.options.length > 0 ? (
             <select
               aria-label={field.label}
+              aria-required={field.required || undefined}
               value={formatReportParameterInputValue(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
             >
@@ -522,6 +546,7 @@ function ReportRunParameterFields({
           ) : (
             <input
               aria-label={field.label}
+              aria-required={field.required || undefined}
               type={field.inputType}
               value={formatReportParameterInputValue(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
@@ -727,6 +752,7 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
   if (!properties) {
     return [];
   }
+  const requiredCodes = getReportParameterRequiredCodes(schema);
 
   return Object.entries(properties).flatMap(([code, rawConfig]) => {
     if (!isRecord(rawConfig)) {
@@ -747,12 +773,48 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
         code,
         label,
         description,
+        required: requiredCodes.has(code),
         type: rawType,
         inputType: getReportParameterInputType(rawConfig, rawType),
         options: getReportParameterOptions(rawConfig, rawType),
       },
     ];
   });
+}
+
+function getReportParameterRequiredCodes(schema: Record<string, unknown> | null) {
+  if (!Array.isArray(schema?.required)) {
+    return new Set<string>();
+  }
+  return new Set(
+    schema.required.filter(
+      (value): value is string => typeof value === "string" && Boolean(value.trim()),
+    ),
+  );
+}
+
+function validateReportRunParameters(
+  schema: Record<string, unknown> | null,
+  parameters: Record<string, unknown> | null,
+) {
+  const fields = getReportParameterFields(schema);
+  const missingLabels = fields.flatMap((field) => {
+    if (!field.required || !isReportParameterMissing(parameters?.[field.code])) {
+      return [];
+    }
+    return [field.label];
+  });
+  if (missingLabels.length === 0) {
+    return null;
+  }
+  return `${uiText.reportRequiredParameters}: ${missingLabels.join(", ")}`;
+}
+
+function isReportParameterMissing(value: unknown) {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  return typeof value === "string" && value.trim() === "";
 }
 
 function getReportParameterDefaults(schema: Record<string, unknown> | null) {

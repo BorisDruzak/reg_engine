@@ -85,6 +85,7 @@ Completed phases:
 - Phase 4P: Report Run Date Parameter Controls.
 - Phase 4Q: Report Run Parameter Description Hints.
 - Phase 4R: Report Run Schema Default Parameters.
+- Phase 4S: Report Run Required Parameter Validation.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -326,6 +327,12 @@ Current stop point:
   to `origin/main`, frontend dist is deployed, healthcheck passed, and server
   checks passed. No backend code, migrations, endpoints, report formats, full
   visual report builder, or MCP write tools are included.
+- Phase 4S Report Run Required Parameter Validation is completed locally:
+  supported flat report run controls now read JSON Schema `required`, block
+  generation when required values are empty, and show a Russian validation
+  message listing missing parameter labels. Deployment evidence is pending. No
+  backend code, migrations, endpoints, report formats, full visual report
+  builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3287,6 +3294,78 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4R; no backend schema changes are included.
+
+### Phase 4S: Report Run Required Parameter Validation
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by honoring flat JSON Schema `required`
+metadata in the Russian report run form before calling the existing report run
+API.
+
+Scope:
+
+- Detect `parameters_schema_json.required` string entries for supported flat
+  visual report parameters.
+- Mark required visual controls with `aria-required`.
+- Before report generation, validate the resolved run parameter payload from
+  manual JSON or merged defaults.
+- Treat `null`, `undefined`, and empty strings as missing; keep numeric `0` and
+  boolean `false` valid.
+- Show a Russian validation message listing missing parameter labels.
+- Do not send the report run POST request when required parameters are missing.
+- Preserve existing manual JSON override, schema defaults, template defaults,
+  number, integer, boolean, enum, `oneOf`, date, description, output format,
+  archive, download, and metadata display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A required supported schema parameter with no value blocks report generation
+  in the Russian UI.
+- The validation message includes the visible parameter label.
+- No report run POST is sent while required parameters are missing.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is frontend validation only; backend remains the API/security boundary.
+- Only flat visual parameters supported by the current report form are checked.
+- No nested schema validation, `minLength`, `minimum`, `pattern`, conditional
+  validation, arrays, objects, grouped controls, or full visual report builder
+  behavior is included.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because generation
+  was not blocked for an empty required schema parameter.
+- GREEN targeted required-parameter frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when required"`.
+- Existing schema-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report parameter schema defaults"`.
+- Existing template-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report template default parameters"`.
+- Existing date-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Local format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 138 skipped`, frontend unit `36 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4S; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

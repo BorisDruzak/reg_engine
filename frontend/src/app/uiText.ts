@@ -289,6 +289,7 @@ export const uiText = {
   reportTemplateParametersJson: "Параметры шаблона JSON",
   reportTemplateEditParametersJson: "Новые параметры шаблона JSON",
   reportRunParametersJson: "Параметры запуска JSON",
+  reportRequiredParameters: "Заполните обязательные параметры отчета",
   reportTemplateCreated: "Шаблон отчета создан",
   reportTemplateUpdated: "Шаблон отчета обновлен",
   reportTemplateArchived: "Шаблон отчета архивирован",
