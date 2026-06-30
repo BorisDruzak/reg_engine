@@ -301,10 +301,14 @@ Current stop point:
   synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
-- Phase 4P Report Run Date Parameter Controls is completed locally:
+- Phase 4P Report Run Date Parameter Controls is completed and deployed:
   report run parameter controls now render JSON Schema string properties with
   `format: "date"` as date inputs while preserving string values in the
-  existing report run parameters JSON payload. Deployment evidence is pending.
+  existing report run parameters JSON payload. Commit `a145e11` is pushed, the
+  server checkout is synchronized to `origin/main`, frontend dist is deployed,
+  healthcheck passed, and server checks passed. No backend code, migrations,
+  endpoints, report formats, full visual report builder, or MCP write tools
+  are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3040,7 +3044,7 @@ Production migration checkpoint:
 
 ### Phase 4P: Report Run Date Parameter Controls
 
-Status: completed locally; deployment pending.
+Status: completed.
 
 Purpose: continue the report-polish sequence by rendering JSON Schema
 `format: "date"` string parameters as native date inputs in the Russian report
@@ -3098,6 +3102,16 @@ Verification so far:
   `33 passed`, frontend build, and project tree check.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `a145e11` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=a145e11`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-D1h_Y_y-.js` with `/assets/index-bNU_0_Xh.css`.
 
 Production migration checkpoint:
 
