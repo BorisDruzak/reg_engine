@@ -268,12 +268,14 @@ Current stop point:
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, healthcheck passed, and server checks passed. No backend code,
   migrations, endpoints, report formats, or MCP write tools are included.
-- Phase 4L Report Run Visual Parameter Form is completed locally: the Russian
+- Phase 4L Report Run Visual Parameter Form is completed and deployed: the Russian
   report run form now renders basic visual controls from existing
   `parameters_schema_json` object properties and syncs changes into the
-  existing run parameters JSON payload. Local checks passed; server
-  synchronization is pending. No backend code, migrations, endpoints, report
-  formats, full visual report builder, or MCP write tools are included.
+  existing run parameters JSON payload. Commit `74089ea` is pushed, the server
+  checkout is synchronized to `origin/main`, frontend dist is deployed,
+  healthcheck passed, and server checks passed. No backend code, migrations,
+  endpoints, report formats, full visual report builder, or MCP write tools are
+  included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1823,8 +1825,8 @@ Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
 template type/format edit slices, and report run parameters/summary visibility.
-report template parameter schema UI. Report run visual parameter form is
-completed locally; additional report polish remains deferred.
+report template parameter schema UI, and report run visual parameter form.
+Additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2711,7 +2713,7 @@ Production migration checkpoint:
 
 ### Phase 4L: Report Run Visual Parameter Form
 
-Status: completed locally.
+Status: completed.
 
 Purpose: close a report run usability polish gap by using existing
 `parameters_schema_json` object properties to render basic Russian UI controls
@@ -2768,6 +2770,16 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `74089ea` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=74089ea`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-Cw6onbGr.js` with `/assets/index-bNU_0_Xh.css`.
 
 Production migration checkpoint:
 
