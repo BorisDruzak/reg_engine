@@ -68,6 +68,7 @@ Completed phases:
 - Phase 4A: Report Foundation API.
 - Phase 4B: Report Frontend UI.
 - Phase 4C: Report Template Settings Edit.
+- Phase 4D: CSV Report Output.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -182,13 +183,18 @@ Current stop point:
   checkout is synchronized to `origin/main`, frontend dist is deployed, the
   backend service is restarted, OpenAPI exposes the PATCH route, healthcheck
   passed, and server checks passed.
+- Phase 4D CSV Report Output is implemented in the current checkpoint:
+  `csv` is accepted as a report template output format, report runs can store
+  and download CSV files through the existing storage abstraction, and the
+  Russian report UI can create CSV templates. Production migration
+  `0012_report_csv_output` is required before live use.
 - Next planned work requires explicit prioritization: remaining report polish,
-  non-JSON report outputs, XLSX workflows, MCP write tools, or another
+  XLSX/PDF report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
-- Later explicit phases remain non-JSON report outputs, MCP write tools, and
+- Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
   remaining report polish.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, non-JSON report outputs, remaining report polish, and MCP write
+  export, XLSX/PDF report outputs, remaining report polish, and MCP write
   tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -1544,9 +1550,9 @@ Known limitations:
 
 Purpose: add report definitions and report runs.
 
-Status: completed for the approved backend report foundation, frontend UI, and
-report template settings edit slices; non-JSON report outputs and remaining
-report polish remain deferred.
+Status: completed for the approved backend report foundation, frontend UI,
+report template settings edit, and CSV report output slices; XLSX/PDF report
+outputs and remaining report polish remain deferred.
 
 Planned overall scope:
 
@@ -1663,7 +1669,7 @@ Acceptance criteria:
 
 Known limitations:
 
-- Report output remains JSON only.
+- At Phase 4B, report output remained JSON only; Phase 4D adds CSV output.
 - Report template settings edit is handled by Phase 4C; richer report builder
   UX remains future polish.
 - Report downloads still use the existing browser blob download path.
@@ -1723,7 +1729,7 @@ Scope:
 Acceptance criteria:
 
 - No database schema change or Alembic migration is added.
-- No XLSX/PDF/non-JSON report output is added.
+- No XLSX/PDF/non-JSON report output is added in Phase 4C.
 - No scheduled/background reports, charts, public-link report workflows,
   binary attachment/document export, or MCP write tools are added.
 - Backend coverage verifies update success, permission denial, archived
@@ -1734,7 +1740,7 @@ Acceptance criteria:
 
 Known limitations:
 
-- Report output remains JSON only.
+- At Phase 4C, report output remained JSON only; Phase 4D adds CSV output.
 - Report template settings are still a simple form, not a visual report
   builder.
 - Report template `code`, `report_type`, and `output_format` remain immutable.
@@ -1770,6 +1776,81 @@ Verification:
 Production migration checkpoint:
 
 - Not required for Phase 4C.
+
+### Phase 4D: CSV Report Output
+
+Status: implemented and locally verified; pending production migration and
+deployment verification.
+
+Purpose: add the first non-JSON report output while keeping the existing report
+service/API boundary, storage abstraction, scope checks, and audit behavior.
+
+Scope:
+
+- Add output format `csv` for report templates.
+- Add migration `0012_report_csv_output` to allow `csv` in
+  `report_templates.output_format`.
+- Keep existing report types: `registry_cards`, `card_detail`, and
+  `period_summary`.
+- Store generated CSV report bytes through the existing report storage prefix.
+- Return `text/csv; charset=utf-8` and `.csv` filenames for CSV report runs.
+- Keep report run responses safe: no storage keys, filesystem paths, checksums,
+  or stored-file ids.
+- Preserve existing backend scope checks for template creation, report
+  generation, report reads/downloads, and archive reads.
+- Preserve report run generate/download/archive audit events.
+- Add Russian-first UI support for choosing `JSON` or `CSV` when creating a
+  report template.
+
+Acceptance criteria:
+
+- CSV report templates can be created only by actors with
+  `registry.schema.manage`.
+- CSV report runs use the same visibility scope as JSON report runs.
+- CSV download does not expose sibling-branch cards outside the actor scope.
+- CSV output is stored through the storage abstraction, not returned from
+  memory-only ad hoc state.
+- JSON report behavior remains intact.
+- No XLSX/PDF output, scheduling, charts, public-link report workflows,
+  binary attachment/document report export, or MCP write tools are added.
+- README, PLANS, and project tree are updated.
+
+Known limitations:
+
+- CSV schemas are simple technical exports per existing report type, not a
+  visual report builder.
+- XLSX/PDF report outputs remain deferred.
+- Scheduled/background reports, charts, and public-link report workflows remain
+  deferred.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED backend test failed before implementation with
+  `Unsupported report output format: csv`.
+- RED frontend test failed before implementation because `Формат отчета` did
+  not offer a `csv` option.
+- GREEN backend targeted test passed on disposable PostgreSQL database
+  `reg_engine_phase4d_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_api_phase_4_reports.py::test_csv_registry_report_runs_are_scoped_stored_and_downloadable -q`.
+- GREEN frontend targeted test passed:
+  `npm test -- --run src/App.test.tsx --testNamePattern "report templates"`.
+- Full PostgreSQL-backed report API suite passed on disposable database
+  `reg_engine_phase4d_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_api_phase_4_reports.py -q`.
+- Alembic offline SQL render passed from `backend` and included migration
+  `0012_report_csv_output` with `csv` in
+  `ck_report_templates_output_format`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e`.
+
+Production migration checkpoint:
+
+- Pending for `0012_report_csv_output`.
 
 ### Phase 5: MCP Over API Only
 

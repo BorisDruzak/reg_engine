@@ -17,6 +17,7 @@ import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
 
 const reportTypes = ["registry_cards", "card_detail", "period_summary"];
+const reportOutputFormats = ["json", "csv"];
 
 export function ReportsPanel({
   selectedRegistryId,
@@ -31,6 +32,7 @@ export function ReportsPanel({
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [reportType, setReportType] = useState("registry_cards");
+  const [outputFormat, setOutputFormat] = useState("json");
   const [templateParametersJson, setTemplateParametersJson] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editTemplateName, setEditTemplateName] = useState("");
@@ -68,7 +70,7 @@ export function ReportsPanel({
         description: templateDescription.trim() || null,
         report_type: reportType,
         default_parameters_json: parseJsonObjectOrNull(templateParametersJson),
-        output_format: "json",
+        output_format: outputFormat,
       }),
     onSuccess: async (template) => {
       setMessage(uiText.reportTemplateCreated);
@@ -78,6 +80,7 @@ export function ReportsPanel({
       setTemplateName("");
       setTemplateDescription("");
       setReportType("registry_cards");
+      setOutputFormat("json");
       setTemplateParametersJson("");
       await invalidateReportData(queryClient, token, selectedRegistryId);
     },
@@ -209,7 +212,13 @@ export function ReportsPanel({
           </label>
           <label className="field-editor-control">
             <span>{uiText.reportOutputFormat}</span>
-            <input value="json" disabled />
+            <select value={outputFormat} onChange={(event) => setOutputFormat(event.target.value)}>
+              {reportOutputFormats.map((format) => (
+                <option key={format} value={format}>
+                  {reportOutputFormatLabel(format)}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="field-editor-control template-body-control">
             <span>{uiText.reportTemplateParametersJson}</span>
@@ -469,6 +478,10 @@ function parseJsonObjectOrNull(value: string) {
 
 function formatJsonObjectForEdit(value: Record<string, unknown> | null) {
   return value ? JSON.stringify(value, null, 2) : "";
+}
+
+function reportOutputFormatLabel(format: string) {
+  return format.toUpperCase();
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

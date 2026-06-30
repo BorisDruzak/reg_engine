@@ -1,9 +1,11 @@
+import csv
 import json
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import StringIO
 from typing import Any
 from uuid import UUID
 
@@ -36,6 +38,13 @@ class _RenderedReport:
     content: dict[str, Any]
     summary: dict[str, Any]
     row_count: int
+
+
+@dataclass(frozen=True)
+class _ReportOutput:
+    content: bytes
+    filename: str
+    content_type: str
 
 
 class ReportService:
@@ -197,8 +206,6 @@ class ReportService:
         parameters: dict[str, Any] | None = None,
     ) -> ReportRun:
         template = self._get_active_template(template_id)
-        if template.output_format != "json":
-            raise ReportServiceError("Only JSON report output is supported in this phase.")
         merged_parameters = {
             **(template.default_parameters_json or {}),
             **(parameters or {}),
@@ -208,27 +215,22 @@ class ReportService:
             template=template,
             parameters=merged_parameters,
         )
-        content = json.dumps(
-            rendered.content,
-            ensure_ascii=False,
-            sort_keys=True,
-            default=_serialize_report_value,
-        ).encode("utf-8")
-        output_filename = self._output_filename(template)
+        output = self._render_report_output(template=template, rendered=rendered)
         started_at = datetime.now(UTC)
-        stored_info = self.storage.write_bytes(content)
+        stored_info = self.storage.write_bytes(output.content)
         try:
             stored_file = StoredFile(
                 storage_backend=self.storage.backend_name,
                 storage_key=stored_info.storage_key,
-                original_filename=output_filename,
-                content_type="application/json",
+                original_filename=output.filename,
+                content_type=output.content_type,
                 content_length_bytes=stored_info.content_length_bytes,
                 checksum_sha256=stored_info.checksum_sha256,
                 scanner_status="deferred",
                 scanner_details_json={
                     "source": "report_run_v1",
                     "report_type": rendered.report_type,
+                    "output_format": template.output_format,
                 },
                 created_by=actor_user_id,
             )
@@ -244,7 +246,7 @@ class ReportService:
                 parameters_json=merged_parameters,
                 summary_json=rendered.summary,
                 row_count=rendered.row_count,
-                output_filename=output_filename,
+                output_filename=output.filename,
                 output_content_type=stored_file.content_type,
                 generated_by=actor_user_id,
                 started_at=started_at,
@@ -264,6 +266,7 @@ class ReportService:
                     "report_type": rendered.report_type,
                     "stored_file_id": str(stored_file.id),
                     "row_count": rendered.row_count,
+                    "output_format": template.output_format,
                 },
             )
             return report_run
@@ -386,6 +389,124 @@ class ReportService:
                 parameters=parameters,
             )
         raise ReportServiceError(f"Unsupported report type: {template.report_type}")
+
+    def _render_report_output(
+        self,
+        *,
+        template: ReportTemplate,
+        rendered: _RenderedReport,
+    ) -> _ReportOutput:
+        if template.output_format == "json":
+            return _ReportOutput(
+                content=json.dumps(
+                    rendered.content,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    default=_serialize_report_value,
+                ).encode("utf-8"),
+                filename=self._output_filename(template),
+                content_type="application/json",
+            )
+        if template.output_format == "csv":
+            return _ReportOutput(
+                content=self._render_csv_report(rendered),
+                filename=self._output_filename(template),
+                content_type="text/csv; charset=utf-8",
+            )
+        raise ReportServiceError(f"Unsupported report output format: {template.output_format}")
+
+    def _render_csv_report(self, rendered: _RenderedReport) -> bytes:
+        if rendered.report_type == "registry_cards":
+            return self._render_registry_cards_csv(rendered)
+        if rendered.report_type == "card_detail":
+            return self._render_card_detail_csv(rendered)
+        if rendered.report_type == "period_summary":
+            return self._render_period_summary_csv(rendered)
+        raise ReportServiceError(f"Unsupported report type: {rendered.report_type}")
+
+    def _render_registry_cards_csv(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = [
+            "id",
+            "registry_id",
+            "organization_id",
+            "org_unit_id",
+            "display_name",
+            "lifecycle_status",
+            "created_at",
+        ]
+        rows = [
+            {fieldname: _csv_cell(card.get(fieldname)) for fieldname in fieldnames}
+            for card in rendered.content.get("cards", [])
+            if isinstance(card, dict)
+        ]
+        return _write_csv(fieldnames, rows)
+
+    def _render_card_detail_csv(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = [
+            "card_id",
+            "block_code",
+            "block_instance_id",
+            "ordinal",
+            "field_code",
+            "field_type",
+            "value",
+        ]
+        card = rendered.content.get("card")
+        if not isinstance(card, dict):
+            return _write_csv(fieldnames, [])
+        card_id = card.get("id")
+        blocks = card.get("blocks")
+        rows: list[dict[str, str]] = []
+        if isinstance(blocks, dict):
+            for block_code, block in blocks.items():
+                if not isinstance(block, dict):
+                    continue
+                instances = block.get("instances")
+                if not isinstance(instances, list):
+                    continue
+                for instance in instances:
+                    if not isinstance(instance, dict):
+                        continue
+                    fields = instance.get("fields")
+                    if not isinstance(fields, dict):
+                        continue
+                    for field_code, field in fields.items():
+                        if not isinstance(field, dict):
+                            continue
+                        rows.append(
+                            {
+                                "card_id": _csv_cell(card_id),
+                                "block_code": _csv_cell(block_code),
+                                "block_instance_id": _csv_cell(instance.get("block_instance_id")),
+                                "ordinal": _csv_cell(instance.get("ordinal")),
+                                "field_code": _csv_cell(field_code),
+                                "field_type": _csv_cell(field.get("field_type")),
+                                "value": _csv_cell(field.get("value")),
+                            }
+                        )
+        return _write_csv(fieldnames, rows)
+
+    def _render_period_summary_csv(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = ["metric", "key", "value"]
+        summary = rendered.summary
+        rows = [
+            {
+                "metric": "card_count",
+                "key": "",
+                "value": _csv_cell(summary.get("card_count")),
+            }
+        ]
+        status_counts = summary.get("lifecycle_status_counts")
+        if isinstance(status_counts, dict):
+            rows.extend(
+                {
+                    "metric": "lifecycle_status_count",
+                    "key": _csv_cell(status),
+                    "value": _csv_cell(count),
+                }
+                for status, count in sorted(status_counts.items())
+            )
+        return _write_csv(fieldnames, rows)
 
     def _render_registry_cards_report(
         self,
@@ -549,7 +670,9 @@ class ReportService:
 
     def _output_filename(self, template: ReportTemplate) -> str:
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-        return normalize_attachment_filename(f"{template.code}-{timestamp}.json")
+        return normalize_attachment_filename(
+            f"{template.code}-{timestamp}.{template.output_format}"
+        )
 
     def _get_active_template(self, template_id: UUID) -> ReportTemplate:
         template = self.session.get(ReportTemplate, template_id)
@@ -686,3 +809,23 @@ def _serialize_report_value(value: object) -> object:
     if isinstance(value, datetime | date):
         return value.isoformat()
     raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
+def _csv_cell(value: object) -> str:
+    if value is None:
+        return ""
+    try:
+        serialized = _serialize_report_value(value)
+    except TypeError:
+        serialized = value
+    if isinstance(serialized, dict | list):
+        return json.dumps(serialized, ensure_ascii=False, sort_keys=True)
+    return str(serialized)
+
+
+def _write_csv(fieldnames: list[str], rows: list[dict[str, str]]) -> bytes:
+    output = StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8")

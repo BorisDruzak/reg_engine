@@ -1,7 +1,8 @@
+import csv
 import json
 import os
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -299,6 +300,7 @@ def _create_report_template(
     actor_user_id: UUID,
     code: str,
     report_type: str,
+    output_format: str = "json",
 ) -> dict[str, Any]:
     response = api_client.post(
         f"/api/v1/registries/{registry_id}/report-templates",
@@ -307,13 +309,14 @@ def _create_report_template(
             "code": code,
             "name": f"{code} report",
             "report_type": report_type,
+            "output_format": output_format,
         },
     )
     assert response.status_code == 201, response.text
     payload = response.json()
     assert payload["code"] == code
     assert payload["report_type"] == report_type
-    assert payload["output_format"] == "json"
+    assert payload["output_format"] == output_format
     assert "stored_file_id" not in payload
     assert "storage_key" not in payload
     return payload
@@ -390,6 +393,69 @@ def test_report_template_settings_can_be_updated_and_audited(
     )
 
 
+def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+    csv_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="registry-cards-csv",
+        report_type="registry_cards",
+        output_format="csv",
+    )
+
+    run_response = api_client.post(
+        f"/api/v1/report-templates/{csv_template['id']}/runs",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"parameters": {"organization_id": str(context["child"].id)}},
+    )
+    assert run_response.status_code == 201, run_response.text
+    run_payload = run_response.json()
+    assert run_payload["report_template_id"] == csv_template["id"]
+    assert run_payload["report_type"] == "registry_cards"
+    assert run_payload["row_count"] == 1
+    assert run_payload["output_content_type"] == "text/csv; charset=utf-8"
+    assert run_payload["output_filename"].endswith(".csv")
+
+    stored_file = db_session.scalar(
+        select(StoredFile).where(StoredFile.original_filename == run_payload["output_filename"])
+    )
+    assert stored_file is not None
+    assert stored_file.storage_key.startswith("reports/")
+    assert stored_file.content_type == "text/csv; charset=utf-8"
+    assert stored_file.scanner_details_json == {
+        "source": "report_run_v1",
+        "report_type": "registry_cards",
+        "output_format": "csv",
+    }
+
+    download_response = api_client.get(
+        f"/api/v1/report-runs/{run_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert download_response.status_code == 200, download_response.text
+    assert download_response.headers["content-type"].startswith("text/csv")
+    assert "attachment;" in download_response.headers["content-disposition"]
+    assert download_response.headers["x-report-filename"].endswith(".csv")
+    csv_text = download_response.content.decode("utf-8")
+    rows = list(csv.DictReader(StringIO(csv_text)))
+    assert len(rows) == 1
+    assert rows[0]["id"] == str(context["child_card"].id)
+    assert rows[0]["display_name"] == "Visible report card"
+    assert rows[0]["lifecycle_status"] == "draft"
+    assert "Hidden sibling report card" not in csv_text
+
+    audit_actions = set(
+        db_session.scalars(
+            select(AuditEvent.action).where(AuditEvent.object_type == "report_run")
+        ).all()
+    )
+    assert {"report_run_generate", "report_run_download"} <= audit_actions
+
+
 def test_registry_and_period_report_runs_are_scoped_stored_and_audited(
     api_client: TestClient,
     db_session: Session,
@@ -437,6 +503,7 @@ def test_registry_and_period_report_runs_are_scoped_stored_and_audited(
     assert stored_file.scanner_details_json == {
         "source": "report_run_v1",
         "report_type": "registry_cards",
+        "output_format": "json",
     }
 
     download_response = api_client.get(
@@ -472,7 +539,7 @@ def test_registry_and_period_report_runs_are_scoped_stored_and_audited(
         json={
             "parameters": {
                 "created_from": "2000-01-01T00:00:00+00:00",
-                "created_to": datetime.now(UTC).isoformat(),
+                "created_to": "2999-01-01T00:00:00+00:00",
             }
         },
     )

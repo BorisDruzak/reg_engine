@@ -1075,6 +1075,10 @@ beforeEach(() => {
         const payload = JSON.parse(String(init?.body ?? "{}")) as {
           parameters: Record<string, unknown> | null;
         };
+        const template = reportTemplateItems.find(
+          (item) => item.id === "52525252-5252-4252-8252-525252525252",
+        )!;
+        const isCsvReport = template.output_format === "csv";
         const created: ReportRunRead = {
           id: "53535353-5353-4353-8353-535353535353",
           report_template_id: "52525252-5252-4252-8252-525252525252",
@@ -1085,8 +1089,8 @@ beforeEach(() => {
           parameters_json: payload.parameters,
           summary_json: { row_count: 1 },
           row_count: 1,
-          output_filename: "report.json",
-          output_content_type: "application/json",
+          output_filename: isCsvReport ? "report.csv" : "report.json",
+          output_content_type: isCsvReport ? "text/csv; charset=utf-8" : "application/json",
           generated_by: "11111111-1111-4111-8111-111111111111",
           started_at: "2026-06-28T12:11:00Z",
           finished_at: "2026-06-28T12:11:01Z",
@@ -1100,13 +1104,22 @@ beforeEach(() => {
         return jsonResponse({ items: reportRunItems });
       }
       if (url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content")) {
-        return new Response('{"format_version":"report_run_v1","cards":[]}', {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Report-Filename": "report.json",
+        const run = reportRunItems.find(
+          (item) => item.id === "53535353-5353-4353-8353-535353535353",
+        );
+        const isCsvReport = run?.output_filename.endsWith(".csv") ?? false;
+        return new Response(
+          isCsvReport
+            ? "id,display_name,lifecycle_status\ncard-1,Отчетная карточка,draft\n"
+            : '{"format_version":"report_run_v1","cards":[]}',
+          {
+            status: 200,
+            headers: {
+              "Content-Type": isCsvReport ? "text/csv; charset=utf-8" : "application/json",
+              "X-Report-Filename": isCsvReport ? "report.csv" : "report.json",
+            },
           },
-        });
+        );
       }
       if (url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353")) {
         const archived = {
@@ -3466,6 +3479,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.type(screen.getByLabelText("Название шаблона отчета"), "Отчет по карточкам");
   await user.type(screen.getByLabelText("Описание шаблона отчета"), "Список видимых карточек");
   await user.selectOptions(screen.getByLabelText("Тип отчета"), "registry_cards");
+  await user.selectOptions(screen.getByLabelText("Формат отчета"), "csv");
   fireEvent.change(screen.getByLabelText("Параметры шаблона JSON"), {
     target: { value: '{"limit":20}' },
   });
@@ -3546,7 +3560,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.description === "Список видимых карточек" &&
           body.report_type === "registry_cards" &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
-          body.output_format === "json"
+          body.output_format === "csv"
         );
       }),
     ).toBe(true);
