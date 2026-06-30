@@ -105,6 +105,7 @@ Completed phases:
 - Phase 5M: MCP Document Template Write Tools.
 - Phase 5N: MCP Generated Document Write Tools.
 - Phase 5O: MCP Document Metadata Read Tools.
+- Phase 5P: MCP Report And Generated Document Content Read Tools.
 
 Current stop point:
 
@@ -165,12 +166,17 @@ Current stop point:
   download, public-link document workflows, attachment upload/download,
   import/export MCP tools, and new write tools stay deferred.
 - Phase 5P MCP Report And Generated Document Content Read Tools is completed
-  locally and pending full local check, push, deploy, and server smoke:
-  report-run and generated-document content reads use existing authenticated
-  REST API `GET` content endpoints and return base64 content plus safe metadata
-  through MCP structured output. Attachment content, document-template content,
-  public-link workflows, import/export MCP tools, and new write tools stay
-  deferred.
+  and deployed: report-run and generated-document content reads use existing
+  authenticated REST API `GET` content endpoints and return base64 content plus
+  safe metadata through MCP structured output. Commit `555454db` is pushed, the
+  server checkout is synchronized to `origin/main`, server checks passed,
+  server MCP targeted tests passed with `47 passed`, server MCP stdio
+  `tools/list` shows both new tools with `readOnlyHint=true`, healthcheck
+  passed, and Alembic remains at `0014_report_pdf_output (head)`. Production
+  smoke did not call content tools against production report/document records
+  and did not mutate production data. Attachment content, document-template
+  content, public-link workflows, import/export MCP tools, and new write tools
+  stay deferred.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5548,8 +5554,7 @@ Production migration checkpoint:
 
 ### Phase 5P: MCP Report And Generated Document Content Read Tools
 
-Status: completed locally; pending full local check, push, deploy, and server
-smoke.
+Status: completed and deployed.
 
 Purpose: add read-only MCP access to report-run output content and generated
 document content through existing REST API endpoints, without adding direct
@@ -5639,6 +5644,22 @@ Verification so far:
   unit tests with `39 passed`, frontend production build, and project-map check.
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message "Add MCP content read tools"`
+  created commit `555454db` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`.
+- Server MCP Phase 5 tests passed with `47 passed`.
+- Direct server smoke passed: server checkout `555454db`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_read_report_run_content` and
+  `reg_engine_read_generated_document_content` with `readOnlyHint=true`.
+- Production smoke did not call content tools against production
+  report/generated-document records and did not mutate production data.
 
 Production migration checkpoint:
 
