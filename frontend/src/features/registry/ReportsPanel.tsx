@@ -712,15 +712,39 @@ function getReportParameterOptions(
   config: Record<string, unknown>,
   type: ReportParameterFieldType,
 ): ReportParameterOption[] {
+  const oneOfOptions = getReportParameterOneOfOptions(config, type);
+  if (oneOfOptions.length > 0) {
+    return oneOfOptions;
+  }
+
   if (!Array.isArray(config.enum)) {
     return [];
   }
-
   return config.enum.flatMap((value) => {
     if (!isReportParameterOptionValue(value, type)) {
       return [];
     }
     return [{ value, label: String(value) }];
+  });
+}
+
+function getReportParameterOneOfOptions(
+  config: Record<string, unknown>,
+  type: ReportParameterFieldType,
+): ReportParameterOption[] {
+  if (!Array.isArray(config.oneOf)) {
+    return [];
+  }
+
+  return config.oneOf.flatMap((rawOption) => {
+    if (!isRecord(rawOption) || !isReportParameterOptionValue(rawOption.const, type)) {
+      return [];
+    }
+    const label =
+      typeof rawOption.title === "string" && rawOption.title.trim()
+        ? rawOption.title
+        : String(rawOption.const);
+    return [{ value: rawOption.const, label }];
   });
 }
 

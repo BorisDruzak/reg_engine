@@ -3851,7 +3851,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   fireEvent.change(screen.getByLabelText("Новая схема параметров JSON"), {
     target: {
       value:
-        '{"type":"object","properties":{"limit":{"type":"integer","title":"Лимит"},"section":{"type":"string","title":"Раздел","enum":["cards","summary"]}}}',
+        '{"type":"object","properties":{"limit":{"type":"integer","title":"Лимит"},"section":{"type":"string","title":"Раздел","oneOf":[{"const":"cards","title":"Карточки"},{"const":"summary","title":"Сводка"}]}}}',
     },
   });
   fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
@@ -3874,6 +3874,10 @@ test("manages report templates and report runs in Russian registry UI", async ()
   expect([...sectionParameterSelect.options].map((option) => option.value)).toEqual([
     "cards",
     "summary",
+  ]);
+  expect([...sectionParameterSelect.options].map((option) => option.textContent)).toEqual([
+    "Карточки",
+    "Сводка",
   ]);
   expect(sectionParameterSelect).toHaveValue("cards");
   await user.selectOptions(sectionParameterSelect, "summary");
@@ -4012,7 +4016,14 @@ test("manages report templates and report runs in Russian registry UI", async ()
               type: "object",
               properties: {
                 limit: { type: "integer", title: "Лимит" },
-                section: { type: "string", title: "Раздел", enum: ["cards", "summary"] },
+                section: {
+                  type: "string",
+                  title: "Раздел",
+                  oneOf: [
+                    { const: "cards", title: "Карточки" },
+                    { const: "summary", title: "Сводка" },
+                  ],
+                },
               },
             }) &&
           JSON.stringify(body.default_parameters_json) ===

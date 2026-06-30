@@ -80,6 +80,7 @@ Completed phases:
 - Phase 4K: Report Template Parameter Schema UI.
 - Phase 4L: Report Run Visual Parameter Form.
 - Phase 4M: Report Run Enum Parameter Controls.
+- Phase 4N: Report Run Enum Option Labels.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -284,6 +285,11 @@ Current stop point:
   frontend dist is deployed, healthcheck passed, and server checks passed. No
   backend code, migrations, endpoints, report formats, full visual report
   builder, or MCP write tools are included.
+- Phase 4N Report Run Enum Option Labels is completed locally: report run
+  parameter select controls can display Russian option labels from
+  `oneOf[].title` while preserving scalar `const` values in the existing run
+  parameters JSON payload. No backend code, migrations, endpoints, report
+  formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -2866,6 +2872,74 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4M; no backend schema changes are included.
+
+### Phase 4N: Report Run Enum Option Labels
+
+Status: completed.
+
+Purpose: continue the report-polish sequence by allowing report run enum
+parameter selects to show user-facing option labels from existing template JSON
+schema metadata.
+
+Scope:
+
+- Render report parameter options from
+  `parameters_schema_json.properties.<code>.oneOf[]` entries with scalar
+  `const` values.
+- Use `oneOf[].title` as the select option label when present, otherwise show
+  the raw `const` value.
+- Preserve scalar `const` values in the existing report run `parameters` JSON
+  payload.
+- Keep existing raw `enum` support as a fallback for schemas without `oneOf`.
+- Keep the manual `Параметры запуска JSON` field available for unsupported or
+  advanced schemas.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template with a scalar `oneOf[].const` schema property renders a
+  visual select control in the Russian UI.
+- Select options show `oneOf[].title` labels while keeping the option values as
+  the scalar `const` values.
+- Changing the select control updates the report generation payload with the
+  scalar value, not the display label.
+- Existing raw `enum` report parameter behavior remains available.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat object properties with scalar `oneOf[].const` values are rendered
+  as labelled selects.
+- Nested objects, arrays, conditional schemas, validation constraints, grouped
+  options, and a full visual report builder remain deferred.
+- Backend remains the API/security boundary; frontend schema rendering is only
+  a usability layer.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because schema
+  `oneOf` parameter `Раздел` rendered as a text input without select options.
+- GREEN targeted frontend report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4N; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 
