@@ -66,6 +66,7 @@ Completed phases:
 - Phase 3B: Import Preview And Mapping.
 - Phase 3C: Import Commit And Export Polish.
 - Phase 3D: Import Export Frontend UI.
+- Phase 3E: XLSX Import Export Format Support.
 - Phase 4A: Report Foundation API.
 - Phase 4B: Report Frontend UI.
 - Phase 4C: Report Template Settings Edit.
@@ -162,12 +163,15 @@ Current stop point:
   the server checkout is synchronized to `origin/main`, frontend dist is
   deployed, healthcheck passed, Alembic remains at
   `0012_report_csv_output (head)`, and server checks passed.
-- Phase 3E XLSX Import Export Format Support is implemented locally as a
+- Phase 3E XLSX Import Export Format Support is completed and deployed as a
   bounded format-adapter slice: XLSX export/preview/commit reuse the existing
-  row-oriented CSV contract and backend validation rules. Local checks are
-  complete; push/deploy/server evidence is pending. No database schema changes,
-  binary attachment/document import/export, report output changes, or MCP write
-  tools are included.
+  row-oriented CSV contract and backend validation rules. Commit `6c7880a` is
+  pushed, the server checkout is synchronized to `origin/main`, backend
+  dependency `openpyxl==3.1.5` is installed on the server, frontend dist is
+  deployed, healthcheck passed, Alembic remains at
+  `0012_report_csv_output (head)`, and server checks passed. No database
+  schema changes, binary attachment/document import/export, report output
+  changes, or MCP write tools were included.
 - Phase 4A Report Foundation API is completed: migration `0010_reports`,
   backend report templates/runs, JSON report output storage, scoped
   reads/downloads, and audit are implemented, pushed, deployed, and migrated in
@@ -222,9 +226,8 @@ Current stop point:
   passed, and server checks passed. No migration was required.
 - Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
   additional report polish.
-- XLSX export/import, binary attachment/document
-  export, XLSX/PDF report outputs, additional report polish, and MCP write
-  tools remain deferred until their explicit phases.
+- Binary attachment/document export, XLSX/PDF report outputs, additional report
+  polish, and MCP write tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1391,8 +1394,7 @@ Known limitations:
 
 Purpose: add controlled data exchange.
 
-Status: completed for the JSON/CSV backend and frontend slices. Phase 3E XLSX
-format support is implemented locally; deployment evidence is pending.
+Status: completed for the JSON/CSV/XLSX backend and frontend slices.
 
 Approved/current scope:
 
@@ -1622,7 +1624,7 @@ Known limitations:
 
 - CSV is pasted into a text area in this slice; file upload can be later UI
   polish.
-- XLSX import/export remains deferred.
+- XLSX import/export is handled by Phase 3E.
 - Binary attachment/document import/export remains deferred.
 - Reference label enrichment remains deferred.
 - No backend changes and no MCP write tools.
@@ -1665,7 +1667,7 @@ Deployment checkpoint:
 
 ### Phase 3E: XLSX Import Export Format Support
 
-Status: completed locally; deployment pending.
+Status: completed.
 
 Purpose: add XLSX as an additional authenticated card import/export transport
 while preserving the existing schema-driven CSV row contract, backend
@@ -1747,8 +1749,22 @@ Production migration checkpoint:
 
 Deployment checkpoint:
 
-- Pending push, server deploy, frontend deploy, backend service restart, and
-  server check.
+- Commit `6c7880a` (`Add XLSX card import export`) is pushed to `origin/main`.
+- Server checkout is synchronized to `origin/main` at `HEAD=6c7880a`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` installed the
+  backend package and dependency `openpyxl==3.1.5` on the configured server.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`
+  rebuilt and deployed frontend dist, restarted the backend service, and
+  same-origin smoke returned `/assets/index-CZ_kAByZ.js`.
+- Server OpenAPI smoke confirmed card export query format pattern
+  `^(json|csv|xlsx)$`.
+- Server healthcheck passed:
+  `curl -fsS http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
+- Production Alembic status was checked and remains
+  `0012_report_csv_output (head)`; no Phase 3E migration was required.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment and service restart.
 
 ### Phase 4: Reports
 
