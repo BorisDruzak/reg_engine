@@ -104,6 +104,7 @@ Completed phases:
 - Phase 5L: MCP Report Run Write Tools.
 - Phase 5M: MCP Document Template Write Tools.
 - Phase 5N: MCP Generated Document Write Tools.
+- Phase 5O: MCP Document Metadata Read Tools.
 
 Current stop point:
 
@@ -151,13 +152,18 @@ Current stop point:
   archived during smoke validation. Generated document content download, binary
   template upload/version upload, public-link document workflows, attachment
   upload/download, and import/export MCP tools stay deferred.
-- Phase 5O MCP Document Metadata Read Tools is completed locally and pending
-  full local check, push, deploy, and server smoke: document-template,
-  template-version, and generated-document metadata reads are exposed through
-  existing REST API `GET` endpoints with `readOnlyHint=true`. Generated document
-  content download, binary template content download, public-link document
-  workflows, attachment upload/download, import/export MCP tools, and new write
-  tools stay deferred.
+- Phase 5O MCP Document Metadata Read Tools is completed and deployed:
+  document-template, template-version, and generated-document metadata reads are
+  exposed through existing REST API `GET` endpoints with `readOnlyHint=true`.
+  Commit `063ef0ce` is pushed, the server checkout is synchronized to
+  `origin/main`, server checks passed, server MCP targeted tests passed with
+  `44 passed`, server MCP stdio `tools/list` shows all four new tools with
+  `readOnlyHint=true`, healthcheck passed, and Alembic remains at
+  `0014_report_pdf_output (head)`. No production document/template content was
+  downloaded and no production document/template/card data was mutated during
+  smoke validation. Generated document content download, binary template content
+  download, public-link document workflows, attachment upload/download,
+  import/export MCP tools, and new write tools stay deferred.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5405,8 +5411,7 @@ Production migration checkpoint:
 
 ### Phase 5O: MCP Document Metadata Read Tools
 
-Status: completed locally; pending full local check, push, deploy, and server
-smoke.
+Status: completed and deployed.
 
 Purpose: add read-only MCP access to document-template, template-version, and
 generated-document metadata through existing REST API endpoints, without
@@ -5512,6 +5517,22 @@ Verification so far:
   unit tests with `39 passed`, frontend production build, and project-map check.
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message "Add MCP document metadata tools"`
+  created commit `063ef0ce` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`.
+- Server MCP Phase 5 tests passed with `44 passed`.
+- Direct server smoke passed: server checkout `063ef0ce`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_list_document_templates`,
+  `reg_engine_list_document_template_versions`,
+  `reg_engine_list_generated_documents`, and
+  `reg_engine_read_generated_document` with `readOnlyHint=true`.
 
 Production migration checkpoint:
 
