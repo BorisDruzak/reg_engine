@@ -102,6 +102,7 @@ Completed phases:
 - Phase 5J: MCP Card Transfer Write Tool.
 - Phase 5K: MCP Report Template Write Tools.
 - Phase 5L: MCP Report Run Write Tools.
+- Phase 5M: MCP Document Template Write Tools.
 
 Current stop point:
 
@@ -125,13 +126,18 @@ Current stop point:
   `0014_report_pdf_output (head)`. No production report run was generated or
   archived during smoke validation. Report output download/content tools stay
   deferred as binary workflows.
-- Phase 5M MCP Document Template Write Tools is completed locally and pending
-  full local check, push, and deploy: text document template create/archive MCP
-  tools call only existing REST API endpoints, while template permissions, text
-  template validation, archive semantics, version metadata, and audit remain
-  API-enforced. Binary `.docx` template upload, template version upload,
-  generated document workflows, and document content download stay deferred for
-  later MCP phases.
+- Phase 5M MCP Document Template Write Tools is completed and deployed: text
+  document template create/archive MCP tools call only existing REST API
+  endpoints, while template permissions, text template validation, archive
+  semantics, version metadata, and audit remain API-enforced. Commit `bb93fdd2`
+  is pushed, the server checkout is synchronized to `origin/main`, server
+  checks passed, server MCP targeted tests passed with `37 passed`, server MCP
+  stdio `tools/list` shows both new tools with `readOnlyHint=false`,
+  healthcheck passed, and Alembic remains at
+  `0014_report_pdf_output (head)`. No production document template was created
+  or archived during smoke validation. Binary `.docx` template upload, template
+  version upload, generated document workflows, and document content download
+  stay deferred for later MCP phases.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5148,7 +5154,7 @@ Production migration checkpoint:
 
 ### Phase 5M: MCP Document Template Write Tools
 
-Status: completed locally; pending full local check, push, and deploy.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with text document template
 create/archive operations while keeping registry/template permissions,
@@ -5238,6 +5244,20 @@ Verification so far:
   with backend `103 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP document template tools"`
+  created commit `bb93fdd2` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed with `37 passed`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_create_document_template` and
+  `reg_engine_archive_document_template` with `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `bb93fdd2`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
