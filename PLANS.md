@@ -348,11 +348,14 @@ Current stop point:
   remains at `0014_report_pdf_output (head)`. No backend code, migrations,
   endpoints, report formats, full visual report builder, or MCP write tools are
   included.
-- Phase 4U Report Run Pattern And Multiple Validation is completed locally:
+- Phase 4U Report Run Pattern And Multiple Validation is completed and deployed:
   supported flat report run controls now read string `pattern` and numeric
   `multipleOf`, block generation when provided values fail those constraints,
   and show a Russian validation message listing the failing parameter labels.
-  Deployment evidence is pending. No backend code, migrations, endpoints,
+  Commit `7f4d676` is pushed, the server checkout is synchronized to
+  `origin/main`, frontend dist is deployed with `index-VYoHv-du.js`,
+  healthcheck passed, server checks passed, and Alembic remains at
+  `0014_report_pdf_output (head)`. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
@@ -3503,7 +3506,7 @@ Production migration checkpoint:
 
 ### Phase 4U: Report Run Pattern And Multiple Validation
 
-Status: completed locally; deployment pending.
+Status: completed and deployed.
 
 Purpose: continue report-polish by honoring additional flat JSON Schema scalar
 constraints in the Russian report run form before calling the existing report
@@ -3577,6 +3580,22 @@ Verification so far:
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed` after clearing a stale local Vite
   process from an earlier failed e2e webServer start on port `5173`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add report pattern multiple validation"`
+  created commit `7f4d676e559c0aad08057bcb8f48b8ea3114ea5c` and pushed
+  `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Frontend deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`;
+  the server SPA now references `/assets/index-VYoHv-du.js` and
+  `/assets/index-Be0bM7I8.css`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Direct server smoke passed: server checkout `7f4d676`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
