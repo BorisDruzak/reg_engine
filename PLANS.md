@@ -175,10 +175,13 @@ Current stop point:
   reports, public report workflows, or MCP write tools. Commit `c5eb448` is
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, same-origin smoke passed, and server checks passed.
-- Phase 4C Report Template Settings Edit is implemented in the current
-  checkpoint: authenticated admins can update existing report template name,
-  description, and default/schema JSON settings through REST API and the
-  Russian registry UI. No migration is required.
+- Phase 4C Report Template Settings Edit is completed and deployed:
+  authenticated admins can update existing report template name, description,
+  and default/schema JSON settings through REST API and the Russian registry
+  UI. No migration was required. Commit `95001a6` is pushed, the server
+  checkout is synchronized to `origin/main`, frontend dist is deployed, the
+  backend service is restarted, OpenAPI exposes the PATCH route, healthcheck
+  passed, and server checks passed.
 - Next planned work requires explicit prioritization: remaining report polish,
   non-JSON report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
@@ -1695,7 +1698,7 @@ Production migration checkpoint:
 
 ### Phase 4C: Report Template Settings Edit
 
-Status: completed locally; pending full checkpoint push/deploy verification.
+Status: completed.
 
 Purpose: close the first report polish gap by allowing authenticated registry
 schema admins to edit existing report template settings without introducing
@@ -1739,7 +1742,7 @@ Known limitations:
 - No public-link report workflows.
 - No MCP report write tools.
 
-Verification so far:
+Verification:
 
 - Targeted frontend tests passed:
   `npm test -- --run src/api/adminMutations.test.ts src/App.test.tsx`
@@ -1752,6 +1755,17 @@ Verification so far:
   passed.
 - `mypy backend/app` passed.
 - `npm run typecheck` passed in `frontend`.
+- Full `scripts/check.ps1 -SkipRemote` passed with backend pytest
+  `77 passed, 131 skipped`, frontend unit tests `30 passed`, frontend build,
+  and project tree check.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- Deployed commit `95001a6` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- Server OpenAPI smoke verified
+  `/api/v1/report-templates/{template_id}` exposes `PATCH`.
+- `scripts/server-check.ps1` passed after deployment.
 
 Production migration checkpoint:
 
