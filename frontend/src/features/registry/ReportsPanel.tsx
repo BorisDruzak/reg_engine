@@ -26,6 +26,7 @@ type ReportParameterOption = {
 type ReportParameterField = {
   code: string;
   label: string;
+  description: string | null;
   type: ReportParameterFieldType;
   inputType: "date" | "number" | "text";
   options: ReportParameterOption[];
@@ -497,12 +498,14 @@ function ReportRunParameterFields({
           <span>{field.label}</span>
           {field.type === "boolean" ? (
             <input
+              aria-label={field.label}
               type="checkbox"
               checked={Boolean(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.checked)}
             />
           ) : field.options.length > 0 ? (
             <select
+              aria-label={field.label}
               value={formatReportParameterInputValue(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
             >
@@ -514,11 +517,13 @@ function ReportRunParameterFields({
             </select>
           ) : (
             <input
+              aria-label={field.label}
               type={field.inputType}
               value={formatReportParameterInputValue(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
             />
           )}
+          {field.description && <small>{field.description}</small>}
         </label>
       ))}
     </div>
@@ -718,10 +723,15 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
     }
     const label =
       typeof rawConfig.title === "string" && rawConfig.title.trim() ? rawConfig.title : code;
+    const description =
+      typeof rawConfig.description === "string" && rawConfig.description.trim()
+        ? rawConfig.description
+        : null;
     return [
       {
         code,
         label,
+        description,
         type: rawType,
         inputType: getReportParameterInputType(rawConfig, rawType),
         options: getReportParameterOptions(rawConfig, rawType),

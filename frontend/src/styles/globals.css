@@ -652,6 +652,13 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.field-editor-control small {
+  color: #667085;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .field-editor-control input,
 .field-editor-control select,
 .field-editor-control textarea {

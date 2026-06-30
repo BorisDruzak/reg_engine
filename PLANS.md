@@ -83,6 +83,7 @@ Completed phases:
 - Phase 4N: Report Run Enum Option Labels.
 - Phase 4O: Report Run Default Parameter Payload.
 - Phase 4P: Report Run Date Parameter Controls.
+- Phase 4Q: Report Run Parameter Description Hints.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -309,6 +310,11 @@ Current stop point:
   healthcheck passed, and server checks passed. No backend code, migrations,
   endpoints, report formats, full visual report builder, or MCP write tools
   are included.
+- Phase 4Q Report Run Parameter Description Hints is completed locally:
+  report run parameter controls now render JSON Schema property `description`
+  values as visible hints while preserving accessible field labels. Deployment
+  evidence is pending. No backend code, migrations, endpoints, report formats,
+  full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3116,6 +3122,66 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4P; no backend schema changes are included.
+
+### Phase 4Q: Report Run Parameter Description Hints
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by showing JSON Schema property descriptions as
+Russian-first hints under visual report run parameter controls.
+
+Scope:
+
+- Detect flat `parameters_schema_json.properties.<code>.description` values.
+- Render non-empty string descriptions as small hints under the matching
+  parameter control.
+- Preserve accessible field labels with explicit `aria-label`.
+- Preserve existing number, integer, boolean, enum, `oneOf`, date, default
+  payload, output format, archive, download, and metadata display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template parameter with a JSON Schema `description` shows that text
+  under the visual control.
+- The field remains findable and usable by its visible title/label.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat property descriptions are rendered.
+- No markdown rendering, i18n transformation, validation text, nested schema
+  help, grouped controls, or full visual report builder is included.
+- Backend remains the API/security boundary; description hints are a usability
+  layer over existing report template fields.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because the schema
+  description text was not rendered in the DOM.
+- GREEN targeted description frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders report parameter descriptions"`.
+- Existing date-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `34 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4Q; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

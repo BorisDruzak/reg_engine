@@ -4200,6 +4200,36 @@ test("renders date report parameters as date inputs", async () => {
   });
 }, 15000);
 
+test("renders report parameter descriptions from schema", async () => {
+  reportTemplateItems = [
+    {
+      ...apiPayloads.reportTemplates.items[0],
+      parameters_schema_json: {
+        type: "object",
+        properties: {
+          section: {
+            type: "string",
+            title: "Раздел",
+            description: "Выберите часть реестра для включения в отчет",
+          },
+        },
+      },
+      default_parameters_json: { section: "cards" },
+      output_format: "csv",
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(await screen.findByLabelText("Раздел")).toHaveValue("cards");
+  expect(screen.getByText("Выберите часть реестра для включения в отчет")).toBeInTheDocument();
+}, 15000);
+
 test("edits a public-link card without authentication", async () => {
   const user = userEvent.setup();
   window.history.pushState({}, "", "/public/edit/public-token");
