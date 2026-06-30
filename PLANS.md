@@ -98,14 +98,19 @@ Completed phases:
 - Phase 5F: MCP Schema Builder Write Tools.
 - Phase 5G: MCP Card Lifecycle Write Tools.
 - Phase 5H: MCP Card Field Value Write Tools.
+- Phase 5I: MCP Card Block Instance Write Tools.
 
 Current stop point:
 
-- Phase 5I MCP Card Block Instance Write Tools is completed locally and
-  pending push/deploy: repeatable block-instance create/archive MCP tools call
-  only existing REST API endpoints, with backend permissions,
-  repeatable/non-repeatable rules, archive protection, and audit remaining
-  API-enforced.
+- Phase 5I MCP Card Block Instance Write Tools is completed and deployed:
+  repeatable block-instance create/archive MCP tools call only existing REST
+  API endpoints, with backend permissions, repeatable/non-repeatable rules,
+  archive protection, and audit remaining API-enforced. Commit `f14a39b4` is
+  pushed, the server checkout is synchronized to `origin/main`, server checks
+  passed, server MCP targeted tests passed, server MCP stdio `tools/list`
+  shows both new tools with `readOnlyHint=false`, healthcheck passed, and
+  Alembic remains at `0014_report_pdf_output (head)`. No production block
+  instance was created or archived during smoke validation.
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
 - Phase 2K.0 admin workflow API gap audit is completed and recorded in
   `docs/PHASE_2K_ADMIN_API_READINESS.md`.
@@ -4668,7 +4673,7 @@ Production migration checkpoint:
 
 ### Phase 5I: MCP Card Block Instance Write Tools
 
-Status: completed locally; pending push/deploy.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with card block-instance
 operations while keeping repeatable/non-repeatable rules, locked/system block
@@ -4751,6 +4756,20 @@ Verification so far:
   with backend `95 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP card block instance tools"`
+  created commit `f14a39b4` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_create_card_block_instance` and
+  `reg_engine_archive_card_block_instance` with `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `f14a39b4`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
