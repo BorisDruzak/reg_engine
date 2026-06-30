@@ -5,8 +5,9 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from io import StringIO
-from typing import Any
+from importlib import import_module
+from io import BytesIO, StringIO
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -25,6 +26,8 @@ from app.services.cards import (
     FileRefValueRead,
 )
 from app.services.permissions import PermissionDeniedError, PermissionService
+
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class ReportServiceError(ValueError):
@@ -415,6 +418,12 @@ class ReportService:
                 filename=self._output_filename(template),
                 content_type="text/csv; charset=utf-8",
             )
+        if template.output_format == "xlsx":
+            return _ReportOutput(
+                content=self._render_xlsx_report(rendered),
+                filename=self._output_filename(template),
+                content_type=XLSX_CONTENT_TYPE,
+            )
         raise ReportServiceError(f"Unsupported report output format: {template.output_format}")
 
     def _render_csv_report(self, rendered: _RenderedReport) -> bytes:
@@ -424,6 +433,15 @@ class ReportService:
             return self._render_card_detail_csv(rendered)
         if rendered.report_type == "period_summary":
             return self._render_period_summary_csv(rendered)
+        raise ReportServiceError(f"Unsupported report type: {rendered.report_type}")
+
+    def _render_xlsx_report(self, rendered: _RenderedReport) -> bytes:
+        if rendered.report_type == "registry_cards":
+            return self._render_registry_cards_xlsx(rendered)
+        if rendered.report_type == "card_detail":
+            return self._render_card_detail_xlsx(rendered)
+        if rendered.report_type == "period_summary":
+            return self._render_period_summary_xlsx(rendered)
         raise ReportServiceError(f"Unsupported report type: {rendered.report_type}")
 
     def _render_registry_cards_csv(self, rendered: _RenderedReport) -> bytes:
@@ -442,6 +460,23 @@ class ReportService:
             if isinstance(card, dict)
         ]
         return _write_csv(fieldnames, rows)
+
+    def _render_registry_cards_xlsx(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = [
+            "id",
+            "registry_id",
+            "organization_id",
+            "org_unit_id",
+            "display_name",
+            "lifecycle_status",
+            "created_at",
+        ]
+        rows = [
+            {fieldname: _csv_cell(card.get(fieldname)) for fieldname in fieldnames}
+            for card in rendered.content.get("cards", [])
+            if isinstance(card, dict)
+        ]
+        return _write_xlsx("registry_cards", fieldnames, rows)
 
     def _render_card_detail_csv(self, rendered: _RenderedReport) -> bytes:
         fieldnames = [
@@ -488,6 +523,51 @@ class ReportService:
                         )
         return _write_csv(fieldnames, rows)
 
+    def _render_card_detail_xlsx(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = [
+            "card_id",
+            "block_code",
+            "block_instance_id",
+            "ordinal",
+            "field_code",
+            "field_type",
+            "value",
+        ]
+        card = rendered.content.get("card")
+        if not isinstance(card, dict):
+            return _write_xlsx("card_detail", fieldnames, [])
+        card_id = card.get("id")
+        blocks = card.get("blocks")
+        rows: list[dict[str, str]] = []
+        if isinstance(blocks, dict):
+            for block_code, block in blocks.items():
+                if not isinstance(block, dict):
+                    continue
+                instances = block.get("instances")
+                if not isinstance(instances, list):
+                    continue
+                for instance in instances:
+                    if not isinstance(instance, dict):
+                        continue
+                    fields = instance.get("fields")
+                    if not isinstance(fields, dict):
+                        continue
+                    for field_code, field in fields.items():
+                        if not isinstance(field, dict):
+                            continue
+                        rows.append(
+                            {
+                                "card_id": _csv_cell(card_id),
+                                "block_code": _csv_cell(block_code),
+                                "block_instance_id": _csv_cell(instance.get("block_instance_id")),
+                                "ordinal": _csv_cell(instance.get("ordinal")),
+                                "field_code": _csv_cell(field_code),
+                                "field_type": _csv_cell(field.get("field_type")),
+                                "value": _csv_cell(field.get("value")),
+                            }
+                        )
+        return _write_xlsx("card_detail", fieldnames, rows)
+
     def _render_period_summary_csv(self, rendered: _RenderedReport) -> bytes:
         fieldnames = ["metric", "key", "value"]
         summary = rendered.summary
@@ -509,6 +589,28 @@ class ReportService:
                 for status, count in sorted(status_counts.items())
             )
         return _write_csv(fieldnames, rows)
+
+    def _render_period_summary_xlsx(self, rendered: _RenderedReport) -> bytes:
+        fieldnames = ["metric", "key", "value"]
+        summary = rendered.summary
+        rows = [
+            {
+                "metric": "card_count",
+                "key": "",
+                "value": _csv_cell(summary.get("card_count")),
+            }
+        ]
+        status_counts = summary.get("lifecycle_status_counts")
+        if isinstance(status_counts, dict):
+            rows.extend(
+                {
+                    "metric": "lifecycle_status_count",
+                    "key": _csv_cell(status),
+                    "value": _csv_cell(count),
+                }
+                for status, count in sorted(status_counts.items())
+            )
+        return _write_xlsx("period_summary", fieldnames, rows)
 
     def _render_registry_cards_report(
         self,
@@ -831,3 +933,19 @@ def _write_csv(fieldnames: list[str], rows: list[dict[str, str]]) -> bytes:
     writer.writeheader()
     writer.writerows(rows)
     return output.getvalue().encode("utf-8")
+
+
+def _write_xlsx(sheet_title: str, fieldnames: list[str], rows: list[dict[str, str]]) -> bytes:
+    workbook = _openpyxl().Workbook()
+    worksheet = workbook.active
+    worksheet.title = sheet_title[:31]
+    worksheet.append(fieldnames)
+    for row in rows:
+        worksheet.append([row.get(fieldname, "") for fieldname in fieldnames])
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def _openpyxl() -> Any:
+    return cast(Any, import_module("openpyxl"))

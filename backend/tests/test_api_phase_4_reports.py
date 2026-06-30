@@ -3,7 +3,7 @@ import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -12,6 +12,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
@@ -24,6 +25,7 @@ from app.models import (
     AuditEvent,
     Permission,
     ReportRun,
+    ReportTemplate,
     Role,
     StoredFile,
     User,
@@ -32,6 +34,7 @@ from app.models import (
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
+from app.services.reports import ReportService, _RenderedReport
 
 
 def _require_test_database_url() -> str:
@@ -332,6 +335,57 @@ def _create_report_template(
     return payload
 
 
+def test_xlsx_report_output_renderer_creates_workbook_bytes() -> None:
+    template = ReportTemplate(
+        code="registry-cards-xlsx",
+        name="Registry cards XLSX",
+        report_type="registry_cards",
+        output_format="xlsx",
+    )
+    rendered = _RenderedReport(
+        report_type="registry_cards",
+        card_id=None,
+        content={
+            "cards": [
+                {
+                    "id": "card-1",
+                    "registry_id": "registry-1",
+                    "organization_id": "organization-1",
+                    "org_unit_id": None,
+                    "display_name": "Visible report card",
+                    "lifecycle_status": "draft",
+                    "created_at": "2026-06-30T00:00:00+00:00",
+                }
+            ]
+        },
+        summary={"card_count": 1},
+        row_count=1,
+    )
+
+    output = ReportService(session=None, storage=None)._render_report_output(  # type: ignore[arg-type]
+        template=template,
+        rendered=rendered,
+    )
+
+    assert (
+        output.content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert output.filename.endswith(".xlsx")
+    workbook = load_workbook(BytesIO(output.content), read_only=True)
+    worksheet = workbook["registry_cards"]
+    rows = list(worksheet.iter_rows(values_only=True))
+    assert rows[0] == (
+        "id",
+        "registry_id",
+        "organization_id",
+        "org_unit_id",
+        "display_name",
+        "lifecycle_status",
+        "created_at",
+    )
+    assert rows[1][4] == "Visible report card"
+
+
 def test_report_template_settings_can_be_updated_and_audited(
     api_client: TestClient,
     db_session: Session,
@@ -457,6 +511,89 @@ def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
     assert rows[0]["display_name"] == "Visible report card"
     assert rows[0]["lifecycle_status"] == "draft"
     assert "Hidden sibling report card" not in csv_text
+
+    audit_actions = set(
+        db_session.scalars(
+            select(AuditEvent.action).where(AuditEvent.object_type == "report_run")
+        ).all()
+    )
+    assert {"report_run_generate", "report_run_download"} <= audit_actions
+
+
+def test_xlsx_registry_report_runs_are_scoped_stored_and_downloadable(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+    xlsx_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="registry-cards-xlsx",
+        report_type="registry_cards",
+        output_format="xlsx",
+    )
+
+    run_response = api_client.post(
+        f"/api/v1/report-templates/{xlsx_template['id']}/runs",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"parameters": {"organization_id": str(context["child"].id)}},
+    )
+    assert run_response.status_code == 201, run_response.text
+    run_payload = run_response.json()
+    assert run_payload["report_template_id"] == xlsx_template["id"]
+    assert run_payload["report_type"] == "registry_cards"
+    assert run_payload["row_count"] == 1
+    assert (
+        run_payload["output_content_type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert run_payload["output_filename"].endswith(".xlsx")
+
+    stored_file = db_session.scalar(
+        select(StoredFile).where(StoredFile.original_filename == run_payload["output_filename"])
+    )
+    assert stored_file is not None
+    assert stored_file.storage_key.startswith("reports/")
+    assert (
+        stored_file.content_type
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert stored_file.scanner_details_json == {
+        "source": "report_run_v1",
+        "report_type": "registry_cards",
+        "output_format": "xlsx",
+    }
+
+    download_response = api_client.get(
+        f"/api/v1/report-runs/{run_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert download_response.status_code == 200, download_response.text
+    assert (
+        download_response.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "attachment;" in download_response.headers["content-disposition"]
+    assert download_response.headers["x-report-filename"].endswith(".xlsx")
+
+    workbook = load_workbook(BytesIO(download_response.content), read_only=True)
+    worksheet = workbook["registry_cards"]
+    rows = list(worksheet.iter_rows(values_only=True))
+    assert rows[0] == (
+        "id",
+        "registry_id",
+        "organization_id",
+        "org_unit_id",
+        "display_name",
+        "lifecycle_status",
+        "created_at",
+    )
+    assert rows[1][0] == str(context["child_card"].id)
+    assert rows[1][4] == "Visible report card"
+    assert rows[1][5] == "draft"
+    flattened = "\n".join(str(cell) for row in rows for cell in row if cell is not None)
+    assert "Hidden sibling report card" not in flattened
 
     audit_actions = set(
         db_session.scalars(

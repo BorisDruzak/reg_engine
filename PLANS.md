@@ -73,6 +73,7 @@ Completed phases:
 - Phase 4D: CSV Report Output.
 - Phase 4E: Report Run List Polish.
 - Phase 4F: Report Archive Visibility.
+- Phase 4G: XLSX Report Output.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -224,9 +225,11 @@ Current stop point:
   be edited or archived again. Commit `7a33e25` is pushed, the server checkout
   is synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No migration was required.
-- Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
+- Phase 4G XLSX Report Output is in progress as the next bounded report output
+  format slice.
+- Later explicit phases remain PDF report outputs, MCP write tools, and
   additional report polish.
-- Binary attachment/document export, XLSX/PDF report outputs, additional report
+- Binary attachment/document export, PDF report outputs, additional report
   polish, and MCP write tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -2234,6 +2237,80 @@ Deployment checkpoint:
   `0012_report_csv_output (head)`, `GET /api/v1/health` returned
   `{"status":"ok","service":"reg_engine"}`, and the SPA shell served the
   updated asset `/assets/index-DVjJpnYY.js`.
+
+### Phase 4G: XLSX Report Output
+
+Status: in progress.
+
+Purpose: add the next non-JSON report output format while preserving the
+existing report service/API boundary, storage abstraction, visibility scope, and
+audit behavior.
+
+Scope:
+
+- Add output format `xlsx` for report templates.
+- Add Alembic migration `0013_report_xlsx_output` to allow `xlsx` in
+  `report_templates.output_format`.
+- Render XLSX files for the existing report types: `registry_cards`,
+  `card_detail`, and `period_summary`.
+- Store generated XLSX report bytes through the existing `reports` storage
+  prefix.
+- Return the standard XLSX content type and `.xlsx` filenames for XLSX report
+  runs.
+- Keep report run responses safe: no storage keys, filesystem paths,
+  checksums, or stored-file ids.
+- Preserve existing backend scope checks for template creation, report
+  generation, report reads/downloads, archive reads, and audit events.
+- Add Russian-first UI support for choosing `XLSX` when creating a report
+  template.
+
+Acceptance criteria:
+
+- XLSX report templates can be created only by actors with
+  `registry.schema.manage`.
+- XLSX report runs use the same visibility scope as JSON/CSV report runs.
+- XLSX download does not expose sibling-branch cards outside the actor scope.
+- XLSX output is stored through the storage abstraction, not returned from
+  memory-only ad hoc state.
+- JSON and CSV report behavior remains intact.
+- No PDF output, scheduling, charts, public-link report workflows, binary
+  attachment/document report export, or MCP write tools are added.
+- README, PLANS, and project tree are updated.
+
+Known limitations:
+
+- XLSX sheets are simple technical report outputs per existing report type, not
+  a visual report builder.
+- PDF report outputs remain deferred.
+- Scheduled/background reports, charts, and public-link report workflows remain
+  deferred.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED backend unit test failed before implementation with
+  `Unsupported report output format: xlsx`.
+- RED frontend test failed before implementation because the report format
+  select did not contain value `xlsx`.
+- GREEN backend targeted renderer test passed:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_4_reports.py::test_xlsx_report_output_renderer_creates_workbook_bytes -q`.
+- GREEN frontend targeted report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Alembic offline SQL render passed and included
+  `0013_report_xlsx_output` with `json`, `csv`, and `xlsx` in
+  `ck_report_templates_output_format`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `78 passed, 137 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Pending for `0013_report_xlsx_output`.
 
 ### Phase 5: MCP Over API Only
 

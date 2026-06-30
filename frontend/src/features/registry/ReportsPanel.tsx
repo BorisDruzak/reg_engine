@@ -17,7 +17,7 @@ import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
 
 const reportTypes = ["registry_cards", "card_detail", "period_summary"];
-const reportOutputFormats = ["json", "csv"];
+const reportOutputFormats = ["json", "csv", "xlsx"];
 
 export function ReportsPanel({
   selectedRegistryId,
@@ -525,6 +525,12 @@ function reportOutputFormatLabel(format: string) {
 }
 
 function reportRunOutputFormatLabel(run: ReportRunRead) {
+  if (
+    run.output_content_type.includes("spreadsheetml.sheet") ||
+    run.output_filename.endsWith(".xlsx")
+  ) {
+    return "XLSX";
+  }
   if (run.output_content_type.includes("csv") || run.output_filename.endsWith(".csv")) {
     return "CSV";
   }
