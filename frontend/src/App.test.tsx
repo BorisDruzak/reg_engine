@@ -1092,6 +1092,7 @@ beforeEach(() => {
         const outputContentTypes: Record<string, string> = {
           csv: "text/csv; charset=utf-8",
           json: "application/json",
+          pdf: "application/pdf",
           xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         };
         const created: ReportRunRead = {
@@ -1128,23 +1129,28 @@ beforeEach(() => {
           (item) => item.id === "53535353-5353-4353-8353-535353535353",
         );
         const isCsvReport = run?.output_filename.endsWith(".csv") ?? false;
+        const isPdfReport = run?.output_filename.endsWith(".pdf") ?? false;
         const isXlsxReport = run?.output_filename.endsWith(".xlsx") ?? false;
         return new Response(
-          isXlsxReport
-            ? new Blob(["xlsx"], {
-                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              })
-            : isCsvReport
-              ? "id,display_name,lifecycle_status\ncard-1,Отчетная карточка,draft\n"
-              : '{"format_version":"report_run_v1","cards":[]}',
+          isPdfReport
+            ? new Blob(["pdf"], { type: "application/pdf" })
+            : isXlsxReport
+              ? new Blob(["xlsx"], {
+                  type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                })
+              : isCsvReport
+                ? "id,display_name,lifecycle_status\ncard-1,Отчетная карточка,draft\n"
+                : '{"format_version":"report_run_v1","cards":[]}',
           {
             status: 200,
             headers: {
-              "Content-Type": isXlsxReport
-                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                : isCsvReport
-                  ? "text/csv; charset=utf-8"
-                  : "application/json",
+              "Content-Type": isPdfReport
+                ? "application/pdf"
+                : isXlsxReport
+                  ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  : isCsvReport
+                    ? "text/csv; charset=utf-8"
+                    : "application/json",
               "X-Report-Filename": run?.output_filename ?? "report.json",
             },
           },
@@ -3802,7 +3808,14 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.type(screen.getByLabelText("Название шаблона отчета"), "Отчет по карточкам");
   await user.type(screen.getByLabelText("Описание шаблона отчета"), "Список видимых карточек");
   await user.selectOptions(screen.getByLabelText("Тип отчета"), "registry_cards");
-  await user.selectOptions(screen.getByLabelText("Формат отчета"), "xlsx");
+  const reportFormatSelect = screen.getByLabelText("Формат отчета") as HTMLSelectElement;
+  expect([...reportFormatSelect.options].map((option) => option.value)).toEqual([
+    "json",
+    "csv",
+    "xlsx",
+    "pdf",
+  ]);
+  await user.selectOptions(reportFormatSelect, "pdf");
   fireEvent.change(screen.getByLabelText("Параметры шаблона JSON"), {
     target: { value: '{"limit":20}' },
   });
@@ -3843,7 +3856,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("Карточки реестра / Сформирован / XLSX / report.xlsx / 1"),
+        element.textContent?.includes("Карточки реестра / Сформирован / PDF / report.pdf / 1"),
       ),
     ),
   ).toBeInTheDocument();
@@ -3861,14 +3874,14 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("Карточки реестра / Сформирован / XLSX / report.xlsx / 1") &&
+        element.textContent?.includes("Карточки реестра / Сформирован / PDF / report.pdf / 1") &&
         element.textContent?.includes("Архивировано"),
       ),
     ),
   ).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Скачать отчет report.xlsx" }));
+  await user.click(screen.getByRole("button", { name: "Скачать отчет report.pdf" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Архивировать отчет report.xlsx" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Архивировать отчет report.pdf" })).toBeDisabled();
 
   await user.click(screen.getByLabelText("Показывать архивные шаблоны отчетов"));
   expect(
@@ -3914,7 +3927,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.description === "Список видимых карточек" &&
           body.report_type === "registry_cards" &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
-          body.output_format === "xlsx"
+          body.output_format === "pdf"
         );
       }),
     ).toBe(true);

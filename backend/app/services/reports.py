@@ -7,9 +7,15 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from importlib import import_module
 from io import BytesIO, StringIO
+from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
+from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.lib.units import mm  # type: ignore[import-untyped]
+from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
+from reportlab.pdfbase.ttfonts import TTFont  # type: ignore[import-untyped]
+from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -28,6 +34,14 @@ from app.services.cards import (
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+PDF_CONTENT_TYPE = "application/pdf"
+_PDF_FONT_NAME = "RegEngineDejaVuSans"
+_PDF_FONT_CANDIDATES = (
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+    Path("C:/Windows/Fonts/DejaVuSans.ttf"),
+    Path("C:/Windows/Fonts/arial.ttf"),
+)
 
 
 class ReportServiceError(ValueError):
@@ -424,6 +438,12 @@ class ReportService:
                 filename=self._output_filename(template),
                 content_type=XLSX_CONTENT_TYPE,
             )
+        if template.output_format == "pdf":
+            return _ReportOutput(
+                content=self._render_pdf_report(template=template, rendered=rendered),
+                filename=self._output_filename(template),
+                content_type=PDF_CONTENT_TYPE,
+            )
         raise ReportServiceError(f"Unsupported report output format: {template.output_format}")
 
     def _render_csv_report(self, rendered: _RenderedReport) -> bytes:
@@ -442,6 +462,30 @@ class ReportService:
             return self._render_card_detail_xlsx(rendered)
         if rendered.report_type == "period_summary":
             return self._render_period_summary_xlsx(rendered)
+        raise ReportServiceError(f"Unsupported report type: {rendered.report_type}")
+
+    def _render_pdf_report(self, *, template: ReportTemplate, rendered: _RenderedReport) -> bytes:
+        title = template.name or template.code
+        lines = [
+            title,
+            f"technical_code: {template.code}",
+            f"report_type: {rendered.report_type}",
+            f"row_count: {rendered.row_count}",
+            "",
+            "summary",
+        ]
+        lines.extend(_flatten_pdf_summary(rendered.summary))
+        lines.append("")
+        lines.extend(self._render_pdf_body_lines(rendered))
+        return _write_pdf(title, lines)
+
+    def _render_pdf_body_lines(self, rendered: _RenderedReport) -> list[str]:
+        if rendered.report_type == "registry_cards":
+            return self._render_registry_cards_pdf_lines(rendered)
+        if rendered.report_type == "card_detail":
+            return self._render_card_detail_pdf_lines(rendered)
+        if rendered.report_type == "period_summary":
+            return self._render_period_summary_pdf_lines(rendered)
         raise ReportServiceError(f"Unsupported report type: {rendered.report_type}")
 
     def _render_registry_cards_csv(self, rendered: _RenderedReport) -> bytes:
@@ -477,6 +521,24 @@ class ReportService:
             if isinstance(card, dict)
         ]
         return _write_xlsx("registry_cards", fieldnames, rows)
+
+    def _render_registry_cards_pdf_lines(self, rendered: _RenderedReport) -> list[str]:
+        fieldnames = [
+            "id",
+            "display_name",
+            "lifecycle_status",
+            "organization_id",
+            "org_unit_id",
+            "created_at",
+        ]
+        lines = ["registry_cards", " | ".join(fieldnames)]
+        for card in rendered.content.get("cards", []):
+            if not isinstance(card, dict):
+                continue
+            lines.append(" | ".join(_csv_cell(card.get(fieldname)) for fieldname in fieldnames))
+        if len(lines) == 2:
+            lines.append("(empty)")
+        return lines
 
     def _render_card_detail_csv(self, rendered: _RenderedReport) -> bytes:
         fieldnames = [
@@ -568,6 +630,51 @@ class ReportService:
                         )
         return _write_xlsx("card_detail", fieldnames, rows)
 
+    def _render_card_detail_pdf_lines(self, rendered: _RenderedReport) -> list[str]:
+        lines = ["card_detail"]
+        card = rendered.content.get("card")
+        if not isinstance(card, dict):
+            lines.append("(empty)")
+            return lines
+        lines.extend(
+            [
+                f"card_id: {_csv_cell(card.get('id'))}",
+                f"display_name: {_csv_cell(card.get('display_name'))}",
+                "",
+            ]
+        )
+        blocks = card.get("blocks")
+        if not isinstance(blocks, dict):
+            lines.append("(empty)")
+            return lines
+        for block_code, block in blocks.items():
+            if not isinstance(block, dict):
+                continue
+            lines.append(f"block: {_csv_cell(block_code)}")
+            instances = block.get("instances")
+            if not isinstance(instances, list):
+                continue
+            for instance in instances:
+                if not isinstance(instance, dict):
+                    continue
+                lines.append(
+                    "instance: "
+                    f"{_csv_cell(instance.get('block_instance_id'))} "
+                    f"ordinal={_csv_cell(instance.get('ordinal'))}"
+                )
+                fields = instance.get("fields")
+                if not isinstance(fields, dict):
+                    continue
+                for field_code, field in fields.items():
+                    if not isinstance(field, dict):
+                        continue
+                    lines.append(
+                        f"{_csv_cell(field_code)} "
+                        f"({_csv_cell(field.get('field_type'))}): "
+                        f"{_csv_cell(field.get('value'))}"
+                    )
+        return lines
+
     def _render_period_summary_csv(self, rendered: _RenderedReport) -> bytes:
         fieldnames = ["metric", "key", "value"]
         summary = rendered.summary
@@ -611,6 +718,11 @@ class ReportService:
                 for status, count in sorted(status_counts.items())
             )
         return _write_xlsx("period_summary", fieldnames, rows)
+
+    def _render_period_summary_pdf_lines(self, rendered: _RenderedReport) -> list[str]:
+        lines = ["period_summary"]
+        lines.extend(_flatten_pdf_summary(rendered.summary))
+        return lines
 
     def _render_registry_cards_report(
         self,
@@ -945,6 +1057,121 @@ def _write_xlsx(sheet_title: str, fieldnames: list[str], rows: list[dict[str, st
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+def _flatten_pdf_summary(summary: dict[str, Any]) -> list[str]:
+    if not summary:
+        return ["(empty)"]
+    lines: list[str] = []
+    for key, value in sorted(summary.items()):
+        if isinstance(value, dict):
+            if not value:
+                lines.append(f"{key}: {{}}")
+                continue
+            for child_key, child_value in sorted(value.items()):
+                lines.append(f"{key}.{child_key}: {_csv_cell(child_value)}")
+            continue
+        lines.append(f"{key}: {_csv_cell(value)}")
+    return lines
+
+
+def _write_pdf(title: str, lines: list[str]) -> bytes:
+    buffer = BytesIO()
+    page_width = float(A4[0])
+    page_height = float(A4[1])
+    margin_x = float(18 * mm)
+    margin_y = float(18 * mm)
+    font_name = _pdf_font_name()
+    font_size = 10.0
+    title_font_size = 13.0
+    line_height = 14.0
+    max_width = page_width - (margin_x * 2)
+    y_position = page_height - margin_y
+
+    pdf_canvas = canvas.Canvas(buffer, pagesize=A4)
+    pdf_canvas.setTitle(title)
+    pdf_canvas.setFont(font_name, title_font_size)
+    for line in _wrap_pdf_line(title, max_width, font_name, title_font_size):
+        if y_position < margin_y:
+            pdf_canvas.showPage()
+            y_position = page_height - margin_y
+        pdf_canvas.drawString(margin_x, y_position, line)
+        y_position -= line_height + 2
+    pdf_canvas.setFont(font_name, font_size)
+    y_position -= line_height
+
+    for source_line in lines[1:] or [""]:
+        for line in _wrap_pdf_line(source_line, max_width, font_name, font_size):
+            if y_position < margin_y:
+                pdf_canvas.showPage()
+                pdf_canvas.setFont(font_name, font_size)
+                y_position = page_height - margin_y
+            pdf_canvas.drawString(margin_x, y_position, line)
+            y_position -= line_height
+
+    pdf_canvas.save()
+    return buffer.getvalue()
+
+
+def _pdf_font_name() -> str:
+    with suppress(KeyError):
+        pdfmetrics.getFont(_PDF_FONT_NAME)
+        return _PDF_FONT_NAME
+    for candidate in _PDF_FONT_CANDIDATES:
+        if candidate.is_file():
+            pdfmetrics.registerFont(TTFont(_PDF_FONT_NAME, str(candidate)))
+            return _PDF_FONT_NAME
+    return "Helvetica"
+
+
+def _wrap_pdf_line(
+    line: str,
+    max_width: float,
+    font_name: str,
+    font_size: float,
+) -> list[str]:
+    if not line:
+        return [""]
+
+    wrapped: list[str] = []
+    current = ""
+    for word in line.split(" "):
+        candidate = word if not current else f"{current} {word}"
+        if pdfmetrics.stringWidth(candidate, font_name, font_size) <= max_width:
+            current = candidate
+            continue
+        if current:
+            wrapped.append(current)
+        if pdfmetrics.stringWidth(word, font_name, font_size) <= max_width:
+            current = word
+            continue
+        chunks = _split_pdf_word(word, max_width, font_name, font_size)
+        wrapped.extend(chunks[:-1])
+        current = chunks[-1] if chunks else ""
+
+    if current or not wrapped:
+        wrapped.append(current)
+    return wrapped
+
+
+def _split_pdf_word(
+    word: str,
+    max_width: float,
+    font_name: str,
+    font_size: float,
+) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+    for character in word:
+        candidate = f"{current}{character}"
+        if current and pdfmetrics.stringWidth(candidate, font_name, font_size) > max_width:
+            chunks.append(current)
+            current = character
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _openpyxl() -> Any:

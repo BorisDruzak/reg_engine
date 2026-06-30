@@ -233,9 +233,11 @@ Current stop point:
   PostgreSQL is migrated to `0013_report_xlsx_output` after backup and
   disposable PostgreSQL verification, frontend dist is deployed, healthcheck
   passed, and server checks passed.
-- Later explicit phases remain PDF report outputs, MCP write tools, and
+- Phase 4H PDF Report Output is in progress as the next bounded report output
+  format slice.
+- Later explicit phases remain MCP write tools and
   additional report polish.
-- Binary attachment/document export, PDF report outputs, additional report
+- Binary attachment/document export, additional report
   polish, and MCP write tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -1781,8 +1783,8 @@ Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
-report archive visibility, and XLSX report output slices. PDF report outputs
-and additional report polish remain deferred.
+report archive visibility, and XLSX report output slices. Phase 4H PDF report
+output is in progress; additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2343,6 +2345,82 @@ Production migration checkpoint:
   `ck_report_templates_output_format` allows `json`, `csv`, and `xlsx`.
 - Backend service was restarted; a first immediate health curl raced the
   restart, then repeated healthcheck returned `ok`.
+
+### Phase 4H: PDF Report Output
+
+Status: in progress.
+
+Purpose: add PDF as the next report output format while preserving the existing
+report service/API boundary, storage abstraction, visibility scope, and audit
+behavior.
+
+Scope:
+
+- Add output format `pdf` for report templates.
+- Add Alembic migration `0014_report_pdf_output` to allow `pdf` in
+  `report_templates.output_format`.
+- Render simple technical PDF files for the existing report types:
+  `registry_cards`, `card_detail`, and `period_summary`.
+- Store generated PDF report bytes through the existing `reports` storage
+  prefix.
+- Return `application/pdf` and `.pdf` filenames for PDF report runs.
+- Keep report run responses safe: no storage keys, filesystem paths,
+  checksums, or stored-file ids.
+- Preserve existing backend scope checks for template creation, report
+  generation, report reads/downloads, archive reads, and audit events.
+- Add Russian-first UI support for choosing `PDF` when creating a report
+  template.
+
+Acceptance criteria:
+
+- PDF report templates can be created only by actors with
+  `registry.schema.manage`.
+- PDF report runs use the same visibility scope as JSON/CSV/XLSX report runs.
+- PDF download does not expose sibling-branch cards outside the actor scope.
+- PDF output is stored through the storage abstraction, not returned from
+  memory-only ad hoc state.
+- JSON, CSV, and XLSX report behavior remains intact.
+- No scheduling, charts, public-link report workflows, binary
+  attachment/document report export, visual report builder, or MCP write tools
+  are added.
+- README, PLANS, and project tree are updated.
+
+Known limitations:
+
+- PDF output is a simple technical text/table rendering, not a polished visual
+  report designer.
+- Scheduled/background reports, charts, and public-link report workflows remain
+  deferred.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED backend unit test failed before implementation with
+  `Unsupported report output format: pdf`.
+- RED frontend test failed before implementation because the report format
+  select did not contain value `pdf`.
+- GREEN backend targeted renderer test passed:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_4_reports.py::test_pdf_report_output_renderer_creates_pdf_bytes -q`.
+- GREEN frontend targeted report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Backend report suite without `TEST_DATABASE_URL` passed locally with
+  `2 passed, 7 skipped`:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_4_reports.py -q`.
+- Targeted `ruff check`, `mypy app`, and Alembic offline SQL render passed;
+  offline SQL included `0014_report_pdf_output` and
+  `ck_report_templates_output_format` with `json`, `csv`, `xlsx`, and `pdf`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `79 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Pending for `0014_report_pdf_output`.
 
 ### Phase 5: MCP Over API Only
 
