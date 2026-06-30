@@ -45,7 +45,9 @@ Target system:
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs, authenticated card export API foundation, CSV import preview/commit API foundation, authenticated JSON/CSV report template/run API foundation, read-only MCP-over-API gateway foundation, and MCP stdio/config hardening.
 - Current frontend scope has a bearer-authenticated admin shell with organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive, repeatable block-instance add/archive, per-field and bulk dynamic value editing workflows, authenticated public-link list/create/disable controls with attachment-upload limits, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV card export and CSV import preview/commit controls, authenticated report template create/update/archive and JSON/CSV report generate/download/archive controls with visible run format/filename metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download, and full Russian UI browser validation for the core admin setup path.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
-- XLSX import/export, XLSX/PDF report outputs, additional report polish, and MCP write tools are later phases.
+- XLSX card import/export is available as a row-oriented technical exchange
+  format. XLSX/PDF report outputs, additional report polish, and MCP write
+  tools are later phases.
 
 ## Local Setup
 
@@ -394,16 +396,16 @@ Authenticated card export API:
 ```powershell
 GET /api/v1/registries/{registry_id}/exports/cards?format=json
 GET /api/v1/registries/{registry_id}/exports/cards?format=csv
+GET /api/v1/registries/{registry_id}/exports/cards?format=xlsx
 ```
 
-The export endpoint uses the same backend card visibility rules as card list/read. JSON export preserves schema-driven `blocks -> instances -> fields` structure. CSV export is field-row based with explicit `block_code`, `block_instance_ordinal`, and `field_code` columns so duplicate field codes in different blocks remain unambiguous.
+The export endpoint uses the same backend card visibility rules as card list/read. JSON export preserves schema-driven `blocks -> instances -> fields` structure. CSV and XLSX export are field-row based with explicit `block_code`, `block_instance_ordinal`, and `field_code` columns so duplicate field codes in different blocks remain unambiguous. XLSX export uses the same technical row contract as CSV in one worksheet.
 
 Attachment and generated-document exports include metadata only. Storage keys, checksums, stored file ids, filesystem paths, and binary bytes are not exported. Each export writes an `audit_events` row with `action=export` and `object_type=registry`.
 
 The authenticated registry workspace includes Russian-first controls for
-downloading JSON/CSV card exports through the existing export API. XLSX
-workflows and binary attachment/document export remain deferred to later
-explicit phases.
+downloading JSON/CSV/XLSX card exports through the existing export API. Binary
+attachment/document export remains deferred to later explicit phases.
 
 ## Phase 3B CSV Import Preview API
 
@@ -421,6 +423,9 @@ Request body:
 }
 ```
 
+XLSX preview uses multipart form data with a `file` field. The workbook must
+use the same row-oriented columns as CSV; the first worksheet is read.
+
 Required CSV columns:
 
 - `card_id`
@@ -432,7 +437,7 @@ Required CSV columns:
 
 Rows with `card_id` are previewed as updates. Rows without `card_id` are previewed as new-card rows and require `organization_id` and `display_name`. Field mapping uses `block_code.field_code`, matching the schema-driven export format. Preview validates card/organization scope and dynamic field values through backend card service rules, then returns per-row `valid` or `invalid` status and errors.
 
-Preview does not create cards, update field values, upload files, attach documents, or write audit events. CSV import commit is exposed separately. The authenticated registry workspace can paste CSV content, run preview, inspect valid/invalid row summaries, and keep commit disabled while preview has errors or stale CSV content. XLSX preview/export and binary attachment/document import/export remain deferred.
+Preview does not create cards, update field values, upload files, attach documents, or write audit events. CSV/XLSX import commit is exposed separately. The authenticated registry workspace can paste CSV content or choose an XLSX file, run preview, inspect valid/invalid row summaries, and keep commit disabled while preview has errors or stale input content. Binary attachment/document import/export remains deferred.
 
 ## Phase 3C CSV Import Commit API
 
@@ -450,7 +455,10 @@ Request body:
 }
 ```
 
-The commit endpoint reuses the same CSV shape and validation rules as preview.
+XLSX commit uses multipart form data with a `file` field and reuses the same
+row-oriented contract as XLSX preview.
+
+The commit endpoint reuses the same CSV/XLSX shape and validation rules as preview.
 `import_key` is optional. Rows with `card_id` update an existing editable card.
 Rows without `card_id` create a new card; multiple create rows with the same
 `import_key` are committed into one new card and must use the same
@@ -463,9 +471,9 @@ commit atomically, write schema-driven field values through `CardService`, and
 record an `audit_events` row with `action=import_commit`.
 
 The authenticated registry workspace can apply a CSV import commit after a
-valid preview and then refresh card/audit data. XLSX import/export, binary
-attachment/document import/export, and reference label enrichment remain
-deferred.
+valid preview, or an XLSX import commit after a valid XLSX preview, and then
+refresh card/audit data. Binary attachment/document import/export and reference
+label enrichment remain deferred.
 
 ## Phase 4A Report Foundation API
 
@@ -829,7 +837,7 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 ## Known Remaining Non-Goals After Core Schema v1 API Foundation
 
 - No server-side token revocation table yet.
-- No XLSX import/export workflows yet.
+- No binary attachment/document import/export workflows yet.
 - No XLSX/PDF report output, report scheduling, report charts, or visual report
   builder yet.
 - No public-link attachment archive/delete.
@@ -838,4 +846,4 @@ Use `scripts/check.ps1 -SkipRemote` when you need local lint/typecheck/test/buil
 - No MCP write tools.
 - No MDB migration.
 
-Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, Phase 2K.1 added organization unit management API, Phase 2K.2 added registry update/archive API, Phase 2K.3 added card block instance archive API, Phase 2K.4 added atomic bulk card values API, and Phase 2K.5 completed API coverage/live validation. Phase 2L.0 added the shared admin mutation frontend foundation, Phase 2L.1 added organization create/edit/archive UI, Phase 2L.2 added user create/edit/password-reset/archive UI, Phase 2L.3 added access-grant issue/revoke UI, Phase 2L.4 added registry create/update/archive UI, Phase 2L.5 added schema builder UI for form blocks and fields, Phase 2L.6 added reference-list/item management UI plus select/multi_select reference-list wiring, Phase 2L.7 added card create/metadata/archive, repeatable block-instance, and bulk field-value UI, Phase 2L.8 added authenticated public-link list/create/disable controls with separate attachment-upload limit UI, Phase 2L.9 added browser validation for the full Russian admin setup path, Phase 2J.0 accepted the `file_ref` dynamic field type ADR, Phase 2J.1 added the `file_ref` database/model foundation, Phase 2J.2 added backend service set/read/clear behavior, Phase 2J.3 added transfer behavior, Phase 2J.4 added REST card value API support, Phase 2J.5 added authenticated frontend editing, Phase 2J.6 added generated-document text rendering for `file_ref`, Phase 2J.7 completed live validation, Phase 2M added binary `.docx` template upload/versioning through authenticated API, Phase 2N added authenticated PDF generation for `docx_text_v1` templates, Phase 3A added authenticated JSON/CSV card export foundation, Phase 3B added CSV import preview and mapping foundation, Phase 3C added CSV import commit with atomic create/update and audit, Phase 3D adds authenticated Russian-first import/export frontend controls, Phase 4A adds authenticated JSON report template/run API foundation, Phase 4B adds authenticated Russian-first report UI controls, Phase 4C adds report template settings update API/UI, Phase 4D adds CSV report output, Phase 4E polishes report run ordering and output metadata display, Phase 4F adds archived report template/run visibility in the authenticated UI, Phase 5A adds a read-only MCP-over-API gateway foundation, and Phase 5B hardens MCP stdio/config behavior. XLSX workflows, XLSX/PDF report outputs, additional report polish, and MCP write tools remain later phases.
+Phase 1B through Phase 1J completed the Core Schema v1 database, backend service layer, REST API foundation, current API hardening checkpoint, bootstrap seed tooling, bearer-token authentication, and user/access management API. Phase 1K.1 added the authenticated admin shell. Phase 1K.2 added registry/schema and card list/read frontend workflows. Phase 1K.3 added dynamic card editing. Phase 1K.4 added public-link frontend editing. Phase 1K.5 completed browser validation for the frontend foundation. Phase 2 completed the current attachment and generated-document slices through public-link attachment quota API and concurrency hardening. Phase 2K.0 recorded the admin API gap audit, Phase 2K.1 added organization unit management API, Phase 2K.2 added registry update/archive API, Phase 2K.3 added card block instance archive API, Phase 2K.4 added atomic bulk card values API, and Phase 2K.5 completed API coverage/live validation. Phase 2L.0 added the shared admin mutation frontend foundation, Phase 2L.1 added organization create/edit/archive UI, Phase 2L.2 added user create/edit/password-reset/archive UI, Phase 2L.3 added access-grant issue/revoke UI, Phase 2L.4 added registry create/update/archive UI, Phase 2L.5 added schema builder UI for form blocks and fields, Phase 2L.6 added reference-list/item management UI plus select/multi_select reference-list wiring, Phase 2L.7 added card create/metadata/archive, repeatable block-instance, and bulk field-value UI, Phase 2L.8 added authenticated public-link list/create/disable controls with separate attachment-upload limit UI, Phase 2L.9 added browser validation for the full Russian admin setup path, Phase 2J.0 accepted the `file_ref` dynamic field type ADR, Phase 2J.1 added the `file_ref` database/model foundation, Phase 2J.2 added backend service set/read/clear behavior, Phase 2J.3 added transfer behavior, Phase 2J.4 added REST card value API support, Phase 2J.5 added authenticated frontend editing, Phase 2J.6 added generated-document text rendering for `file_ref`, Phase 2J.7 completed live validation, Phase 2M added binary `.docx` template upload/versioning through authenticated API, Phase 2N added authenticated PDF generation for `docx_text_v1` templates, Phase 3A added authenticated JSON/CSV card export foundation, Phase 3B added CSV import preview and mapping foundation, Phase 3C added CSV import commit with atomic create/update and audit, Phase 3D adds authenticated Russian-first import/export frontend controls, Phase 3E adds XLSX card import/export as the same row-oriented technical exchange contract, Phase 4A adds authenticated JSON report template/run API foundation, Phase 4B adds authenticated Russian-first report UI controls, Phase 4C adds report template settings update API/UI, Phase 4D adds CSV report output, Phase 4E polishes report run ordering and output metadata display, Phase 4F adds archived report template/run visibility in the authenticated UI, Phase 5A adds a read-only MCP-over-API gateway foundation, and Phase 5B hardens MCP stdio/config behavior. XLSX/PDF report outputs, additional report polish, and MCP write tools remain later phases.

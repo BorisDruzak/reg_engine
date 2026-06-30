@@ -162,6 +162,12 @@ Current stop point:
   the server checkout is synchronized to `origin/main`, frontend dist is
   deployed, healthcheck passed, Alembic remains at
   `0012_report_csv_output (head)`, and server checks passed.
+- Phase 3E XLSX Import Export Format Support is implemented locally as a
+  bounded format-adapter slice: XLSX export/preview/commit reuse the existing
+  row-oriented CSV contract and backend validation rules. Local checks are
+  complete; push/deploy/server evidence is pending. No database schema changes,
+  binary attachment/document import/export, report output changes, or MCP write
+  tools are included.
 - Phase 4A Report Foundation API is completed: migration `0010_reports`,
   backend report templates/runs, JSON report output storage, scoped
   reads/downloads, and audit are implemented, pushed, deployed, and migrated in
@@ -1385,15 +1391,17 @@ Known limitations:
 
 Purpose: add controlled data exchange.
 
-Status: completed for the current approved backend API slices; XLSX and
-frontend import/export workflows are deferred until explicitly approved.
+Status: completed for the JSON/CSV backend and frontend slices. Phase 3E XLSX
+format support is implemented locally; deployment evidence is pending.
 
 Approved/current scope:
 
 - CSV import with mapping, preview, validation, commit, and audit.
 - JSON/CSV export with permission checks.
 - Export of attachment/document metadata only first; binary export requires separate approval.
-- XLSX import/export remains a later explicit phase if needed.
+- XLSX import/export is limited to Phase 3E format support over the same
+  row-oriented contract. Binary attachment/document import/export remains a
+  separate later phase.
 
 Decisions:
 
@@ -1654,6 +1662,93 @@ Deployment checkpoint:
   `{"status":"ok","service":"reg_engine"}`.
 - Production Alembic status was checked and remains
   `0012_report_csv_output (head)`; no Phase 3D migration was required.
+
+### Phase 3E: XLSX Import Export Format Support
+
+Status: completed locally; deployment pending.
+
+Purpose: add XLSX as an additional authenticated card import/export transport
+while preserving the existing schema-driven CSV row contract, backend
+permission checks, preview/commit validation, and audit semantics.
+
+Scope:
+
+- Add `xlsx` to authenticated card export:
+  `GET /api/v1/registries/{registry_id}/exports/cards?format=xlsx`.
+- Export one worksheet using the same row-oriented columns as CSV:
+  `card_id`, `display_name`, `organization_id`, `org_unit_id`,
+  `lifecycle_status`, `block_code`, `block_instance_ordinal`, `field_code`,
+  `field_type`, and `value`.
+- Add XLSX import preview and commit request payload support without changing
+  the existing CSV payload contract.
+- Convert XLSX rows into the existing import row contract, then reuse the same
+  preview validation and commit path as CSV.
+- Record export and import audit metadata with `format=xlsx`.
+- Add Russian-first frontend controls for downloading XLSX, loading XLSX file
+  content for preview, and committing a valid XLSX preview.
+- Use a maintained XLSX library dependency instead of hand-rolled XLSX parsing.
+- Do not add database schema changes, Alembic migrations, binary
+  attachment/document import/export, report output changes, public-link
+  import/export workflows, or MCP write tools.
+
+Acceptance criteria:
+
+- XLSX export returns a valid workbook with the same technical columns and
+  scoped rows as CSV export.
+- XLSX preview returns the same response shape as CSV preview and does not
+  mutate cards, field values, files, or audit.
+- XLSX commit reuses preview validation, rejects invalid batches atomically,
+  writes schema-driven card values, and records import audit with
+  `format=xlsx`.
+- CSV export/preview/commit behavior remains unchanged.
+- Frontend tests cover Russian XLSX export/import controls, file-required
+  validation, preview, invalid preview blocking, and commit payloads.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- XLSX support is row-oriented technical exchange, not a polished business
+  spreadsheet template.
+- XLSX import/export still uses stored ids for reference values; label
+  enrichment remains deferred.
+- Binary attachment/document bytes are not imported or exported.
+- No report XLSX output, public-link XLSX workflow, or MCP write tools.
+
+Verification:
+
+- RED backend XLSX tests failed before implementation on disposable
+  PostgreSQL database `reg_engine_phase3e_test`: `format=xlsx` was rejected by
+  the export query validator and multipart XLSX import was not accepted by the
+  existing JSON-only import endpoints.
+- GREEN backend XLSX targeted tests passed on disposable PostgreSQL database
+  `reg_engine_phase3e_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_3_import_export.py -k "xlsx" -q`.
+- Full Phase 3 import/export API suite passed on disposable PostgreSQL
+  database `reg_engine_phase3e_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_3_import_export.py -q`
+  with `9 passed`.
+- RED frontend test failed before implementation because the authenticated
+  registry workspace had no `Скачать XLSX` control.
+- GREEN targeted frontend test passed:
+  `npm test -- --run src/App.test.tsx --testNamePattern "exports and imports cards"`.
+- Targeted backend ruff check, ruff format check, and mypy passed.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `77 passed, 136 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 3E.
+
+Deployment checkpoint:
+
+- Pending push, server deploy, frontend deploy, backend service restart, and
+  server check.
 
 ### Phase 4: Reports
 

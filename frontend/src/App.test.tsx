@@ -1168,11 +1168,26 @@ beforeEach(() => {
       }
       if (
         url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=xlsx",
+        )
+      ) {
+        return new Response(new Blob(["xlsx-export"]), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
+        });
+      }
+      if (
+        url.endsWith(
           "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/preview",
         )
       ) {
-        const payload = JSON.parse(String(init?.body ?? "{}")) as { csv_content: string };
-        const hasInvalidRow = payload.csv_content.includes("invalid-number");
+        const isXlsx = init?.body instanceof FormData;
+        const payload = isXlsx
+          ? { csv_content: "xlsx-valid" }
+          : (JSON.parse(String(init?.body ?? "{}")) as { csv_content: string });
+        const hasInvalidRow = !isXlsx && payload.csv_content.includes("invalid-number");
         const preview: CardImportPreviewRead = {
           format_version: "card_import_preview_v1",
           registry_id: "77777777-7777-4777-8777-777777777777",
@@ -3600,6 +3615,8 @@ test("exports and imports cards through Russian registry UI", async () => {
   expect(await screen.findByText("Экспорт скачан")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать CSV" }));
   expect(await screen.findByText("Экспорт скачан")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать XLSX" }));
+  expect(await screen.findByText("Экспорт скачан")).toBeInTheDocument();
 
   const invalidCsv =
     "card_id,organization_id,display_name,block_code,field_code,value\n" +
@@ -3633,6 +3650,19 @@ test("exports and imports cards through Russian registry UI", async () => {
     screen.getByText("Строк применено: 1 / создано карточек: 0 / обновлено карточек: 1"),
   ).toBeInTheDocument();
 
+  await user.click(screen.getByRole("button", { name: "Проверить XLSX" }));
+  expect(await screen.findByText("Выберите XLSX файл")).toBeInTheDocument();
+  const xlsxFile = new File(["xlsx-content"], "cards.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  await user.upload(screen.getByLabelText("XLSX для импорта"), xlsxFile);
+  await user.click(screen.getByRole("button", { name: "Проверить XLSX" }));
+
+  expect(await screen.findByText("Можно применить импорт")).toBeInTheDocument();
+  expect(screen.getByText("Всего строк: 1 / корректных: 1 / ошибок: 0")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Применить XLSX" }));
+  expect(await screen.findByText("Импорт применен")).toBeInTheDocument();
+
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
     expect(
@@ -3642,6 +3672,19 @@ test("exports and imports cards through Russian registry UI", async () => {
         return (
           url.endsWith(
             "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=json",
+          ) &&
+          init?.method === "GET" &&
+          headers?.Authorization === "Bearer test-token"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/exports/cards?format=xlsx",
           ) &&
           init?.method === "GET" &&
           headers?.Authorization === "Bearer test-token"
@@ -3689,6 +3732,38 @@ test("exports and imports cards through Russian registry UI", async () => {
         }
         const body = JSON.parse(String(init.body ?? "{}")) as { csv_content?: string };
         return body.csv_content === validCsv;
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/preview",
+          ) ||
+          init?.method !== "POST" ||
+          !(init.body instanceof FormData)
+        ) {
+          return false;
+        }
+        const file = init.body.get("file");
+        return file instanceof File && file.name === "cards.xlsx";
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/imports/cards/commit",
+          ) ||
+          init?.method !== "POST" ||
+          !(init.body instanceof FormData)
+        ) {
+          return false;
+        }
+        const file = init.body.get("file");
+        return file instanceof File && file.name === "cards.xlsx";
       }),
     ).toBe(true);
   });

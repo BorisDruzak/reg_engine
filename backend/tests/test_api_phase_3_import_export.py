@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
 from typing import Any
 from uuid import UUID
 
@@ -34,6 +35,57 @@ from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
+
+
+def _load_xlsx_rows(content: bytes) -> list[dict[str, str]]:
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    sheet = workbook.active
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows
+    headers = [str(value) for value in rows[0]]
+    return [
+        {
+            header: "" if value is None else str(value)
+            for header, value in zip(headers, row, strict=False)
+        }
+        for row in rows[1:]
+    ]
+
+
+def _xlsx_upload(
+    rows: list[dict[str, str]],
+) -> tuple[str, tuple[str, SpooledTemporaryFile[bytes], str]]:
+    from openpyxl import Workbook
+
+    columns = [
+        "import_key",
+        "card_id",
+        "organization_id",
+        "display_name",
+        "block_code",
+        "field_code",
+        "value",
+    ]
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "cards"
+    sheet.append(columns)
+    for row in rows:
+        sheet.append([row.get(column, "") for column in columns])
+
+    file = SpooledTemporaryFile[bytes]()
+    workbook.save(file)
+    file.seek(0)
+    return (
+        "file",
+        (
+            "cards.xlsx",
+            file,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    )
 
 
 def _require_test_database_url() -> str:
@@ -457,6 +509,60 @@ def test_card_csv_export_uses_block_field_rows_for_duplicate_field_codes(
     assert "stored_file_id" not in response.text
 
 
+def test_card_xlsx_export_uses_same_scoped_row_contract_as_csv(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_export_context(db_session)
+
+    response = api_client.get(
+        f"/api/v1/registries/{context['registry'].id}/exports/cards?format=xlsx",
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="registry-cards-export.xlsx"'
+    )
+    rows = _load_xlsx_rows(response.content)
+    assert {
+        (
+            row["card_id"],
+            row["block_code"],
+            row["block_instance_ordinal"],
+            row["field_code"],
+            row["field_type"],
+            row["value"],
+        )
+        for row in rows
+    } == {
+        (str(context["child_card"].id), "main", "0", "status", "text", "ready"),
+        (str(context["child_card"].id), "details", "0", "status", "text", "secondary"),
+    }
+    serialized_rows = repr(rows)
+    assert "Hidden sibling card" not in serialized_rows
+    assert "storage_key" not in serialized_rows
+    assert "checksum_sha256" not in serialized_rows
+    assert "stored_file_id" not in serialized_rows
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "export",
+            AuditEvent.object_type == "registry",
+            AuditEvent.object_id == context["registry"].id,
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.new_data_json == {
+        "export_type": "cards",
+        "format": "xlsx",
+        "card_count": 1,
+    }
+
+
 def _phase_3_import_context(db_session: Session) -> dict[str, Any]:
     context = _phase_3_export_context(db_session)
     schema_service = RegistrySchemaService(db_session)
@@ -601,6 +707,66 @@ def test_card_csv_import_preview_rejects_missing_required_columns(
     )
 
 
+def test_card_xlsx_import_preview_reuses_csv_contract_and_does_not_mutate(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    card_count_before = db_session.scalar(select(func.count()).select_from(Card))
+    value_count_before = db_session.scalar(select(func.count()).select_from(FieldValue))
+    audit_count_before = db_session.scalar(select(func.count()).select_from(AuditEvent))
+    file_field = _xlsx_upload(
+        [
+            {
+                "card_id": str(context["child_card"].id),
+                "block_code": "main",
+                "field_code": "status",
+                "value": "valid xlsx update preview",
+            },
+            {
+                "organization_id": str(context["child_card"].organization_id),
+                "display_name": "XLSX preview create",
+                "block_code": "metrics",
+                "field_code": "priority",
+                "value": "42.5",
+            },
+            {
+                "card_id": str(context["child_card"].id),
+                "block_code": "metrics",
+                "field_code": "priority",
+                "value": "not-a-number",
+            },
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        files=[file_field],
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["format_version"] == "card_import_preview_v1"
+    assert payload["summary"] == {
+        "total_rows": 3,
+        "valid_rows": 2,
+        "invalid_rows": 1,
+        "would_create_rows": 1,
+        "would_update_rows": 1,
+    }
+    rows_by_number = {row["row_number"]: row for row in payload["rows"]}
+    assert rows_by_number[2]["status"] == "valid"
+    assert rows_by_number[2]["field_path"] == "main.status"
+    assert rows_by_number[3]["status"] == "valid"
+    assert rows_by_number[3]["parsed_value"] == "42.5"
+    assert rows_by_number[4]["status"] == "invalid"
+    assert rows_by_number[4]["errors"] == ["Number fields require a numeric value."]
+    assert db_session.scalar(select(func.count()).select_from(Card)) == card_count_before
+    assert db_session.scalar(select(func.count()).select_from(FieldValue)) == value_count_before
+    assert db_session.scalar(select(func.count()).select_from(AuditEvent)) == audit_count_before
+
+
 def test_card_csv_import_commit_creates_updates_and_records_audit(
     api_client: TestClient,
     db_session: Session,
@@ -674,6 +840,103 @@ def test_card_csv_import_commit_creates_updates_and_records_audit(
     assert audit_event.new_data_json == {
         "import_type": "cards",
         "format": "csv",
+        "total_rows": 3,
+        "committed_rows": 3,
+        "created_cards": 1,
+        "updated_cards": 1,
+        "field_values_written": 3,
+    }
+
+
+def test_card_xlsx_import_commit_creates_updates_and_records_xlsx_audit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    file_field = _xlsx_upload(
+        [
+            {
+                "card_id": str(context["child_card"].id),
+                "block_code": "main",
+                "field_code": "status",
+                "value": "committed xlsx update",
+            },
+            {
+                "import_key": "xlsx-new-1",
+                "organization_id": str(context["child_card"].organization_id),
+                "display_name": "Committed XLSX import card",
+                "block_code": "metrics",
+                "field_code": "priority",
+                "value": "10.5",
+            },
+            {
+                "import_key": "xlsx-new-1",
+                "organization_id": str(context["child_card"].organization_id),
+                "display_name": "Committed XLSX import card",
+                "block_code": "main",
+                "field_code": "status",
+                "value": "created xlsx status",
+            },
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/commit",
+        files=[file_field],
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["format_version"] == "card_import_commit_v1"
+    assert payload["summary"] == {
+        "total_rows": 3,
+        "committed_rows": 3,
+        "created_cards": 1,
+        "updated_cards": 1,
+        "field_values_written": 3,
+    }
+
+    card_service = CardService(db_session)
+    updated_card = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=context["child_card"].id,
+    )
+    assert updated_card.blocks["main"].instances[0].fields["status"].value == (
+        "committed xlsx update"
+    )
+
+    created_card = db_session.scalar(
+        select(Card).where(
+            Card.registry_id == context["registry"].id,
+            Card.display_name == "Committed XLSX import card",
+        )
+    )
+    assert created_card is not None
+    created_read = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=created_card.id,
+    )
+    assert created_read.blocks["main"].instances[0].fields["status"].value == (
+        "created xlsx status"
+    )
+    assert created_read.blocks["metrics"].instances[0].fields["priority"].value == Decimal("10.5")
+    assert payload["cards"] == [
+        {"card_id": str(context["child_card"].id), "action": "update", "import_key": None},
+        {"card_id": str(created_card.id), "action": "create", "import_key": "xlsx-new-1"},
+    ]
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "import_commit",
+            AuditEvent.object_type == "registry",
+            AuditEvent.object_id == context["registry"].id,
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.new_data_json == {
+        "import_type": "cards",
+        "format": "xlsx",
         "total_rows": 3,
         "committed_rows": 3,
         "created_cards": 1,

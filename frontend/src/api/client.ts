@@ -333,7 +333,7 @@ export async function transferCard(token: string, cardId: string, payload: CardT
 export async function downloadCardExport(
   token: string,
   registryId: string,
-  exportFormat: "json" | "csv",
+  exportFormat: "json" | "csv" | "xlsx",
 ) {
   const response = await fetch(
     `${apiBaseUrl.replace(/\/$/, "")}/api/v1/registries/${registryId}/exports/cards?format=${exportFormat}`,
@@ -371,6 +371,19 @@ export async function previewCardImport(
   );
 }
 
+export async function previewCardImportFile(token: string, registryId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<CardImportPreviewRead>(
+    `/api/v1/registries/${registryId}/imports/cards/preview`,
+    {
+      method: "POST",
+      token,
+      body: formData,
+    },
+  );
+}
+
 export async function commitCardImport(
   token: string,
   registryId: string,
@@ -380,6 +393,16 @@ export async function commitCardImport(
     method: "POST",
     token,
     body: payload,
+  });
+}
+
+export async function commitCardImportFile(token: string, registryId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<CardImportCommitRead>(`/api/v1/registries/${registryId}/imports/cards/commit`, {
+    method: "POST",
+    token,
+    body: formData,
   });
 }
 

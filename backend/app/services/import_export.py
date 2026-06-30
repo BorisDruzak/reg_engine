@@ -2,8 +2,9 @@ import csv
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from io import StringIO
-from typing import Any
+from importlib import import_module
+from io import BytesIO, StringIO
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -34,6 +35,18 @@ CARD_IMPORT_REQUIRED_COLUMNS = {
     "field_code",
     "value",
 }
+CARD_EXPORT_ROW_COLUMNS = [
+    "card_id",
+    "display_name",
+    "organization_id",
+    "org_unit_id",
+    "lifecycle_status",
+    "block_code",
+    "block_instance_ordinal",
+    "field_code",
+    "field_type",
+    "value",
+]
 
 
 class ImportExportServiceError(ValueError):
@@ -96,30 +109,11 @@ class CardExportService:
             include_archive=include_archive,
             query=query,
         )
+        rows = self._card_export_rows(cards)
         output = StringIO(newline="")
-        fieldnames = [
-            "card_id",
-            "display_name",
-            "organization_id",
-            "org_unit_id",
-            "lifecycle_status",
-            "block_code",
-            "block_instance_ordinal",
-            "field_code",
-            "field_type",
-            "value",
-        ]
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer = csv.DictWriter(output, fieldnames=CARD_EXPORT_ROW_COLUMNS)
         writer.writeheader()
-        for card in cards:
-            for block_code, block in card["blocks"].items():
-                for instance in block["instances"]:
-                    self._write_csv_instance_rows(
-                        writer,
-                        card=card,
-                        block_code=block_code,
-                        instance=instance,
-                    )
+        writer.writerows(rows)
 
         self._record_export_event(
             actor_user_id=actor_user_id,
@@ -128,6 +122,55 @@ class CardExportService:
             card_count=len(cards),
         )
         return output.getvalue()
+
+    def export_cards_xlsx_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        organization_id: UUID | None = None,
+        include_archive: bool = False,
+        query: str | None = None,
+    ) -> bytes:
+        cards = self._card_exports_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            organization_id=organization_id,
+            include_archive=include_archive,
+            query=query,
+        )
+        rows = self._card_export_rows(cards)
+        openpyxl = _openpyxl()
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "cards"
+        sheet.append(CARD_EXPORT_ROW_COLUMNS)
+        for row in rows:
+            sheet.append([row[column] for column in CARD_EXPORT_ROW_COLUMNS])
+
+        output = BytesIO()
+        workbook.save(output)
+        self._record_export_event(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            export_format="xlsx",
+            card_count=len(cards),
+        )
+        return output.getvalue()
+
+    def _card_export_rows(self, cards: list[dict[str, Any]]) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        for card in cards:
+            for block_code, block in card["blocks"].items():
+                for instance in block["instances"]:
+                    rows.extend(
+                        self._export_instance_rows(
+                            card=card,
+                            block_code=block_code,
+                            instance=instance,
+                        )
+                    )
+        return rows
 
     def _card_exports_for_actor(
         self,
@@ -276,29 +319,28 @@ class CardExportService:
             )
         return metadata
 
-    def _write_csv_instance_rows(
+    def _export_instance_rows(
         self,
-        writer: csv.DictWriter[str],
         *,
         card: dict[str, Any],
         block_code: str,
         instance: dict[str, Any],
-    ) -> None:
-        for field_code, field in instance["fields"].items():
-            writer.writerow(
-                {
-                    "card_id": card["id"],
-                    "display_name": card["display_name"],
-                    "organization_id": card["organization_id"],
-                    "org_unit_id": card["org_unit_id"] or "",
-                    "lifecycle_status": card["lifecycle_status"],
-                    "block_code": block_code,
-                    "block_instance_ordinal": instance["ordinal"],
-                    "field_code": field_code,
-                    "field_type": field["field_type"],
-                    "value": _csv_export_value(field["value"]),
-                }
-            )
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "card_id": card["id"],
+                "display_name": card["display_name"],
+                "organization_id": card["organization_id"],
+                "org_unit_id": card["org_unit_id"] or "",
+                "lifecycle_status": card["lifecycle_status"],
+                "block_code": block_code,
+                "block_instance_ordinal": str(instance["ordinal"]),
+                "field_code": field_code,
+                "field_type": field["field_type"],
+                "value": _csv_export_value(field["value"]),
+            }
+            for field_code, field in instance["fields"].items()
+        ]
 
     def _record_export_event(
         self,
@@ -333,6 +375,33 @@ class CardImportPreviewService:
         csv_content: str,
     ) -> dict[str, Any]:
         rows = self._read_csv_rows(csv_content)
+        return self._preview_cards_rows_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            rows=rows,
+        )
+
+    def preview_cards_xlsx_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        xlsx_content: bytes,
+    ) -> dict[str, Any]:
+        rows = self._read_xlsx_rows(xlsx_content)
+        return self._preview_cards_rows_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            rows=rows,
+        )
+
+    def _preview_cards_rows_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        rows: list[tuple[int, dict[str, str]]],
+    ) -> dict[str, Any]:
         _, blocks, fields = RegistrySchemaService(self.session).read_schema_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
@@ -376,6 +445,35 @@ class CardImportPreviewService:
             )
             for index, row in enumerate(reader, start=2)
         ]
+
+    def _read_xlsx_rows(self, xlsx_content: bytes) -> list[tuple[int, dict[str, str]]]:
+        try:
+            workbook = _openpyxl().load_workbook(
+                BytesIO(xlsx_content),
+                read_only=True,
+                data_only=True,
+            )
+        except Exception as exc:
+            raise ImportExportServiceError("XLSX import file could not be read.") from exc
+        sheet = workbook.active
+        rows = list(sheet.iter_rows(values_only=True))
+        if not rows:
+            raise ImportExportServiceError("XLSX import file is empty.")
+        headers = ["" if value is None else str(value).strip() for value in rows[0]]
+        fieldnames = set(headers)
+        if not fieldnames >= CARD_IMPORT_REQUIRED_COLUMNS:
+            required = ", ".join(sorted(CARD_IMPORT_REQUIRED_COLUMNS))
+            raise ImportExportServiceError(f"XLSX import preview requires columns: {required}.")
+
+        parsed_rows: list[tuple[int, dict[str, str]]] = []
+        for index, values in enumerate(rows[1:], start=2):
+            row = {
+                key: "" if value is None else str(value).strip()
+                for key, value in zip(headers, values, strict=False)
+                if key
+            }
+            parsed_rows.append((index, row))
+        return parsed_rows
 
     def _field_mapping(
         self,
@@ -496,6 +594,40 @@ class CardImportCommitService:
             registry_id=registry_id,
             csv_content=csv_content,
         )
+        return self._commit_preview_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            preview=preview,
+            import_format="csv",
+        )
+
+    def commit_cards_xlsx_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        xlsx_content: bytes,
+    ) -> dict[str, Any]:
+        preview = CardImportPreviewService(self.session).preview_cards_xlsx_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            xlsx_content=xlsx_content,
+        )
+        return self._commit_preview_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            preview=preview,
+            import_format="xlsx",
+        )
+
+    def _commit_preview_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        preview: dict[str, Any],
+        import_format: str,
+    ) -> dict[str, Any]:
         if preview["summary"]["invalid_rows"]:
             raise CardImportCommitValidationError(preview)
 
@@ -551,7 +683,7 @@ class CardImportCommitService:
                 object_id=registry_id,
                 new_data_json={
                     "import_type": "cards",
-                    "format": "csv",
+                    "format": import_format,
                     "total_rows": preview["summary"]["total_rows"],
                     "committed_rows": field_values_written,
                     "created_cards": created_cards,
@@ -749,3 +881,7 @@ def _parse_multi_select_csv_value(raw_value: str) -> list[UUID]:
         raise ImportExportServiceError(
             "Multi-select fields require UUID strings separated by semicolon or a JSON list."
         ) from exc
+
+
+def _openpyxl() -> Any:
+    return cast(Any, import_module("openpyxl"))

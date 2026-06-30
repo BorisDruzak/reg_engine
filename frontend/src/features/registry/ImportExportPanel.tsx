@@ -1,7 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 
-import { commitCardImport, downloadCardExport, previewCardImport } from "@/api/client";
+import {
+  commitCardImport,
+  commitCardImportFile,
+  downloadCardExport,
+  previewCardImport,
+  previewCardImportFile,
+} from "@/api/client";
 import type { CardImportCommitRead, CardImportPreviewRead } from "@/api/types";
 import { uiText } from "@/app/uiText";
 import { Panel } from "@/components/common/DataSurfaces";
@@ -17,13 +23,16 @@ export function ImportExportPanel({
   const queryClient = useQueryClient();
   const [csvContent, setCsvContent] = useState("");
   const [previewCsvContent, setPreviewCsvContent] = useState("");
+  const [xlsxFile, setXlsxFile] = useState<File | null>(null);
+  const [previewXlsxFile, setPreviewXlsxFile] = useState<File | null>(null);
+  const [previewSource, setPreviewSource] = useState<"csv" | "xlsx" | null>(null);
   const [preview, setPreview] = useState<CardImportPreviewRead | null>(null);
   const [commitResult, setCommitResult] = useState<CardImportCommitRead | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const downloadMutation = useMutation({
-    mutationFn: (exportFormat: "json" | "csv") =>
+    mutationFn: (exportFormat: "json" | "csv" | "xlsx") =>
       downloadCardExport(token, selectedRegistryId, exportFormat),
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
@@ -32,7 +41,7 @@ export function ImportExportPanel({
     },
     onError: (error) => setLocalError(errorText(error)),
   });
-  const previewMutation = useMutation({
+  const previewCsvMutation = useMutation({
     mutationFn: () => {
       const content = csvContent.trim();
       if (!content) {
@@ -42,7 +51,29 @@ export function ImportExportPanel({
     },
     onSuccess: (result) => {
       setPreview(result);
+      setPreviewSource("csv");
       setPreviewCsvContent(csvContent);
+      setPreviewXlsxFile(null);
+      setCommitResult(null);
+      setMessage(
+        result.summary.invalid_rows === 0 ? uiText.importCanApply : uiText.importPreviewReady,
+      );
+      setLocalError(null);
+    },
+    onError: (error) => setLocalError(errorText(error)),
+  });
+  const previewXlsxMutation = useMutation({
+    mutationFn: () => {
+      if (!xlsxFile) {
+        throw new Error(uiText.importXlsxRequired);
+      }
+      return previewCardImportFile(token, selectedRegistryId, xlsxFile);
+    },
+    onSuccess: (result) => {
+      setPreview(result);
+      setPreviewSource("xlsx");
+      setPreviewCsvContent("");
+      setPreviewXlsxFile(xlsxFile);
       setCommitResult(null);
       setMessage(
         result.summary.invalid_rows === 0 ? uiText.importCanApply : uiText.importPreviewReady,
@@ -55,6 +86,18 @@ export function ImportExportPanel({
     mutationFn: () => {
       if (!preview) {
         throw new Error(uiText.importPreviewRequired);
+      }
+      if (previewSource === "csv") {
+        if (previewCsvContent !== csvContent) {
+          throw new Error(uiText.importPreviewStale);
+        }
+        return commitCardImport(token, selectedRegistryId, { csv_content: csvContent });
+      }
+      if (previewSource === "xlsx") {
+        if (!xlsxFile || previewXlsxFile !== xlsxFile) {
+          throw new Error(uiText.importXlsxPreviewStale);
+        }
+        return commitCardImportFile(token, selectedRegistryId, xlsxFile);
       }
       if (previewCsvContent !== csvContent) {
         throw new Error(uiText.importPreviewStale);
@@ -71,12 +114,15 @@ export function ImportExportPanel({
     onError: (error) => setLocalError(errorText(error)),
   });
 
-  const hasStableValidPreview =
-    Boolean(preview) && preview?.summary.invalid_rows === 0 && previewCsvContent === csvContent;
+  const hasValidPreview = Boolean(preview) && preview?.summary.invalid_rows === 0;
+  const hasStableValidCsvPreview =
+    hasValidPreview && previewSource === "csv" && previewCsvContent === csvContent;
+  const hasStableValidXlsxPreview =
+    hasValidPreview && previewSource === "xlsx" && previewXlsxFile === xlsxFile;
 
   function handlePreviewSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    previewMutation.mutate();
+    previewCsvMutation.mutate();
   }
 
   return (
@@ -100,6 +146,14 @@ export function ImportExportPanel({
           >
             {uiText.downloadCsv}
           </button>
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={!selectedRegistryId || downloadMutation.isPending}
+            onClick={() => downloadMutation.mutate("xlsx")}
+          >
+            {uiText.downloadXlsx}
+          </button>
         </div>
       </section>
 
@@ -117,20 +171,48 @@ export function ImportExportPanel({
             <button
               type="submit"
               className="primary-button"
-              disabled={!selectedRegistryId || previewMutation.isPending}
+              disabled={!selectedRegistryId || previewCsvMutation.isPending}
             >
               {uiText.previewImport}
             </button>
             <button
               type="button"
               className="primary-button"
-              disabled={!hasStableValidPreview || commitMutation.isPending}
+              disabled={!hasStableValidCsvPreview || commitMutation.isPending}
               onClick={() => commitMutation.mutate()}
             >
               {uiText.applyImport}
             </button>
           </div>
         </form>
+        <div className="template-form">
+          <label className="field-editor-control">
+            <span>{uiText.importXlsxFile}</span>
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={(event) => setXlsxFile(event.currentTarget.files?.[0] ?? null)}
+            />
+          </label>
+          <div className="row-actions template-body-control">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!selectedRegistryId || previewXlsxMutation.isPending}
+              onClick={() => previewXlsxMutation.mutate()}
+            >
+              {uiText.previewXlsxImport}
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!hasStableValidXlsxPreview || commitMutation.isPending}
+              onClick={() => commitMutation.mutate()}
+            >
+              {uiText.applyXlsxImport}
+            </button>
+          </div>
+        </div>
         {message && <p className="inline-success attachment-status">{message}</p>}
         {localError && <p className="inline-alert attachment-status">{localError}</p>}
         {preview && <ImportPreview preview={preview} />}
