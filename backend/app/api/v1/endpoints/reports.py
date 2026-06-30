@@ -15,6 +15,7 @@ from app.schemas.reports import (
     ReportTemplateCreate,
     ReportTemplateListRead,
     ReportTemplateRead,
+    ReportTemplateUpdate,
 )
 from app.services.attachments import LocalFilesystemAttachmentStorage, normalize_attachment_filename
 from app.services.reports import ReportService
@@ -73,6 +74,25 @@ def list_report_templates(
     return ReportTemplateListRead(
         items=[ReportTemplateRead.model_validate(template) for template in templates]
     )
+
+
+@router.patch("/report-templates/{template_id}", response_model=ReportTemplateRead)
+def update_report_template(
+    template_id: UUID,
+    payload: ReportTemplateUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> ReportTemplateRead:
+    service = _report_service(session)
+    try:
+        template = service.update_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            updates=payload.model_dump(exclude_unset=True),
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return ReportTemplateRead.model_validate(template)
 
 
 @router.delete("/report-templates/{template_id}", response_model=ReportTemplateRead)

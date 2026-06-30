@@ -607,6 +607,13 @@ export type ReportTemplateCreatePayload = {
   output_format?: string;
 };
 
+export type ReportTemplateUpdatePayload = {
+  name?: string;
+  description?: string | null;
+  parameters_schema_json?: Record<string, unknown> | null;
+  default_parameters_json?: Record<string, unknown> | null;
+};
+
 export type ReportTemplateListRead = {
   items: ReportTemplateRead[];
 };

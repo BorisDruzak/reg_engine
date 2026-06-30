@@ -15,6 +15,13 @@ class ReportTemplateCreate(BaseModel):
     output_format: str = "json"
 
 
+class ReportTemplateUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    parameters_schema_json: dict[str, Any] | None = None
+    default_parameters_json: dict[str, Any] | None = None
+
+
 class ReportTemplateRead(BaseModel):
     id: UUID
     registry_id: UUID

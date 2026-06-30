@@ -9,6 +9,7 @@ import {
   generateReportRun,
   listReportRuns,
   listReportTemplates,
+  updateReportTemplate,
 } from "@/api/client";
 import type { ReportRunRead, ReportTemplateRead } from "@/api/types";
 import { formatUiDateTime, reportRunStatusLabel, reportTypeLabel, uiText } from "@/app/uiText";
@@ -31,6 +32,10 @@ export function ReportsPanel({
   const [templateDescription, setTemplateDescription] = useState("");
   const [reportType, setReportType] = useState("registry_cards");
   const [templateParametersJson, setTemplateParametersJson] = useState("");
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTemplateName, setEditTemplateName] = useState("");
+  const [editTemplateDescription, setEditTemplateDescription] = useState("");
+  const [editTemplateParametersJson, setEditTemplateParametersJson] = useState("");
   const [runParametersJson, setRunParametersJson] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -54,6 +59,7 @@ export function ReportsPanel({
   const canCreateTemplate = Boolean(
     selectedRegistryId && templateCode.trim() && templateName.trim() && reportType,
   );
+  const canUpdateTemplate = Boolean(editingTemplateId && editTemplateName.trim());
   const createTemplateMutation = useMutation({
     mutationFn: () =>
       createReportTemplate(token, selectedRegistryId, {
@@ -73,6 +79,25 @@ export function ReportsPanel({
       setTemplateDescription("");
       setReportType("registry_cards");
       setTemplateParametersJson("");
+      await invalidateReportData(queryClient, token, selectedRegistryId);
+    },
+    onError: (error) => setLocalError(errorText(error)),
+  });
+  const updateTemplateMutation = useMutation({
+    mutationFn: () => {
+      if (!editingTemplateId) {
+        throw new Error(uiText.noReportTemplates);
+      }
+      return updateReportTemplate(token, editingTemplateId, {
+        name: editTemplateName.trim(),
+        description: editTemplateDescription.trim() || null,
+        default_parameters_json: parseJsonObjectOrNull(editTemplateParametersJson),
+      });
+    },
+    onSuccess: async () => {
+      setMessage(uiText.reportTemplateUpdated);
+      setLocalError(null);
+      clearTemplateEdit();
       await invalidateReportData(queryClient, token, selectedRegistryId);
     },
     onError: (error) => setLocalError(errorText(error)),
@@ -121,6 +146,22 @@ export function ReportsPanel({
     },
     onError: (error) => setLocalError(errorText(error)),
   });
+
+  function startTemplateEdit(template: ReportTemplateRead) {
+    setEditingTemplateId(template.id);
+    setEditTemplateName(template.name);
+    setEditTemplateDescription(template.description ?? "");
+    setEditTemplateParametersJson(formatJsonObjectForEdit(template.default_parameters_json));
+    setMessage(null);
+    setLocalError(null);
+  }
+
+  function clearTemplateEdit() {
+    setEditingTemplateId(null);
+    setEditTemplateName("");
+    setEditTemplateDescription("");
+    setEditTemplateParametersJson("");
+  }
 
   return (
     <Panel title={uiText.reports}>
@@ -185,9 +226,56 @@ export function ReportsPanel({
             {uiText.createReportTemplate}
           </button>
         </form>
+        {editingTemplateId && (
+          <form
+            className="template-form"
+            aria-label={uiText.editReportTemplate}
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateTemplateMutation.mutate();
+            }}
+          >
+            <label className="field-editor-control">
+              <span>{uiText.reportTemplateEditName}</span>
+              <input
+                required
+                value={editTemplateName}
+                onChange={(event) => setEditTemplateName(event.target.value)}
+              />
+            </label>
+            <label className="field-editor-control">
+              <span>{uiText.reportTemplateEditDescription}</span>
+              <input
+                value={editTemplateDescription}
+                onChange={(event) => setEditTemplateDescription(event.target.value)}
+              />
+            </label>
+            <label className="field-editor-control template-body-control">
+              <span>{uiText.reportTemplateEditParametersJson}</span>
+              <textarea
+                value={editTemplateParametersJson}
+                onChange={(event) => setEditTemplateParametersJson(event.target.value)}
+              />
+            </label>
+            <div className="row-actions">
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={!canUpdateTemplate || updateTemplateMutation.isPending}
+              >
+                {uiText.saveReportTemplate}
+              </button>
+              <button type="button" className="ghost-button" onClick={clearTemplateEdit}>
+                {uiText.cancel}
+              </button>
+            </div>
+          </form>
+        )}
         <ReportTemplateList
           items={templates}
+          editingId={editingTemplateId}
           archivingId={archiveTemplateMutation.variables ?? null}
+          onEdit={startTemplateEdit}
           onArchive={(template) => archiveTemplateMutation.mutate(template.id)}
         />
         {templates.length === 0 && <p className="data-empty">{uiText.noReportTemplates}</p>}
@@ -245,11 +333,15 @@ export function ReportsPanel({
 
 function ReportTemplateList({
   items,
+  editingId,
   archivingId,
+  onEdit,
   onArchive,
 }: {
   items: ReportTemplateRead[];
+  editingId: string | null;
   archivingId: string | null;
+  onEdit: (template: ReportTemplateRead) => void;
   onArchive: (template: ReportTemplateRead) => void;
 }) {
   if (items.length === 0) {
@@ -268,6 +360,15 @@ function ReportTemplateList({
             </span>
           </div>
           <div className="row-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              aria-label={`${uiText.editReportTemplate} ${template.name}`}
+              disabled={editingId === template.id}
+              onClick={() => onEdit(template)}
+            >
+              {uiText.update}
+            </button>
             <button
               type="button"
               className="ghost-button"
@@ -364,6 +465,10 @@ function parseJsonObjectOrNull(value: string) {
     throw new Error(uiText.jsonObjectRequired);
   }
   return parsed as Record<string, unknown>;
+}
+
+function formatJsonObjectForEdit(value: Record<string, unknown> | null) {
+  return value ? JSON.stringify(value, null, 2) : "";
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

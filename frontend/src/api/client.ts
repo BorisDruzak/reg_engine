@@ -65,6 +65,7 @@ import type {
   ReportTemplateCreatePayload,
   ReportTemplateListRead,
   ReportTemplateRead,
+  ReportTemplateUpdatePayload,
   RoleListRead,
   UserCreatePayload,
   UserListRead,
@@ -736,6 +737,18 @@ export async function archiveReportTemplate(token: string, templateId: string) {
   return apiRequest<ReportTemplateRead>(`/api/v1/report-templates/${templateId}`, {
     method: "DELETE",
     token,
+  });
+}
+
+export async function updateReportTemplate(
+  token: string,
+  templateId: string,
+  payload: ReportTemplateUpdatePayload,
+) {
+  return apiRequest<ReportTemplateRead>(`/api/v1/report-templates/${templateId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
   });
 }
 

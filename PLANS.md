@@ -67,6 +67,7 @@ Completed phases:
 - Phase 3C: Import Commit And Export Polish.
 - Phase 4A: Report Foundation API.
 - Phase 4B: Report Frontend UI.
+- Phase 4C: Report Template Settings Edit.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -174,14 +175,18 @@ Current stop point:
   reports, public report workflows, or MCP write tools. Commit `c5eb448` is
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, same-origin smoke passed, and server checks passed.
-- Next planned work requires explicit prioritization: report polish,
+- Phase 4C Report Template Settings Edit is implemented in the current
+  checkpoint: authenticated admins can update existing report template name,
+  description, and default/schema JSON settings through REST API and the
+  Russian registry UI. No migration is required.
+- Next planned work requires explicit prioritization: remaining report polish,
   non-JSON report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
-- Later explicit phases remain report polish, non-JSON report outputs, and
-  MCP write tools.
+- Later explicit phases remain non-JSON report outputs, MCP write tools, and
+  remaining report polish.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, non-JSON report outputs, report polish, and MCP write tools remain
-  deferred until their explicit phases.
+  export, non-JSON report outputs, remaining report polish, and MCP write
+  tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1536,8 +1541,9 @@ Known limitations:
 
 Purpose: add report definitions and report runs.
 
-Status: completed for the approved backend report foundation and frontend UI
-slices; non-JSON report outputs and report polish remain deferred.
+Status: completed for the approved backend report foundation, frontend UI, and
+report template settings edit slices; non-JSON report outputs and remaining
+report polish remain deferred.
 
 Planned overall scope:
 
@@ -1655,8 +1661,8 @@ Acceptance criteria:
 Known limitations:
 
 - Report output remains JSON only.
-- Report template settings are create/archive only; edit and richer report
-  builder UX remain future polish.
+- Report template settings edit is handled by Phase 4C; richer report builder
+  UX remains future polish.
 - Report downloads still use the existing browser blob download path.
 - No public-link report workflows.
 - No MCP report write tools.
@@ -1686,6 +1692,70 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4B.
+
+### Phase 4C: Report Template Settings Edit
+
+Status: completed locally; pending full checkpoint push/deploy verification.
+
+Purpose: close the first report polish gap by allowing authenticated registry
+schema admins to edit existing report template settings without introducing
+new report output formats, scheduling, charts, public report workflows, or MCP
+write tools.
+
+Scope:
+
+- Add authenticated REST API support for updating an active report template.
+- Allow updates to report template `name`, `description`,
+  `parameters_schema_json`, and `default_parameters_json`.
+- Keep `code`, `registry_id`, `report_type`, and `output_format` immutable in
+  this slice.
+- Enforce existing `registry.schema.manage` permission for updates.
+- Reject archived/inactive report template updates through the active template
+  lookup.
+- Write `audit_events` with `action=report_template_update`.
+- Add Russian-first UI controls for editing an existing report template from
+  the report panel.
+- Add frontend API client support for `PATCH /api/v1/report-templates/{id}`.
+
+Acceptance criteria:
+
+- No database schema change or Alembic migration is added.
+- No XLSX/PDF/non-JSON report output is added.
+- No scheduled/background reports, charts, public-link report workflows,
+  binary attachment/document export, or MCP write tools are added.
+- Backend coverage verifies update success, permission denial, archived
+  template denial, and audit.
+- Frontend coverage verifies Russian edit controls, PATCH payload, and
+  continued generate/download/archive behavior after a template update.
+- README, PLANS, and project tree checks are updated or verified.
+
+Known limitations:
+
+- Report output remains JSON only.
+- Report template settings are still a simple form, not a visual report
+  builder.
+- Report template `code`, `report_type`, and `output_format` remain immutable.
+- Report downloads still use the existing browser blob download path.
+- No public-link report workflows.
+- No MCP report write tools.
+
+Verification so far:
+
+- Targeted frontend tests passed:
+  `npm test -- --run src/api/adminMutations.test.ts src/App.test.tsx`
+  with `2 passed`, `24 passed`.
+- Backend PostgreSQL-backed report tests were invoked with
+  `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_api_phase_4_reports.py -q`
+  and skipped locally because `TEST_DATABASE_URL` is not set.
+- `ruff check backend/app backend/tests/test_api_phase_4_reports.py` passed.
+- `ruff format --check backend/app backend/tests/test_api_phase_4_reports.py`
+  passed.
+- `mypy backend/app` passed.
+- `npm run typecheck` passed in `frontend`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4C.
 
 ### Phase 5: MCP Over API Only
 

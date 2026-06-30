@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -85,6 +86,63 @@ class ReportService:
                 "output_format": template.output_format,
             },
         )
+        return template
+
+    def update_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        updates: Mapping[str, Any],
+    ) -> ReportTemplate:
+        template = self._get_active_template(template_id)
+        self._require_schema_permission(actor_user_id, template.registry_id)
+        allowed_fields = {
+            "name",
+            "description",
+            "parameters_schema_json",
+            "default_parameters_json",
+        }
+        unexpected_fields = set(updates) - allowed_fields
+        if unexpected_fields:
+            raise ReportServiceError(
+                f"Unsupported report template update fields: {', '.join(sorted(unexpected_fields))}"
+            )
+
+        old_data: dict[str, Any] = {}
+        new_data: dict[str, Any] = {}
+        if "name" in updates:
+            old_data["name"] = template.name
+            name = updates["name"]
+            if not isinstance(name, str):
+                raise ReportServiceError("Report template name must not be empty.")
+            template.name = self._clean_required_text(name, "name")
+            new_data["name"] = template.name
+        if "description" in updates:
+            old_data["description"] = template.description
+            description = updates["description"]
+            template.description = description.strip() if isinstance(description, str) else None
+            new_data["description"] = template.description
+        if "parameters_schema_json" in updates:
+            old_data["parameters_schema_json"] = template.parameters_schema_json
+            template.parameters_schema_json = updates["parameters_schema_json"]
+            new_data["parameters_schema_json"] = template.parameters_schema_json
+        if "default_parameters_json" in updates:
+            old_data["default_parameters_json"] = template.default_parameters_json
+            template.default_parameters_json = updates["default_parameters_json"]
+            new_data["default_parameters_json"] = template.default_parameters_json
+
+        if old_data:
+            template.updated_by = actor_user_id
+            self.session.flush()
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="report_template_update",
+                object_type="report_template",
+                object_id=template.id,
+                old_data_json=old_data,
+                new_data_json=new_data,
+            )
         return template
 
     def list_templates_for_actor(

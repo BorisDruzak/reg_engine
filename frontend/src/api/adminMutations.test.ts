@@ -39,6 +39,7 @@ import {
   updateReferenceItem,
   updateReferenceList,
   updateRegistry,
+  updateReportTemplate,
   updateUser,
 } from "./client";
 
@@ -336,6 +337,22 @@ test("admin mutation API client uses backend routes with bearer auth and JSON bo
         report_type: "registry_cards",
         default_parameters_json: { limit: 20 },
         output_format: "json",
+      },
+    },
+    {
+      name: "update report template",
+      action: () =>
+        updateReportTemplate(token, "report-template-id", {
+          name: "Обновленный отчет по карточкам",
+          description: null,
+          default_parameters_json: { limit: 50 },
+        }),
+      path: "/api/v1/report-templates/report-template-id",
+      method: "PATCH",
+      body: {
+        name: "Обновленный отчет по карточкам",
+        description: null,
+        default_parameters_json: { limit: 50 },
       },
     },
     {

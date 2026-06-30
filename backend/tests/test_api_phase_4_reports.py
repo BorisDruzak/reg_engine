@@ -319,6 +319,77 @@ def _create_report_template(
     return payload
 
 
+def test_report_template_settings_can_be_updated_and_audited(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+    template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="editable-template",
+        report_type="registry_cards",
+    )
+
+    update_response = api_client.patch(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "name": "Updated registry report",
+            "description": "Updated report description",
+            "default_parameters_json": {"limit": 25},
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    updated = update_response.json()
+    assert updated["id"] == template["id"]
+    assert updated["code"] == "editable-template"
+    assert updated["report_type"] == "registry_cards"
+    assert updated["output_format"] == "json"
+    assert updated["name"] == "Updated registry report"
+    assert updated["description"] == "Updated report description"
+    assert updated["default_parameters_json"] == {"limit": 25}
+
+    list_response = api_client.get(
+        f"/api/v1/registries/{context['registry'].id}/report-templates",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert list_response.json()["items"][0]["name"] == "Updated registry report"
+
+    forbidden_response = api_client.patch(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"name": "Forbidden update"},
+    )
+    assert forbidden_response.status_code == 403, forbidden_response.text
+
+    archive_response = api_client.delete(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+    assert archive_response.status_code == 200, archive_response.text
+    archived_update_response = api_client.patch(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={"name": "Archived update"},
+    )
+    assert archived_update_response.status_code == 400, archived_update_response.text
+
+    audit_actions = set(
+        db_session.scalars(
+            select(AuditEvent.action).where(
+                AuditEvent.object_type == "report_template",
+                AuditEvent.object_id == UUID(template["id"]),
+            )
+        ).all()
+    )
+    assert {"report_template_create", "report_template_update", "report_template_archive"} <= (
+        audit_actions
+    )
+
+
 def test_registry_and_period_report_runs_are_scoped_stored_and_audited(
     api_client: TestClient,
     db_session: Session,

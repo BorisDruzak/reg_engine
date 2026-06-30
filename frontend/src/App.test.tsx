@@ -1038,6 +1038,30 @@ beforeEach(() => {
         return jsonResponse({ items: reportTemplateItems });
       }
       if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252")) {
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            name?: string;
+            description?: string | null;
+            default_parameters_json?: Record<string, unknown> | null;
+          };
+          const current = reportTemplateItems.find(
+            (item) => item.id === "52525252-5252-4252-8252-525252525252",
+          )!;
+          const updated: ReportTemplateRead = {
+            ...current,
+            name: payload.name ?? current.name,
+            description: Object.hasOwn(payload, "description")
+              ? (payload.description ?? null)
+              : current.description,
+            default_parameters_json: Object.hasOwn(payload, "default_parameters_json")
+              ? (payload.default_parameters_json ?? null)
+              : current.default_parameters_json,
+          };
+          reportTemplateItems = reportTemplateItems.map((item) =>
+            item.id === updated.id ? updated : item,
+          );
+          return jsonResponse(updated);
+        }
         const archived = {
           ...reportTemplateItems.find(
             (item) => item.id === "52525252-5252-4252-8252-525252525252",
@@ -3450,6 +3474,24 @@ test("manages report templates and report runs in Russian registry UI", async ()
   expect(await screen.findByText("Шаблон отчета создан")).toBeInTheDocument();
   expect(screen.getAllByText("Отчет по карточкам").length).toBeGreaterThan(0);
 
+  await user.click(
+    screen.getByRole("button", { name: "Редактировать шаблон отчета Отчет по карточкам" }),
+  );
+  await user.clear(screen.getByLabelText("Новое название шаблона отчета"));
+  await user.type(screen.getByLabelText("Новое название шаблона отчета"), "Обновленный отчет");
+  await user.clear(screen.getByLabelText("Новое описание шаблона отчета"));
+  await user.type(
+    screen.getByLabelText("Новое описание шаблона отчета"),
+    "Обновленная сводка карточек",
+  );
+  fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
+    target: { value: '{"limit":30}' },
+  });
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон отчета" }));
+
+  expect(await screen.findByText("Шаблон отчета обновлен")).toBeInTheDocument();
+  expect(screen.getAllByText("Обновленный отчет").length).toBeGreaterThan(0);
+
   await user.selectOptions(
     screen.getByLabelText("Шаблон отчета"),
     "52525252-5252-4252-8252-525252525252",
@@ -3468,12 +3510,12 @@ test("manages report templates and report runs in Russian registry UI", async ()
       ),
     ),
   ).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Скачать отчет Отчет по карточкам" }));
+  await user.click(screen.getByRole("button", { name: "Скачать отчет Обновленный отчет" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Архивировать отчет Отчет по карточкам" }));
+  await user.click(screen.getByRole("button", { name: "Архивировать отчет Обновленный отчет" }));
   expect(await screen.findByText("Отчет архивирован")).toBeInTheDocument();
   await user.click(
-    screen.getByRole("button", { name: "Архивировать шаблон отчета Отчет по карточкам" }),
+    screen.getByRole("button", { name: "Архивировать шаблон отчета Обновленный отчет" }),
   );
   expect(await screen.findByText("Шаблон отчета архивирован")).toBeInTheDocument();
 
@@ -3505,6 +3547,27 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.report_type === "registry_cards" &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
           body.output_format === "json"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          name?: string;
+          description?: string | null;
+          default_parameters_json?: unknown;
+        };
+        return (
+          body.name === "Обновленный отчет" &&
+          body.description === "Обновленная сводка карточек" &&
+          JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 30 })
         );
       }),
     ).toBe(true);
