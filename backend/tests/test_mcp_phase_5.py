@@ -194,6 +194,9 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_create_form_field",
         "reg_engine_update_form_field",
         "reg_engine_archive_form_field",
+        "reg_engine_create_card",
+        "reg_engine_update_card",
+        "reg_engine_archive_card",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -686,6 +689,174 @@ def test_mcp_update_and_archive_form_field_tools_use_existing_api_boundary() -> 
     assert transport.requests[1]["method"] == "DELETE"
     assert transport.requests[1]["url"] == f"http://api.local/api/v1/fields/{field_id}"
     assert transport.requests[1]["body"] is None
+
+
+def test_mcp_create_card_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_create_card")
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["registry_id", "organization_id", "display_name"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    registry_id = str(uuid4())
+    organization_id = str(uuid4())
+    org_unit_id = str(uuid4())
+    card_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": card_id,
+            "registry_id": registry_id,
+            "organization_id": organization_id,
+            "org_unit_id": org_unit_id,
+            "display_name": "Card 1",
+            "lifecycle_status": "active",
+            "public_view_enabled": True,
+            "public_edit_enabled": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_card",
+        {
+            "registry_id": registry_id,
+            "organization_id": organization_id,
+            "display_name": "Card 1",
+            "org_unit_id": org_unit_id,
+            "public_view_enabled": True,
+            "public_edit_enabled": False,
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == card_id
+    assert transport.requests[0]["method"] == "POST"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/registries/{registry_id}/cards"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "organization_id": organization_id,
+        "display_name": "Card 1",
+        "org_unit_id": org_unit_id,
+        "public_view_enabled": True,
+        "public_edit_enabled": False,
+    }
+
+
+def test_mcp_update_card_tool_patches_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_update_card")
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": card_id,
+            "registry_id": str(uuid4()),
+            "organization_id": str(uuid4()),
+            "org_unit_id": None,
+            "display_name": "Updated card",
+            "lifecycle_status": "active",
+            "public_view_enabled": False,
+            "public_edit_enabled": True,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    empty_update = call_tool("reg_engine_update_card", {"card_id": card_id}, client=client)
+    assert empty_update["isError"] is True
+    assert transport.requests == []
+
+    updated = call_tool(
+        "reg_engine_update_card",
+        {
+            "card_id": card_id,
+            "display_name": "Updated card",
+            "public_view_enabled": False,
+            "public_edit_enabled": True,
+        },
+        client=client,
+    )
+
+    assert updated["isError"] is False
+    assert updated["structuredContent"]["id"] == card_id
+    assert transport.requests[0]["method"] == "PATCH"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "display_name": "Updated card",
+        "public_view_enabled": False,
+        "public_edit_enabled": True,
+    }
+
+
+def test_mcp_archive_card_tool_requires_confirmation_before_delete() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_archive_card")
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "confirm_archive"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": card_id,
+            "registry_id": str(uuid4()),
+            "organization_id": str(uuid4()),
+            "org_unit_id": None,
+            "display_name": "Archived card",
+            "lifecycle_status": "archived",
+            "public_view_enabled": False,
+            "public_edit_enabled": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_archive_card",
+        {"card_id": card_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_archive" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    archived = call_tool(
+        "reg_engine_archive_card",
+        {"card_id": card_id, "confirm_archive": True},
+        client=client,
+    )
+
+    assert archived["isError"] is False
+    assert archived["structuredContent"]["lifecycle_status"] == "archived"
+    assert transport.requests[0]["method"] == "DELETE"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:

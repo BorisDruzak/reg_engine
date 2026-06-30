@@ -309,6 +309,59 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_create_card",
+        "title": "Create card",
+        "description": "Create a card through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "organization_id": {"type": "string"},
+                "display_name": {"type": "string"},
+                "org_unit_id": {"type": "string"},
+                "public_view_enabled": {"type": "boolean"},
+                "public_edit_enabled": {"type": "boolean"},
+            },
+            "required": ["registry_id", "organization_id", "display_name"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_update_card",
+        "title": "Update card",
+        "description": "Update card metadata through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "display_name": {"type": "string"},
+                "public_view_enabled": {"type": "boolean"},
+                "public_edit_enabled": {"type": "boolean"},
+            },
+            "required": ["card_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_card",
+        "title": "Archive card",
+        "description": (
+            "Archive a card through the Registry Engine API. Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["card_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -471,6 +524,30 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/fields/{field_id}")
+    if name == "reg_engine_create_card":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        card_payload: dict[str, Any] = {
+            "organization_id": _required_str_arg(arguments, "organization_id"),
+            "display_name": _required_str_arg(arguments, "display_name"),
+        }
+        _add_optional_str(card_payload, arguments, "org_unit_id")
+        _add_optional_bool(card_payload, arguments, "public_view_enabled")
+        _add_optional_bool(card_payload, arguments, "public_edit_enabled")
+        return client.post_json(f"/api/v1/registries/{registry_id}/cards", card_payload)
+    if name == "reg_engine_update_card":
+        card_id = _required_str_arg(arguments, "card_id")
+        card_update_payload: dict[str, Any] = {}
+        _add_optional_str(card_update_payload, arguments, "display_name")
+        _add_optional_bool(card_update_payload, arguments, "public_view_enabled")
+        _add_optional_bool(card_update_payload, arguments, "public_edit_enabled")
+        if not card_update_payload:
+            raise ValueError("At least one card update field is required.")
+        return client.patch_json(f"/api/v1/cards/{card_id}", card_update_payload)
+    if name == "reg_engine_archive_card":
+        card_id = _required_str_arg(arguments, "card_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/cards/{card_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 

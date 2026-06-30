@@ -96,6 +96,7 @@ Completed phases:
 - Phase 5D: MCP Registry Create Write Tool.
 - Phase 5E: MCP Registry Update And Archive Write Tools.
 - Phase 5F: MCP Schema Builder Write Tools.
+- Phase 5G: MCP Card Lifecycle Write Tools.
 
 Current stop point:
 
@@ -250,6 +251,9 @@ Current stop point:
   `tools/list` shows all six new tools with `readOnlyHint=false`, healthcheck
   passed, and Alembic remains at `0014_report_pdf_output (head)`. No
   production schema was updated or archived during smoke validation.
+- Phase 5G MCP Card Lifecycle Write Tools is completed locally and awaiting
+  deploy: the narrow MCP write-tool slice covers card create, metadata update,
+  and archive operations through existing REST API endpoints only.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4411,6 +4415,108 @@ Production migration checkpoint:
 
 - Not required for Phase 5F; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5G: MCP Card Lifecycle Write Tools
+
+Status: completed locally; deploy pending.
+
+Purpose: extend the API-only MCP write surface with card lifecycle operations
+while keeping card visibility, edit permissions, validation, archive semantics,
+and audit in the existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_create_card`
+- `reg_engine_update_card`
+- `reg_engine_archive_card`
+
+Argument schemas:
+
+- `reg_engine_create_card`:
+  - `registry_id`: required string.
+  - `organization_id`: required string.
+  - `display_name`: required string.
+  - `org_unit_id`: optional string.
+  - `public_view_enabled`: optional boolean.
+  - `public_edit_enabled`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_update_card`:
+  - `card_id`: required string.
+  - `display_name`: optional string.
+  - `public_view_enabled`: optional boolean.
+  - `public_edit_enabled`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_archive_card`:
+  - `card_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/registries/{registry_id}/cards`
+- `PATCH /api/v1/cards/{card_id}`
+- `DELETE /api/v1/cards/{card_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Card create/update/archive permissions remain API-side through existing card
+  service checks.
+- Organization scope, descendant visibility, archived/superseded edit
+  protection, and audit remain in the existing backend service layer.
+- Archive requires explicit `confirm_archive=true` before sending DELETE.
+
+Scope:
+
+- Expose the three tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F write behavior.
+- Reject archive calls unless `confirm_archive=true`.
+- Reject update calls with no update fields before sending a request.
+- Do not add field-value mutation, block-instance mutation, card transfer,
+  import, document, report, public-link, binary download, or other MCP tools in
+  this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes all three new tools as write tools.
+- Create card sends `POST /api/v1/registries/{registry_id}/cards` with required
+  values and only provided optional fields.
+- Update card sends `PATCH /api/v1/cards/{card_id}` with only provided update
+  fields and rejects empty update payloads.
+- Archive card sends `DELETE /api/v1/cards/{card_id}` only when
+  `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not archive or mutate real production cards
+  without a disposable production-safe target.
+- Field-value, block-instance, transfer, report, document, and public-link MCP
+  write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_create_card`, `reg_engine_update_card`, and
+  `reg_engine_archive_card` were absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `25 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `91 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5G; no backend schema changes are included.
 
 ## Verification
 
