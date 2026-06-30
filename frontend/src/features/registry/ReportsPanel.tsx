@@ -27,6 +27,7 @@ type ReportParameterField = {
   code: string;
   label: string;
   type: ReportParameterFieldType;
+  inputType: "date" | "number" | "text";
   options: ReportParameterOption[];
 };
 
@@ -513,7 +514,7 @@ function ReportRunParameterFields({
             </select>
           ) : (
             <input
-              type={field.type === "string" ? "text" : "number"}
+              type={field.inputType}
               value={formatReportParameterInputValue(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
             />
@@ -717,8 +718,29 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
     }
     const label =
       typeof rawConfig.title === "string" && rawConfig.title.trim() ? rawConfig.title : code;
-    return [{ code, label, type: rawType, options: getReportParameterOptions(rawConfig, rawType) }];
+    return [
+      {
+        code,
+        label,
+        type: rawType,
+        inputType: getReportParameterInputType(rawConfig, rawType),
+        options: getReportParameterOptions(rawConfig, rawType),
+      },
+    ];
   });
+}
+
+function getReportParameterInputType(
+  config: Record<string, unknown>,
+  type: ReportParameterFieldType,
+): ReportParameterField["inputType"] {
+  if (type === "number" || type === "integer") {
+    return "number";
+  }
+  if (type === "string" && config.format === "date") {
+    return "date";
+  }
+  return "text";
 }
 
 function getReportParameterOptions(

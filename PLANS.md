@@ -82,6 +82,7 @@ Completed phases:
 - Phase 4M: Report Run Enum Parameter Controls.
 - Phase 4N: Report Run Enum Option Labels.
 - Phase 4O: Report Run Default Parameter Payload.
+- Phase 4P: Report Run Date Parameter Controls.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -300,6 +301,10 @@ Current stop point:
   synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
+- Phase 4P Report Run Date Parameter Controls is completed locally:
+  report run parameter controls now render JSON Schema string properties with
+  `format: "date"` as date inputs while preserving string values in the
+  existing report run parameters JSON payload. Deployment evidence is pending.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3032,6 +3037,71 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4O; no backend schema changes are included.
+
+### Phase 4P: Report Run Date Parameter Controls
+
+Status: completed locally; deployment pending.
+
+Purpose: continue the report-polish sequence by rendering JSON Schema
+`format: "date"` string parameters as native date inputs in the Russian report
+run form.
+
+Scope:
+
+- Detect flat `parameters_schema_json.properties.<code>` entries with
+  `type: "string"` and `format: "date"`.
+- Render those parameters as `input type="date"` while keeping ordinary
+  strings as text inputs.
+- Preserve string date values in the existing report run `parameters` JSON
+  payload.
+- Preserve existing number, integer, boolean, enum, `oneOf` label, default
+  payload, output format, archive, download, and metadata display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template parameter with `type: "string"` and `format: "date"`
+  renders as a native date input in the Russian UI.
+- The date input is prefilled from `default_parameters_json` when available.
+- Changing the date input updates the report generation payload with the date
+  string.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat string properties with `format: "date"` are rendered as date
+  inputs. `date-time`, ranges, validation constraints, nested schemas,
+  arrays, grouped controls, and a full visual report builder remain deferred.
+- Backend remains the API/security boundary; frontend date rendering is only a
+  usability layer over existing report template fields.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because a
+  `format: "date"` report parameter rendered as `type="text"`.
+- GREEN targeted date-parameter frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Existing default-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report template default parameters"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `33 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4P; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 
