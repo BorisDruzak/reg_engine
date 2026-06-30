@@ -358,11 +358,14 @@ Current stop point:
   healthcheck passed, server checks passed, and Alembic remains at
   `0014_report_pdf_output (head)`. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
-- Phase 4V Report Run Exclusive Bound Validation is completed locally;
-  deployment is pending: supported flat number/integer report run controls now
-  read numeric `exclusiveMinimum` and `exclusiveMaximum`, block generation when
-  provided values are equal to or cross those exclusive bounds, and show a
-  Russian validation message listing the failing parameter labels. No backend
+- Phase 4V Report Run Exclusive Bound Validation is completed and deployed:
+  supported flat number/integer report run controls now read numeric
+  `exclusiveMinimum` and `exclusiveMaximum`, block generation when provided
+  values are equal to or cross those exclusive bounds, and show a Russian
+  validation message listing the failing parameter labels. Commit `c333ad3` is
+  pushed, the server checkout is synchronized to `origin/main`, frontend dist
+  is deployed with `index-D6dl-Wmv.js`, healthcheck passed, server checks
+  passed, and Alembic remains at `0014_report_pdf_output (head)`. No backend
   code, migrations, endpoints, report formats, full visual report builder, or
   MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
@@ -3611,7 +3614,7 @@ Production migration checkpoint:
 
 ### Phase 4V: Report Run Exclusive Bound Validation
 
-Status: completed locally; deployment pending.
+Status: completed and deployed.
 
 Purpose: continue report-polish by honoring flat JSON Schema exclusive numeric
 bounds in the Russian report run form before calling the existing report run
@@ -3677,6 +3680,22 @@ Verification so far:
   production build, and current project tree.
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add report exclusive bound validation"`
+  created commit `c333ad30609cd9bf28fc4567a56642a4e1f55dca` and pushed
+  `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Frontend deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`;
+  the server SPA now references `/assets/index-D6dl-Wmv.js` and
+  `/assets/index-Be0bM7I8.css`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Direct server smoke passed: server checkout `c333ad3`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
