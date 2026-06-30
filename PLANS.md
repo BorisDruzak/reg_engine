@@ -100,13 +100,19 @@ Completed phases:
 - Phase 5H: MCP Card Field Value Write Tools.
 - Phase 5I: MCP Card Block Instance Write Tools.
 - Phase 5J: MCP Card Transfer Write Tool.
+- Phase 5K: MCP Report Template Write Tools.
 
 Current stop point:
 
-- Phase 5K MCP Report Template Write Tools is in progress: expose only report
-  template create/update/archive through existing REST API endpoints, while
-  report template permissions, validation, archive semantics, and audit remain
-  API-enforced.
+- Phase 5K MCP Report Template Write Tools is completed and deployed:
+  report template create/update/archive MCP tools call only existing REST API
+  endpoints, with report template permissions, validation, archive semantics,
+  and audit remaining API-enforced. Commit `f632adb5` is pushed, the server
+  checkout is synchronized to `origin/main`, server checks passed, server MCP
+  targeted tests passed with `33 passed`, server MCP stdio `tools/list` shows
+  all three new tools with `readOnlyHint=false`, healthcheck passed, and
+  Alembic remains at `0014_report_pdf_output (head)`. No production report
+  template was created, updated, or archived during smoke validation.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -4890,7 +4896,7 @@ Production migration checkpoint:
 
 ### Phase 5K: MCP Report Template Write Tools
 
-Status: completed locally; pending full local check, push, and deploy.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with report template
 create/update/archive operations while keeping registry visibility, report
@@ -4996,6 +5002,21 @@ Verification so far:
   with backend `99 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP report template tools"`
+  created commit `f632adb5` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed with `33 passed`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_create_report_template`,
+  `reg_engine_update_report_template`, and
+  `reg_engine_archive_report_template` with `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `f632adb5`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
