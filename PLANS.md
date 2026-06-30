@@ -66,6 +66,7 @@ Completed phases:
 - Phase 3B: Import Preview And Mapping.
 - Phase 3C: Import Commit And Export Polish.
 - Phase 4A: Report Foundation API.
+- Phase 4B: Report Frontend UI.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -167,11 +168,15 @@ Current stop point:
   without terminating the server loop, and returns tool argument failures as
   MCP tool errors. It is implemented, pushed, deployed, and verified on the
   server. No migration was required.
-- Phase 4B Report Frontend UI is implemented locally: authenticated
-  Russian-first report template/run controls use the existing Phase 4A REST
-  API, without backend schema changes, migrations, non-JSON report outputs,
-  scheduled reports, public report workflows, or MCP write tools. Push/deploy
-  evidence is pending.
+- Phase 4B Report Frontend UI is completed: authenticated Russian-first
+  report template/run controls use the existing Phase 4A REST API, without
+  backend schema changes, migrations, non-JSON report outputs, scheduled
+  reports, public report workflows, or MCP write tools. Commit `c5eb448` is
+  pushed, the server checkout is synchronized to `origin/main`, frontend dist
+  is deployed, same-origin smoke passed, and server checks passed.
+- Next planned work requires explicit prioritization: report polish,
+  non-JSON report outputs, XLSX workflows, MCP write tools, or another
+  deferred phase.
 - Later explicit phases remain report polish, non-JSON report outputs, and
   MCP write tools.
 - XLSX export/import, import/export frontend UI, binary attachment/document
@@ -1531,7 +1536,8 @@ Known limitations:
 
 Purpose: add report definitions and report runs.
 
-Status: completed for the approved backend report foundation slice.
+Status: completed for the approved backend report foundation and frontend UI
+slices; non-JSON report outputs and report polish remain deferred.
 
 Planned overall scope:
 
@@ -1615,7 +1621,7 @@ Known limitations:
 
 ### Phase 4B: Report Frontend UI
 
-Status: completed locally; push/deploy pending.
+Status: completed.
 
 Purpose: expose the existing Phase 4A report API in the authenticated
 Russian-first registry workspace without adding backend schema, migrations,
@@ -1669,8 +1675,17 @@ Verification so far:
   tree check.
 - `scripts/format.ps1 -Check` passed.
 - `pnpm -C frontend e2e` passed with `3 passed`.
+- Deployed commit `c5eb448` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed.
+- `scripts/server-check.ps1` passed after frontend deployment.
 - No production migration is required because Phase 4B adds no backend schema
   changes.
+
+Production migration checkpoint:
+
+- Not required for Phase 4B.
 
 ### Phase 5: MCP Over API Only
 
