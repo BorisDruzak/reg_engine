@@ -144,6 +144,66 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         "annotations": {"readOnlyHint": True},
     },
     {
+        "name": "reg_engine_list_document_templates",
+        "title": "List document templates",
+        "description": "List document template metadata for a registry.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["registry_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "reg_engine_list_document_template_versions",
+        "title": "List document template versions",
+        "description": "List document template version metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["template_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "reg_engine_list_generated_documents",
+        "title": "List generated documents",
+        "description": "List generated document metadata for a card.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["card_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "reg_engine_read_generated_document",
+        "title": "Read generated document",
+        "description": "Read safe generated document metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "generated_document_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["generated_document_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
         "name": "reg_engine_create_registry",
         "title": "Create registry",
         "description": (
@@ -717,6 +777,30 @@ def _call_tool_or_raise(
         report_run_id = _required_str_arg(arguments, "report_run_id")
         return client.get_json(
             f"/api/v1/report-runs/{report_run_id}",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+    if name == "reg_engine_list_document_templates":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        return client.get_json(
+            f"/api/v1/registries/{registry_id}/document-templates",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+    if name == "reg_engine_list_document_template_versions":
+        template_id = _required_str_arg(arguments, "template_id")
+        return client.get_json(
+            f"/api/v1/document-templates/{template_id}/versions",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+    if name == "reg_engine_list_generated_documents":
+        card_id = _required_str_arg(arguments, "card_id")
+        return client.get_json(
+            f"/api/v1/cards/{card_id}/generated-documents",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+    if name == "reg_engine_read_generated_document":
+        generated_document_id = _required_str_arg(arguments, "generated_document_id")
+        return client.get_json(
+            f"/api/v1/generated-documents/{generated_document_id}",
             {"include_archive": _bool_arg(arguments, "include_archive", False)},
         )
     if name == "reg_engine_create_registry":

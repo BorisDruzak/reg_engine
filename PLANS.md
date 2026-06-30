@@ -151,6 +151,13 @@ Current stop point:
   archived during smoke validation. Generated document content download, binary
   template upload/version upload, public-link document workflows, attachment
   upload/download, and import/export MCP tools stay deferred.
+- Phase 5O MCP Document Metadata Read Tools is completed locally and pending
+  full local check, push, deploy, and server smoke: document-template,
+  template-version, and generated-document metadata reads are exposed through
+  existing REST API `GET` endpoints with `readOnlyHint=true`. Generated document
+  content download, binary template content download, public-link document
+  workflows, attachment upload/download, import/export MCP tools, and new write
+  tools stay deferred.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5394,6 +5401,121 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5N; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5O: MCP Document Metadata Read Tools
+
+Status: completed locally; pending full local check, push, deploy, and server
+smoke.
+
+Purpose: add read-only MCP access to document-template, template-version, and
+generated-document metadata through existing REST API endpoints, without
+exposing binary content or adding new mutations.
+
+Tool set:
+
+- `reg_engine_list_document_templates`
+- `reg_engine_list_document_template_versions`
+- `reg_engine_list_generated_documents`
+- `reg_engine_read_generated_document`
+
+Argument schemas:
+
+- `reg_engine_list_document_templates`:
+  - `registry_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_list_document_template_versions`:
+  - `template_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_list_generated_documents`:
+  - `card_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_read_generated_document`:
+  - `generated_document_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `GET /api/v1/registries/{registry_id}/document-templates`
+- `GET /api/v1/document-templates/{template_id}/versions`
+- `GET /api/v1/cards/{card_id}/generated-documents`
+- `GET /api/v1/generated-documents/{generated_document_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Registry/card/template/generated-document visibility and archive scope remain
+  API-side in the existing document service.
+- All tools are read-only and use `readOnlyHint=true`.
+
+Scope:
+
+- Expose metadata reads only.
+- Preserve existing read-only tools and Phase 5D through Phase 5N write
+  behavior.
+- Do not download generated document content, expose binary content, download
+  binary template content, upload binary `.docx` templates, upload template
+  versions, mutate document templates, generate/archive documents, mutate
+  public links, upload or download attachments, import/export data, or add
+  other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes all four new tools as read-only tools.
+- Document template list sends
+  `GET /api/v1/registries/{registry_id}/document-templates` with
+  `include_archive`.
+- Document template version list sends
+  `GET /api/v1/document-templates/{template_id}/versions` with
+  `include_archive`.
+- Generated document list sends
+  `GET /api/v1/cards/{card_id}/generated-documents` with `include_archive`.
+- Generated document read sends
+  `GET /api/v1/generated-documents/{generated_document_id}` with
+  `include_archive`.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Generated document content download, binary `.docx` template
+  upload/version/content workflows, public-link document workflows, attachment
+  upload/download, import/export MCP tools, and new write tools remain future
+  phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_list_document_templates`,
+  `reg_engine_list_document_template_versions`,
+  `reg_engine_list_generated_documents`, and
+  `reg_engine_read_generated_document` were absent from
+  `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `44 passed`.
+- Targeted MCP ruff check passed:
+  `backend\.venv\Scripts\python.exe -m ruff check backend\app\mcp\tools.py backend\tests\test_mcp_phase_5.py`.
+- Targeted MCP ruff format check passed:
+  `backend\.venv\Scripts\python.exe -m ruff format --check backend\app\mcp\tools.py backend\tests\test_mcp_phase_5.py`.
+- Targeted MCP mypy passed:
+  `backend\.venv\Scripts\python.exe -m mypy backend\app\mcp`.
+- Full local check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`.
+  This included backend ruff, backend format check, backend mypy, backend pytest
+  with `110 passed, 141 skipped`, frontend lint, frontend typecheck, frontend
+  unit tests with `39 passed`, frontend production build, and project-map check.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5O; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
