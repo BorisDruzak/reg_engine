@@ -46,6 +46,8 @@ import {
 import { Panel, SelectableList } from "@/components/common/DataSurfaces";
 import { shortId } from "@/components/common/dataUtils";
 
+import { ReportsPanel } from "./ReportsPanel";
+
 type RegistryFormState = {
   mode: "create" | "edit";
   registryId: string | null;
@@ -396,6 +398,7 @@ export function RegistriesAndSchema({
           token={token}
         />
       </Panel>
+      <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
     </div>
   );
 }

@@ -581,3 +581,59 @@ export type GeneratedDocumentRead = {
 export type GeneratedDocumentListRead = {
   items: GeneratedDocumentRead[];
 };
+
+export type ReportTemplateRead = {
+  id: string;
+  registry_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  report_type: string;
+  parameters_schema_json: Record<string, unknown> | null;
+  default_parameters_json: Record<string, unknown> | null;
+  output_format: string;
+  is_active: boolean;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type ReportTemplateCreatePayload = {
+  code: string;
+  name: string;
+  report_type: string;
+  description?: string | null;
+  parameters_schema_json?: Record<string, unknown> | null;
+  default_parameters_json?: Record<string, unknown> | null;
+  output_format?: string;
+};
+
+export type ReportTemplateListRead = {
+  items: ReportTemplateRead[];
+};
+
+export type ReportRunRead = {
+  id: string;
+  report_template_id: string;
+  registry_id: string;
+  card_id: string | null;
+  report_type: string;
+  run_status: string;
+  parameters_json: Record<string, unknown> | null;
+  summary_json: Record<string, unknown> | null;
+  row_count: number;
+  output_filename: string;
+  output_content_type: string;
+  generated_by: string;
+  started_at: string;
+  finished_at: string;
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type ReportRunCreatePayload = {
+  parameters?: Record<string, unknown> | null;
+};
+
+export type ReportRunListRead = {
+  items: ReportRunRead[];
+};

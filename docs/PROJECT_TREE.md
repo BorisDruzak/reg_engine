@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-06-30 04:29:34 +05:00
+- Generated: 2026-06-30 05:00:06 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -203,6 +203,7 @@
 - `frontend/src/features/overview/Overview.tsx`
 - `frontend/src/features/registry/.gitkeep`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
+- `frontend/src/features/registry/ReportsPanel.tsx`
 - `frontend/src/features/users/UsersAndRoles.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/pages/HomePage.tsx`

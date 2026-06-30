@@ -18,6 +18,8 @@ import type {
   ReferenceItemRead,
   ReferenceListRead,
   RegistryRead,
+  ReportRunRead,
+  ReportTemplateRead,
   UserRead,
 } from "@/api/types";
 
@@ -370,6 +372,27 @@ const apiPayloads = {
   generatedDocuments: {
     items: [] as GeneratedDocumentRead[],
   },
+  reportTemplates: {
+    items: [
+      {
+        id: "51515151-5151-4151-8151-515151515151",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "registry_cards",
+        name: "Сводный отчет",
+        description: "Список карточек",
+        report_type: "registry_cards",
+        parameters_schema_json: null,
+        default_parameters_json: null,
+        output_format: "json",
+        is_active: true,
+        created_at: "2026-06-28T12:00:00Z",
+        archived_at: null,
+      },
+    ] as ReportTemplateRead[],
+  },
+  reportRuns: {
+    items: [] as ReportRunRead[],
+  },
   referenceLists: {
     items: [
       {
@@ -475,6 +498,8 @@ let publicLinkItems: PublicLinkRead[];
 let attachmentItems: typeof apiPayloads.attachments.items;
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
+let reportTemplateItems: ReportTemplateRead[];
+let reportRunItems: ReportRunRead[];
 
 beforeEach(() => {
   localStorage.clear();
@@ -510,6 +535,8 @@ beforeEach(() => {
   attachmentItems = [];
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
+  reportTemplateItems = [...apiPayloads.reportTemplates.items];
+  reportRunItems = [];
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   vi.stubGlobal(
     "fetch",
@@ -980,10 +1007,98 @@ beforeEach(() => {
         }
       }
       if (
+        url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates")
+      ) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            description: string | null;
+            report_type: string;
+            default_parameters_json: Record<string, unknown> | null;
+            output_format: string;
+          };
+          const created: ReportTemplateRead = {
+            id: "52525252-5252-4252-8252-525252525252",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            code: payload.code,
+            name: payload.name,
+            description: payload.description,
+            report_type: payload.report_type,
+            parameters_schema_json: null,
+            default_parameters_json: payload.default_parameters_json,
+            output_format: payload.output_format,
+            is_active: true,
+            created_at: "2026-06-28T12:10:00Z",
+            archived_at: null,
+          };
+          reportTemplateItems = [...reportTemplateItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: reportTemplateItems });
+      }
+      if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252")) {
+        const archived = {
+          ...reportTemplateItems.find(
+            (item) => item.id === "52525252-5252-4252-8252-525252525252",
+          )!,
+          archived_at: "2026-06-28T12:14:00Z",
+        };
+        reportTemplateItems = reportTemplateItems.filter((item) => item.id !== archived.id);
+        return jsonResponse(archived);
+      }
+      if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252/runs")) {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          parameters: Record<string, unknown> | null;
+        };
+        const created: ReportRunRead = {
+          id: "53535353-5353-4353-8353-535353535353",
+          report_template_id: "52525252-5252-4252-8252-525252525252",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          card_id: null,
+          report_type: "registry_cards",
+          run_status: "completed",
+          parameters_json: payload.parameters,
+          summary_json: { row_count: 1 },
+          row_count: 1,
+          output_filename: "report.json",
+          output_content_type: "application/json",
+          generated_by: "11111111-1111-4111-8111-111111111111",
+          started_at: "2026-06-28T12:11:00Z",
+          finished_at: "2026-06-28T12:11:01Z",
+          created_at: "2026-06-28T12:11:01Z",
+          archived_at: null,
+        };
+        reportRunItems = [created, ...reportRunItems];
+        return jsonResponse(created, { status: 201 });
+      }
+      if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-runs")) {
+        return jsonResponse({ items: reportRunItems });
+      }
+      if (url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content")) {
+        return new Response('{"format_version":"report_run_v1","cards":[]}', {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Report-Filename": "report.json",
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353")) {
+        const archived = {
+          ...reportRunItems.find((item) => item.id === "53535353-5353-4353-8353-535353535353")!,
+          archived_at: "2026-06-28T12:13:00Z",
+        };
+        reportRunItems = reportRunItems.filter((item) => item.id !== archived.id);
+        return jsonResponse(archived);
+      }
+      if (
         url.includes("/api/v1/registries/") &&
         !url.endsWith("/schema") &&
         !url.includes("/cards") &&
-        !url.includes("/document-templates")
+        !url.includes("/document-templates") &&
+        !url.includes("/report-templates") &&
+        !url.includes("/report-runs")
       ) {
         const registryId = url.split("/api/v1/registries/")[1].split("?")[0];
         const current = registryItems.find((item) => item.id === registryId);
@@ -1300,9 +1415,7 @@ beforeEach(() => {
         return jsonResponse({ items: generatedDocumentItems });
       }
       if (
-        url.endsWith(
-          "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents/pdf",
-        )
+        url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/generated-documents/pdf")
       ) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
@@ -3305,6 +3418,117 @@ test("creates and archives document templates in Russian UI", async () => {
         return (
           url.endsWith("/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab") &&
           init?.method === "DELETE"
+        );
+      }),
+    ).toBe(true);
+  });
+});
+
+test("manages report templates and report runs in Russian registry UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(await screen.findByRole("heading", { name: "Отчеты" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Сформированные отчеты" })).toBeInTheDocument();
+  expect(screen.getAllByText("Сводный отчет").length).toBeGreaterThan(0);
+  expect(screen.getByText("Нет сформированных отчетов")).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Код шаблона отчета"), "cards_summary");
+  await user.type(screen.getByLabelText("Название шаблона отчета"), "Отчет по карточкам");
+  await user.type(screen.getByLabelText("Описание шаблона отчета"), "Список видимых карточек");
+  await user.selectOptions(screen.getByLabelText("Тип отчета"), "registry_cards");
+  fireEvent.change(screen.getByLabelText("Параметры шаблона JSON"), {
+    target: { value: '{"limit":20}' },
+  });
+  await user.click(screen.getByRole("button", { name: "Создать шаблон отчета" }));
+
+  expect(await screen.findByText("Шаблон отчета создан")).toBeInTheDocument();
+  expect(screen.getAllByText("Отчет по карточкам").length).toBeGreaterThan(0);
+
+  await user.selectOptions(
+    screen.getByLabelText("Шаблон отчета"),
+    "52525252-5252-4252-8252-525252525252",
+  );
+  fireEvent.change(screen.getByLabelText("Параметры запуска JSON"), {
+    target: { value: '{"limit":20}' },
+  });
+  await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
+
+  expect(await screen.findByText("Отчет сформирован")).toBeInTheDocument();
+  expect(
+    await screen.findByText((_, element) =>
+      Boolean(
+        element?.tagName === "SPAN" &&
+        element.textContent?.includes("Карточки реестра / Сформирован / 1"),
+      ),
+    ),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать отчет Отчет по карточкам" }));
+  expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Архивировать отчет Отчет по карточкам" }));
+  expect(await screen.findByText("Отчет архивирован")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать шаблон отчета Отчет по карточкам" }),
+  );
+  expect(await screen.findByText("Шаблон отчета архивирован")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates",
+          ) ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          code?: string;
+          name?: string;
+          description?: string | null;
+          report_type?: string;
+          default_parameters_json?: unknown;
+          output_format?: string;
+        };
+        return (
+          body.code === "cards_summary" &&
+          body.name === "Отчет по карточкам" &&
+          body.description === "Список видимых карточек" &&
+          body.report_type === "registry_cards" &&
+          JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
+          body.output_format === "json"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252/runs") ||
+          init?.method !== "POST"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as { parameters?: unknown };
+        return JSON.stringify(body.parameters) === JSON.stringify({ limit: 20 });
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content") &&
+          init?.method === "GET" &&
+          headers?.Authorization === "Bearer test-token"
         );
       }),
     ).toBe(true);

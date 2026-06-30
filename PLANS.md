@@ -167,14 +167,16 @@ Current stop point:
   without terminating the server loop, and returns tool argument failures as
   MCP tool errors. It is implemented, pushed, deployed, and verified on the
   server. No migration was required.
-- Next planned work requires explicit prioritization: MCP write tools,
-  report UI/polish, non-JSON reports, XLSX workflows, or
-  another deferred phase.
-- Later explicit phases remain report frontend UI/polish, non-JSON report
-  outputs, and MCP write tools.
+- Phase 4B Report Frontend UI is implemented locally: authenticated
+  Russian-first report template/run controls use the existing Phase 4A REST
+  API, without backend schema changes, migrations, non-JSON report outputs,
+  scheduled reports, public report workflows, or MCP write tools. Push/deploy
+  evidence is pending.
+- Later explicit phases remain report polish, non-JSON report outputs, and
+  MCP write tools.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, report frontend UI/polish, non-JSON report outputs, and MCP write
-  tools remain deferred until their explicit phases.
+  export, non-JSON report outputs, report polish, and MCP write tools remain
+  deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1610,6 +1612,65 @@ Known limitations:
 - No public-link report workflows.
 - No binary attachment/generated-document report export.
 - No MCP.
+
+### Phase 4B: Report Frontend UI
+
+Status: completed locally; push/deploy pending.
+
+Purpose: expose the existing Phase 4A report API in the authenticated
+Russian-first registry workspace without adding backend schema, migrations,
+non-JSON report formats, scheduling, charts, public report workflows, or MCP
+write tools.
+
+Scope:
+
+- Add frontend API client functions for report template and report run list,
+  create/generate/download/archive operations.
+- Add a Russian-first `Отчеты` panel to the authenticated registry workspace.
+- Allow authorized users to create and archive report templates for
+  `registry_cards`, `card_detail`, and `period_summary`.
+- Allow authorized users to generate JSON report runs, download generated
+  report content, and archive report runs.
+- Keep all operations behind the existing REST API boundary and bearer-auth
+  session.
+- Localize report type and report run status labels in the browser UI.
+
+Acceptance criteria:
+
+- No backend models, migrations, services, endpoints, or MCP tools are added.
+- No XLSX/PDF report output, report scheduling, charts, public-link report
+  workflows, or binary attachment/document report export is added.
+- Frontend unit coverage verifies report template create/archive, report run
+  generate/download/archive, request payloads, authorization headers, and
+  Russian UI labels.
+- Frontend typecheck, lint, format, unit tests, build, and e2e pass.
+- Project tree, README, and PLANS are updated.
+
+Known limitations:
+
+- Report output remains JSON only.
+- Report template settings are create/archive only; edit and richer report
+  builder UX remain future polish.
+- Report downloads still use the existing browser blob download path.
+- No public-link report workflows.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED frontend tests failed before implementation for missing report API client
+  functions and missing `Отчеты` UI.
+- Additional RED checks failed before fixes for raw `completed` report-run
+  status and the missing `Сформированные отчеты` heading.
+- Targeted frontend tests passed:
+  `pnpm -C frontend exec vitest run src/api/adminMutations.test.ts src/App.test.tsx`
+  with `2 passed`, `24 passed`.
+- `scripts/check.ps1 -SkipRemote` passed with backend pytest `77 passed,
+  130 skipped`, frontend unit tests `30 passed`, frontend build, and project
+  tree check.
+- `scripts/format.ps1 -Check` passed.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- No production migration is required because Phase 4B adds no backend schema
+  changes.
 
 ### Phase 5: MCP Over API Only
 

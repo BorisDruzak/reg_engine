@@ -754,6 +754,17 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       });
       return;
     }
+    if (
+      url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates" ||
+      url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/report-runs"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [] }),
+      });
+      return;
+    }
     if (url.pathname === "/api/v1/document-templates/abababab-abab-4aba-8bab-abababababab") {
       const archived = {
         ...documentTemplateItems.find((item) => item.id === "abababab-abab-4aba-8bab-abababababab"),
@@ -1815,6 +1826,17 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ items: documentTemplates }),
+      });
+      return;
+    }
+    if (
+      url.pathname === `/api/v1/registries/${ids.registry}/report-templates` ||
+      url.pathname === `/api/v1/registries/${ids.registry}/report-runs`
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [] }),
       });
       return;
     }

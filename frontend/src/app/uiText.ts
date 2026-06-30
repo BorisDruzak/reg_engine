@@ -237,6 +237,29 @@ export const uiText = {
   files: "Файлы",
   documentTemplates: "Шаблоны документов",
   generatedDocuments: "Сформированные документы",
+  reports: "Отчеты",
+  reportTemplates: "Шаблоны отчетов",
+  reportRuns: "Сформированные отчеты",
+  createReportTemplate: "Создать шаблон отчета",
+  archiveReportTemplate: "Архивировать шаблон отчета",
+  generateReport: "Сформировать отчет",
+  downloadReport: "Скачать отчет",
+  archiveReport: "Архивировать отчет",
+  reportTemplateCode: "Код шаблона отчета",
+  reportTemplateName: "Название шаблона отчета",
+  reportTemplateDescription: "Описание шаблона отчета",
+  reportTemplate: "Шаблон отчета",
+  reportType: "Тип отчета",
+  reportOutputFormat: "Формат отчета",
+  reportTemplateParametersJson: "Параметры шаблона JSON",
+  reportRunParametersJson: "Параметры запуска JSON",
+  reportTemplateCreated: "Шаблон отчета создан",
+  reportTemplateArchived: "Шаблон отчета архивирован",
+  reportGenerated: "Отчет сформирован",
+  reportDownloaded: "Отчет скачан",
+  reportArchived: "Отчет архивирован",
+  noReportTemplates: "Нет шаблонов отчетов",
+  noReportRuns: "Нет сформированных отчетов",
   uploadFile: "Загрузить файл",
   download: "Скачать",
   archive: "Архивировать",
@@ -370,6 +393,25 @@ export function lifecycleStatusLabel(value: string) {
     draft: "Черновик",
     inactive: "Неактивно",
     superseded: "Заменено",
+  };
+  return labels[value] ?? value;
+}
+
+export function reportTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    card_detail: "Карточка",
+    period_summary: "Период",
+    registry_cards: "Карточки реестра",
+  };
+  return labels[value] ?? value;
+}
+
+export function reportRunStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    completed: "Сформирован",
+    failed: "Ошибка",
+    pending: "Ожидает",
+    running: "Выполняется",
   };
   return labels[value] ?? value;
 }

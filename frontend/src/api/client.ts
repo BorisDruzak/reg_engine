@@ -59,6 +59,12 @@ import type {
   RegistryRead,
   RegistrySchemaRead,
   RegistryUpdatePayload,
+  ReportRunCreatePayload,
+  ReportRunListRead,
+  ReportRunRead,
+  ReportTemplateCreatePayload,
+  ReportTemplateListRead,
+  ReportTemplateRead,
   RoleListRead,
   UserCreatePayload,
   UserListRead,
@@ -703,6 +709,58 @@ export async function downloadGeneratedDocumentContent(token: string, generatedD
 
 export async function archiveGeneratedDocument(token: string, generatedDocumentId: string) {
   return apiRequest<GeneratedDocumentRead>(`/api/v1/generated-documents/${generatedDocumentId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listReportTemplates(token: string, registryId: string) {
+  return apiRequest<ReportTemplateListRead>(`/api/v1/registries/${registryId}/report-templates`, {
+    token,
+  });
+}
+
+export async function createReportTemplate(
+  token: string,
+  registryId: string,
+  payload: ReportTemplateCreatePayload,
+) {
+  return apiRequest<ReportTemplateRead>(`/api/v1/registries/${registryId}/report-templates`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveReportTemplate(token: string, templateId: string) {
+  return apiRequest<ReportTemplateRead>(`/api/v1/report-templates/${templateId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listReportRuns(token: string, registryId: string) {
+  return apiRequest<ReportRunListRead>(`/api/v1/registries/${registryId}/report-runs`, { token });
+}
+
+export async function generateReportRun(
+  token: string,
+  templateId: string,
+  payload: ReportRunCreatePayload,
+) {
+  return apiRequest<ReportRunRead>(`/api/v1/report-templates/${templateId}/runs`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function downloadReportRunContent(token: string, reportRunId: string) {
+  return downloadFile(`/api/v1/report-runs/${reportRunId}/content`, token, "X-Report-Filename");
+}
+
+export async function archiveReportRun(token: string, reportRunId: string) {
+  return apiRequest<ReportRunRead>(`/api/v1/report-runs/${reportRunId}`, {
     method: "DELETE",
     token,
   });
