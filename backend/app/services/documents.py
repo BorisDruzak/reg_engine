@@ -541,6 +541,16 @@ class DocumentService:
         stored_file = self.session.get(StoredFile, generated.stored_file_id)
         if stored_file is None:
             raise DocumentServiceError("Generated document file was not found.")
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="generated_document_download",
+            object_type="generated_document",
+            object_id=generated.id,
+            new_data_json={
+                "stored_file_id": str(stored_file.id),
+                "content_length_bytes": stored_file.content_length_bytes,
+            },
+        )
         return self.storage.read_bytes(stored_file.storage_key)
 
     def list_generated_documents_for_actor(

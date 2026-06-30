@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-01 03:25:19 +05:00
+- Generated: 2026-07-01 04:54:34 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -161,6 +161,7 @@
 - `docs/CODEX_PROJECT_FOUNDATION_PROMPT.md`
 - `docs/CODEX_WORKFLOW.md`
 - `docs/CONVENTIONS.md`
+- `docs/LIVE_VERIFICATION_PLAN.md`
 - `docs/PHASE_2_APPROVAL_CHECKLIST.md`
 - `docs/PHASE_2A_ATTACHMENT_ARCHITECTURE.md`
 - `docs/PHASE_2C_GENERATED_DOCUMENT_TEMPLATES.md`

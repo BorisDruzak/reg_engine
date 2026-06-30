@@ -1396,9 +1396,7 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
         return jsonResponse(currentRegistrySchema());
       }
-      if (
-        pathname.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")
-      ) {
+      if (pathname.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             organization_id: string;
@@ -1575,8 +1573,7 @@ beforeEach(() => {
           }
           if (item.field_id === "99999999-9999-4999-8999-999999999998") {
             cardApprovedValue = Boolean(item.value);
-            cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].approved =
-              cardApprovedValue;
+            cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].approved = cardApprovedValue;
           }
         }
         return jsonResponse({
@@ -2116,17 +2113,21 @@ test("does not show global admin query errors while scoped user works with cards
   expect(screen.queryByText("Действие недоступно.")).not.toBeInTheDocument();
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/users"))).toBe(
+      false,
+    );
     expect(
-      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/users")),
-    ).toBe(false);
-    expect(
-      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/audit-events?limit=20")),
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/audit-events?limit=20"),
+      ),
     ).toBe(false);
   });
 
   await user.click(screen.getByRole("button", { name: "Пользователи" }));
 
   expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(await screen.findByText("Нет доступа к разделу.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Создать пользователя" })).not.toBeInTheDocument();
   expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
 });
 
@@ -2172,9 +2173,7 @@ test("filters cards by search organization and archive visibility", async () => 
       fetchMock.mock.calls.some(([input, init]) => {
         const url = input instanceof Request ? input.url : String(input);
         return (
-          url.includes(
-            "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards?",
-          ) &&
+          url.includes("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards?") &&
           url.includes("q=%D0%90%D1%80%D1%85%D0%B8%D0%B2%D0%BD%D0%B0%D1%8F") &&
           url.includes("include_archive=true") &&
           url.includes("organization_id=22222222-2222-4222-8222-222222222222") &&

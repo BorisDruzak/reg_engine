@@ -36,7 +36,7 @@ from app.services.attachments import LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
-from app.services.reports import ReportService, _RenderedReport
+from app.services.reports import ReportService, ReportServiceError, _RenderedReport
 
 
 def _require_test_database_url() -> str:
@@ -762,6 +762,13 @@ def test_report_run_parameters_are_validated_at_backend_boundary(
         parameters={**base_parameters, "report_code": "AB"},
         detail="Report parameter report_code must be at least 3 characters.",
     )
+    _assert_report_run_rejected(
+        api_client,
+        template_id=string_template["id"],
+        actor_user_id=context["card_admin"].id,
+        parameters={**base_parameters, "report_code": ""},
+        detail="Report parameter report_code must be at least 3 characters.",
+    )
 
     numeric_template = _create_report_template(
         api_client,
@@ -820,6 +827,18 @@ def test_report_run_parameters_are_validated_at_backend_boundary(
         parameters={**base_parameters, "status": "draft", "view": "full"},
         detail="Report parameter status must be one of: open, closed.",
     )
+
+
+def test_report_parameter_validation_rejects_provided_empty_string_with_min_length() -> None:
+    service = ReportService(session=None, storage=None)  # type: ignore[arg-type]
+    schema = {
+        "type": "object",
+        "properties": {"q": {"type": "string", "minLength": 1}},
+    }
+
+    service._validate_run_parameters_for_schema(schema, {})
+    with pytest.raises(ReportServiceError, match="Report parameter q must be at least 1"):
+        service._validate_run_parameters_for_schema(schema, {"q": ""})
 
 
 def test_report_output_storage_is_cleaned_when_transaction_rolls_back(

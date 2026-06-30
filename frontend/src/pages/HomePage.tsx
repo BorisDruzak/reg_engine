@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import {
+  ApiError,
   getCurrentUser,
   getRegistrySchema,
   listAccessGrants,
@@ -21,7 +22,7 @@ import {
   visibleSections,
   type VisibleSection,
 } from "@/app/uiText";
-import { DataAlert } from "@/components/common/DataSurfaces";
+import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { AccessGrantsTable } from "@/features/access/AccessGrantsTable";
 import { AuditTable } from "@/features/audit/AuditTable";
 import { LoginScreen } from "@/features/auth/LoginScreen";
@@ -119,6 +120,13 @@ export function HomePage() {
     queryFn: () => listAuditEvents(token),
     enabled: Boolean(token && needsAudit),
   });
+  const usersSectionDenied =
+    activeSection === "users" &&
+    hasAccessDeniedError([usersQuery.error, rolesQuery.error, permissionsQuery.error]);
+  const accessSectionDenied =
+    activeSection === "access" &&
+    hasAccessDeniedError([usersQuery.error, rolesQuery.error, grantsQuery.error]);
+  const auditSectionDenied = activeSection === "audit" && hasAccessDeniedError([auditQuery.error]);
 
   const currentUser = currentUserQuery.data ?? session?.user ?? null;
   const metrics = useMemo(
@@ -278,25 +286,59 @@ export function HomePage() {
           />
         )}
         {activeSection === "users" && (
-          <UsersAndRoles
-            users={usersQuery.data?.items ?? []}
-            roles={rolesQuery.data?.items ?? []}
-            permissions={permissionsQuery.data?.items ?? []}
-            token={token}
-          />
+          <>
+            {usersSectionDenied ? (
+              <SectionAccessDenied />
+            ) : (
+              <UsersAndRoles
+                users={usersQuery.data?.items ?? []}
+                roles={rolesQuery.data?.items ?? []}
+                permissions={permissionsQuery.data?.items ?? []}
+                token={token}
+              />
+            )}
+          </>
         )}
         {activeSection === "access" && (
-          <AccessGrantsTable
-            grants={grantsQuery.data?.items ?? []}
-            users={usersQuery.data?.items ?? []}
-            roles={rolesQuery.data?.items ?? []}
-            organizations={organizationsQuery.data?.items ?? []}
-            registries={registriesQuery.data?.items ?? []}
-            token={token}
-          />
+          <>
+            {accessSectionDenied ? (
+              <SectionAccessDenied />
+            ) : (
+              <AccessGrantsTable
+                grants={grantsQuery.data?.items ?? []}
+                users={usersQuery.data?.items ?? []}
+                roles={rolesQuery.data?.items ?? []}
+                organizations={organizationsQuery.data?.items ?? []}
+                registries={registriesQuery.data?.items ?? []}
+                token={token}
+              />
+            )}
+          </>
         )}
-        {activeSection === "audit" && <AuditTable auditEvents={auditQuery.data?.items ?? []} />}
+        {activeSection === "audit" && (
+          <>
+            {auditSectionDenied ? (
+              <SectionAccessDenied />
+            ) : (
+              <AuditTable auditEvents={auditQuery.data?.items ?? []} />
+            )}
+          </>
+        )}
       </section>
     </main>
+  );
+}
+
+function hasAccessDeniedError(errors: unknown[]) {
+  return errors.some((error) => error instanceof ApiError && error.status === 403);
+}
+
+function SectionAccessDenied() {
+  return (
+    <Panel title={uiText.accessDenied}>
+      <p className="data-empty" role="alert">
+        {uiText.sectionAccessDenied}
+      </p>
+    </Panel>
   );
 }

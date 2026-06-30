@@ -228,6 +228,8 @@ export const uiText = {
   integrityConstraintViolation: "Данные нарушают ограничения базы.",
   internalServiceError: "Внутренняя ошибка сервиса.",
   notFound: "Запись не найдена.",
+  accessDenied: "Доступ ограничен",
+  sectionAccessDenied: "Нет доступа к разделу.",
   empty: "Пусто",
   jsonObjectRequired: "JSON-поле должно содержать объект.",
   numberRequired: "Числовое поле должно содержать число.",

@@ -1084,8 +1084,10 @@ class ReportService:
             parameter_type = raw_type if isinstance(raw_type, str) else "string"
             if parameter_type not in _REPORT_PARAMETER_TYPES:
                 continue
+            if code not in parameters:
+                continue
             value = parameters.get(code)
-            if self._is_report_parameter_missing(value):
+            if value is None:
                 continue
             errors.extend(
                 self._validate_report_parameter_value(

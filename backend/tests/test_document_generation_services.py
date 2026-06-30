@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 from zipfile import ZipFile
@@ -486,6 +487,136 @@ def test_generated_document_renders_schema_driven_card_data_to_storage(
         )
     )
     assert audit_event is not None
+
+
+def test_generated_document_download_writes_audit(
+    db_session: Session,
+    document_service: DocumentService,
+) -> None:
+    context = _document_context(db_session)
+    template = document_service.create_template_for_actor(
+        actor_user_id=context["schema_admin"].id,
+        registry_id=context["registry"].id,
+        code="download-audit",
+        name="Download audit",
+        template_body="РљР°СЂС‚РѕС‡РєР°: {{ card.display_name }}",
+    )
+    generated = document_service.generate_document_for_actor(
+        actor_user_id=context["card_admin"].id,
+        template_id=template.id,
+        card_id=context["card"].id,
+    )
+
+    content = document_service.read_generated_document_content_for_actor(
+        actor_user_id=context["card_admin"].id,
+        generated_document_id=generated.id,
+    )
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "generated_document",
+            AuditEvent.object_id == generated.id,
+            AuditEvent.action == "generated_document_download",
+        )
+    )
+    assert content
+    assert audit_event is not None
+    assert audit_event.new_data_json is not None
+    assert audit_event.new_data_json["stored_file_id"] == str(generated.stored_file_id)
+
+
+def test_generated_document_download_audit_boundary_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    generated_document_id = uuid4()
+    card_id = uuid4()
+    stored_file_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    audit_events: list[dict[str, Any]] = []
+
+    generated = SimpleNamespace(
+        id=generated_document_id,
+        card_id=card_id,
+        stored_file_id=stored_file_id,
+        archived_at=None,
+    )
+    card = SimpleNamespace(
+        id=card_id,
+        registry_id=registry_id,
+        organization_id=organization_id,
+    )
+    stored_file = SimpleNamespace(
+        id=stored_file_id,
+        storage_key="generated/doc.docx",
+        content_length_bytes=9,
+    )
+
+    class FakeSession:
+        def get(self, model: type[object], object_id: UUID) -> object | None:
+            if model is StoredFile and object_id == stored_file_id:
+                return stored_file
+            return None
+
+    class FakeStorage:
+        backend_name = "fake"
+
+        def read_bytes(self, storage_key: str) -> bytes:
+            assert storage_key == "generated/doc.docx"
+            return b"doc-bytes"
+
+    class FakePermissionService:
+        def __init__(self, session: FakeSession) -> None:
+            self.session = session
+
+        def can_see_organization(
+            self,
+            checked_actor_user_id: UUID,
+            checked_organization_id: UUID,
+            *,
+            registry_id: UUID,
+        ) -> bool:
+            assert checked_actor_user_id == actor_user_id
+            assert checked_organization_id == organization_id
+            assert registry_id == card.registry_id
+            return True
+
+    class FakeAuditService:
+        def __init__(self, session: FakeSession) -> None:
+            self.session = session
+
+        def record_user_event(self, **kwargs: Any) -> None:
+            audit_events.append(kwargs)
+
+    service = DocumentService(FakeSession(), storage=FakeStorage())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_generated_document", lambda object_id: generated)
+    monkeypatch.setattr(
+        service,
+        "_get_readable_card",
+        lambda object_id, *, include_archive: card,
+    )
+    monkeypatch.setattr("app.services.documents.PermissionService", FakePermissionService)
+    monkeypatch.setattr("app.services.documents.AuditService", FakeAuditService)
+
+    content = service.read_generated_document_content_for_actor(
+        actor_user_id=actor_user_id,
+        generated_document_id=generated_document_id,
+    )
+
+    assert content == b"doc-bytes"
+    assert audit_events == [
+        {
+            "actor_user_id": actor_user_id,
+            "action": "generated_document_download",
+            "object_type": "generated_document",
+            "object_id": generated_document_id,
+            "new_data_json": {
+                "stored_file_id": str(stored_file_id),
+                "content_length_bytes": 9,
+            },
+        }
+    ]
 
 
 def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
