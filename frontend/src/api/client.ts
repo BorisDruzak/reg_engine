@@ -715,10 +715,18 @@ export async function archiveGeneratedDocument(token: string, generatedDocumentI
   });
 }
 
-export async function listReportTemplates(token: string, registryId: string) {
-  return apiRequest<ReportTemplateListRead>(`/api/v1/registries/${registryId}/report-templates`, {
-    token,
-  });
+export async function listReportTemplates(
+  token: string,
+  registryId: string,
+  includeArchive = false,
+) {
+  const query = includeArchive ? "?include_archive=true" : "";
+  return apiRequest<ReportTemplateListRead>(
+    `/api/v1/registries/${registryId}/report-templates${query}`,
+    {
+      token,
+    },
+  );
 }
 
 export async function createReportTemplate(
@@ -752,8 +760,11 @@ export async function updateReportTemplate(
   });
 }
 
-export async function listReportRuns(token: string, registryId: string) {
-  return apiRequest<ReportRunListRead>(`/api/v1/registries/${registryId}/report-runs`, { token });
+export async function listReportRuns(token: string, registryId: string, includeArchive = false) {
+  const query = includeArchive ? "?include_archive=true" : "";
+  return apiRequest<ReportRunListRead>(`/api/v1/registries/${registryId}/report-runs${query}`, {
+    token,
+  });
 }
 
 export async function generateReportRun(
@@ -768,8 +779,17 @@ export async function generateReportRun(
   });
 }
 
-export async function downloadReportRunContent(token: string, reportRunId: string) {
-  return downloadFile(`/api/v1/report-runs/${reportRunId}/content`, token, "X-Report-Filename");
+export async function downloadReportRunContent(
+  token: string,
+  reportRunId: string,
+  includeArchive = false,
+) {
+  const query = includeArchive ? "?include_archive=true" : "";
+  return downloadFile(
+    `/api/v1/report-runs/${reportRunId}/content${query}`,
+    token,
+    "X-Report-Filename",
+  );
 }
 
 export async function archiveReportRun(token: string, reportRunId: string) {

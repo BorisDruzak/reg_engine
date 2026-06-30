@@ -1007,7 +1007,7 @@ beforeEach(() => {
         }
       }
       if (
-        url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates")
+        url.includes("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates")
       ) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
@@ -1035,7 +1035,12 @@ beforeEach(() => {
           reportTemplateItems = [...reportTemplateItems, created];
           return jsonResponse(created, { status: 201 });
         }
-        return jsonResponse({ items: reportTemplateItems });
+        const includeArchive = url.includes("include_archive=true");
+        return jsonResponse({
+          items: includeArchive
+            ? reportTemplateItems
+            : reportTemplateItems.filter((item) => !item.archived_at),
+        });
       }
       if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252")) {
         if (init?.method === "PATCH") {
@@ -1068,7 +1073,9 @@ beforeEach(() => {
           )!,
           archived_at: "2026-06-28T12:14:00Z",
         };
-        reportTemplateItems = reportTemplateItems.filter((item) => item.id !== archived.id);
+        reportTemplateItems = reportTemplateItems.map((item) =>
+          item.id === archived.id ? archived : item,
+        );
         return jsonResponse(archived);
       }
       if (url.endsWith("/api/v1/report-templates/52525252-5252-4252-8252-525252525252/runs")) {
@@ -1100,10 +1107,15 @@ beforeEach(() => {
         reportRunItems = [created, ...reportRunItems];
         return jsonResponse(created, { status: 201 });
       }
-      if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-runs")) {
-        return jsonResponse({ items: reportRunItems });
+      if (url.includes("/api/v1/registries/77777777-7777-4777-8777-777777777777/report-runs")) {
+        const includeArchive = url.includes("include_archive=true");
+        return jsonResponse({
+          items: includeArchive
+            ? reportRunItems
+            : reportRunItems.filter((item) => !item.archived_at),
+        });
       }
-      if (url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content")) {
+      if (url.includes("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content")) {
         const run = reportRunItems.find(
           (item) => item.id === "53535353-5353-4353-8353-535353535353",
         );
@@ -1126,7 +1138,7 @@ beforeEach(() => {
           ...reportRunItems.find((item) => item.id === "53535353-5353-4353-8353-535353535353")!,
           archived_at: "2026-06-28T12:13:00Z",
         };
-        reportRunItems = reportRunItems.filter((item) => item.id !== archived.id);
+        reportRunItems = reportRunItems.map((item) => (item.id === archived.id ? archived : item));
         return jsonResponse(archived);
       }
       if (
@@ -3533,6 +3545,37 @@ test("manages report templates and report runs in Russian registry UI", async ()
   );
   expect(await screen.findByText("Шаблон отчета архивирован")).toBeInTheDocument();
 
+  await user.click(screen.getByLabelText("Показывать архивные отчеты"));
+  expect(
+    await screen.findByText((_, element) =>
+      Boolean(
+        element?.tagName === "SPAN" &&
+        element.textContent?.includes("Карточки реестра / Сформирован / CSV / report.csv / 1") &&
+        element.textContent?.includes("Архивировано"),
+      ),
+    ),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать отчет report.csv" }));
+  expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Архивировать отчет report.csv" })).toBeDisabled();
+
+  await user.click(screen.getByLabelText("Показывать архивные шаблоны отчетов"));
+  expect(
+    await screen.findByText((_, element) =>
+      Boolean(
+        element?.tagName === "SPAN" &&
+        element.textContent?.includes("cards_summary") &&
+        element.textContent?.includes("Архивировано"),
+      ),
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Редактировать шаблон отчета Обновленный отчет" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Архивировать шаблон отчета Обновленный отчет" }),
+  ).toBeDisabled();
+
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
     expect(
@@ -3604,6 +3647,35 @@ test("manages report templates and report runs in Russian registry UI", async ()
         const headers = init?.headers as Record<string, string> | undefined;
         return (
           url.endsWith("/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content") &&
+          init?.method === "GET" &&
+          headers?.Authorization === "Bearer test-token"
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/report-templates?include_archive=true",
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return url.endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/report-runs?include_archive=true",
+        );
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        const headers = init?.headers as Record<string, string> | undefined;
+        return (
+          url.endsWith(
+            "/api/v1/report-runs/53535353-5353-4353-8353-535353535353/content?include_archive=true",
+          ) &&
           init?.method === "GET" &&
           headers?.Authorization === "Bearer test-token"
         );

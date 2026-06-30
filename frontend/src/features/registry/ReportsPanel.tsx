@@ -41,19 +41,25 @@ export function ReportsPanel({
   const [runParametersJson, setRunParametersJson] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showArchivedReportTemplates, setShowArchivedReportTemplates] = useState(false);
+  const [showArchivedReportRuns, setShowArchivedReportRuns] = useState(false);
 
   const templatesQuery = useQuery({
-    queryKey: ["report-templates", token, selectedRegistryId],
-    queryFn: () => listReportTemplates(token, selectedRegistryId),
+    queryKey: ["report-templates", token, selectedRegistryId, showArchivedReportTemplates],
+    queryFn: () => listReportTemplates(token, selectedRegistryId, showArchivedReportTemplates),
     enabled: Boolean(token && selectedRegistryId),
   });
   const runsQuery = useQuery({
-    queryKey: ["report-runs", token, selectedRegistryId],
-    queryFn: () => listReportRuns(token, selectedRegistryId),
+    queryKey: ["report-runs", token, selectedRegistryId, showArchivedReportRuns],
+    queryFn: () => listReportRuns(token, selectedRegistryId, showArchivedReportRuns),
     enabled: Boolean(token && selectedRegistryId),
   });
   const templates = useMemo(() => templatesQuery.data?.items ?? [], [templatesQuery.data?.items]);
-  const selectedTemplateId = templateId || templates[0]?.id || "";
+  const activeTemplates = useMemo(
+    () => templates.filter((template) => isActiveTemplate(template)),
+    [templates],
+  );
+  const selectedTemplateId = templateId || activeTemplates[0]?.id || "";
   const templateById = useMemo(
     () => new Map(templates.map((template) => [template.id, template])),
     [templates],
@@ -131,7 +137,8 @@ export function ReportsPanel({
     onError: (error) => setLocalError(errorText(error)),
   });
   const downloadMutation = useMutation({
-    mutationFn: (reportRun: ReportRunRead) => downloadReportRunContent(token, reportRun.id),
+    mutationFn: (reportRun: ReportRunRead) =>
+      downloadReportRunContent(token, reportRun.id, Boolean(reportRun.archived_at)),
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
       setMessage(uiText.reportDownloaded);
@@ -170,6 +177,15 @@ export function ReportsPanel({
     <Panel title={uiText.reports}>
       <section className="template-manager" aria-labelledby="report-templates-heading">
         <h3 id="report-templates-heading">{uiText.reportTemplates}</h3>
+        <label className="checkbox-control">
+          <input
+            aria-label={uiText.showArchivedReportTemplates}
+            checked={showArchivedReportTemplates}
+            type="checkbox"
+            onChange={(event) => setShowArchivedReportTemplates(event.currentTarget.checked)}
+          />
+          <span>{uiText.showArchivedReportTemplates}</span>
+        </label>
         <form
           className="template-form"
           onSubmit={(event) => {
@@ -297,7 +313,7 @@ export function ReportsPanel({
             value={selectedTemplateId}
             onChange={(event) => setTemplateId(event.target.value)}
           >
-            {templates.map((template) => (
+            {activeTemplates.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.name}
               </option>
@@ -327,10 +343,21 @@ export function ReportsPanel({
       <DataAlert error={runsQuery.error} />
       <section aria-labelledby="report-runs-heading">
         <h3 id="report-runs-heading">{uiText.reportRuns}</h3>
+        <label className="checkbox-control">
+          <input
+            aria-label={uiText.showArchivedReportRuns}
+            checked={showArchivedReportRuns}
+            type="checkbox"
+            onChange={(event) => setShowArchivedReportRuns(event.currentTarget.checked)}
+          />
+          <span>{uiText.showArchivedReportRuns}</span>
+        </label>
         <ReportRunList
           items={runsQuery.data?.items ?? []}
           templateById={templateById}
-          downloadingId={downloadMutation.variables?.id ?? null}
+          downloadingId={
+            downloadMutation.isPending ? (downloadMutation.variables?.id ?? null) : null
+          }
           archivingId={archiveRunMutation.variables ?? null}
           onDownload={(run) => downloadMutation.mutate(run)}
           onArchive={(run) => archiveRunMutation.mutate(run.id)}
@@ -359,38 +386,42 @@ function ReportTemplateList({
 
   return (
     <ul className="file-action-list template-list">
-      {items.map((template) => (
-        <li key={template.id}>
-          <div>
-            <strong>{template.name}</strong>
-            <span>
-              {uiText.technicalCode}: {template.code} / {reportTypeLabel(template.report_type)} /{" "}
-              {reportOutputFormatLabel(template.output_format)} /{" "}
-              {formatUiDateTime(template.created_at)}
-            </span>
-          </div>
-          <div className="row-actions">
-            <button
-              type="button"
-              className="ghost-button"
-              aria-label={`${uiText.editReportTemplate} ${template.name}`}
-              disabled={editingId === template.id}
-              onClick={() => onEdit(template)}
-            >
-              {uiText.update}
-            </button>
-            <button
-              type="button"
-              className="ghost-button"
-              aria-label={`${uiText.archiveReportTemplate} ${template.name}`}
-              disabled={archivingId === template.id}
-              onClick={() => onArchive(template)}
-            >
-              {uiText.archive}
-            </button>
-          </div>
-        </li>
-      ))}
+      {items.map((template) => {
+        const isArchived = !isActiveTemplate(template);
+        return (
+          <li key={template.id}>
+            <div>
+              <strong>{template.name}</strong>
+              <span>
+                {uiText.technicalCode}: {template.code} / {reportTypeLabel(template.report_type)} /{" "}
+                {reportOutputFormatLabel(template.output_format)} /{" "}
+                {formatUiDateTime(template.created_at)}
+                {isArchived ? ` / ${uiText.archived}` : ""}
+              </span>
+            </div>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                aria-label={`${uiText.editReportTemplate} ${template.name}`}
+                disabled={isArchived || editingId === template.id}
+                onClick={() => onEdit(template)}
+              >
+                {uiText.update}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                aria-label={`${uiText.archiveReportTemplate} ${template.name}`}
+                disabled={isArchived || archivingId === template.id}
+                onClick={() => onArchive(template)}
+              >
+                {uiText.archive}
+              </button>
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -419,6 +450,7 @@ function ReportRunList({
       {items.map((run) => {
         const title = templateById.get(run.report_template_id)?.name ?? run.output_filename;
         const outputFormat = reportRunOutputFormatLabel(run);
+        const isArchived = Boolean(run.archived_at);
         return (
           <li key={run.id}>
             <div>
@@ -427,6 +459,7 @@ function ReportRunList({
                 {reportTypeLabel(run.report_type)} / {reportRunStatusLabel(run.run_status)} /{" "}
                 {outputFormat} / {run.output_filename} / {run.row_count} /{" "}
                 {formatUiDateTime(run.created_at)}
+                {isArchived ? ` / ${uiText.archived}` : ""}
               </span>
             </div>
             <div className="row-actions">
@@ -443,7 +476,7 @@ function ReportRunList({
                 type="button"
                 className="ghost-button"
                 aria-label={`${uiText.archiveReport} ${title}`}
-                disabled={archivingId === run.id}
+                disabled={isArchived || archivingId === run.id}
                 onClick={() => onArchive(run)}
               >
                 {uiText.archive}
@@ -454,6 +487,10 @@ function ReportRunList({
       })}
     </ul>
   );
+}
+
+function isActiveTemplate(template: ReportTemplateRead) {
+  return template.is_active && !template.archived_at;
 }
 
 async function invalidateReportData(queryClient: QueryClient, token: string, registryId: string) {

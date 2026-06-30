@@ -197,13 +197,15 @@ Current stop point:
   format and filename for generated runs. Commit `98bdeef` is pushed, the
   server checkout is synchronized to `origin/main`, frontend dist is deployed,
   healthcheck passed, and server checks passed. No migration was required.
-- Next planned work requires explicit prioritization: remaining report polish,
-  XLSX/PDF report outputs, XLSX workflows, MCP write tools, or another
-  deferred phase.
+- Phase 4F Report Archive Visibility is in progress as the next report polish
+  slice: authenticated report template/run lists expose an archive toggle in
+  the Russian UI, archived report rows are visible in archive scope, archived
+  runs remain downloadable through `include_archive=true`, and archived rows
+  cannot be edited or archived again. No migration is required.
 - Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
-  remaining report polish.
+  additional report polish.
 - XLSX export/import, import/export frontend UI, binary attachment/document
-  export, XLSX/PDF report outputs, remaining report polish, and MCP write
+  export, XLSX/PDF report outputs, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
@@ -1560,8 +1562,9 @@ Known limitations:
 Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
-report template settings edit, and CSV report output slices; XLSX/PDF report
-outputs and remaining report polish remain deferred.
+report template settings edit, CSV report output, and report run list polish
+slices; Phase 4F report archive visibility is in progress. XLSX/PDF report
+outputs and additional report polish remain deferred.
 
 Planned overall scope:
 
@@ -1945,6 +1948,74 @@ Deployment checkpoint:
   `0012_report_csv_output (head)`, `GET /api/v1/health` returned
   `{"status":"ok","service":"reg_engine"}`, and the SPA shell served the
   updated asset `/assets/index-jkxU57z9.js`.
+
+### Phase 4F: Report Archive Visibility
+
+Status: in progress.
+
+Purpose: close the next report polish gap by making archived report templates
+and report runs inspectable from the authenticated Russian report UI before
+larger XLSX/PDF report outputs, XLSX workflows, or MCP write tools.
+
+Scope:
+
+- Add Russian UI toggles for showing archived report templates and archived
+  report runs.
+- Use existing backend `include_archive=true` support for report template/run
+  list and archived report-run content download.
+- Keep active report generation limited to active, non-archived templates.
+- Allow archived report runs to be downloaded while preserving backend
+  visibility checks.
+- Disable edit/archive actions for archived templates and disable repeated
+  archive action for archived report runs.
+- Do not add database schema changes or migrations.
+- Do not add XLSX/PDF output, scheduling, charts, public-link report workflows,
+  binary attachment/document report export, or MCP write tools.
+
+Acceptance criteria:
+
+- Authenticated users can toggle archived report templates in the report UI.
+- Authenticated users can toggle archived report runs in the report UI.
+- Archived report rows show a Russian archived status.
+- Archived report runs download through
+  `GET /api/v1/report-runs/{report_run_id}/content?include_archive=true`.
+- List/download archive visibility does not re-enable edit/archive actions for
+  archived rows.
+- Existing report create/update/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is archive visibility polish only; it does not add a visual report
+  builder.
+- XLSX/PDF report outputs remain deferred.
+- Scheduled/background reports, charts, and public-link report workflows remain
+  deferred.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED frontend test failed before implementation because the report UI had no
+  `Показывать архивные отчеты` control.
+- GREEN targeted frontend test passed:
+  `npm test -- --run src/App.test.tsx --testNamePattern "manages report templates" --testTimeout 12000`.
+- Targeted frontend test also passed without a custom timeout:
+  `npm test -- --run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4F.
+
+Deployment checkpoint:
+
+- Pending full local checks, push, frontend deploy, and server check.
 
 ### Phase 5: MCP Over API Only
 
