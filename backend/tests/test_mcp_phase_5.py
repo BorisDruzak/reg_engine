@@ -116,6 +116,46 @@ def test_mcp_api_client_uses_get_bearer_token_and_mcp_source_header() -> None:
     ]
 
 
+def test_mcp_api_client_supports_json_mutation_methods_without_exposing_tools() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+
+    transport = RecordingTransport({"ok": True})
+    client = RegEngineApiClient(
+        base_url="https://registry.example.test/",
+        token="test-token",
+        transport=transport,
+        timeout_seconds=7.5,
+    )
+
+    assert client.post_json("/api/v1/registries", {"name": "Реестр"}) == {"ok": True}
+    assert client.patch_json("/api/v1/registries/registry-1", {"name": "Реестр 2"}) == {"ok": True}
+    assert client.delete_json("/api/v1/registries/registry-1") == {"ok": True}
+
+    assert [request["method"] for request in transport.requests] == ["POST", "PATCH", "DELETE"]
+    assert transport.requests[0]["url"] == "https://registry.example.test/api/v1/registries"
+    assert (
+        transport.requests[1]["url"] == "https://registry.example.test/api/v1/registries/registry-1"
+    )
+    assert (
+        transport.requests[2]["url"] == "https://registry.example.test/api/v1/registries/registry-1"
+    )
+    for request in transport.requests:
+        assert request["headers"]["Accept"] == "application/json"
+        assert request["headers"]["Authorization"] == "Bearer test-token"
+        assert request["headers"]["User-Agent"] == "reg-engine-mcp/0.1"
+        assert request["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["headers"]["Content-Type"] == "application/json"
+    assert transport.requests[1]["headers"]["Content-Type"] == "application/json"
+    assert "Content-Type" not in transport.requests[2]["headers"]
+    post_body = transport.requests[0]["body"]
+    patch_body = transport.requests[1]["body"]
+    assert isinstance(post_body, bytes)
+    assert isinstance(patch_body, bytes)
+    assert json.loads(post_body.decode("utf-8")) == {"name": "Реестр"}
+    assert json.loads(patch_body.decode("utf-8")) == {"name": "Реестр 2"}
+    assert transport.requests[2]["body"] is None
+
+
 @pytest.mark.parametrize("base_url", ["", "file:///tmp/reg_engine", "api.local"])
 def test_mcp_api_client_rejects_non_http_base_urls(base_url: str) -> None:
     from app.mcp.api_client import RegEngineApiClient

@@ -92,6 +92,7 @@ Completed phases:
 - Phase 4W: Cross-Cutting Bugfix And Stabilization.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
+- Phase 5C: MCP Mutation Client Foundation.
 
 Current stop point:
 
@@ -208,6 +209,10 @@ Current stop point:
   without terminating the server loop, and returns tool argument failures as
   MCP tool errors. It is implemented, pushed, deployed, and verified on the
   server. No migration was required.
+- Phase 5C MCP Mutation Client Foundation is completed locally and pending
+  deploy: the MCP REST API client can send JSON `POST`, `PATCH`, and `DELETE`
+  requests with bearer auth and `X-Reg-Engine-Source: mcp`, while the published
+  MCP tool list remains read-only and no MCP write tools are exposed.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -3957,6 +3962,61 @@ Known limitations:
   boundary.
 - Still no public-link MCP workflows.
 - Still no binary attachment/generated-document download tools.
+
+### Phase 5C: MCP Mutation Client Foundation
+
+Status: completed locally; deploy pending.
+
+Purpose: prepare the MCP gateway for future explicitly approved write tools by
+adding mutation-capable REST client primitives while keeping the published MCP
+tool surface read-only.
+
+Scope:
+
+- Add JSON `POST`, `PATCH`, and `DELETE` methods to the MCP REST API client.
+- Preserve bearer-token auth, `Accept: application/json`, `User-Agent`, and
+  `X-Reg-Engine-Source: mcp` headers on mutation requests.
+- Send `Content-Type: application/json` only for requests with JSON bodies.
+- Reuse the existing API error handling path for unsafe HTTP methods.
+- Keep `MCP_TOOL_DEFINITIONS` read-only and do not expose any write tools yet.
+- Keep MCP API-only: no SQLAlchemy, Alembic, DB sessions, backend models,
+  backend services, storage backends, public-link workflows, binary downloads,
+  standalone MCP auth, frontend UI, or database migrations.
+
+Acceptance criteria:
+
+- The MCP API client can issue JSON `POST`, `PATCH`, and `DELETE` requests
+  through its transport.
+- Mutation requests include the same bearer auth and MCP source headers as
+  read-only requests.
+- JSON body requests include `Content-Type: application/json`; bodyless DELETE
+  requests do not.
+- Existing read-only MCP tools remain listed with `readOnlyHint=true`.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+
+Known limitations:
+
+- This phase does not add MCP write tools.
+- Future MCP write tool phases must explicitly name the tool set, argument
+  schemas, confirmation requirements for destructive actions, API endpoints,
+  audit expectations, and PostgreSQL-backed validation strategy.
+
+Verification so far:
+
+- RED targeted test failed before implementation because `RegEngineApiClient`
+  had no `post_json` method.
+- GREEN targeted mutation client test passed.
+- Full MCP Phase 5 test file passed locally with `15 passed`.
+- Targeted `ruff check` and `mypy app/mcp` passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `81 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5C; no backend schema changes are included.
 
 ## Verification
 

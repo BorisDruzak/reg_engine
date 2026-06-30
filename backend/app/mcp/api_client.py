@@ -81,11 +81,31 @@ class RegEngineApiClient:
         self.timeout_seconds = timeout_seconds
 
     def get_json(self, path: str, query: Mapping[str, object | None] | None = None) -> Any:
+        return self._request_json(method="GET", path=path, query=query)
+
+    def post_json(self, path: str, payload: Mapping[str, Any]) -> Any:
+        return self._request_json(method="POST", path=path, payload=payload)
+
+    def patch_json(self, path: str, payload: Mapping[str, Any]) -> Any:
+        return self._request_json(method="PATCH", path=path, payload=payload)
+
+    def delete_json(self, path: str, query: Mapping[str, object | None] | None = None) -> Any:
+        return self._request_json(method="DELETE", path=path, query=query)
+
+    def _request_json(
+        self,
+        *,
+        method: str,
+        path: str,
+        query: Mapping[str, object | None] | None = None,
+        payload: Mapping[str, Any] | None = None,
+    ) -> Any:
+        body = _json_body(payload) if payload is not None else None
         response = self.transport.request(
-            method="GET",
+            method=method,
             url=self._url(path, query),
-            headers=self._headers(),
-            body=None,
+            headers=self._headers(has_body=body is not None),
+            body=body,
             timeout_seconds=self.timeout_seconds,
         )
         if response.status_code >= 400:
@@ -93,7 +113,7 @@ class RegEngineApiClient:
                 _api_error_message(response.body),
                 status_code=response.status_code,
             )
-        return json.loads(response.body.decode("utf-8"))
+        return json.loads(response.body.decode("utf-8")) if response.body else None
 
     def _url(self, path: str, query: Mapping[str, object | None] | None) -> str:
         normalized_path = path if path.startswith("/") else f"/{path}"
@@ -103,12 +123,14 @@ class RegEngineApiClient:
         suffix = f"?{urlencode(filtered_query)}" if filtered_query else ""
         return f"{self.base_url}{normalized_path}{suffix}"
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, has_body: bool = False) -> dict[str, str]:
         headers = {
             "Accept": "application/json",
             "User-Agent": MCP_USER_AGENT,
             MCP_SOURCE_HEADER: "mcp",
         }
+        if has_body:
+            headers["Content-Type"] = "application/json"
         if self.token is not None:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
@@ -134,6 +156,10 @@ def _query_value(value: object) -> str:
     if isinstance(value, bool):
         return str(value).lower()
     return str(value)
+
+
+def _json_body(payload: Mapping[str, Any]) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def _api_error_message(body: bytes) -> str:
