@@ -113,6 +113,11 @@ Current stop point:
   all three new tools with `readOnlyHint=false`, healthcheck passed, and
   Alembic remains at `0014_report_pdf_output (head)`. No production report
   template was created, updated, or archived during smoke validation.
+- Phase 5L MCP Report Run Write Tools is in progress: expose only report run
+  generation and archive through existing REST API endpoints, while report
+  permissions, parameter/default validation, output storage, archive semantics,
+  and audit remain API-enforced. Report output download/content tools stay
+  deferred as binary workflows.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5021,6 +5026,96 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5K; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5L: MCP Report Run Write Tools
+
+Status: completed locally; pending full local check, push, and deploy.
+
+Purpose: extend the API-only MCP write surface with report run generation and
+archive operations while keeping registry/report permissions, report template
+validation, parameter/default validation, output storage, archive semantics,
+and audit in the existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_generate_report_run`
+- `reg_engine_archive_report_run`
+
+Argument schemas:
+
+- `reg_engine_generate_report_run`:
+  - `template_id`: required string.
+  - `parameters`: optional object.
+  - `additionalProperties=false`.
+- `reg_engine_archive_report_run`:
+  - `report_run_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/report-templates/{template_id}/runs`
+- `DELETE /api/v1/report-runs/{report_run_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Report generation permissions, template visibility, supported report type and
+  output format validation, parameter/default validation, output storage,
+  archive visibility, and audit remain API-side in the existing report service.
+- Archive requires explicit `confirm_archive=true` before sending `DELETE`.
+
+Scope:
+
+- Expose the two tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F/5G/5H/5I/5J/5K write
+  behavior.
+- Generate sends the existing REST payload with `parameters` only when the MCP
+  caller provides it.
+- Do not download report output, expose binary content, mutate report templates,
+  mutate documents, mutate public links, upload or download attachments,
+  import/export data, or add other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as write tools.
+- Generate report run sends `POST /api/v1/report-templates/{template_id}/runs`
+  with only provided optional `parameters`.
+- Archive report run sends `DELETE /api/v1/report-runs/{report_run_id}` only
+  when `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not generate or archive production report runs
+  without a disposable production-safe target.
+- MCP report output download/content, document/public-link, attachment
+  upload/download, and import/export write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_generate_report_run` and `reg_engine_archive_report_run` were
+  absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `35 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `101 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5L; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification

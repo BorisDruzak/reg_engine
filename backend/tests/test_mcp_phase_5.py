@@ -205,6 +205,8 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_create_report_template",
         "reg_engine_update_report_template",
         "reg_engine_archive_report_template",
+        "reg_engine_generate_report_run",
+        "reg_engine_archive_report_run",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -1389,6 +1391,142 @@ def test_mcp_archive_report_template_tool_requires_confirmation_before_delete() 
     assert archived["structuredContent"]["id"] == template_id
     assert transport.requests[0]["method"] == "DELETE"
     assert transport.requests[0]["url"] == f"http://api.local/api/v1/report-templates/{template_id}"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
+
+
+def test_mcp_generate_report_run_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_generate_report_run"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["template_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    template_id = str(uuid4())
+    run_id = str(uuid4())
+    registry_id = str(uuid4())
+    parameters = {"date_from": "2026-01-01", "status": "active"}
+    transport = RecordingTransport(
+        {
+            "id": run_id,
+            "report_template_id": template_id,
+            "registry_id": registry_id,
+            "card_id": None,
+            "report_type": "cards_json",
+            "run_status": "completed",
+            "parameters_json": parameters,
+            "summary_json": {"rows": 12},
+            "row_count": 12,
+            "output_filename": "report.json",
+            "output_content_type": "application/json",
+            "generated_by": str(uuid4()),
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:00:01Z",
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": None,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    empty_parameters = call_tool(
+        "reg_engine_generate_report_run",
+        {"template_id": template_id},
+        client=client,
+    )
+    assert empty_parameters["isError"] is False
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/report-templates/{template_id}/runs"
+    )
+    empty_body = transport.requests[0]["body"]
+    assert isinstance(empty_body, bytes)
+    assert json.loads(empty_body.decode("utf-8")) == {}
+
+    generated = call_tool(
+        "reg_engine_generate_report_run",
+        {"template_id": template_id, "parameters": parameters},
+        client=client,
+    )
+
+    assert generated["isError"] is False
+    assert generated["structuredContent"]["id"] == run_id
+    assert transport.requests[1]["method"] == "POST"
+    assert (
+        transport.requests[1]["url"]
+        == f"http://api.local/api/v1/report-templates/{template_id}/runs"
+    )
+    assert transport.requests[1]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[1]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {"parameters": parameters}
+
+
+def test_mcp_archive_report_run_tool_requires_confirmation_before_delete() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_archive_report_run"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["report_run_id", "confirm_archive"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    report_run_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": report_run_id,
+            "report_template_id": str(uuid4()),
+            "registry_id": str(uuid4()),
+            "card_id": None,
+            "report_type": "cards_json",
+            "run_status": "completed",
+            "parameters_json": None,
+            "summary_json": {"rows": 12},
+            "row_count": 12,
+            "output_filename": "report.json",
+            "output_content_type": "application/json",
+            "generated_by": str(uuid4()),
+            "started_at": "2026-01-01T00:00:00Z",
+            "finished_at": "2026-01-01T00:00:01Z",
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": "2026-01-02T00:00:00Z",
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_archive_report_run",
+        {"report_run_id": report_run_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_archive" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    archived = call_tool(
+        "reg_engine_archive_report_run",
+        {"report_run_id": report_run_id, "confirm_archive": True},
+        client=client,
+    )
+
+    assert archived["isError"] is False
+    assert archived["structuredContent"]["id"] == report_run_id
+    assert transport.requests[0]["method"] == "DELETE"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/report-runs/{report_run_id}"
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
 

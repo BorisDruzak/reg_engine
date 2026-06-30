@@ -517,6 +517,38 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_generate_report_run",
+        "title": "Generate report run",
+        "description": "Generate a report run through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string"},
+                "parameters": {"type": "object"},
+            },
+            "required": ["template_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_report_run",
+        "title": "Archive report run",
+        "description": (
+            "Archive a report run through the Registry Engine API. Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "report_run_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["report_run_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -779,6 +811,19 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/report-templates/{template_id}")
+    if name == "reg_engine_generate_report_run":
+        template_id = _required_str_arg(arguments, "template_id")
+        report_run_payload: dict[str, Any] = {}
+        _add_optional_dict(report_run_payload, arguments, "parameters")
+        return client.post_json(
+            f"/api/v1/report-templates/{template_id}/runs",
+            report_run_payload,
+        )
+    if name == "reg_engine_archive_report_run":
+        report_run_id = _required_str_arg(arguments, "report_run_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/report-runs/{report_run_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
