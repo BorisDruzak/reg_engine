@@ -89,6 +89,7 @@ Completed phases:
 - Phase 4T: Report Run Scalar Constraint Validation.
 - Phase 4U: Report Run Pattern And Multiple Validation.
 - Phase 4V: Report Run Exclusive Bound Validation.
+- Phase 4W: Cross-Cutting Bugfix And Stabilization.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -368,6 +369,14 @@ Current stop point:
   passed, and Alembic remains at `0014_report_pdf_output (head)`. No backend
   code, migrations, endpoints, report formats, full visual report builder, or
   MCP write tools are included.
+- Phase 4W Cross-Cutting Bugfix And Stabilization is completed locally and
+  pending deploy: backend report generation now enforces the supported flat
+  template parameter schema subset at the service/API boundary, report template
+  create/update rejects invalid supported-schema structures and invalid default
+  parameters, and generated report output files are registered for cleanup on
+  transaction rollback. No frontend feature work, report formats, MCP write
+  tools, binary export, database schema changes, or Alembic migrations are
+  included; Alembic remains at `0014_report_pdf_output (head)`.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3700,6 +3709,83 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4V; no backend schema changes are included.
+
+### Phase 4W: Cross-Cutting Bugfix And Stabilization
+
+Status: completed locally; deploy pending.
+
+Purpose: harden cross-cutting report correctness issues after Phase 4V before
+starting MCP write tools, additional report polish, binary export, or other new
+product capabilities.
+
+Scope:
+
+- Add backend/service validation for the flat report parameter schema subset
+  already exposed by the Russian report UI: `required`, scalar `string`,
+  `number`, `integer`, `boolean`, string `minLength` / `maxLength` /
+  `pattern`, numeric `minimum` / `maximum` / `exclusiveMinimum` /
+  `exclusiveMaximum` / `multipleOf`, `enum`, and `oneOf[].const`.
+- Validate `parameters_schema_json` and `default_parameters_json` on report
+  template create/update so unsupported or broken supported-schema structures
+  fail at the API boundary instead of becoming broken UI state.
+- Register generated report output storage writes for pending cleanup so a
+  later SQLAlchemy transaction rollback removes the uncommitted report file.
+- Keep report downloads on the existing bounded `read_bytes` behavior and
+  document that real streaming is deferred until the storage abstraction exposes
+  an open-file/streaming boundary.
+- Keep binary attachment/document export, import/export expansion, report
+  formats, public report workflows, full visual report builder polish, and MCP
+  write tools out of this phase.
+
+Acceptance criteria:
+
+- Missing required report parameters are rejected through the REST/API path.
+- Supported string constraints are rejected through the REST/API path.
+- Supported numeric constraints are rejected through the REST/API path.
+- `enum` and `oneOf[].const` values outside the allowed set are rejected.
+- Report template create/update rejects invalid supported-schema structures and
+  invalid default parameters.
+- Report output storage is cleaned when report generation metadata is rolled
+  back after the bytes are written.
+- Existing JSON/CSV/XLSX/PDF report output tests continue to pass.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is not a full JSON Schema engine; nested objects, arrays, conditional
+  schema, grouped controls, and full visual report builder behavior remain
+  deferred.
+- Invalid regular expressions in stored report schemas are ignored for runtime
+  parameter matching, matching the existing frontend tolerance.
+- Report downloads still read the full authorized report object into memory
+  through the storage abstraction; real streaming is deferred.
+- No database schema change or Alembic migration is included.
+
+Verification so far:
+
+- RED PostgreSQL-backed report run test failed before implementation because
+  the API accepted a missing required parameter and generated a report.
+- RED PostgreSQL-backed rollback cleanup test failed before implementation
+  because report output bytes remained after transaction rollback.
+- RED PostgreSQL-backed template schema test failed before implementation
+  because an invalid `parameters_schema_json` object was accepted.
+- GREEN targeted PostgreSQL-backed Phase 4W tests passed with `3 passed`.
+- Full PostgreSQL-backed report API suite passed with `13 passed`.
+- Targeted report service/test lint and type checks passed:
+  `ruff check backend/app/services/reports.py backend/tests/test_api_phase_4_reports.py`
+  and `mypy backend/app/services/reports.py`.
+- Local format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4W; no backend schema changes are included and Alembic
+  remains at `0014_report_pdf_output (head)`.
 
 ### Phase 5: MCP Over API Only
 

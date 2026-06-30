@@ -1,10 +1,12 @@
 import csv
 import json
+import math
+import re
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from importlib import import_module
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -21,7 +23,12 @@ from sqlalchemy.orm import Session
 
 from app.domain.constants import REPORT_OUTPUT_FORMATS, REPORT_TYPES
 from app.models import Card, Registry, ReportRun, ReportTemplate, StoredFile
-from app.services.attachments import AttachmentStorage, normalize_attachment_filename
+from app.services.attachments import (
+    AttachmentStorage,
+    _forget_pending_storage_cleanup,
+    _remember_pending_storage_cleanup,
+    normalize_attachment_filename,
+)
 from app.services.audit import AuditService
 from app.services.cards import (
     CardBlockInstanceRead,
@@ -36,6 +43,7 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 PDF_CONTENT_TYPE = "application/pdf"
 _PDF_FONT_NAME = "RegEngineDejaVuSans"
+_REPORT_PARAMETER_TYPES = {"string", "number", "integer", "boolean"}
 _PDF_FONT_CANDIDATES = (
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
     Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
@@ -86,6 +94,11 @@ class ReportService:
         self._get_active_registry(registry_id)
         self._validate_report_type(report_type)
         self._validate_output_format(output_format)
+        self._validate_report_parameter_schema(parameters_schema_json)
+        self._validate_report_default_parameters(
+            schema=parameters_schema_json,
+            default_parameters=default_parameters_json,
+        )
         template = ReportTemplate(
             registry_id=registry_id,
             code=self._clean_required_text(code, "code"),
@@ -135,6 +148,21 @@ class ReportService:
         if unexpected_fields:
             raise ReportServiceError(
                 f"Unsupported report template update fields: {', '.join(sorted(unexpected_fields))}"
+            )
+
+        if "parameters_schema_json" in updates or "default_parameters_json" in updates:
+            candidate_schema = updates.get(
+                "parameters_schema_json",
+                template.parameters_schema_json,
+            )
+            candidate_defaults = updates.get(
+                "default_parameters_json",
+                template.default_parameters_json,
+            )
+            self._validate_report_parameter_schema(candidate_schema)
+            self._validate_report_default_parameters(
+                schema=candidate_schema,
+                default_parameters=candidate_defaults,
             )
 
         old_data: dict[str, Any] = {}
@@ -245,6 +273,7 @@ class ReportService:
             **(template.default_parameters_json or {}),
             **(parameters or {}),
         }
+        self._validate_run_parameters(template, merged_parameters)
         rendered = self._render_report(
             actor_user_id=actor_user_id,
             template=template,
@@ -253,6 +282,11 @@ class ReportService:
         output = self._render_report_output(template=template, rendered=rendered)
         started_at = datetime.now(UTC)
         stored_info = self.storage.write_bytes(output.content)
+        pending_cleanup = _remember_pending_storage_cleanup(
+            self.session,
+            storage=self.storage,
+            storage_key=stored_info.storage_key,
+        )
         try:
             stored_file = StoredFile(
                 storage_backend=self.storage.backend_name,
@@ -308,6 +342,7 @@ class ReportService:
         except Exception:
             with suppress(Exception):
                 self.storage.delete_bytes(stored_info.storage_key)
+            _forget_pending_storage_cleanup(self.session, pending_cleanup)
             raise
 
     def list_report_runs_for_actor(
@@ -969,6 +1004,306 @@ class ReportService:
     def _validate_output_format(self, output_format: str) -> None:
         if output_format not in REPORT_OUTPUT_FORMATS:
             raise ReportServiceError(f"Unsupported report output format: {output_format}")
+
+    def _validate_run_parameters(
+        self,
+        template: ReportTemplate,
+        parameters: Mapping[str, Any],
+    ) -> None:
+        self._validate_run_parameters_for_schema(template.parameters_schema_json, parameters)
+
+    def _validate_report_parameter_schema(self, schema: Mapping[str, Any] | None) -> None:
+        if schema is None:
+            return
+
+        schema_type = schema.get("type")
+        if schema_type is not None and schema_type != "object":
+            raise ReportServiceError("Report parameter schema type must be object.")
+
+        properties = schema.get("properties")
+        if properties is not None and not isinstance(properties, Mapping):
+            raise ReportServiceError("Report parameter schema properties must be an object.")
+
+        required = schema.get("required")
+        if required is not None and (
+            not isinstance(required, list)
+            or any(not isinstance(code, str) or not code.strip() for code in required)
+        ):
+            raise ReportServiceError("Report parameter schema required must be a list of names.")
+
+        if not isinstance(properties, Mapping):
+            return
+        for code, raw_config in properties.items():
+            if not isinstance(code, str) or not code.strip():
+                raise ReportServiceError(
+                    "Report parameter schema property names must not be empty."
+                )
+            if not isinstance(raw_config, Mapping):
+                raise ReportServiceError(
+                    f"Report parameter schema property {code} must be an object."
+                )
+            raw_type = raw_config.get("type")
+            if raw_type is not None and (
+                not isinstance(raw_type, str) or raw_type not in _REPORT_PARAMETER_TYPES
+            ):
+                raise ReportServiceError(
+                    f"Report parameter schema property {code} has unsupported type."
+                )
+
+    def _validate_report_default_parameters(
+        self,
+        *,
+        schema: Mapping[str, Any] | None,
+        default_parameters: Mapping[str, Any] | None,
+    ) -> None:
+        if default_parameters is None:
+            return
+        self._validate_run_parameters_for_schema(schema, default_parameters)
+
+    def _validate_run_parameters_for_schema(
+        self,
+        schema: Mapping[str, Any] | None,
+        parameters: Mapping[str, Any],
+    ) -> None:
+        if not isinstance(schema, Mapping):
+            return
+
+        properties = schema.get("properties")
+        if not isinstance(properties, Mapping):
+            return
+        errors: list[str] = []
+        required_codes = self._report_parameter_required_codes(schema)
+        for code in sorted(required_codes):
+            if self._is_report_parameter_missing(parameters.get(code)):
+                errors.append(f"Report parameter {code} is required.")
+
+        for code, raw_config in properties.items():
+            if not isinstance(code, str) or not isinstance(raw_config, Mapping):
+                continue
+            raw_type = raw_config.get("type")
+            parameter_type = raw_type if isinstance(raw_type, str) else "string"
+            if parameter_type not in _REPORT_PARAMETER_TYPES:
+                continue
+            value = parameters.get(code)
+            if self._is_report_parameter_missing(value):
+                continue
+            errors.extend(
+                self._validate_report_parameter_value(
+                    code=code,
+                    parameter_type=parameter_type,
+                    value=value,
+                    config=raw_config,
+                )
+            )
+
+        if errors:
+            raise ReportServiceError(f"Invalid report parameters: {'; '.join(errors)}")
+
+    def _validate_report_parameter_value(
+        self,
+        *,
+        code: str,
+        parameter_type: str,
+        value: Any,
+        config: Mapping[str, Any],
+    ) -> list[str]:
+        option_errors = self._validate_report_parameter_options(
+            code=code,
+            parameter_type=parameter_type,
+            value=value,
+            config=config,
+        )
+
+        if parameter_type == "string":
+            if not isinstance(value, str):
+                return [f"Report parameter {code} must be a string.", *option_errors]
+            return [
+                *self._validate_report_string_parameter(code=code, value=value, config=config),
+                *option_errors,
+            ]
+
+        if parameter_type == "boolean":
+            if not isinstance(value, bool):
+                return [f"Report parameter {code} must be a boolean.", *option_errors]
+            return option_errors
+
+        if not self._is_json_number(value):
+            return [f"Report parameter {code} must be a number.", *option_errors]
+        number_value = float(value)
+        numeric_errors = []
+        if parameter_type == "integer" and not self._is_json_integer(value):
+            numeric_errors.append(f"Report parameter {code} must be an integer.")
+        numeric_errors.extend(
+            self._validate_report_numeric_parameter(
+                code=code,
+                value=number_value,
+                config=config,
+            )
+        )
+        return [*numeric_errors, *option_errors]
+
+    def _validate_report_string_parameter(
+        self,
+        *,
+        code: str,
+        value: str,
+        config: Mapping[str, Any],
+    ) -> list[str]:
+        errors: list[str] = []
+        min_length = self._non_negative_integer_constraint(config.get("minLength"))
+        max_length = self._non_negative_integer_constraint(config.get("maxLength"))
+        pattern = config.get("pattern")
+        if min_length is not None and len(value) < min_length:
+            errors.append(f"Report parameter {code} must be at least {min_length} characters.")
+        if max_length is not None and len(value) > max_length:
+            errors.append(f"Report parameter {code} must be at most {max_length} characters.")
+        if isinstance(pattern, str) and not self._matches_report_parameter_pattern(value, pattern):
+            errors.append(f"Report parameter {code} must match pattern.")
+        return errors
+
+    def _validate_report_numeric_parameter(
+        self,
+        *,
+        code: str,
+        value: float,
+        config: Mapping[str, Any],
+    ) -> list[str]:
+        errors: list[str] = []
+        minimum = self._finite_number_constraint(config.get("minimum"))
+        maximum = self._finite_number_constraint(config.get("maximum"))
+        exclusive_minimum = self._finite_number_constraint(config.get("exclusiveMinimum"))
+        exclusive_maximum = self._finite_number_constraint(config.get("exclusiveMaximum"))
+        multiple_of = self._positive_number_constraint(config.get("multipleOf"))
+        if minimum is not None and value < minimum:
+            errors.append(
+                f"Report parameter {code} must be at least {self._format_number(minimum)}."
+            )
+        if maximum is not None and value > maximum:
+            errors.append(
+                f"Report parameter {code} must be at most {self._format_number(maximum)}."
+            )
+        if exclusive_minimum is not None and value <= exclusive_minimum:
+            errors.append(
+                f"Report parameter {code} must be greater than "
+                f"{self._format_number(exclusive_minimum)}."
+            )
+        if exclusive_maximum is not None and value >= exclusive_maximum:
+            errors.append(
+                f"Report parameter {code} must be less than "
+                f"{self._format_number(exclusive_maximum)}."
+            )
+        if multiple_of is not None and not self._is_multiple_of(value, multiple_of):
+            errors.append(
+                f"Report parameter {code} must be a multiple of {self._format_number(multiple_of)}."
+            )
+        return errors
+
+    def _validate_report_parameter_options(
+        self,
+        *,
+        code: str,
+        parameter_type: str,
+        value: Any,
+        config: Mapping[str, Any],
+    ) -> list[str]:
+        options = self._report_parameter_options(config, parameter_type)
+        if not options or value in options:
+            return []
+        formatted_options = ", ".join(self._format_option(option) for option in options)
+        return [f"Report parameter {code} must be one of: {formatted_options}."]
+
+    def _report_parameter_options(
+        self,
+        config: Mapping[str, Any],
+        parameter_type: str,
+    ) -> list[Any]:
+        one_of = config.get("oneOf")
+        if isinstance(one_of, list):
+            options = [
+                option["const"]
+                for option in one_of
+                if isinstance(option, Mapping)
+                and "const" in option
+                and self._matches_report_parameter_type(option["const"], parameter_type)
+            ]
+            if options:
+                return options
+
+        enum = config.get("enum")
+        if not isinstance(enum, list):
+            return []
+        return [
+            option for option in enum if self._matches_report_parameter_type(option, parameter_type)
+        ]
+
+    def _report_parameter_required_codes(self, schema: Mapping[str, Any]) -> set[str]:
+        required = schema.get("required")
+        if not isinstance(required, list):
+            return set()
+        return {code for code in required if isinstance(code, str) and code.strip()}
+
+    def _is_report_parameter_missing(self, value: Any) -> bool:
+        return value is None or (isinstance(value, str) and not value.strip())
+
+    def _matches_report_parameter_type(self, value: Any, parameter_type: str) -> bool:
+        if parameter_type == "string":
+            return isinstance(value, str)
+        if parameter_type == "boolean":
+            return isinstance(value, bool)
+        if parameter_type == "integer":
+            return self._is_json_integer(value)
+        if parameter_type == "number":
+            return self._is_json_number(value)
+        return False
+
+    def _is_json_number(self, value: Any) -> bool:
+        return (
+            isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+        )
+
+    def _is_json_integer(self, value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    def _finite_number_constraint(self, value: Any) -> float | None:
+        if self._is_json_number(value):
+            return float(value)
+        return None
+
+    def _positive_number_constraint(self, value: Any) -> float | None:
+        number = self._finite_number_constraint(value)
+        if number is not None and number > 0:
+            return number
+        return None
+
+    def _non_negative_integer_constraint(self, value: Any) -> int | None:
+        if self._is_json_integer(value) and value >= 0:
+            return int(value)
+        return None
+
+    def _matches_report_parameter_pattern(self, value: str, pattern: str) -> bool:
+        try:
+            return re.search(pattern, value) is not None
+        except re.error:
+            return True
+
+    def _is_multiple_of(self, value: float, multiple_of: float) -> bool:
+        try:
+            value_decimal = Decimal(str(value))
+            multiple_decimal = Decimal(str(multiple_of))
+            return value_decimal % multiple_decimal == 0
+        except (InvalidOperation, ValueError, ZeroDivisionError):
+            quotient = value / multiple_of
+            return math.isclose(quotient, round(quotient), rel_tol=0, abs_tol=1e-12)
+
+    def _format_number(self, value: float) -> str:
+        if value.is_integer():
+            return str(int(value))
+        return str(value)
+
+    def _format_option(self, value: Any) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
 
     def _clean_required_text(self, value: str, label: str) -> str:
         cleaned = value.strip()

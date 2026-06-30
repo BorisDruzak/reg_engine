@@ -2,13 +2,31 @@
 
 ## Status
 
-Planned next.
+Completed locally; deploy pending.
 
 ## Purpose
 
 Stabilize the current implementation after the completed Phase 4V report-parameter validation work and before starting MCP write tools, additional report polish, binary export, or other new product capabilities.
 
 This phase is a bugfix and correctness checkpoint. It must not add unrelated product features.
+
+## Local Implementation Result
+
+Implemented fixes:
+
+- Backend report generation validates the supported flat JSON Schema subset
+  before rendering or writing output bytes.
+- Report template create/update validates the supported schema shape and default
+  parameters before storing template JSON.
+- Generated report output storage writes are registered for SQLAlchemy rollback
+  cleanup, so uncommitted report objects are removed if the surrounding
+  transaction later rolls back.
+- Report download buffering is documented as current bounded MVP behavior; real
+  streaming remains deferred until the storage abstraction exposes an open-file
+  or streaming boundary.
+
+No database schema change or Alembic migration was required; Alembic remains at
+`0014_report_pdf_output`.
 
 ## Current Review Findings
 
@@ -170,6 +188,23 @@ sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .
 ```
 
 If no migration is required, confirm Alembic remains at `0014_report_pdf_output`.
+
+Local evidence so far:
+
+- RED PostgreSQL-backed report run test failed before implementation because
+  invalid/missing parameters were accepted by the API.
+- RED PostgreSQL-backed template schema test failed before implementation
+  because an invalid schema object was accepted by the API.
+- RED PostgreSQL-backed rollback cleanup test failed before implementation
+  because report output bytes remained after transaction rollback.
+- GREEN targeted PostgreSQL-backed Phase 4W tests passed with `3 passed`.
+- Full PostgreSQL-backed report API suite passed with `13 passed`.
+- Targeted `ruff check` and `mypy` passed for the report service changes.
+- Full local check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 141 skipped`, frontend unit `39 passed`, production
+  frontend build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
 
 ## Closeout Criteria
 

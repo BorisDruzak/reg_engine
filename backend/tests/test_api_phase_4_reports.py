@@ -32,6 +32,7 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.services.attachments import LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
@@ -315,6 +316,8 @@ def _create_report_template(
     code: str,
     report_type: str,
     output_format: str = "json",
+    parameters_schema_json: dict[str, Any] | None = None,
+    default_parameters_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     response = api_client.post(
         f"/api/v1/registries/{registry_id}/report-templates",
@@ -324,6 +327,8 @@ def _create_report_template(
             "name": f"{code} report",
             "report_type": report_type,
             "output_format": output_format,
+            "parameters_schema_json": parameters_schema_json,
+            "default_parameters_json": default_parameters_json,
         },
     )
     assert response.status_code == 201, response.text
@@ -334,6 +339,23 @@ def _create_report_template(
     assert "stored_file_id" not in payload
     assert "storage_key" not in payload
     return payload
+
+
+def _assert_report_run_rejected(
+    api_client: TestClient,
+    *,
+    template_id: str,
+    actor_user_id: UUID,
+    parameters: dict[str, Any],
+    detail: str,
+) -> None:
+    response = api_client.post(
+        f"/api/v1/report-templates/{template_id}/runs",
+        headers=_actor_headers(actor_user_id),
+        json={"parameters": parameters},
+    )
+    assert response.status_code == 400, response.text
+    assert detail in response.text
 
 
 def _extract_pdf_text(content: bytes) -> str:
@@ -576,6 +598,55 @@ def test_report_template_settings_can_be_updated_and_audited(
     )
 
 
+def test_report_template_schema_shape_is_validated_at_backend_boundary(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+
+    create_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/report-templates",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "code": "invalid-schema-create",
+            "name": "Invalid schema create",
+            "report_type": "registry_cards",
+            "parameters_schema_json": {"type": "array"},
+        },
+    )
+    assert create_response.status_code == 400, create_response.text
+    assert "Report parameter schema type must be object." in create_response.text
+
+    template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="invalid-schema-update",
+        report_type="registry_cards",
+    )
+    update_response = api_client.patch(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={"parameters_schema_json": {"type": "object", "properties": []}},
+    )
+    assert update_response.status_code == 400, update_response.text
+    assert "Report parameter schema properties must be an object." in update_response.text
+
+    invalid_default_response = api_client.patch(
+        f"/api/v1/report-templates/{template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "parameters_schema_json": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "minimum": 1}},
+            },
+            "default_parameters_json": {"limit": 0},
+        },
+    )
+    assert invalid_default_response.status_code == 400, invalid_default_response.text
+    assert "Report parameter limit must be at least 1." in invalid_default_response.text
+
+
 def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
     api_client: TestClient,
     db_session: Session,
@@ -637,6 +708,149 @@ def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
         ).all()
     )
     assert {"report_run_generate", "report_run_download"} <= audit_actions
+
+
+def test_report_run_parameters_are_validated_at_backend_boundary(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+    base_parameters = {"organization_id": str(context["child"].id)}
+
+    required_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="backend-required-params",
+        report_type="registry_cards",
+        parameters_schema_json={
+            "type": "object",
+            "required": ["section"],
+            "properties": {"section": {"type": "string", "title": "Section"}},
+        },
+    )
+    _assert_report_run_rejected(
+        api_client,
+        template_id=required_template["id"],
+        actor_user_id=context["card_admin"].id,
+        parameters=base_parameters,
+        detail="Report parameter section is required.",
+    )
+
+    string_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="backend-string-params",
+        report_type="registry_cards",
+        parameters_schema_json={
+            "type": "object",
+            "properties": {
+                "report_code": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 8,
+                    "pattern": "^REG-[0-9]+$",
+                }
+            },
+        },
+    )
+    _assert_report_run_rejected(
+        api_client,
+        template_id=string_template["id"],
+        actor_user_id=context["card_admin"].id,
+        parameters={**base_parameters, "report_code": "AB"},
+        detail="Report parameter report_code must be at least 3 characters.",
+    )
+
+    numeric_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="backend-numeric-params",
+        report_type="registry_cards",
+        parameters_schema_json={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                "score": {"type": "number", "exclusiveMinimum": 10, "exclusiveMaximum": 20},
+                "step": {"type": "integer", "multipleOf": 5},
+                "enabled": {"type": "boolean"},
+            },
+        },
+    )
+    _assert_report_run_rejected(
+        api_client,
+        template_id=numeric_template["id"],
+        actor_user_id=context["card_admin"].id,
+        parameters={
+            **base_parameters,
+            "limit": 0,
+            "score": 10,
+            "step": 3,
+            "enabled": "yes",
+        },
+        detail="Report parameter limit must be at least 1.",
+    )
+
+    enum_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="backend-enum-params",
+        report_type="registry_cards",
+        parameters_schema_json={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["open", "closed"]},
+                "view": {
+                    "type": "string",
+                    "oneOf": [
+                        {"const": "summary", "title": "Summary"},
+                        {"const": "detail", "title": "Detail"},
+                    ],
+                },
+            },
+        },
+    )
+    _assert_report_run_rejected(
+        api_client,
+        template_id=enum_template["id"],
+        actor_user_id=context["card_admin"].id,
+        parameters={**base_parameters, "status": "draft", "view": "full"},
+        detail="Report parameter status must be one of: open, closed.",
+    )
+
+
+def test_report_output_storage_is_cleaned_when_transaction_rolls_back(
+    db_session: Session,
+    tmp_path: Path,
+) -> None:
+    context = _report_api_context(db_session)
+    storage = LocalFilesystemAttachmentStorage(tmp_path, key_prefix="reports")
+    service = ReportService(db_session, storage=storage)
+    template = service.create_template_for_actor(
+        actor_user_id=context["schema_admin"].id,
+        registry_id=context["registry"].id,
+        code="rollback-report-output",
+        name="Rollback report output",
+        report_type="registry_cards",
+        output_format="json",
+    )
+
+    report_run = service.generate_report_for_actor(
+        actor_user_id=context["card_admin"].id,
+        template_id=template.id,
+        parameters={"organization_id": str(context["child"].id)},
+    )
+    stored_file = db_session.get(StoredFile, report_run.stored_file_id)
+    assert stored_file is not None
+    storage_key = stored_file.storage_key
+    assert storage.exists(storage_key)
+
+    db_session.rollback()
+
+    assert not storage.exists(storage_key)
 
 
 def test_xlsx_registry_report_runs_are_scoped_stored_and_downloadable(

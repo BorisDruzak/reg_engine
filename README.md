@@ -42,7 +42,7 @@ Target system:
 - Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs, authenticated card export API foundation, CSV import preview/commit API foundation, authenticated JSON/CSV/XLSX/PDF report template/run API foundation, read-only MCP-over-API gateway foundation, and MCP stdio/config hardening.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs, authenticated card export API foundation, CSV import preview/commit API foundation, authenticated JSON/CSV/XLSX/PDF report template/run API foundation with backend report parameter/schema validation and rollback-safe report output cleanup, read-only MCP-over-API gateway foundation, and MCP stdio/config hardening.
 - Current frontend scope has a bearer-authenticated admin shell with organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive, repeatable block-instance add/archive, per-field and bulk dynamic value editing workflows, authenticated public-link list/create/disable controls with attachment-upload limits, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV card export and CSV import preview/commit controls, authenticated report template create/update/archive and JSON/CSV/XLSX/PDF report generate/download/archive controls with template parameter schema/default JSON editing, basic visual run-parameter controls generated from flat schema properties including scalar enum select controls, `oneOf` option titles, date-format string inputs, schema description hints, schema default values, required-parameter validation, scalar `minLength`/`maxLength`/`minimum`/`maximum` validation, `pattern`/`multipleOf` validation, and `exclusiveMinimum`/`exclusiveMaximum` validation, default run-parameter payload fallback when manual JSON is empty, visible run format, filename, parameters, and summary metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download, and full Russian UI browser validation for the core admin setup path.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
 - XLSX card import/export is available as a row-oriented technical exchange
@@ -506,6 +506,16 @@ events. Report template updates support safe settings changes for `name`,
 `report_type`, and `output_format`; existing report runs keep their original
 type and output metadata.
 
+The backend validates the supported flat report parameter schema subset at the
+service/API boundary before generation: `required`, scalar `string`, `number`,
+`integer`, `boolean`, string `minLength` / `maxLength` / `pattern`, numeric
+`minimum` / `maximum` / `exclusiveMinimum` / `exclusiveMaximum` / `multipleOf`,
+`enum`, and `oneOf[].const`. Report template create/update rejects invalid
+supported-schema structures and invalid default parameters instead of storing
+broken run-form state. Generated report output bytes are registered for
+rollback cleanup after storage write, so a later database rollback removes the
+uncommitted report object.
+
 The authenticated registry workspace includes Russian-first report controls for
 creating, updating, and archiving report templates, editing template parameter
 schema/default JSON, generating basic visual run-parameter controls from flat
@@ -524,6 +534,12 @@ report templates and report runs can be shown with Russian archive toggles;
 archived rows display `Архивировано`, archived templates cannot be edited or
 archived again, and archived report runs remain downloadable through
 `include_archive=true` while repeated archive actions stay disabled.
+
+Report run content downloads currently read the authorized report object into
+memory through the storage abstraction and return a normal response. Real
+streaming is deferred until the storage boundary exposes open-file or streaming
+reads; wrapping already-loaded bytes in `StreamingResponse` is intentionally
+not used.
 
 Report scheduling, charts, public-link report workflows, binary
 attachment/document report export, full visual report builder polish, and MCP
