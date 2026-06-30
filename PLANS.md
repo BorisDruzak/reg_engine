@@ -86,6 +86,7 @@ Completed phases:
 - Phase 4Q: Report Run Parameter Description Hints.
 - Phase 4R: Report Run Schema Default Parameters.
 - Phase 4S: Report Run Required Parameter Validation.
+- Phase 4T: Report Run Scalar Constraint Validation.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -334,6 +335,13 @@ Current stop point:
   server checkout is synchronized to `origin/main`, frontend dist is deployed
   with `index-DQlO092U.js`, healthcheck passed, server checks passed, and
   Alembic remains at `0014_report_pdf_output (head)`. No backend code,
+  migrations, endpoints, report formats, full visual report builder, or MCP
+  write tools are included.
+- Phase 4T Report Run Scalar Constraint Validation is completed locally:
+  supported flat report run controls now read `minLength`, `maxLength`,
+  `minimum`, and `maximum`, block generation when provided scalar values fail
+  those constraints, and show a Russian validation message listing the failing
+  parameter labels. Deployment evidence is pending. No backend code,
   migrations, endpoints, report formats, full visual report builder, or MCP
   write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
@@ -3385,6 +3393,87 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4S; no backend schema changes are included.
+
+### Phase 4T: Report Run Scalar Constraint Validation
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by honoring basic flat JSON Schema scalar
+constraints in the Russian report run form before calling the existing report
+run API.
+
+Scope:
+
+- Detect `minLength` and `maxLength` for supported flat string report
+  parameters.
+- Detect `minimum` and `maximum` for supported flat number/integer report
+  parameters.
+- Validate the resolved run parameter payload from manual JSON or merged
+  defaults before report generation.
+- Treat omitted optional values as allowed; required handling remains owned by
+  Phase 4S.
+- Show a Russian validation message listing the failing parameter labels and
+  limits.
+- Do not send the report run POST request when supported scalar constraints
+  fail.
+- Preserve existing manual JSON override, schema defaults, template defaults,
+  required validation, number, integer, boolean, enum, `oneOf`, date,
+  description, output format, archive, download, and metadata display
+  behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A flat string report parameter shorter than `minLength` blocks generation in
+  the Russian UI.
+- A flat number/integer report parameter outside `minimum`/`maximum` blocks
+  generation in the Russian UI.
+- The validation message includes visible parameter labels and limit values.
+- No report run POST is sent while supported scalar constraints fail.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is frontend validation only; backend remains the API/security boundary.
+- Only flat visual parameters supported by the current report form are checked.
+- No nested schema validation, `pattern`, `exclusiveMinimum`,
+  `exclusiveMaximum`, `multipleOf`, arrays, objects, grouped controls, or full
+  visual report builder behavior is included.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because generation
+  was not blocked when an integer was below `minimum` and a string was shorter
+  than `minLength`.
+- GREEN targeted scalar-constraint frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when scalar schema constraints fail"`.
+- Existing required-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when required"`.
+- Existing schema-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report parameter schema defaults"`.
+- Existing template-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report template default parameters"`.
+- Existing date-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Local format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 138 skipped`, frontend unit `37 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4T; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

@@ -4259,6 +4259,59 @@ test("blocks report generation when required schema parameters are empty", async
   ).toBe(false);
 }, 15000);
 
+test("blocks report generation when scalar schema constraints fail", async () => {
+  reportTemplateItems = [
+    {
+      ...apiPayloads.reportTemplates.items[0],
+      parameters_schema_json: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            title: "Лимит",
+            minimum: 1,
+            maximum: 100,
+          },
+          section: {
+            type: "string",
+            title: "Раздел",
+            minLength: 3,
+          },
+        },
+      },
+      default_parameters_json: null,
+      output_format: "csv",
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  await user.type(await screen.findByLabelText("Лимит"), "0");
+  await user.type(screen.getByLabelText("Раздел"), "ab");
+  await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
+
+  expect(
+    await screen.findByText(
+      "Проверьте параметры отчета: Лимит должен быть не меньше 1; Раздел должен быть не короче 3 символов",
+    ),
+  ).toBeInTheDocument();
+  const fetchMock = vi.mocked(fetch);
+  expect(
+    fetchMock.mock.calls.some(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith("/api/v1/report-templates/51515151-5151-4151-8151-515151515151/runs") &&
+        init?.method === "POST"
+      );
+    }),
+  ).toBe(false);
+}, 15000);
+
 test("renders date report parameters as date inputs", async () => {
   reportTemplateItems = [
     {

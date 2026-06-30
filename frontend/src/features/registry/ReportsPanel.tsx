@@ -28,6 +28,10 @@ type ReportParameterField = {
   label: string;
   description: string | null;
   required: boolean;
+  minLength: number | null;
+  maxLength: number | null;
+  minimum: number | null;
+  maximum: number | null;
   type: ReportParameterFieldType;
   inputType: "date" | "number" | "text";
   options: ReportParameterOption[];
@@ -774,6 +778,10 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
         label,
         description,
         required: requiredCodes.has(code),
+        minLength: getNonNegativeIntegerConstraint(rawConfig.minLength),
+        maxLength: getNonNegativeIntegerConstraint(rawConfig.maxLength),
+        minimum: getFiniteNumberConstraint(rawConfig.minimum),
+        maximum: getFiniteNumberConstraint(rawConfig.maximum),
         type: rawType,
         inputType: getReportParameterInputType(rawConfig, rawType),
         options: getReportParameterOptions(rawConfig, rawType),
@@ -805,9 +813,49 @@ function validateReportRunParameters(
     return [field.label];
   });
   if (missingLabels.length === 0) {
-    return null;
+    const constraintErrors = fields.flatMap((field) =>
+      validateReportParameterConstraints(field, parameters?.[field.code]),
+    );
+    if (constraintErrors.length === 0) {
+      return null;
+    }
+    return `${uiText.reportInvalidParameters}: ${constraintErrors.join("; ")}`;
   }
   return `${uiText.reportRequiredParameters}: ${missingLabels.join(", ")}`;
+}
+
+function validateReportParameterConstraints(field: ReportParameterField, value: unknown) {
+  if (isReportParameterMissing(value)) {
+    return [];
+  }
+  if (field.type === "string") {
+    const textValue = String(value);
+    return [
+      ...(field.minLength !== null && textValue.length < field.minLength
+        ? [`${field.label} должен быть не короче ${field.minLength} символов`]
+        : []),
+      ...(field.maxLength !== null && textValue.length > field.maxLength
+        ? [`${field.label} должен быть не длиннее ${field.maxLength} символов`]
+        : []),
+    ];
+  }
+  if (field.type !== "number" && field.type !== "integer") {
+    return [];
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return [`${field.label} должен быть числом`];
+  }
+  return [
+    ...(field.type === "integer" && !Number.isInteger(value)
+      ? [`${field.label} должен быть целым числом`]
+      : []),
+    ...(field.minimum !== null && value < field.minimum
+      ? [`${field.label} должен быть не меньше ${field.minimum}`]
+      : []),
+    ...(field.maximum !== null && value > field.maximum
+      ? [`${field.label} должен быть не больше ${field.maximum}`]
+      : []),
+  ];
 }
 
 function isReportParameterMissing(value: unknown) {
@@ -815,6 +863,14 @@ function isReportParameterMissing(value: unknown) {
     return true;
   }
   return typeof value === "string" && value.trim() === "";
+}
+
+function getFiniteNumberConstraint(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getNonNegativeIntegerConstraint(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 function getReportParameterDefaults(schema: Record<string, unknown> | null) {
