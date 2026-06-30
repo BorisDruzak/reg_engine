@@ -549,6 +549,43 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_create_document_template",
+        "title": "Create document template",
+        "description": "Create a text document template through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "code": {"type": "string"},
+                "name": {"type": "string"},
+                "template_body": {"type": "string"},
+                "description": {"type": "string"},
+                "output_filename_template": {"type": "string"},
+            },
+            "required": ["registry_id", "code", "name", "template_body"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_document_template",
+        "title": "Archive document template",
+        "description": (
+            "Archive a document template through the Registry Engine API. "
+            "Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["template_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -824,6 +861,28 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/report-runs/{report_run_id}")
+    if name == "reg_engine_create_document_template":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        document_template_payload: dict[str, Any] = {
+            "code": _required_str_arg(arguments, "code"),
+            "name": _required_str_arg(arguments, "name"),
+            "template_body": _required_str_arg(arguments, "template_body"),
+        }
+        _add_optional_str(document_template_payload, arguments, "description")
+        _add_optional_str(
+            document_template_payload,
+            arguments,
+            "output_filename_template",
+        )
+        return client.post_json(
+            f"/api/v1/registries/{registry_id}/document-templates",
+            document_template_payload,
+        )
+    if name == "reg_engine_archive_document_template":
+        template_id = _required_str_arg(arguments, "template_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/document-templates/{template_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 

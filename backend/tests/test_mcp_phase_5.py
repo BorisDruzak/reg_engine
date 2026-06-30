@@ -207,6 +207,8 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_archive_report_template",
         "reg_engine_generate_report_run",
         "reg_engine_archive_report_run",
+        "reg_engine_create_document_template",
+        "reg_engine_archive_document_template",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -1527,6 +1529,148 @@ def test_mcp_archive_report_run_tool_requires_confirmation_before_delete() -> No
     assert archived["structuredContent"]["id"] == report_run_id
     assert transport.requests[0]["method"] == "DELETE"
     assert transport.requests[0]["url"] == f"http://api.local/api/v1/report-runs/{report_run_id}"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
+
+
+def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_create_document_template"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == [
+        "registry_id",
+        "code",
+        "name",
+        "template_body",
+    ]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    registry_id = str(uuid4())
+    template_id = str(uuid4())
+    template_body = "Карточка: {{ card.display_name }}"
+    transport = RecordingTransport(
+        {
+            "id": template_id,
+            "registry_id": registry_id,
+            "code": "summary",
+            "name": "Summary",
+            "description": "Document summary",
+            "template_format": "docx_text_v1",
+            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_content_type": (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            "is_active": True,
+            "current_version_id": str(uuid4()),
+            "current_version_number": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": None,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_document_template",
+        {
+            "registry_id": registry_id,
+            "code": "summary",
+            "name": "Summary",
+            "description": "Document summary",
+            "template_body": template_body,
+            "output_filename_template": "{{ card.display_name }}.docx",
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == template_id
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/registries/{registry_id}/document-templates"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "code": "summary",
+        "name": "Summary",
+        "description": "Document summary",
+        "template_body": template_body,
+        "output_filename_template": "{{ card.display_name }}.docx",
+    }
+
+
+def test_mcp_archive_document_template_tool_requires_confirmation_before_delete() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_archive_document_template"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["template_id", "confirm_archive"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    template_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": template_id,
+            "registry_id": str(uuid4()),
+            "code": "summary",
+            "name": "Summary",
+            "description": None,
+            "template_format": "docx_text_v1",
+            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_content_type": (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            "is_active": False,
+            "current_version_id": str(uuid4()),
+            "current_version_number": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": "2026-01-02T00:00:00Z",
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_archive_document_template",
+        {"template_id": template_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_archive" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    archived = call_tool(
+        "reg_engine_archive_document_template",
+        {"template_id": template_id, "confirm_archive": True},
+        client=client,
+    )
+
+    assert archived["isError"] is False
+    assert archived["structuredContent"]["id"] == template_id
+    assert transport.requests[0]["method"] == "DELETE"
+    assert (
+        transport.requests[0]["url"] == f"http://api.local/api/v1/document-templates/{template_id}"
+    )
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
 

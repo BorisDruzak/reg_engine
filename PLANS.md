@@ -125,6 +125,13 @@ Current stop point:
   `0014_report_pdf_output (head)`. No production report run was generated or
   archived during smoke validation. Report output download/content tools stay
   deferred as binary workflows.
+- Phase 5M MCP Document Template Write Tools is completed locally and pending
+  full local check, push, and deploy: text document template create/archive MCP
+  tools call only existing REST API endpoints, while template permissions, text
+  template validation, archive semantics, version metadata, and audit remain
+  API-enforced. Binary `.docx` template upload, template version upload,
+  generated document workflows, and document content download stay deferred for
+  later MCP phases.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5137,6 +5144,104 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5L; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5M: MCP Document Template Write Tools
+
+Status: completed locally; pending full local check, push, and deploy.
+
+Purpose: extend the API-only MCP write surface with text document template
+create/archive operations while keeping registry/template permissions,
+template validation, version metadata, archive semantics, and audit in the
+existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_create_document_template`
+- `reg_engine_archive_document_template`
+
+Argument schemas:
+
+- `reg_engine_create_document_template`:
+  - `registry_id`: required string.
+  - `code`: required string.
+  - `name`: required string.
+  - `template_body`: required string.
+  - `description`: optional string.
+  - `output_filename_template`: optional string.
+  - `additionalProperties=false`.
+- `reg_engine_archive_document_template`:
+  - `template_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/registries/{registry_id}/document-templates`
+- `DELETE /api/v1/document-templates/{template_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Registry visibility, document template permissions, text template validation,
+  version metadata, archive semantics, and audit remain API-side in the
+  existing document service.
+- Archive requires explicit `confirm_archive=true` before sending `DELETE`.
+
+Scope:
+
+- Expose the two tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F/5G/5H/5I/5J/5K/5L
+  write behavior.
+- Create only supports the existing JSON text-template endpoint.
+- Do not upload binary `.docx` templates, upload template versions, generate
+  documents, archive generated documents, download document content, mutate
+  public links, upload or download attachments, import/export data, or add
+  other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as write tools.
+- Create document template sends
+  `POST /api/v1/registries/{registry_id}/document-templates` with required
+  values and only provided optional fields.
+- Archive document template sends
+  `DELETE /api/v1/document-templates/{template_id}` only when
+  `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not create or archive production document
+  templates without a disposable production-safe target.
+- MCP binary `.docx` template upload/version upload, generated document
+  generate/archive, document content download, public-link, attachment
+  upload/download, and import/export write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_create_document_template` and
+  `reg_engine_archive_document_template` were absent from
+  `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `37 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `103 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5M; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
