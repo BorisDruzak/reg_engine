@@ -107,8 +107,30 @@ Completed phases:
 - Phase 5O: MCP Document Metadata Read Tools.
 - Phase 5P: MCP Report And Generated Document Content Read Tools.
 
+Planned phases:
+
+- Phase 5Q: MCP Content And Cross-Cutting Stabilization.
+- Phase 5R: User Scenario UAT Bugfix And Product Readiness.
+
 Current stop point:
 
+- Phase 5Q is the single next active implementation checkpoint. Source plan:
+  `docs/PHASE_5Q_BUGFIX_PLAN.md`. This is a bugfix/correctness phase after
+  Phase 5P and before any new MCP tools, report polish, binary export, public
+  document workflows, or new product capabilities.
+- Phase 5R is planned after Phase 5Q. Source plan:
+  `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`. The user-facing UAT filename
+  was referred to as `docs/PHASE_5R_USER_SCENARIO_UAT_BUGFIX_PLAN.md`; the
+  tracked repository file is `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`.
+- Production Alembic remains at `0014_report_pdf_output (head)` unless a
+  Phase 5Q/5R task proves that a migration is necessary and the standard
+  migration approval flow passes.
+- Phase 5Q and Phase 5R must not add unrelated product work. Deferred scope
+  stays deferred: new MCP tool categories, import/export MCP tools, attachment
+  upload/download MCP tools, public-link document workflows, new report
+  formats, scheduled reports, full visual report builder, binary
+  attachment/document export, new storage backends, hardcoded HR fields, MDB
+  migration, and service desk integration.
 - Phase 5K MCP Report Template Write Tools is completed and deployed:
   report template create/update/archive MCP tools call only existing REST API
   endpoints, with report template permissions, validation, archive semantics,
@@ -5665,6 +5687,238 @@ Production migration checkpoint:
 
 - Not required for Phase 5P; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5Q: MCP Content And Cross-Cutting Stabilization
+
+Status: planned next.
+
+Source plan: `docs/PHASE_5Q_BUGFIX_PLAN.md`.
+
+Purpose: stabilize the current Phase 5 MCP-heavy implementation after Phase 5P
+and before adding more MCP tools, report polish, binary export, public document
+workflows, or new product capabilities.
+
+Required work:
+
+- Make Phase 5Q the unambiguous active implementation checkpoint in this plan.
+- Add an explicit MCP report/generated-document content-size guardrail before
+  returning base64 content. Prefer `REG_ENGINE_MCP_MAX_CONTENT_BYTES` with a
+  safe default.
+- Decide and document the sensitive-content UX contract for MCP content reads:
+  either require an explicit confirmation argument or document why
+  authenticated API scope is sufficient for the current deployment.
+- Audit all MCP write tools for consistent `readOnlyHint=false`, REST-only API
+  boundary usage, no DB/model/service imports, confirmation flags for
+  destructive operations, no raw storage key/path exposure, and clear
+  validation before API calls.
+- Normalize MCP error payloads so useful validation information remains
+  available without exposing storage paths, SQL traces, stack traces, or raw
+  internals.
+- Document current byte-buffer REST/MCP download behavior and MVP size
+  assumptions. Do not add pseudo-streaming without a real storage streaming or
+  open-file boundary.
+- Keep attachment content, document-template content, public-link workflows,
+  import/export MCP tools, and additional write tools deferred unless
+  explicitly approved later.
+
+Allowed work:
+
+- MCP content-size limit and tests.
+- MCP content-read confirmation or documented no-confirmation decision and
+  tests.
+- MCP write-tool safety audit and tests.
+- MCP error-boundary cleanup.
+- Documentation updates.
+- Small MCP API-client changes needed by the above.
+
+Not allowed:
+
+- New MCP write tools or new MCP tool categories.
+- Import/export MCP tools.
+- Attachment upload/download MCP tools.
+- Public-link document workflows.
+- New report formats, scheduled reports, or full visual report builder.
+- Binary attachment/document export.
+- New storage backend.
+- Hardcoded HR-specific fields, MDB migration, or service desk integration.
+
+Acceptance criteria:
+
+- The next implementation step is unambiguous and no completed phase is also
+  listed as pending.
+- MCP content tools cannot return unbounded base64 payloads.
+- Oversized content behavior is deterministic and documented.
+- Content-read behavior is deliberate, documented, and reflected in tool
+  descriptions/tests.
+- All MCP write tools have consistent safety annotations and validation
+  behavior.
+- Destructive MCP tools require explicit confirmation.
+- No MCP tool bypasses the REST API.
+- MCP tool errors remain actionable without exposing sensitive internals.
+- REST/MCP memory behavior is explicit and tested where the code enforces a
+  limit.
+- Deferred scope remains explicit in README/PLANS.
+
+Required tests:
+
+- Content read under size limit returns base64 and safe metadata.
+- Content read over size limit returns the chosen controlled error/omission
+  response.
+- Content-read confirmation behavior matches the chosen contract if
+  confirmation is added.
+- All MCP write tools have `readOnlyHint=false`.
+- All MCP read tools have `readOnlyHint=true`.
+- Destructive MCP tools require explicit confirmation.
+- MCP API errors are normalized and do not expose storage paths, SQL traces, or
+  raw internals.
+- Existing Phase 5 MCP tests continue to pass.
+
+Verification required before closeout:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+pnpm -C frontend e2e
+```
+
+Server-side targeted verification where applicable:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider backend/tests/test_mcp_phase_5.py
+```
+
+Production migration checkpoint:
+
+- No migration is planned for Phase 5Q. Confirm Alembic remains at
+  `0014_report_pdf_output (head)` unless the implemented fix explicitly
+  requires a migration and the standard migration flow passes.
+
+### Phase 5R: User Scenario UAT Bugfix And Product Readiness
+
+Status: planned after Phase 5Q.
+
+Source plan: `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`.
+
+Purpose: validate and harden real end-to-end user scenarios across the full
+product surface before adding more MCP tools, report polish, binary export,
+public document workflows, or new product capabilities.
+
+Required work:
+
+- Fix global frontend data loading so scoped users do not see unrelated global
+  permission-noise while working in allowed sections.
+- Add an explicit UAT scenario matrix for `system_admin`, `registry_admin`,
+  `org_admin` / scoped card manager, public-link user, and MCP operator token.
+- Decide and implement or document the intended card field editing UX when
+  single-field and bulk-field editors both exist. Keep `file_ref` available
+  through the attachment-aware editor.
+- Decide whether existing-card `org_unit_id` correction is allowed in v1. If
+  allowed, add backend/API/frontend/audit support; if deferred, document the
+  limitation in UI/UAT.
+- Add or confirm card list controls for search text, organization filter,
+  archive/superseded visibility, and lifecycle status display.
+- Add explicit CSV/XLSX import upload size and row-count limits for preview and
+  commit, with stable 4xx errors and tests.
+- Decide whether public-link attachment APIs expose safe upload-limit metadata;
+  if safe, show Russian exhausted-limit state before submit while preserving
+  list/download access.
+- Complete Phase 5Q before marking MCP user scenarios ready. Include MCP
+  scenario tests for metadata reads, content reads under limit, oversized
+  content handling, forbidden content access, bad IDs, and backend 4xx errors.
+- Add a documented backup/restore drill using a disposable copy and verify app
+  startup, Alembic state, login, card read, attachment download, generated
+  document download, and report download after restore.
+- Document the supported flat report parameter JSON Schema subset.
+- Keep binary attachment/document export expectations explicit as
+  metadata-only in card export.
+
+Required scenario matrix:
+
+- System admin: login/logout, organization management, user management,
+  access-grant management, registry/schema creation, audit reads, and no global
+  frontend error noise.
+- Registry admin: schema block/field management, reference list/item
+  management, template/report-template management where permitted, and denied
+  unrelated organization/user administration where applicable.
+- Org admin / scoped card manager: sees only assigned organization branch and
+  descendants, cannot see parent/sibling branches, can manage cards in scope,
+  can use attachments, `file_ref`, generated documents, imports/exports, and
+  reports only within scope, and sees no global users/roles/audit permission
+  errors while working with cards.
+- Public-link user: opens card without login, edits only public-editable
+  fields, uploads/lists/downloads attachments within public-link rules, cannot
+  archive/delete files, cannot edit `file_ref` unless a later phase approves
+  it, and sees useful Russian errors for expired/disabled/exhausted links.
+- MCP operator: tools use REST API only, read tools are read-only annotated,
+  destructive write tools require confirmation, content reads have
+  size/sensitivity guardrails, and forbidden operations return normalized
+  errors.
+
+Allowed work:
+
+- User-scenario bug fixes.
+- Frontend query/loading/permission UX fixes.
+- Import size/row limit hardening.
+- Card list/filter/archive UX fixes.
+- Card metadata/org-unit correction decision and implementation if accepted
+  inside the bugfix scope.
+- UAT scenario documentation and tests.
+- MCP content-read scenario hardening inherited from Phase 5Q.
+
+Not allowed:
+
+- New report formats.
+- New MCP tool categories.
+- Public-link document workflows.
+- Binary attachment/document export.
+- New storage backend.
+- Service desk integration.
+- MDB migration.
+- Hardcoded HR-specific fields.
+
+Acceptance criteria:
+
+- Scoped card/org users can open and edit allowed cards without global error
+  noise.
+- Admin-only sections show clear local access errors when opened without
+  permission.
+- Each major role has a clear allowed/denied scenario checklist.
+- UAT blockers are recorded as bugs.
+- Users have one obvious primary way to edit card fields.
+- Card department/unit correction behavior is explicit.
+- Large registries can be navigated through visible search/filter/archive
+  controls without bypassing RBAC.
+- Import workflows cannot consume unbounded memory from large uploads.
+- Public users understand whether they can upload more files, and upload
+  exhaustion does not imply list/download failure.
+- MCP content scenarios are safe and predictable.
+- A restore procedure is proven before production use with real data.
+- Report template authors understand the supported parameter schema subset.
+- Users do not expect CSV/XLSX/JSON card exports to contain binary files.
+
+Verification required before closeout:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
+pnpm -C frontend e2e
+```
+
+Server-side validation where applicable:
+
+```bash
+cd /opt/reg_engine/backend
+sudo -u postgres env TEST_DATABASE_URL='postgresql+psycopg:///reg_engine_test' .venv/bin/python -m pytest -q -p no:cacheprovider
+```
+
+Manual UAT must run against disposable/staging data, not production personal
+data.
+
+Production migration checkpoint:
+
+- No migration is pre-approved by merely planning Phase 5R. If any Phase 5R
+  fix requires a schema change, apply the standard planned migration rules:
+  disposable PostgreSQL verification, fresh backup, preflight, intentional
+  production target, and post-checks.
 
 ## Verification
 
