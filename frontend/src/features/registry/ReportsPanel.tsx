@@ -33,6 +33,8 @@ type ReportParameterField = {
   maxLength: number | null;
   minimum: number | null;
   maximum: number | null;
+  exclusiveMinimum: number | null;
+  exclusiveMaximum: number | null;
   multipleOf: number | null;
   type: ReportParameterFieldType;
   inputType: "date" | "number" | "text";
@@ -785,6 +787,8 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
         maxLength: getNonNegativeIntegerConstraint(rawConfig.maxLength),
         minimum: getFiniteNumberConstraint(rawConfig.minimum),
         maximum: getFiniteNumberConstraint(rawConfig.maximum),
+        exclusiveMinimum: getFiniteNumberConstraint(rawConfig.exclusiveMinimum),
+        exclusiveMaximum: getFiniteNumberConstraint(rawConfig.exclusiveMaximum),
         multipleOf: getPositiveNumberConstraint(rawConfig.multipleOf),
         type: rawType,
         inputType: getReportParameterInputType(rawConfig, rawType),
@@ -861,6 +865,12 @@ function validateReportParameterConstraints(field: ReportParameterField, value: 
       : []),
     ...(field.maximum !== null && value > field.maximum
       ? [`${field.label} должен быть не больше ${field.maximum}`]
+      : []),
+    ...(field.exclusiveMinimum !== null && value <= field.exclusiveMinimum
+      ? [`${field.label} должен быть больше ${field.exclusiveMinimum}`]
+      : []),
+    ...(field.exclusiveMaximum !== null && value >= field.exclusiveMaximum
+      ? [`${field.label} должен быть меньше ${field.exclusiveMaximum}`]
       : []),
     ...(field.multipleOf !== null && !isReportParameterMultipleOf(value, field.multipleOf)
       ? [`${field.label} должен быть кратен ${field.multipleOf}`]

@@ -88,6 +88,7 @@ Completed phases:
 - Phase 4S: Report Run Required Parameter Validation.
 - Phase 4T: Report Run Scalar Constraint Validation.
 - Phase 4U: Report Run Pattern And Multiple Validation.
+- Phase 4V: Report Run Exclusive Bound Validation.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -357,6 +358,13 @@ Current stop point:
   healthcheck passed, server checks passed, and Alembic remains at
   `0014_report_pdf_output (head)`. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
+- Phase 4V Report Run Exclusive Bound Validation is completed locally;
+  deployment is pending: supported flat number/integer report run controls now
+  read numeric `exclusiveMinimum` and `exclusiveMaximum`, block generation when
+  provided values are equal to or cross those exclusive bounds, and show a
+  Russian validation message listing the failing parameter labels. No backend
+  code, migrations, endpoints, report formats, full visual report builder, or
+  MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3600,6 +3608,79 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4U; no backend schema changes are included.
+
+### Phase 4V: Report Run Exclusive Bound Validation
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by honoring flat JSON Schema exclusive numeric
+bounds in the Russian report run form before calling the existing report run
+API.
+
+Scope:
+
+- Detect numeric `exclusiveMinimum` for supported flat number/integer report
+  parameters.
+- Detect numeric `exclusiveMaximum` for supported flat number/integer report
+  parameters.
+- Validate the resolved run parameter payload from manual JSON or merged
+  defaults before report generation.
+- Show a Russian validation message listing the failing parameter labels and
+  exclusive bound values.
+- Do not send the report run POST request when supported exclusive bounds fail.
+- Preserve existing manual JSON override, schema defaults, template defaults,
+  required validation, scalar min/max validation, `pattern`, `multipleOf`,
+  number, integer, boolean, enum, `oneOf`, date, description, output format,
+  archive, download, and metadata display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A flat number/integer report parameter equal to `exclusiveMinimum` blocks
+  generation in the Russian UI.
+- A flat number/integer report parameter equal to `exclusiveMaximum` blocks
+  generation in the Russian UI.
+- The validation message includes visible parameter labels and exclusive bound
+  values.
+- No report run POST is sent while supported exclusive bounds fail.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is frontend validation only; backend remains the API/security boundary.
+- Only flat visual parameters supported by the current report form are checked.
+- Boolean JSON Schema draft-06 style `exclusiveMinimum=true` /
+  `exclusiveMaximum=true` with separate inclusive bounds is not supported.
+- No nested schema validation, conditional schema, arrays, objects, grouped
+  controls, or full visual report builder behavior is included.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because generation
+  was not blocked when a number equaled `exclusiveMinimum` and another number
+  equaled `exclusiveMaximum`.
+- GREEN targeted exclusive-bound frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when exclusive numeric bounds fail"`.
+- Neighboring report validation targeted frontend tests passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when (scalar schema constraints fail|pattern or multipleOf constraints fail|exclusive numeric bounds fail|required)|uses report parameter schema defaults|renders date report parameters|manages report templates"`
+  with `7 passed`.
+- Local format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 138 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4V; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

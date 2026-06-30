@@ -4364,6 +4364,58 @@ test("blocks report generation when pattern or multipleOf constraints fail", asy
   ).toBe(false);
 }, 15000);
 
+test("blocks report generation when exclusive numeric bounds fail", async () => {
+  reportTemplateItems = [
+    {
+      ...apiPayloads.reportTemplates.items[0],
+      parameters_schema_json: {
+        type: "object",
+        properties: {
+          min_score: {
+            type: "number",
+            title: "Минимальный балл",
+            exclusiveMinimum: 10,
+          },
+          max_ratio: {
+            type: "number",
+            title: "Коэффициент",
+            exclusiveMaximum: 1,
+          },
+        },
+      },
+      default_parameters_json: null,
+      output_format: "csv",
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  await user.type(await screen.findByLabelText("Минимальный балл"), "10");
+  await user.type(screen.getByLabelText("Коэффициент"), "1");
+  await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
+
+  expect(
+    await screen.findByText(
+      "Проверьте параметры отчета: Минимальный балл должен быть больше 10; Коэффициент должен быть меньше 1",
+    ),
+  ).toBeInTheDocument();
+  const fetchMock = vi.mocked(fetch);
+  expect(
+    fetchMock.mock.calls.some(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith("/api/v1/report-templates/51515151-5151-4151-8151-515151515151/runs") &&
+        init?.method === "POST"
+      );
+    }),
+  ).toBe(false);
+}, 15000);
+
 test("renders date report parameters as date inputs", async () => {
   reportTemplateItems = [
     {
