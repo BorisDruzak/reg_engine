@@ -74,6 +74,7 @@ Completed phases:
 - Phase 4E: Report Run List Polish.
 - Phase 4F: Report Archive Visibility.
 - Phase 4G: XLSX Report Output.
+- Phase 4H: PDF Report Output.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -233,8 +234,14 @@ Current stop point:
   PostgreSQL is migrated to `0013_report_xlsx_output` after backup and
   disposable PostgreSQL verification, frontend dist is deployed, healthcheck
   passed, and server checks passed.
-- Phase 4H PDF Report Output is in progress as the next bounded report output
-  format slice.
+- Phase 4H PDF Report Output is completed and deployed: `pdf` is accepted as
+  a report template output format, generated PDF report runs are stored through
+  the report storage abstraction, downloaded with `application/pdf`, and
+  selectable from the Russian report UI. Commit `54d0150` is pushed, the
+  server checkout is synchronized to `origin/main`, production PostgreSQL is
+  migrated to `0014_report_pdf_output` after backup and disposable PostgreSQL
+  verification, frontend dist is deployed, healthcheck passed, and server
+  checks passed.
 - Later explicit phases remain MCP write tools and
   additional report polish.
 - Binary attachment/document export, additional report
@@ -1783,8 +1790,8 @@ Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
-report archive visibility, and XLSX report output slices. Phase 4H PDF report
-output is in progress; additional report polish remains deferred.
+report archive visibility, XLSX report output, and PDF report output slices.
+Additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2050,7 +2057,8 @@ Known limitations:
 
 - CSV schemas are simple technical exports per existing report type, not a
   visual report builder.
-- XLSX/PDF report outputs remain deferred.
+- XLSX/PDF report outputs were outside Phase 4D and were completed later in
+  Phase 4G/4H.
 - Scheduled/background reports, charts, and public-link report workflows remain
   deferred.
 - No MCP report write tools.
@@ -2126,7 +2134,8 @@ Acceptance criteria:
 Known limitations:
 
 - This is list polish only; it does not add a visual report builder.
-- XLSX/PDF report outputs remain deferred.
+- XLSX/PDF report outputs were outside Phase 4E and were completed later in
+  Phase 4G/4H.
 - Scheduled/background reports, charts, and public-link report workflows remain
   deferred.
 - No MCP report write tools.
@@ -2209,7 +2218,8 @@ Known limitations:
 
 - This is archive visibility polish only; it does not add a visual report
   builder.
-- XLSX/PDF report outputs remain deferred.
+- XLSX/PDF report outputs were outside Phase 4F and were completed later in
+  Phase 4G/4H.
 - Scheduled/background reports, charts, and public-link report workflows remain
   deferred.
 - No MCP report write tools.
@@ -2289,7 +2299,7 @@ Known limitations:
 
 - XLSX sheets are simple technical report outputs per existing report type, not
   a visual report builder.
-- PDF report outputs remain deferred.
+- PDF report output was outside Phase 4G and was completed later in Phase 4H.
 - Scheduled/background reports, charts, and public-link report workflows remain
   deferred.
 - No MCP report write tools.
@@ -2348,7 +2358,7 @@ Production migration checkpoint:
 
 ### Phase 4H: PDF Report Output
 
-Status: in progress.
+Status: completed.
 
 Purpose: add PDF as the next report output format while preserving the existing
 report service/API boundary, storage abstraction, visibility scope, and audit
@@ -2417,10 +2427,37 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Disposable PostgreSQL verification passed on server database
+  `reg_engine_phase4h_test`: clean `alembic upgrade head` reached
+  `0014_report_pdf_output`, the targeted PDF report API test passed, and
+  the disposable constraint check showed `json`, `csv`, `xlsx`, and `pdf`.
+- Deployed commit `54d0150` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after migration and frontend deployment.
+- Server smoke confirmed `server_head=54d0150`, Alembic
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-Bto_Mwm8.js`.
 
 Production migration checkpoint:
 
-- Pending for `0014_report_pdf_output`.
+- Production PostgreSQL was migrated from `0013_report_xlsx_output` to
+  `0014_report_pdf_output` on 2026-06-30.
+- Server checkout was synchronized to commit `54d0150` before migration.
+- Preflight confirmed target database `reg_engine`, Alembic current
+  `0013_report_xlsx_output`, and zero `report_templates` rows with output
+  formats outside `json`, `csv`, `xlsx`, or `pdf`.
+- Backup was created before migration:
+  `/var/backups/reg_engine/reg_engine_before_0014_report_pdf_output_20260630T034318Z.dump`
+  (`126923` bytes).
+- Post-check confirmed Alembic `0014_report_pdf_output (head)` and
+  `ck_report_templates_output_format` allows `json`, `csv`, `xlsx`, and
+  `pdf`.
+- Backend service was restarted through frontend deployment; a first immediate
+  health curl raced the restart, then repeated healthcheck returned `ok`.
 
 ### Phase 5: MCP Over API Only
 
