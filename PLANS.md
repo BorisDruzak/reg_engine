@@ -75,6 +75,7 @@ Completed phases:
 - Phase 4F: Report Archive Visibility.
 - Phase 4G: XLSX Report Output.
 - Phase 4H: PDF Report Output.
+- Phase 4I: Report Template Type And Format Edit.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -242,8 +243,13 @@ Current stop point:
   migrated to `0014_report_pdf_output` after backup and disposable PostgreSQL
   verification, frontend dist is deployed, healthcheck passed, and server
   checks passed.
-- Phase 4I Report Template Type And Format Edit is in progress as a bounded
-  report polish slice.
+- Phase 4I Report Template Type And Format Edit is completed and deployed:
+  active report templates can update `report_type` and `output_format` through
+  the existing PATCH API and Russian edit form, with existing validation,
+  permission checks, audit, and archive protection. Commit `87c6481` is
+  pushed, the server checkout is synchronized to `origin/main`, frontend dist
+  is deployed, disposable PostgreSQL-backed API verification passed,
+  healthcheck passed, and server checks passed. No migration was required.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1791,9 +1797,8 @@ Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
-report archive visibility, XLSX report output, and PDF report output slices.
-Phase 4I report template type/format edit polish is in progress. Additional
-report polish remains deferred.
+report archive visibility, XLSX report output, PDF report output, and report
+template type/format edit slices. Additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2463,7 +2468,7 @@ Production migration checkpoint:
 
 ### Phase 4I: Report Template Type And Format Edit
 
-Status: in progress.
+Status: completed.
 
 Purpose: close a report settings polish gap by allowing authenticated registry
 schema admins to change an existing report template's `report_type` and
@@ -2525,10 +2530,26 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Disposable PostgreSQL-backed API verification passed on server database
+  `reg_engine_phase4i_test`: clean `alembic upgrade head` reached
+  `0014_report_pdf_output`, and
+  `tests/test_api_phase_4_reports.py::test_report_template_settings_can_be_updated_and_audited`
+  passed.
+- Deployed commit `87c6481` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=87c6481`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-DVU7TUsK.js`.
 
 Production migration checkpoint:
 
-- Not required for Phase 4I.
+- Not required for Phase 4I; production Alembic remained
+  `0014_report_pdf_output (head)`.
 
 ### Phase 5: MCP Over API Only
 
