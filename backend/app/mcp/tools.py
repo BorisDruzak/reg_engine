@@ -458,6 +458,65 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_create_report_template",
+        "title": "Create report template",
+        "description": "Create a report template through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "code": {"type": "string"},
+                "name": {"type": "string"},
+                "report_type": {"type": "string"},
+                "description": {"type": "string"},
+                "parameters_schema_json": {"type": "object"},
+                "default_parameters_json": {"type": "object"},
+                "output_format": {"type": "string"},
+            },
+            "required": ["registry_id", "code", "name", "report_type"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_update_report_template",
+        "title": "Update report template",
+        "description": "Update report template settings through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "report_type": {"type": "string"},
+                "parameters_schema_json": {"type": "object"},
+                "default_parameters_json": {"type": "object"},
+                "output_format": {"type": "string"},
+            },
+            "required": ["template_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_report_template",
+        "title": "Archive report template",
+        "description": (
+            "Archive a report template through the Registry Engine API. "
+            "Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["template_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -677,6 +736,49 @@ def _call_tool_or_raise(
             f"/api/v1/cards/{card_id}/transfer",
             {"target_organization_id": target_organization_id},
         )
+    if name == "reg_engine_create_report_template":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        report_template_payload: dict[str, Any] = {
+            "code": _required_str_arg(arguments, "code"),
+            "name": _required_str_arg(arguments, "name"),
+            "report_type": _required_str_arg(arguments, "report_type"),
+        }
+        _add_optional_str(report_template_payload, arguments, "description")
+        _add_optional_dict(report_template_payload, arguments, "parameters_schema_json")
+        _add_optional_dict(report_template_payload, arguments, "default_parameters_json")
+        _add_optional_str(report_template_payload, arguments, "output_format")
+        return client.post_json(
+            f"/api/v1/registries/{registry_id}/report-templates",
+            report_template_payload,
+        )
+    if name == "reg_engine_update_report_template":
+        template_id = _required_str_arg(arguments, "template_id")
+        report_template_update_payload: dict[str, Any] = {}
+        _add_optional_str(report_template_update_payload, arguments, "name")
+        _add_optional_str(report_template_update_payload, arguments, "description")
+        _add_optional_str(report_template_update_payload, arguments, "report_type")
+        _add_optional_dict(
+            report_template_update_payload,
+            arguments,
+            "parameters_schema_json",
+        )
+        _add_optional_dict(
+            report_template_update_payload,
+            arguments,
+            "default_parameters_json",
+        )
+        _add_optional_str(report_template_update_payload, arguments, "output_format")
+        if not report_template_update_payload:
+            raise ValueError("At least one report template update field is required.")
+        return client.patch_json(
+            f"/api/v1/report-templates/{template_id}",
+            report_template_update_payload,
+        )
+    if name == "reg_engine_archive_report_template":
+        template_id = _required_str_arg(arguments, "template_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/report-templates/{template_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
@@ -728,6 +830,15 @@ def _optional_bool_arg(arguments: dict[str, Any], key: str) -> bool | None:
     return value
 
 
+def _optional_dict_arg(arguments: dict[str, Any], key: str) -> dict[str, Any] | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"Tool argument {key!r} must be an object.")
+    return value
+
+
 def _required_json_arg(arguments: dict[str, Any], key: str) -> Any:
     if key not in arguments:
         raise ValueError(f"Tool argument {key!r} is required.")
@@ -768,5 +879,11 @@ def _add_optional_int(payload: dict[str, Any], arguments: dict[str, Any], key: s
 
 def _add_optional_bool(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
     value = _optional_bool_arg(arguments, key)
+    if value is not None:
+        payload[key] = value
+
+
+def _add_optional_dict(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
+    value = _optional_dict_arg(arguments, key)
     if value is not None:
         payload[key] = value
