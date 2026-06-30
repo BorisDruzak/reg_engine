@@ -277,8 +277,28 @@ export async function archiveFormField(token: string, fieldId: string) {
   });
 }
 
-export async function listCards(token: string, registryId: string) {
-  return apiRequest<CardListRead>(`/api/v1/registries/${registryId}/cards`, { token });
+export type CardListOptions = {
+  organizationId?: string;
+  includeArchive?: boolean;
+  q?: string;
+};
+
+export async function listCards(token: string, registryId: string, options: CardListOptions = {}) {
+  const params = new URLSearchParams();
+  if (options.organizationId) {
+    params.set("organization_id", options.organizationId);
+  }
+  if (options.includeArchive) {
+    params.set("include_archive", "true");
+  }
+  if (options.q?.trim()) {
+    params.set("q", options.q.trim());
+  }
+  const query = params.toString();
+  return apiRequest<CardListRead>(
+    `/api/v1/registries/${registryId}/cards${query ? `?${query}` : ""}`,
+    { token },
+  );
 }
 
 export async function createCard(token: string, registryId: string, payload: CardCreatePayload) {

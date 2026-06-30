@@ -249,6 +249,7 @@ export type CardCreatePayload = {
 
 export type CardUpdatePayload = {
   display_name?: string | null;
+  org_unit_id?: string | null;
   public_view_enabled?: boolean | null;
   public_edit_enabled?: boolean | null;
 };
@@ -458,6 +459,9 @@ export type PublicLinkAttachmentRead = {
 
 export type PublicLinkAttachmentListRead = {
   items: PublicLinkAttachmentRead[];
+  max_attachment_uploads: number | null;
+  attachment_upload_count: number;
+  can_upload_attachments: boolean;
 };
 
 export type UserRead = {

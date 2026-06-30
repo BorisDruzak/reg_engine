@@ -108,6 +108,7 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
     queryFn: () => listPublicLinkAttachments(rawToken),
     enabled: Boolean(rawToken),
   });
+  const canUploadAttachments = attachmentsQuery.data?.can_upload_attachments ?? true;
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (!file) {
@@ -138,6 +139,11 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canUploadAttachments) {
+      setMessage(null);
+      setLocalError(uiText.publicLinkUploadLimitExhausted);
+      return;
+    }
     if (!file) {
       setMessage(null);
       setLocalError(uiText.selectFile);
@@ -154,12 +160,17 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
       <form ref={formRef} className="attachment-form" onSubmit={handleSubmit}>
         <label className="field-editor-control">
           <span>{uiText.fileTitle}</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          <input
+            disabled={!canUploadAttachments}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
         </label>
         <label className="field-editor-control">
           <span>{uiText.file}</span>
           <input
             aria-label={uiText.file}
+            disabled={!canUploadAttachments}
             type="file"
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
@@ -167,10 +178,17 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
             }}
           />
         </label>
-        <button type="submit" className="primary-button" disabled={uploadMutation.isPending}>
+        <button
+          type="submit"
+          className="primary-button"
+          disabled={uploadMutation.isPending || !canUploadAttachments}
+        >
           {uiText.uploadFile}
         </button>
       </form>
+      {attachmentsQuery.data && !attachmentsQuery.data.can_upload_attachments && (
+        <p className="inline-alert attachment-status">{uiText.publicLinkUploadLimitExhausted}</p>
+      )}
       {message && <p className="inline-success attachment-status">{message}</p>}
       {localError && <p className="inline-alert attachment-status">{localError}</p>}
       {attachmentsQuery.error && <p className="data-alert">{errorText(attachmentsQuery.error)}</p>}

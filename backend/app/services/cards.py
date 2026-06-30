@@ -164,6 +164,7 @@ class CardService:
         public_edit_enabled: bool = False,
         created_by: UUID | None = None,
     ) -> Card:
+        self._validate_org_unit_for_organization(org_unit_id, organization_id)
         card = Card(
             registry_id=registry_id,
             organization_id=organization_id,
@@ -374,6 +375,8 @@ class CardService:
         actor_user_id: UUID,
         card_id: UUID,
         display_name: str | None = None,
+        org_unit_id: UUID | None = None,
+        update_org_unit: bool = False,
         public_view_enabled: bool | None = None,
         public_edit_enabled: bool | None = None,
     ) -> Card:
@@ -385,11 +388,15 @@ class CardService:
         )
         old_data = {
             "display_name": card.display_name,
+            "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
             "public_view_enabled": card.public_view_enabled,
             "public_edit_enabled": card.public_edit_enabled,
         }
         if display_name is not None:
             card.display_name = display_name
+        if update_org_unit:
+            self._validate_org_unit_for_organization(org_unit_id, card.organization_id)
+            card.org_unit_id = org_unit_id
         if public_view_enabled is not None:
             card.public_view_enabled = public_view_enabled
         if public_edit_enabled is not None:
@@ -404,6 +411,7 @@ class CardService:
             old_data_json=old_data,
             new_data_json={
                 "display_name": card.display_name,
+                "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
                 "public_view_enabled": card.public_view_enabled,
                 "public_edit_enabled": card.public_edit_enabled,
             },
@@ -952,6 +960,22 @@ class CardService:
         org_unit = self.session.get(OrgUnit, org_unit_id)
         if org_unit is None or org_unit.archived_at is not None or not org_unit.is_active:
             raise InvalidFieldValueError("Org unit reference target was not found.")
+
+    def _validate_org_unit_for_organization(
+        self,
+        org_unit_id: UUID | None,
+        organization_id: UUID,
+    ) -> None:
+        if org_unit_id is None:
+            return
+        org_unit = self.session.get(OrgUnit, org_unit_id)
+        if (
+            org_unit is None
+            or org_unit.archived_at is not None
+            or not org_unit.is_active
+            or org_unit.organization_id != organization_id
+        ):
+            raise CardServiceError("Org unit was not found in card organization.")
 
     def _ensure_active_user_reference(self, user_id: UUID) -> None:
         user = self.session.get(User, user_id)

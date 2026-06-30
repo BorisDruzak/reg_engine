@@ -31,6 +31,16 @@ class Settings(BaseSettings):
         default=10 * 1024 * 1024,
         validation_alias="REG_ENGINE_MAX_ATTACHMENT_BYTES",
     )
+    max_import_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        validation_alias="REG_ENGINE_MAX_IMPORT_BYTES",
+        gt=0,
+    )
+    max_import_rows: int = Field(
+        default=10_000,
+        validation_alias="REG_ENGINE_MAX_IMPORT_ROWS",
+        gt=0,
+    )
     attachment_allowed_types: str = Field(
         default="",
         validation_alias="REG_ENGINE_ATTACHMENT_ALLOWED_TYPES",

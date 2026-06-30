@@ -38,8 +38,18 @@ export function HomePage() {
   const [activeSection, setActiveSection] = useState<VisibleSection>("overview");
   const [selectedRegistryId, setSelectedRegistryId] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [cardSearch, setCardSearch] = useState("");
+  const [cardOrganizationId, setCardOrganizationId] = useState("");
+  const [includeArchivedCards, setIncludeArchivedCards] = useState(false);
 
   const token = session?.token ?? "";
+  const needsRegistrySchema = activeSection === "registries" || activeSection === "cards";
+  const needsCards = activeSection === "overview" || activeSection === "cards";
+  const needsUsers = activeSection === "users" || activeSection === "access";
+  const needsRoles = activeSection === "users" || activeSection === "access";
+  const needsPermissions = activeSection === "users";
+  const needsAccessGrants = activeSection === "access";
+  const needsAudit = activeSection === "audit";
   const currentUserQuery = useQuery({
     queryKey: ["current-user", token],
     queryFn: () => getCurrentUser(token),
@@ -59,12 +69,24 @@ export function HomePage() {
   const registrySchemaQuery = useQuery({
     queryKey: ["registry-schema", token, activeRegistryId],
     queryFn: () => getRegistrySchema(token, activeRegistryId),
-    enabled: Boolean(token && activeRegistryId),
+    enabled: Boolean(token && activeRegistryId && needsRegistrySchema),
   });
   const cardsQuery = useQuery({
-    queryKey: ["cards", token, activeRegistryId],
-    queryFn: () => listCards(token, activeRegistryId),
-    enabled: Boolean(token && activeRegistryId),
+    queryKey: [
+      "cards",
+      token,
+      activeRegistryId,
+      cardOrganizationId,
+      includeArchivedCards,
+      cardSearch,
+    ],
+    queryFn: () =>
+      listCards(token, activeRegistryId, {
+        organizationId: cardOrganizationId || undefined,
+        includeArchive: includeArchivedCards,
+        q: cardSearch || undefined,
+      }),
+    enabled: Boolean(token && activeRegistryId && needsCards),
   });
   const activeCardId = selectedCardId ?? cardsQuery.data?.items[0]?.id ?? "";
   const cardReadQuery = useQuery({
@@ -75,27 +97,27 @@ export function HomePage() {
   const usersQuery = useQuery({
     queryKey: ["users", token],
     queryFn: () => listUsers(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && needsUsers),
   });
   const rolesQuery = useQuery({
     queryKey: ["roles", token],
     queryFn: () => listRoles(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && needsRoles),
   });
   const permissionsQuery = useQuery({
     queryKey: ["permissions", token],
     queryFn: () => listPermissions(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && needsPermissions),
   });
   const grantsQuery = useQuery({
     queryKey: ["access-grants", token],
     queryFn: () => listAccessGrants(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && needsAccessGrants),
   });
   const auditQuery = useQuery({
     queryKey: ["audit-events", token],
     queryFn: () => listAuditEvents(token),
-    enabled: Boolean(token),
+    enabled: Boolean(token && needsAudit),
   });
 
   const currentUser = currentUserQuery.data ?? session?.user ?? null;
@@ -125,6 +147,24 @@ export function HomePage() {
     setSession(null);
     setActiveSection("overview");
     setSelectedRegistryId(null);
+    setSelectedCardId(null);
+    setCardSearch("");
+    setCardOrganizationId("");
+    setIncludeArchivedCards(false);
+  }
+
+  function handleCardSearchChange(value: string) {
+    setCardSearch(value);
+    setSelectedCardId(null);
+  }
+
+  function handleCardOrganizationChange(value: string) {
+    setCardOrganizationId(value);
+    setSelectedCardId(null);
+  }
+
+  function handleIncludeArchivedCardsChange(value: boolean) {
+    setIncludeArchivedCards(value);
     setSelectedCardId(null);
   }
 
@@ -182,14 +222,16 @@ export function HomePage() {
             currentUserQuery.error,
             organizationsQuery.error,
             registriesQuery.error,
-            registrySchemaQuery.error,
-            cardsQuery.error,
-            cardReadQuery.error,
-            usersQuery.error,
-            rolesQuery.error,
-            permissionsQuery.error,
-            grantsQuery.error,
-            auditQuery.error,
+            activeSection === "registries" || activeSection === "cards"
+              ? registrySchemaQuery.error
+              : null,
+            activeSection === "cards" ? cardsQuery.error : null,
+            activeSection === "cards" ? cardReadQuery.error : null,
+            activeSection === "users" || activeSection === "access" ? usersQuery.error : null,
+            activeSection === "users" || activeSection === "access" ? rolesQuery.error : null,
+            activeSection === "users" ? permissionsQuery.error : null,
+            activeSection === "access" ? grantsQuery.error : null,
+            activeSection === "audit" ? auditQuery.error : null,
           ].find(Boolean)}
         />
 
@@ -226,7 +268,13 @@ export function HomePage() {
             organizations={organizationsQuery.data?.items ?? []}
             selectedRegistryId={activeRegistryId}
             selectedCardId={activeCardId}
+            cardSearch={cardSearch}
+            cardOrganizationId={cardOrganizationId}
+            includeArchivedCards={includeArchivedCards}
             onSelectCard={setSelectedCardId}
+            onCardSearchChange={handleCardSearchChange}
+            onCardOrganizationChange={handleCardOrganizationChange}
+            onIncludeArchivedCardsChange={handleIncludeArchivedCardsChange}
           />
         )}
         {activeSection === "users" && (

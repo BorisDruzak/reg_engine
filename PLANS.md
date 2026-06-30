@@ -107,24 +107,28 @@ Completed phases:
 - Phase 5O: MCP Document Metadata Read Tools.
 - Phase 5P: MCP Report And Generated Document Content Read Tools.
 
-Planned phases:
+Recently completed phases in the current checkpoint:
 
 - Phase 5Q: MCP Content And Cross-Cutting Stabilization.
 - Phase 5R: User Scenario UAT Bugfix And Product Readiness.
 
 Current stop point:
 
-- Phase 5Q is the single next active implementation checkpoint. Source plan:
-  `docs/PHASE_5Q_BUGFIX_PLAN.md`. This is a bugfix/correctness phase after
-  Phase 5P and before any new MCP tools, report polish, binary export, public
-  document workflows, or new product capabilities.
-- Phase 5R is planned after Phase 5Q. Source plan:
-  `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`. The user-facing UAT filename
-  was referred to as `docs/PHASE_5R_USER_SCENARIO_UAT_BUGFIX_PLAN.md`; the
-  tracked repository file is `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`.
-- Production Alembic remains at `0014_report_pdf_output (head)` unless a
-  Phase 5Q/5R task proves that a migration is necessary and the standard
-  migration approval flow passes.
+- Phase 5Q is implemented: MCP report/generated-document content reads require
+  `confirm_content_read=true`, enforce `REG_ENGINE_MCP_MAX_CONTENT_BYTES`,
+  normalize sensitive errors, and keep MCP REST-only/write-tool safety covered
+  by regression tests.
+- Phase 5R is implemented: scoped frontend loading avoids unrelated global
+  permission-noise, card edit UX is bulk-primary with `file_ref` kept separate,
+  same-organization `org_unit_id` correction is supported and audited, card
+  list filters are visible, CSV/XLSX import limits are explicit, public-link
+  attachment upload-limit metadata is exposed safely, and the UAT matrix is
+  documented in `docs/PHASE_5R_UAT_MATRIX.md`.
+- The user-facing UAT filename was referred to as
+  `docs/PHASE_5R_USER_SCENARIO_UAT_BUGFIX_PLAN.md`; the tracked repository
+  source plan remains `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`.
+- Production Alembic remains at `0014_report_pdf_output (head)`. Phase 5Q/5R
+  required no schema migration.
 - Phase 5Q and Phase 5R must not add unrelated product work. Deferred scope
   stays deferred: new MCP tool categories, import/export MCP tools, attachment
   upload/download MCP tools, public-link document workflows, new report
@@ -5690,13 +5694,27 @@ Production migration checkpoint:
 
 ### Phase 5Q: MCP Content And Cross-Cutting Stabilization
 
-Status: planned next.
+Status: completed locally in the current checkpoint.
 
 Source plan: `docs/PHASE_5Q_BUGFIX_PLAN.md`.
 
 Purpose: stabilize the current Phase 5 MCP-heavy implementation after Phase 5P
 and before adding more MCP tools, report polish, binary export, public document
 workflows, or new product capabilities.
+
+Implemented outcome:
+
+- MCP report/generated-document content tools now require
+  `confirm_content_read=true`.
+- `REG_ENGINE_MCP_MAX_CONTENT_BYTES` limits content before base64 encoding.
+- Oversized content returns a controlled MCP tool error without
+  `content_base64`.
+- API and unexpected MCP tool errors are normalized to avoid exposing storage
+  paths, SQL traces, tracebacks, private filenames, checksums, stored-file ids,
+  or raw backend internals.
+- Aggregate MCP tests cover read/write safety annotations, destructive
+  confirmations, REST-only guardrails, content confirmation, content size
+  limits, and normalized errors.
 
 Required work:
 
@@ -5792,16 +5810,48 @@ Production migration checkpoint:
 - No migration is planned for Phase 5Q. Confirm Alembic remains at
   `0014_report_pdf_output (head)` unless the implemented fix explicitly
   requires a migration and the standard migration flow passes.
+- Completed result: no Phase 5Q migration was required.
+
+Verification completed on 2026-07-01:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed locally, including backend compile, ruff, ruff format check, mypy,
+  backend pytest, frontend lint, TypeScript check, Vitest, frontend build, and
+  project-map check.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- PostgreSQL-backed tests that require `TEST_DATABASE_URL` were skipped in the
+  local run because no disposable PostgreSQL test URL was configured.
 
 ### Phase 5R: User Scenario UAT Bugfix And Product Readiness
 
-Status: planned after Phase 5Q.
+Status: completed locally in the current checkpoint.
 
 Source plan: `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`.
 
 Purpose: validate and harden real end-to-end user scenarios across the full
 product surface before adding more MCP tools, report polish, binary export,
 public document workflows, or new product capabilities.
+
+Implemented outcome:
+
+- Admin-only frontend queries for users, roles, permissions, access grants, and
+  audit are now loaded only when their sections need them, preventing global
+  permission-noise in allowed card workflows.
+- Card field editing is bulk-primary for normal schema fields; `file_ref`
+  remains in the attachment-aware single-field editor.
+- Existing cards can correct `org_unit_id` inside the same organization through
+  backend/API/frontend support; cross-organization org-unit assignment is
+  rejected and card updates remain audited.
+- Card list controls expose search, organization filter, and
+  archive/superseded visibility through existing backend list filters.
+- CSV/XLSX import preview and commit enforce `REG_ENGINE_MAX_IMPORT_BYTES` and
+  `REG_ENGINE_MAX_IMPORT_ROWS`.
+- Public-link attachment list responses expose safe upload-limit metadata, and
+  the public UI disables upload with `Лимит загрузок исчерпан` while preserving
+  list/download.
+- UAT scenario matrix, backup/restore drill, flat report parameter schema
+  subset, and metadata-only binary export expectations are documented in
+  `docs/PHASE_5R_UAT_MATRIX.md`.
 
 Required work:
 
@@ -5919,6 +5969,18 @@ Production migration checkpoint:
   fix requires a schema change, apply the standard planned migration rules:
   disposable PostgreSQL verification, fresh backup, preflight, intentional
   production target, and post-checks.
+- Completed result: no Phase 5R migration was required.
+
+Verification completed on 2026-07-01:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed locally with backend pytest `119 passed, 146 skipped, 1 warning`;
+  ruff, ruff format check, mypy, frontend lint, TypeScript check, Vitest,
+  frontend build, and project-map check also passed.
+- `pnpm -C frontend e2e` passed with `3 passed`.
+- PostgreSQL-backed tests that require `TEST_DATABASE_URL` were skipped in the
+  local run because no disposable PostgreSQL test URL was configured; no
+  production database migration was required or run.
 
 ## Verification
 

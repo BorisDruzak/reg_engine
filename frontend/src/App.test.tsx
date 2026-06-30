@@ -475,6 +475,7 @@ let userItems: UserRead[];
 let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
 let denyNextGrantCreate = false;
+let denyAdminReadQueries = false;
 let cardItems: CardSummaryRead[];
 type TestFileRefValue = {
   attachment_id: string;
@@ -498,6 +499,11 @@ let cardValueStateById: Record<
 let denyNextCardUpdate = false;
 let publicLinkItems: PublicLinkRead[];
 let attachmentItems: typeof apiPayloads.attachments.items;
+let publicAttachmentListMeta: {
+  max_attachment_uploads: number | null;
+  attachment_upload_count: number;
+  can_upload_attachments: boolean;
+};
 let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
 let reportTemplateItems: ReportTemplateRead[];
@@ -523,6 +529,7 @@ beforeEach(() => {
   denyNextUserUpdate = false;
   grantItems = [...apiPayloads.grants.items];
   denyNextGrantCreate = false;
+  denyAdminReadQueries = false;
   cardItems = [...apiPayloads.cards.items];
   cardValueStateById = {
     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": {
@@ -535,6 +542,11 @@ beforeEach(() => {
   denyNextCardUpdate = false;
   publicLinkItems = [...apiPayloads.publicLinks.items];
   attachmentItems = [];
+  publicAttachmentListMeta = {
+    max_attachment_uploads: null,
+    attachment_upload_count: 0,
+    can_upload_attachments: true,
+  };
   documentTemplateItems = [...apiPayloads.documentTemplates.items];
   generatedDocumentItems = [];
   reportTemplateItems = [...apiPayloads.reportTemplates.items];
@@ -544,6 +556,8 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
+      const requestUrl = new URL(url, "http://localhost");
+      const pathname = requestUrl.pathname;
       if (url.endsWith("/api/v1/public-links/preview")) {
         return jsonResponse(currentPublicPreview());
       }
@@ -564,7 +578,7 @@ beforeEach(() => {
         });
       }
       if (url.endsWith("/api/v1/public-links/attachments")) {
-        return jsonResponse({ items: attachmentItems });
+        return jsonResponse({ items: attachmentItems, ...publicAttachmentListMeta });
       }
       if (url.endsWith("/api/v1/public-links/attachments/upload")) {
         const created = {
@@ -581,6 +595,14 @@ beforeEach(() => {
           archived_at: null,
         };
         attachmentItems = [created as (typeof apiPayloads.attachments.items)[number]];
+        const nextUploadCount = publicAttachmentListMeta.attachment_upload_count + 1;
+        publicAttachmentListMeta = {
+          ...publicAttachmentListMeta,
+          attachment_upload_count: nextUploadCount,
+          can_upload_attachments:
+            publicAttachmentListMeta.max_attachment_uploads === null ||
+            nextUploadCount < publicAttachmentListMeta.max_attachment_uploads,
+        };
         return jsonResponse(created, { status: 201 });
       }
       if (
@@ -688,6 +710,9 @@ beforeEach(() => {
         }
       }
       if (url.endsWith("/api/v1/users")) {
+        if (init?.method === "GET" && denyAdminReadQueries) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             email: string;
@@ -710,9 +735,15 @@ beforeEach(() => {
         return jsonResponse({ items: userItems });
       }
       if (url.endsWith("/api/v1/roles")) {
+        if (denyAdminReadQueries) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         return jsonResponse(apiPayloads.roles);
       }
       if (url.endsWith("/api/v1/permissions")) {
+        if (denyAdminReadQueries) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         return jsonResponse(apiPayloads.permissions);
       }
       if (url.includes("/api/v1/access-grants/")) {
@@ -728,6 +759,9 @@ beforeEach(() => {
         }
       }
       if (url.endsWith("/api/v1/access-grants")) {
+        if (init?.method === "GET" && denyAdminReadQueries) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         if (init?.method === "POST") {
           if (denyNextGrantCreate) {
             denyNextGrantCreate = false;
@@ -1362,7 +1396,9 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
         return jsonResponse(currentRegistrySchema());
       }
-      if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
+      if (
+        pathname.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")
+      ) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             organization_id: string;
@@ -1390,7 +1426,22 @@ beforeEach(() => {
           };
           return jsonResponse(created, { status: 201 });
         }
-        return jsonResponse({ items: cardItems });
+        const organizationId = requestUrl.searchParams.get("organization_id");
+        const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
+        const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
+        const filteredCards = cardItems.filter((item) => {
+          if (organizationId && item.organization_id !== organizationId) {
+            return false;
+          }
+          if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
+            return false;
+          }
+          if (query && !item.display_name.toLowerCase().includes(query)) {
+            return false;
+          }
+          return true;
+        });
+        return jsonResponse({ items: filteredCards });
       }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links")) {
         if (init?.method === "POST") {
@@ -1503,6 +1554,35 @@ beforeEach(() => {
           items: payload.values.map((item, index) => ({
             id: `bulk-${index}`,
             card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+            block_instance_id: item.block_instance_id ?? null,
+            field_id: item.field_id,
+            value: item.value,
+          })),
+        });
+      }
+      if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values")) {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          values: {
+            field_id: string;
+            value: unknown;
+            block_instance_id?: string | null;
+          }[];
+        };
+        for (const item of payload.values) {
+          if (item.field_id === "99999999-9999-4999-8999-999999999999") {
+            cardStatusValue = String(item.value ?? "");
+            cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].status = cardStatusValue;
+          }
+          if (item.field_id === "99999999-9999-4999-8999-999999999998") {
+            cardApprovedValue = Boolean(item.value);
+            cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].approved =
+              cardApprovedValue;
+          }
+        }
+        return jsonResponse({
+          items: payload.values.map((item, index) => ({
+            id: `bulk-existing-${index}`,
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             block_instance_id: item.block_instance_id ?? null,
             field_id: item.field_id,
             value: item.value,
@@ -1681,12 +1761,16 @@ beforeEach(() => {
           }
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             display_name?: string | null;
+            org_unit_id?: string | null;
             public_view_enabled?: boolean | null;
             public_edit_enabled?: boolean | null;
           };
           const updated: CardSummaryRead = {
             ...current,
             display_name: payload.display_name ?? current.display_name,
+            org_unit_id: Object.prototype.hasOwnProperty.call(payload, "org_unit_id")
+              ? (payload.org_unit_id ?? null)
+              : current.org_unit_id,
             public_view_enabled: payload.public_view_enabled ?? current.public_view_enabled,
             public_edit_enabled: payload.public_edit_enabled ?? current.public_edit_enabled,
           };
@@ -1776,6 +1860,9 @@ beforeEach(() => {
         return jsonResponse(currentCardRead());
       }
       if (url.endsWith("/api/v1/audit-events?limit=20")) {
+        if (denyAdminReadQueries) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         return jsonResponse(apiPayloads.audit);
       }
       return jsonResponse({ detail: "Not Found" }, { status: 404 });
@@ -1968,22 +2055,15 @@ test("logs in and renders authenticated admin workspace", async () => {
   await user.click(screen.getByRole("button", { name: "Карточки" }));
   expect((await screen.findAllByText("Карточка актива")).length).toBeGreaterThan(0);
   expect(screen.getAllByDisplayValue("drafted").length).toBeGreaterThan(0);
-  const statusSaveButton = screen.getByRole("button", { name: "Сохранить Статус" });
-  const statusForm = statusSaveButton.closest("form");
-  expect(statusForm).toBeTruthy();
-  const statusInput = within(statusForm as HTMLElement).getByLabelText("Статус");
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  expect(screen.queryByRole("button", { name: "Сохранить Статус" })).not.toBeInTheDocument();
+  const statusInput = within(bulkForm).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(statusSaveButton);
-  expect(await screen.findByText("Сохранено: Статус")).toBeInTheDocument();
-
-  const approvedSaveButton = screen.getByRole("button", { name: "Сохранить Подтверждено" });
-  const approvedForm = approvedSaveButton.closest("form");
-  expect(approvedForm).toBeTruthy();
-  const approvedInput = within(approvedForm as HTMLElement).getByLabelText("Подтверждено");
+  const approvedInput = within(bulkForm).getByLabelText("Подтверждено");
   await user.click(approvedInput);
-  await user.click(approvedSaveButton);
-  expect(await screen.findByText("Сохранено: Подтверждено")).toBeInTheDocument();
+  await user.click(within(bulkForm).getByRole("button", { name: "Сохранить все поля" }));
+  expect(await screen.findByText("Поля карточки сохранены")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Аудит" }));
   expect(screen.getByText("Создание")).toBeInTheDocument();
@@ -1996,37 +2076,109 @@ test("logs in and renders authenticated admin workspace", async () => {
         return headers?.Authorization === "Bearer test-token";
       }),
     ).toBe(true);
+    const bulkCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+        init?.method === "PATCH",
+    );
+    expect(bulkCall).toBeTruthy();
+    const body = JSON.parse(String(bulkCall?.[1]?.body ?? "{}")) as {
+      values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
+    };
+    expect(body.values).toEqual(
+      expect.arrayContaining([
+        {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          value: "published",
+          block_instance_id: null,
+        },
+        {
+          field_id: "99999999-9999-4999-8999-999999999998",
+          value: true,
+          block_instance_id: null,
+        },
+      ]),
+    );
+  });
+});
+
+test("does not show global admin query errors while scoped user works with cards", async () => {
+  denyAdminReadQueries = true;
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect((await screen.findAllByText("Карточка актива")).length).toBeGreaterThan(0);
+  expect(screen.queryByText("Действие недоступно.")).not.toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/users")),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/audit-events?limit=20")),
+    ).toBe(false);
+  });
+
+  await user.click(screen.getByRole("button", { name: "Пользователи" }));
+
+  expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
+  expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();
+});
+
+test("filters cards by search organization and archive visibility", async () => {
+  cardItems = [
+    ...apiPayloads.cards.items,
+    {
+      id: "abababab-abab-4bab-8bab-abababababab",
+      registry_id: "77777777-7777-4777-8777-777777777777",
+      organization_id: "22222222-2222-4222-8222-222222222222",
+      org_unit_id: null,
+      display_name: "Архивная карточка",
+      lifecycle_status: "archived",
+      public_view_enabled: false,
+      public_edit_enabled: false,
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(screen.getByLabelText("Поиск карточек")).toBeInTheDocument();
+  expect(screen.getByLabelText("Фильтр по организации")).toBeInTheDocument();
+  expect(screen.getByLabelText("Показывать архивные и замененные карточки")).toBeInTheDocument();
+  expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Поиск карточек"), "Архивная");
+  expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
+
+  await user.click(screen.getByLabelText("Показывать архивные и замененные карточки"));
+  expect(await screen.findByText("Архивная карточка")).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Фильтр по организации"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
     expect(
       fetchMock.mock.calls.some(([input, init]) => {
         const url = input instanceof Request ? input.url : String(input);
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          value?: unknown;
-          block_instance_id?: unknown;
-        };
         return (
-          url.endsWith(
-            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999",
+          url.includes(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards?",
           ) &&
-          init?.method === "PATCH" &&
-          body.value === "published" &&
-          body.block_instance_id === null
-        );
-      }),
-    ).toBe(true);
-    expect(
-      fetchMock.mock.calls.some(([input, init]) => {
-        const url = input instanceof Request ? input.url : String(input);
-        const body = JSON.parse(String(init?.body ?? "{}")) as {
-          value?: unknown;
-          block_instance_id?: unknown;
-        };
-        return (
-          url.endsWith(
-            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999998",
-          ) &&
-          init?.method === "PATCH" &&
-          body.value === true &&
-          body.block_instance_id === null
+          url.includes("q=%D0%90%D1%80%D1%85%D0%B8%D0%B2%D0%BD%D0%B0%D1%8F") &&
+          url.includes("include_archive=true") &&
+          url.includes("organization_id=22222222-2222-4222-8222-222222222222") &&
+          init?.method === "GET"
         );
       }),
     ).toBe(true);
@@ -2137,6 +2289,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
           String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
           init?.method === "PATCH" &&
           body.display_name === "Новая карточка обновлена" &&
+          body.org_unit_id === "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f" &&
           body.public_view_enabled === true &&
           body.public_edit_enabled === true
         );
@@ -4587,6 +4740,63 @@ test("edits a public-link card without authentication", async () => {
         }
         const body = JSON.parse(String(init?.body ?? "{}")) as { raw_token?: string };
         return headers?.Authorization === undefined && body.raw_token === "public-token";
+      }),
+    ).toBe(true);
+  });
+});
+
+test("shows public-link attachment upload limit exhausted without blocking downloads", async () => {
+  publicAttachmentListMeta = {
+    max_attachment_uploads: 0,
+    attachment_upload_count: 0,
+    can_upload_attachments: false,
+  };
+  attachmentItems = [
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      stored_file_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      title: "Публичный акт",
+      description: null,
+      position: 0,
+      original_filename: "public.txt",
+      content_type: "text/plain",
+      content_length_bytes: 12,
+      checksum_sha256: "a".repeat(64),
+      scanner_status: "deferred",
+      created_at: "2026-06-28T12:05:00Z",
+      archived_at: null,
+    },
+  ];
+  const user = userEvent.setup();
+  window.history.pushState({}, "", "/public/edit/public-token");
+  render(<App />);
+
+  expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
+  expect(await screen.findByText("Лимит загрузок исчерпан")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Загрузить файл" })).toBeDisabled();
+  expect(screen.getByLabelText("Файл")).toBeDisabled();
+  expect(screen.getByText("Публичный акт")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Скачать файл Публичный акт" }));
+
+  expect(await screen.findByText("Файл скачан")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return url.endsWith("/api/v1/public-links/attachments/upload") && init?.method === "POST";
+      }),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return (
+          url.endsWith(
+            "/api/v1/public-links/attachments/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/content",
+          ) && init?.method === "POST"
+        );
       }),
     ).toBe(true);
   });

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     AccessGrant,
+    AuditEvent,
     Card,
     FieldValue,
     FieldValueItem,
@@ -25,7 +26,7 @@ from app.models import (
     User,
     role_permissions,
 )
-from app.services.cards import CardService, InvalidFieldValueError
+from app.services.cards import CardService, CardServiceError, InvalidFieldValueError
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.references import ReferenceListService
@@ -304,6 +305,66 @@ def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visi
 
     assert child_card.registry_id == sibling_card.registry_id == context["registry"].id
     assert {card.id for card in visible_cards} == {child_card.id}
+
+
+def test_existing_card_org_unit_can_be_corrected_inside_same_organization(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    organization_service = OrganizationService(db_session)
+    child_unit = organization_service.create_org_unit(
+        organization_id=context["child"].id,
+        code="phase1d-child-unit",
+        name="Child Unit",
+        created_by=context["system_admin"].id,
+    )
+    sibling_unit = organization_service.create_org_unit(
+        organization_id=context["sibling"].id,
+        code="phase1d-sibling-unit",
+        name="Sibling Unit",
+        created_by=context["system_admin"].id,
+    )
+    card_service = CardService(db_session)
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Org unit correction card",
+    )
+
+    updated = card_service.update_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        org_unit_id=child_unit.id,
+        update_org_unit=True,
+    )
+
+    assert updated.org_unit_id == child_unit.id
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "update",
+            AuditEvent.object_type == "card",
+            AuditEvent.object_id == card.id,
+        )
+    )
+    assert audit_event is not None
+    assert audit_event.new_data_json["org_unit_id"] == str(child_unit.id)
+
+    cleared = card_service.update_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        org_unit_id=None,
+        update_org_unit=True,
+    )
+
+    assert cleared.org_unit_id is None
+    with pytest.raises(CardServiceError):
+        card_service.update_card_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            org_unit_id=sibling_unit.id,
+            update_org_unit=True,
+        )
 
 
 def test_dynamic_typed_values_are_saved_to_typed_columns(db_session: Session) -> None:

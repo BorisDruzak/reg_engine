@@ -65,7 +65,13 @@ export function CardsWorkspace({
   organizations,
   selectedRegistryId,
   selectedCardId,
+  cardSearch,
+  cardOrganizationId,
+  includeArchivedCards,
   onSelectCard,
+  onCardSearchChange,
+  onCardOrganizationChange,
+  onIncludeArchivedCardsChange,
 }: {
   cards: CardSummaryRead[];
   card: CardRead | null;
@@ -74,7 +80,13 @@ export function CardsWorkspace({
   organizations: OrganizationRead[];
   selectedRegistryId: string;
   selectedCardId: string;
+  cardSearch: string;
+  cardOrganizationId: string;
+  includeArchivedCards: boolean;
   onSelectCard: (cardId: string) => void;
+  onCardSearchChange: (value: string) => void;
+  onCardOrganizationChange: (value: string) => void;
+  onIncludeArchivedCardsChange: (value: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
@@ -94,14 +106,21 @@ export function CardsWorkspace({
     () => fieldRows.filter((field) => field.field.field_type !== "file_ref"),
     [fieldRows],
   );
+  const fileRefFieldRows = useMemo(
+    () => fieldRows.filter((field) => field.field.field_type === "file_ref"),
+    [fieldRows],
+  );
   const repeatableBlocks = useMemo(
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
   );
+  const orgUnitOrganizationId = cardFormMode
+    ? cardForm.organizationId
+    : (card?.organization_id ?? "");
   const orgUnitsQuery = useQuery({
-    queryKey: ["org-units", token, cardForm.organizationId],
-    queryFn: () => listOrgUnits(token, cardForm.organizationId),
-    enabled: Boolean(token && cardFormMode === "create" && cardForm.organizationId),
+    queryKey: ["org-units", token, orgUnitOrganizationId],
+    queryFn: () => listOrgUnits(token, orgUnitOrganizationId),
+    enabled: Boolean(token && orgUnitOrganizationId && (cardFormMode || selectedCard)),
   });
   const createCardMutation = useMutation({
     mutationFn: () =>
@@ -126,6 +145,7 @@ export function CardsWorkspace({
       }
       return updateCard(token, card.id, {
         display_name: cardForm.displayName.trim(),
+        org_unit_id: optionalId(cardForm.orgUnitId),
         public_view_enabled: cardForm.publicViewEnabled,
         public_edit_enabled: cardForm.publicEditEnabled,
       });
@@ -225,6 +245,15 @@ export function CardsWorkspace({
               {uiText.createCard}
             </button>
           </div>
+          <CardListFilters
+            cardSearch={cardSearch}
+            organizationId={cardOrganizationId}
+            includeArchive={includeArchivedCards}
+            organizations={organizations}
+            onSearchChange={onCardSearchChange}
+            onOrganizationChange={onCardOrganizationChange}
+            onIncludeArchiveChange={onIncludeArchivedCardsChange}
+          />
           {cardFormMode === "create" && (
             <div className="panel-form">
               <CardMutationForm
@@ -269,6 +298,16 @@ export function CardsWorkspace({
                   </dd>
                 </div>
                 <div>
+                  <dt>{uiText.cardOrgUnit}</dt>
+                  <dd>
+                    {selectedCard.org_unit_id
+                      ? (orgUnitsQuery.data?.items.find(
+                          (orgUnit) => orgUnit.id === selectedCard.org_unit_id,
+                        )?.name ?? shortId(selectedCard.org_unit_id))
+                      : uiText.noOrgUnit}
+                  </dd>
+                </div>
+                <div>
                   <dt>{uiText.status}</dt>
                   <dd>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</dd>
                 </div>
@@ -308,7 +347,7 @@ export function CardsWorkspace({
                   mode="edit"
                   form={cardForm}
                   organizations={organizations}
-                  orgUnits={[]}
+                  orgUnits={orgUnitsQuery.data?.items ?? []}
                   registryName={schema?.registry.name ?? selectedRegistryId}
                   isSubmitting={updateCardMutation.isPending}
                   error={localError ? new Error(localError) : updateCardMutation.error}
@@ -352,15 +391,14 @@ export function CardsWorkspace({
             token={token}
           />
         )}
-        <div className="field-editor-list">
-          {card && fieldRows.length > 0 ? (
-            fieldRows.map((field) => (
+        {card && fileRefFieldRows.length > 0 && (
+          <div className="field-editor-list">
+            {fileRefFieldRows.map((field) => (
               <CardFieldEditor key={field.key} cardId={card.id} field={field} token={token} />
-            ))
-          ) : (
-            <p className="data-empty">{uiText.noData}</p>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
+        {(!card || fieldRows.length === 0) && <p className="data-empty">{uiText.noData}</p>}
       </Panel>
       {card && (
         <div className="split-grid">
@@ -392,6 +430,60 @@ type CardFormState = {
   publicViewEnabled: boolean;
   publicEditEnabled: boolean;
 };
+
+function CardListFilters({
+  cardSearch,
+  organizationId,
+  includeArchive,
+  organizations,
+  onSearchChange,
+  onOrganizationChange,
+  onIncludeArchiveChange,
+}: {
+  cardSearch: string;
+  organizationId: string;
+  includeArchive: boolean;
+  organizations: OrganizationRead[];
+  onSearchChange: (value: string) => void;
+  onOrganizationChange: (value: string) => void;
+  onIncludeArchiveChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="filter-grid">
+      <label>
+        <span>{uiText.cardSearch}</span>
+        <input
+          placeholder={uiText.cardSearchPlaceholder}
+          value={cardSearch}
+          onChange={(event) => onSearchChange(event.currentTarget.value)}
+        />
+      </label>
+      <label>
+        <span>{uiText.filterByOrganization}</span>
+        <select
+          value={organizationId}
+          onChange={(event) => onOrganizationChange(event.currentTarget.value)}
+        >
+          <option value="">{uiText.allOrganizations}</option>
+          {organizations.map((organization) => (
+            <option key={organization.id} value={organization.id}>
+              {organization.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="checkbox-control">
+        <input
+          aria-label={uiText.showArchivedCards}
+          checked={includeArchive}
+          type="checkbox"
+          onChange={(event) => onIncludeArchiveChange(event.currentTarget.checked)}
+        />
+        <span>{uiText.showArchivedCards}</span>
+      </label>
+    </div>
+  );
+}
 
 function CardMutationForm({
   mode,
@@ -449,22 +541,22 @@ function CardMutationForm({
               ))}
             </select>
           </label>
-          <label>
-            <span>{uiText.cardOrgUnit}</span>
-            <select
-              value={form.orgUnitId}
-              onChange={(event) => onChange({ ...form, orgUnitId: event.currentTarget.value })}
-            >
-              <option value="">{uiText.noOrgUnit}</option>
-              {orgUnits.map((orgUnit) => (
-                <option key={orgUnit.id} value={orgUnit.id}>
-                  {orgUnit.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </>
       )}
+      <label>
+        <span>{uiText.cardOrgUnit}</span>
+        <select
+          value={form.orgUnitId}
+          onChange={(event) => onChange({ ...form, orgUnitId: event.currentTarget.value })}
+        >
+          <option value="">{uiText.noOrgUnit}</option>
+          {orgUnits.map((orgUnit) => (
+            <option key={orgUnit.id} value={orgUnit.id}>
+              {orgUnit.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <label>
         <span>{uiText.cardDisplayName}</span>
         <input

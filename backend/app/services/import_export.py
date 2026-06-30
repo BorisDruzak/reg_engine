@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models import Card, CardAttachment, FormBlock, FormField, GeneratedDocument, StoredFile
 from app.services.audit import AuditService
 from app.services.cards import (
@@ -438,13 +439,20 @@ class CardImportPreviewService:
         if not fieldnames >= CARD_IMPORT_REQUIRED_COLUMNS:
             required = ", ".join(sorted(CARD_IMPORT_REQUIRED_COLUMNS))
             raise ImportExportServiceError(f"CSV import preview requires columns: {required}.")
-        return [
-            (
-                index,
-                {key: (value or "").strip() for key, value in row.items() if key is not None},
+        parsed_rows: list[tuple[int, dict[str, str]]] = []
+        max_rows = get_settings().max_import_rows
+        for index, row in enumerate(reader, start=2):
+            if len(parsed_rows) >= max_rows:
+                raise ImportExportServiceError(
+                    f"Card import row limit exceeded; maximum {max_rows} rows."
+                )
+            parsed_rows.append(
+                (
+                    index,
+                    {key: (value or "").strip() for key, value in row.items() if key is not None},
+                )
             )
-            for index, row in enumerate(reader, start=2)
-        ]
+        return parsed_rows
 
     def _read_xlsx_rows(self, xlsx_content: bytes) -> list[tuple[int, dict[str, str]]]:
         try:
@@ -456,17 +464,24 @@ class CardImportPreviewService:
         except Exception as exc:
             raise ImportExportServiceError("XLSX import file could not be read.") from exc
         sheet = workbook.active
-        rows = list(sheet.iter_rows(values_only=True))
-        if not rows:
-            raise ImportExportServiceError("XLSX import file is empty.")
-        headers = ["" if value is None else str(value).strip() for value in rows[0]]
+        row_iterator = sheet.iter_rows(values_only=True)
+        try:
+            header_values = next(row_iterator)
+        except StopIteration:
+            raise ImportExportServiceError("XLSX import file is empty.") from None
+        headers = ["" if value is None else str(value).strip() for value in header_values]
         fieldnames = set(headers)
         if not fieldnames >= CARD_IMPORT_REQUIRED_COLUMNS:
             required = ", ".join(sorted(CARD_IMPORT_REQUIRED_COLUMNS))
             raise ImportExportServiceError(f"XLSX import preview requires columns: {required}.")
 
         parsed_rows: list[tuple[int, dict[str, str]]] = []
-        for index, values in enumerate(rows[1:], start=2):
+        max_rows = get_settings().max_import_rows
+        for index, values in enumerate(row_iterator, start=2):
+            if len(parsed_rows) >= max_rows:
+                raise ImportExportServiceError(
+                    f"Card import row limit exceeded; maximum {max_rows} rows."
+                )
             row = {
                 key: "" if value is None else str(value).strip()
                 for key, value in zip(headers, values, strict=False)

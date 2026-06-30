@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-01 02:48:50 +05:00
+- Generated: 2026-07-01 03:25:19 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -167,6 +167,7 @@
 - `docs/PHASE_2K_ADMIN_API_READINESS.md`
 - `docs/PHASE_4W_BUGFIX_PLAN.md`
 - `docs/PHASE_5Q_BUGFIX_PLAN.md`
+- `docs/PHASE_5R_UAT_MATRIX.md`
 - `docs/PHASE_5R_USER_SCENARIO_BUGFIX_PLAN.md`
 - `docs/PROJECT_MAP.md`
 - `docs/PROJECT_TREE.md`

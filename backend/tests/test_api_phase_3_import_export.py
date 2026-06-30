@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import create_app
 from app.models import (
     AccessGrant,
@@ -705,6 +706,89 @@ def test_card_csv_import_preview_rejects_missing_required_columns(
         "CSV import preview requires columns: block_code, card_id, display_name, "
         "field_code, organization_id, value."
     )
+
+
+def test_card_csv_import_preview_rejects_oversized_payload(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    monkeypatch.setenv("REG_ENGINE_MAX_IMPORT_BYTES", "64")
+    get_settings.cache_clear()
+    csv_content = "\n".join(
+        [
+            "card_id,organization_id,display_name,block_code,field_code,value",
+            f"{context['child_card'].id},,,main,status,oversized payload",
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        json={"csv_content": csv_content},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    get_settings.cache_clear()
+    assert response.status_code == 413, response.text
+    assert response.json()["detail"] == "Import payload exceeds REG_ENGINE_MAX_IMPORT_BYTES=64."
+
+
+def test_card_csv_import_preview_rejects_rows_over_limit(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    monkeypatch.setenv("REG_ENGINE_MAX_IMPORT_ROWS", "1")
+    get_settings.cache_clear()
+    csv_content = "\n".join(
+        [
+            "card_id,organization_id,display_name,block_code,field_code,value",
+            f"{context['child_card'].id},,,main,status,first",
+            f"{context['child_card'].id},,,main,status,second",
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        json={"csv_content": csv_content},
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    get_settings.cache_clear()
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Card import row limit exceeded; maximum 1 rows."
+
+
+def test_card_xlsx_import_preview_rejects_oversized_file(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_3_import_context(db_session)
+    monkeypatch.setenv("REG_ENGINE_MAX_IMPORT_BYTES", "64")
+    get_settings.cache_clear()
+    file_field = _xlsx_upload(
+        [
+            {
+                "card_id": str(context["child_card"].id),
+                "block_code": "main",
+                "field_code": "status",
+                "value": "oversized",
+            }
+        ]
+    )
+
+    response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/imports/cards/preview",
+        files=[file_field],
+        headers=_actor_headers(context["org_admin"].id),
+    )
+
+    get_settings.cache_clear()
+    assert response.status_code == 413, response.text
+    assert response.json()["detail"] == "Import file exceeds REG_ENGINE_MAX_IMPORT_BYTES=64."
 
 
 def test_card_xlsx_import_preview_reuses_csv_contract_and_does_not_mutate(

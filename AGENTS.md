@@ -101,15 +101,35 @@ It is **not** a hardcoded employee registry. Do not create fixed employee column
 
 ---
 
+## Frontend Scenario Rules
+
+- Admin-only frontend queries such as users, roles, permissions, access grants, and audit must not be loaded globally for every authenticated user; load them only for sections/workflows that need them.
+- Scoped card/org users must be able to work in allowed card workflows without unrelated global 403 banners.
+- The card editor uses the bulk field-values form as the primary editor for ordinary schema fields.
+- Keep `file_ref` in the attachment-aware single-field editor.
+- Do not reintroduce two competing save surfaces for the same non-`file_ref` field.
+- Card list filters must use backend list API parameters and must not bypass backend RBAC.
+
+---
+
 ## Attachment Rules
 
 - Keep Phase 2 attachment-first until generated documents are explicitly approved.
 - Keep attachment storage behind the backend storage abstraction.
 - Configure storage roots and limits outside Git, for example through `REG_ENGINE_STORAGE_ROOT`.
 - Do not commit uploaded files, storage roots, bucket names, endpoints, credentials, or malware scanner secrets.
-- Public links must not upload or download attachments until a later explicit phase approves that behavior.
-- Do not add `file_ref` dynamic values until attachment metadata is accepted as stable.
+- Public-link attachment list/upload/download is approved only for the implemented public-edit attachment workflow; do not add public generated-document workflows without a later explicit phase.
+- Do not expose public-link `file_ref` editing unless a later explicit phase approves it.
 - Malware scanning enforcement is deferred, but scanner status must be recorded through the scanner hook before uploaded files are exposed.
+- Public-link attachment list responses may expose safe upload-limit metadata, but must not expose storage keys, checksums, stored-file ids, filesystem paths, or scanner secrets.
+
+---
+
+## Import/Export Rules
+
+- CSV/XLSX imports must enforce explicit payload/file byte limits and row-count limits before preview/commit work can consume unbounded memory.
+- Configure import limits outside Git with `REG_ENGINE_MAX_IMPORT_BYTES` and `REG_ENGINE_MAX_IMPORT_ROWS`.
+- Card export remains metadata-only for attachments and generated documents until a later explicit binary export phase.
 
 ---
 
@@ -461,7 +481,8 @@ sudo systemctl status postgresql --no-pager
 - MCP code must not import SQLAlchemy, Alembic, database sessions, backend models, or backend service classes.
 - Phase 5A MCP tools are read-only and use HTTP `GET` only.
 - Phase 5O MCP document metadata tools are read-only and use existing REST API `GET` endpoints only.
-- Phase 5P MCP report/generated-document content tools are read-only, call existing REST API `GET` content endpoints only, and return base64 content in MCP structured output.
+- Phase 5P/5Q MCP report/generated-document content tools are read-only, call existing REST API `GET` content endpoints only, require `confirm_content_read=true`, enforce `REG_ENGINE_MCP_MAX_CONTENT_BYTES`, and return base64 content in MCP structured output only when content is within the configured limit.
+- MCP tool errors must not expose storage paths, SQL traces, tracebacks, private file names, checksums, stored-file ids, or raw backend internals.
 - Current approved MCP write tools are limited to the explicit registry, schema-builder, card lifecycle, card field-value, card block-instance, card transfer, report-template, report-run, document-template, and generated-document tools named in `PLANS.md` Phase 5D, Phase 5E, Phase 5F, Phase 5G, Phase 5H, Phase 5I, Phase 5J, Phase 5K, Phase 5L, Phase 5M, and Phase 5N.
 - MCP requests must send `X-Reg-Engine-Source: mcp` so API-side audit can record `source=mcp`.
 - Do not add MCP write tools unless an explicit later plan phase approves them.

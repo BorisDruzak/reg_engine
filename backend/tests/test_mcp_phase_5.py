@@ -290,6 +290,63 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
     )
 
 
+def test_mcp_write_tool_annotations_and_destructive_confirmations_are_consistent() -> None:
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS
+
+    write_tool_names = {
+        "reg_engine_create_registry",
+        "reg_engine_update_registry",
+        "reg_engine_archive_registry",
+        "reg_engine_create_form_block",
+        "reg_engine_update_form_block",
+        "reg_engine_archive_form_block",
+        "reg_engine_create_form_field",
+        "reg_engine_update_form_field",
+        "reg_engine_archive_form_field",
+        "reg_engine_create_card",
+        "reg_engine_update_card",
+        "reg_engine_archive_card",
+        "reg_engine_set_card_field_value",
+        "reg_engine_set_card_values",
+        "reg_engine_create_card_block_instance",
+        "reg_engine_archive_card_block_instance",
+        "reg_engine_transfer_card",
+        "reg_engine_create_report_template",
+        "reg_engine_update_report_template",
+        "reg_engine_archive_report_template",
+        "reg_engine_generate_report_run",
+        "reg_engine_archive_report_run",
+        "reg_engine_create_document_template",
+        "reg_engine_archive_document_template",
+        "reg_engine_generate_document",
+        "reg_engine_generate_pdf_document",
+        "reg_engine_archive_generated_document",
+    }
+    destructive_confirmation_args = {
+        "reg_engine_archive_registry": "confirm_archive",
+        "reg_engine_archive_form_block": "confirm_archive",
+        "reg_engine_archive_form_field": "confirm_archive",
+        "reg_engine_archive_card": "confirm_archive",
+        "reg_engine_archive_card_block_instance": "confirm_archive",
+        "reg_engine_transfer_card": "confirm_transfer",
+        "reg_engine_archive_report_template": "confirm_archive",
+        "reg_engine_archive_report_run": "confirm_archive",
+        "reg_engine_archive_document_template": "confirm_archive",
+        "reg_engine_archive_generated_document": "confirm_archive",
+    }
+
+    tools_by_name = {tool["name"]: tool for tool in MCP_TOOL_DEFINITIONS}
+    assert write_tool_names <= tools_by_name.keys()
+
+    for name in write_tool_names:
+        assert tools_by_name[name]["annotations"]["readOnlyHint"] is False
+
+    for name, confirmation_arg in destructive_confirmation_args.items():
+        schema = tools_by_name[name]["inputSchema"]
+        assert confirmation_arg in schema["required"]
+        assert schema["properties"][confirmation_arg]["type"] == "boolean"
+
+
 def test_mcp_create_registry_tool_posts_to_existing_api_boundary() -> None:
     from app.mcp.api_client import RegEngineApiClient
     from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
@@ -1801,7 +1858,7 @@ def test_mcp_read_report_run_content_tool_gets_existing_api_boundary() -> None:
         if tool["name"] == "reg_engine_read_report_run_content"
     )
     assert tool["annotations"]["readOnlyHint"] is True
-    assert tool["inputSchema"]["required"] == ["report_run_id"]
+    assert tool["inputSchema"]["required"] == ["report_run_id", "confirm_content_read"]
     assert tool["inputSchema"]["additionalProperties"] is False
 
     report_run_id = str(uuid4())
@@ -1822,7 +1879,11 @@ def test_mcp_read_report_run_content_tool_gets_existing_api_boundary() -> None:
 
     result = call_tool(
         "reg_engine_read_report_run_content",
-        {"report_run_id": report_run_id, "include_archive": True},
+        {
+            "report_run_id": report_run_id,
+            "include_archive": True,
+            "confirm_content_read": True,
+        },
         client=client,
     )
 
@@ -1846,6 +1907,54 @@ def test_mcp_read_report_run_content_tool_gets_existing_api_boundary() -> None:
     assert transport.requests[0]["body"] is None
 
 
+def test_mcp_read_report_run_content_requires_confirmation_before_get() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    transport = RecordingTransport(body=b"never-read")
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_read_report_run_content",
+        {"report_run_id": str(uuid4())},
+        client=client,
+    )
+
+    assert result["isError"] is True
+    assert "confirm_content_read" in result["content"][0]["text"]
+    assert transport.requests == []
+
+
+def test_mcp_read_report_run_content_over_size_limit_returns_controlled_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    monkeypatch.setenv("REG_ENGINE_MCP_MAX_CONTENT_BYTES", "5")
+    transport = RecordingTransport(body=b"123456", headers={"Content-Type": "text/csv"})
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_read_report_run_content",
+        {"report_run_id": str(uuid4()), "confirm_content_read": True},
+        client=client,
+    )
+
+    assert result["isError"] is True
+    assert "REG_ENGINE_MCP_MAX_CONTENT_BYTES" in result["content"][0]["text"]
+    assert "content_base64" not in result["content"][0]["text"]
+    assert len(transport.requests) == 1
+
+
 def test_mcp_read_generated_document_content_tool_gets_existing_api_boundary() -> None:
     from app.mcp.api_client import RegEngineApiClient
     from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
@@ -1856,7 +1965,10 @@ def test_mcp_read_generated_document_content_tool_gets_existing_api_boundary() -
         if tool["name"] == "reg_engine_read_generated_document_content"
     )
     assert tool["annotations"]["readOnlyHint"] is True
-    assert tool["inputSchema"]["required"] == ["generated_document_id"]
+    assert tool["inputSchema"]["required"] == [
+        "generated_document_id",
+        "confirm_content_read",
+    ]
     assert tool["inputSchema"]["additionalProperties"] is False
 
     generated_document_id = str(uuid4())
@@ -1877,7 +1989,11 @@ def test_mcp_read_generated_document_content_tool_gets_existing_api_boundary() -
 
     result = call_tool(
         "reg_engine_read_generated_document_content",
-        {"generated_document_id": generated_document_id, "include_archive": True},
+        {
+            "generated_document_id": generated_document_id,
+            "include_archive": True,
+            "confirm_content_read": True,
+        },
         client=client,
     )
 
@@ -1899,6 +2015,99 @@ def test_mcp_read_generated_document_content_tool_gets_existing_api_boundary() -
     assert transport.requests[0]["headers"]["Accept"] == "*/*"
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
+
+
+def test_mcp_read_generated_document_content_honors_configured_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    generated_document_id = str(uuid4())
+    body = b"12345"
+    monkeypatch.setenv("REG_ENGINE_MCP_MAX_CONTENT_BYTES", str(len(body)))
+    transport = RecordingTransport(
+        body=body,
+        headers={
+            "Content-Type": "application/pdf",
+            "X-Document-Filename": "summary.pdf",
+        },
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_read_generated_document_content",
+        {
+            "generated_document_id": generated_document_id,
+            "confirm_content_read": True,
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["content_length_bytes"] == len(body)
+    assert result["structuredContent"]["content_base64"] == base64.b64encode(body).decode("ascii")
+
+
+def test_mcp_api_errors_are_normalized_without_internal_details() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    transport = RecordingTransport(
+        {"detail": "Traceback: psycopg.errors.Error at /var/lib/reg_engine/secret/file.bin"},
+        status_code=500,
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool("reg_engine_read_card", {"card_id": str(uuid4())}, client=client)
+
+    assert result["isError"] is True
+    error_text = result["content"][0]["text"].lower()
+    assert "registry engine api request failed" in error_text
+    assert "traceback" not in error_text
+    assert "psycopg" not in error_text
+    assert "/var/lib" not in error_text
+    assert "secret" not in error_text
+
+
+def test_mcp_unexpected_tool_errors_do_not_expose_internal_details() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import call_tool
+
+    class ExplodingTransport(RecordingTransport):
+        def request(
+            self,
+            *,
+            method: str,
+            url: str,
+            headers: dict[str, str],
+            body: bytes | None,
+            timeout_seconds: float,
+        ) -> ApiResponse:
+            raise RuntimeError("Traceback: failed reading C:/reg_engine/storage/private.bin")
+
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=ExplodingTransport(),
+    )
+
+    result = call_tool("reg_engine_read_card", {"card_id": str(uuid4())}, client=client)
+
+    assert result["isError"] is True
+    error_text = result["content"][0]["text"].lower()
+    assert "registry engine mcp tool failed" in error_text
+    assert "traceback" not in error_text
+    assert "storage" not in error_text
+    assert "private.bin" not in error_text
 
 
 def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> None:

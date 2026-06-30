@@ -61,6 +61,9 @@ class PublicLinkAttachmentRead(BaseModel):
 
 class PublicLinkAttachmentListRead(BaseModel):
     items: list[PublicLinkAttachmentRead]
+    max_attachment_uploads: int | None
+    attachment_upload_count: int
+    can_upload_attachments: bool
 
 
 class PublicLinkPreviewOptionRead(BaseModel):

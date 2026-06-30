@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -11,6 +12,22 @@ from urllib.request import Request, urlopen
 
 MCP_SOURCE_HEADER = "X-Reg-Engine-Source"
 MCP_USER_AGENT = "reg-engine-mcp/0.1"
+SENSITIVE_ERROR_MARKERS = (
+    "traceback",
+    "psycopg",
+    "sqlalchemy",
+    "integrityerror",
+    "programmingerror",
+    "/var/",
+    "/opt/",
+    "c:/",
+    "c:\\",
+    "storage",
+    "stored_file",
+    "checksum",
+    "secret",
+    "private",
+)
 
 
 @dataclass(frozen=True)
@@ -63,7 +80,7 @@ class UrllibHttpTransport:
                 body=exc.read(),
             )
         except URLError as exc:
-            raise RegEngineApiError(f"Registry Engine API request failed: {exc}") from exc
+            raise RegEngineApiError("Registry Engine API request failed.") from exc
 
 
 class RegEngineApiClient:
@@ -200,4 +217,41 @@ def _api_error_message(body: bytes) -> str:
     except (UnicodeDecodeError, json.JSONDecodeError):
         return "Registry Engine API request failed."
     detail = payload.get("detail") if isinstance(payload, dict) else None
-    return str(detail) if detail else "Registry Engine API request failed."
+    message = _safe_detail_message(detail)
+    return message or "Registry Engine API request failed."
+
+
+def _safe_detail_message(detail: object) -> str | None:
+    if detail is None:
+        return None
+    if isinstance(detail, str):
+        return None if _looks_sensitive(detail) else detail
+    if isinstance(detail, dict):
+        for key in ("message", "error"):
+            value = detail.get(key)
+            if isinstance(value, str) and not _looks_sensitive(value):
+                return value
+        return None
+    if isinstance(detail, list):
+        messages: list[str] = []
+        for item in detail[:3]:
+            if not isinstance(item, dict):
+                continue
+            message = item.get("msg")
+            if not isinstance(message, str) or _looks_sensitive(message):
+                continue
+            location = item.get("loc")
+            if isinstance(location, list) and location:
+                location_text = ".".join(str(part) for part in location)
+                messages.append(f"{location_text}: {message}")
+            else:
+                messages.append(message)
+        return "; ".join(messages) if messages else None
+    return None
+
+
+def _looks_sensitive(message: str) -> bool:
+    lowered = message.lower()
+    if any(marker in lowered for marker in SENSITIVE_ERROR_MARKERS):
+        return True
+    return bool(re.search(r"[a-z]:[\\/]", lowered))

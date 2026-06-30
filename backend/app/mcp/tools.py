@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from typing import Any
 
 from app.mcp.api_client import ApiResponse, RegEngineApiClient, RegEngineApiError
 
 McpToolDefinition = dict[str, Any]
 McpToolResult = dict[str, Any]
+
+DEFAULT_MCP_MAX_CONTENT_BYTES = 1024 * 1024
 
 
 MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
@@ -207,14 +210,18 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
     {
         "name": "reg_engine_read_report_run_content",
         "title": "Read report run content",
-        "description": "Read report run output content as base64 through the Registry Engine API.",
+        "description": (
+            "Read report run output content as base64 through the Registry Engine API. "
+            "Requires confirm_content_read=true and enforces REG_ENGINE_MCP_MAX_CONTENT_BYTES."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "report_run_id": {"type": "string"},
                 "include_archive": {"type": "boolean"},
+                "confirm_content_read": {"type": "boolean"},
             },
-            "required": ["report_run_id"],
+            "required": ["report_run_id", "confirm_content_read"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": True},
@@ -223,15 +230,17 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         "name": "reg_engine_read_generated_document_content",
         "title": "Read generated document content",
         "description": (
-            "Read generated document output content as base64 through the Registry Engine API."
+            "Read generated document output content as base64 through the Registry Engine API. "
+            "Requires confirm_content_read=true and enforces REG_ENGINE_MCP_MAX_CONTENT_BYTES."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "generated_document_id": {"type": "string"},
                 "include_archive": {"type": "boolean"},
+                "confirm_content_read": {"type": "boolean"},
             },
-            "required": ["generated_document_id"],
+            "required": ["generated_document_id", "confirm_content_read"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": True},
@@ -746,6 +755,11 @@ def call_tool(
             "content": [{"type": "text", "text": str(exc)}],
             "isError": True,
         }
+    except Exception:
+        return {
+            "content": [{"type": "text", "text": "Registry Engine MCP tool failed."}],
+            "isError": True,
+        }
     return {
         "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False, indent=2)}],
         "structuredContent": payload,
@@ -838,6 +852,8 @@ def _call_tool_or_raise(
         )
     if name == "reg_engine_read_report_run_content":
         report_run_id = _required_str_arg(arguments, "report_run_id")
+        if _bool_arg(arguments, "confirm_content_read", False) is not True:
+            raise ValueError("Tool argument 'confirm_content_read' must be true.")
         response = client.get_bytes(
             f"/api/v1/report-runs/{report_run_id}/content",
             {"include_archive": _bool_arg(arguments, "include_archive", False)},
@@ -850,6 +866,8 @@ def _call_tool_or_raise(
         )
     if name == "reg_engine_read_generated_document_content":
         generated_document_id = _required_str_arg(arguments, "generated_document_id")
+        if _bool_arg(arguments, "confirm_content_read", False) is not True:
+            raise ValueError("Tool argument 'confirm_content_read' must be true.")
         response = client.get_bytes(
             f"/api/v1/generated-documents/{generated_document_id}/content",
             {"include_archive": _bool_arg(arguments, "include_archive", False)},
@@ -1128,16 +1146,37 @@ def _content_response_payload(
     headers = {key.lower(): value for key, value in response.headers.items()}
     content_type = headers.get("content-type", "application/octet-stream")
     content_disposition = headers.get("content-disposition")
+    max_content_bytes = _mcp_max_content_bytes()
+    content_length_bytes = len(response.body)
+    if content_length_bytes > max_content_bytes:
+        raise ValueError(
+            "MCP content response is "
+            f"{content_length_bytes} bytes and exceeds "
+            f"REG_ENGINE_MCP_MAX_CONTENT_BYTES={max_content_bytes}."
+        )
     payload: dict[str, Any] = {
         object_id_key: object_id,
         "content_base64": base64.b64encode(response.body).decode("ascii"),
         "content_type": content_type,
-        "content_length_bytes": len(response.body),
+        "content_length_bytes": content_length_bytes,
         "filename": headers.get(filename_header),
     }
     if content_disposition is not None:
         payload["content_disposition"] = content_disposition
     return payload
+
+
+def _mcp_max_content_bytes() -> int:
+    raw_value = os.environ.get("REG_ENGINE_MCP_MAX_CONTENT_BYTES")
+    if raw_value is None or not raw_value.strip():
+        return DEFAULT_MCP_MAX_CONTENT_BYTES
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("REG_ENGINE_MCP_MAX_CONTENT_BYTES must be a positive integer.") from exc
+    if value <= 0:
+        raise ValueError("REG_ENGINE_MCP_MAX_CONTENT_BYTES must be a positive integer.")
+    return value
 
 
 def _bool_arg(arguments: dict[str, Any], key: str, default: bool) -> bool:

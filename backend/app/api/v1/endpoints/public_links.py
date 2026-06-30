@@ -151,7 +151,10 @@ def list_public_link_attachments(
     except Exception as exc:
         raise_service_http_error(exc)
     return PublicLinkAttachmentListRead(
-        items=[_public_attachment_to_read(service, attachment) for attachment in attachments]
+        items=[_public_attachment_to_read(service, attachment) for attachment in attachments],
+        max_attachment_uploads=public_link.max_attachment_uploads,
+        attachment_upload_count=public_link.attachment_upload_count,
+        can_upload_attachments=_can_public_link_upload_attachment(public_link),
     )
 
 
@@ -234,6 +237,13 @@ def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
         max_attachment_uploads=public_link.max_attachment_uploads,
         attachment_upload_count=public_link.attachment_upload_count,
         disabled_at=public_link.disabled_at,
+    )
+
+
+def _can_public_link_upload_attachment(public_link: CardPublicLink) -> bool:
+    return (
+        public_link.max_attachment_uploads is None
+        or public_link.attachment_upload_count < public_link.max_attachment_uploads
     )
 
 

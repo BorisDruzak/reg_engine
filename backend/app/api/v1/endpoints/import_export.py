@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
+from app.core.config import get_settings
 from app.schemas.import_export import (
     CardImportCommitRead,
     CardImportCommitRequest,
@@ -178,7 +179,13 @@ async def _read_xlsx_import_payload(request: Request) -> CardImportPayload:
     uploaded = form.get("file")
     if not isinstance(uploaded, UploadFile):
         raise HTTPException(status_code=400, detail="XLSX import file is required.")
-    content = await uploaded.read()
+    max_bytes = get_settings().max_import_bytes
+    content = await uploaded.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Import file exceeds REG_ENGINE_MAX_IMPORT_BYTES={max_bytes}.",
+        )
     if not content:
         raise HTTPException(status_code=400, detail="XLSX import file is empty.")
     return CardImportPayload(import_format="xlsx", content=content)
@@ -199,4 +206,10 @@ async def _read_csv_import_payload(
             status_code=400,
             detail="JSON import payload could not be read.",
         ) from exc
+    max_bytes = get_settings().max_import_bytes
+    if len(payload.csv_content.encode("utf-8")) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Import payload exceeds REG_ENGINE_MAX_IMPORT_BYTES={max_bytes}.",
+        )
     return CardImportPayload(import_format="csv", content=payload.csv_content)

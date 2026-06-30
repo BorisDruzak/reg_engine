@@ -480,7 +480,11 @@ def test_api_public_link_attachment_upload_list_and_download(
         json={"raw_token": public_token.raw_token},
     )
     assert list_response.status_code == 200, list_response.text
-    assert [item["id"] for item in list_response.json()["items"]] == [upload_payload["id"]]
+    list_payload = list_response.json()
+    assert [item["id"] for item in list_payload["items"]] == [upload_payload["id"]]
+    assert list_payload["max_attachment_uploads"] is None
+    assert list_payload["attachment_upload_count"] == 1
+    assert list_payload["can_upload_attachments"] is True
 
     download_response = api_client.post(
         f"/api/v1/public-links/attachments/{upload_payload['id']}/content",
@@ -534,7 +538,11 @@ def test_api_public_link_attachment_workflows_ignore_field_edit_usage_limit(
         json={"raw_token": public_token.raw_token},
     )
     assert list_response.status_code == 200, list_response.text
-    assert [item["id"] for item in list_response.json()["items"]] == [upload_payload["id"]]
+    list_payload = list_response.json()
+    assert [item["id"] for item in list_payload["items"]] == [upload_payload["id"]]
+    assert list_payload["max_attachment_uploads"] == 2
+    assert list_payload["attachment_upload_count"] == 1
+    assert list_payload["can_upload_attachments"] is True
 
     download_response = api_client.post(
         f"/api/v1/public-links/attachments/{upload_payload['id']}/content",
@@ -546,6 +554,31 @@ def test_api_public_link_attachment_workflows_ignore_field_edit_usage_limit(
     db_session.refresh(public_token.public_link)
     assert public_token.public_link.used_count == 1
     assert public_token.public_link.attachment_upload_count == 1
+
+
+def test_api_public_link_attachment_list_exposes_exhausted_upload_limit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _attachment_api_context(db_session)
+    context["card"].public_edit_enabled = True
+    public_token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=context["card_admin"].id,
+        card_id=context["card"].id,
+        max_attachment_uploads=0,
+    )
+
+    list_response = api_client.post(
+        "/api/v1/public-links/attachments",
+        json={"raw_token": public_token.raw_token},
+    )
+
+    assert list_response.status_code == 200, list_response.text
+    list_payload = list_response.json()
+    assert list_payload["items"] == []
+    assert list_payload["max_attachment_uploads"] == 0
+    assert list_payload["attachment_upload_count"] == 0
+    assert list_payload["can_upload_attachments"] is False
 
 
 def test_api_public_link_attachment_upload_respects_card_public_edit_toggle(

@@ -840,6 +840,33 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       approvedValue: cardApprovedValue,
       statusValue: cardStatusValue,
     });
+    if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") {
+      const body = request.postDataJSON() as {
+        values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
+      };
+      for (const item of body.values) {
+        if (item.field_id === "99999999-9999-4999-8999-999999999999") {
+          cardStatusValue = String(item.value ?? "");
+        }
+        if (item.field_id === "99999999-9999-4999-8999-999999999998") {
+          cardApprovedValue = Boolean(item.value);
+        }
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: body.values.map((item, index) => ({
+            id: `bulk-existing-${index}`,
+            card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            block_instance_id: item.block_instance_id ?? null,
+            field_id: item.field_id,
+            value: item.value,
+          })),
+        }),
+      });
+      return;
+    }
     if (
       url.pathname ===
       "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999"
@@ -913,19 +940,13 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
   await expect(page.getByText("Карточка актива").first()).toBeVisible();
-  const statusFieldForm = page.locator("form").filter({
-    has: page.getByRole("button", { name: "Сохранить Статус" }),
-  });
-  await expect(statusFieldForm.getByLabel("Статус")).toHaveValue("drafted");
-  await statusFieldForm.getByLabel("Статус").fill("published");
-  await statusFieldForm.getByRole("button", { name: "Сохранить Статус" }).click();
-  await expect(page.getByText("Сохранено: Статус")).toBeVisible();
-  const approvedFieldForm = page.locator("form").filter({
-    has: page.getByRole("button", { name: "Сохранить Подтверждено" }),
-  });
-  await approvedFieldForm.getByLabel("Подтверждено").check();
-  await approvedFieldForm.getByRole("button", { name: "Сохранить Подтверждено" }).click();
-  await expect(page.getByText("Сохранено: Подтверждено")).toBeVisible();
+  const fieldValuesForm = page.getByRole("form", { name: "Массовое сохранение полей" });
+  await expect(fieldValuesForm.getByLabel("Статус")).toHaveValue("drafted");
+  await expect(page.getByRole("button", { name: "Сохранить Статус" })).toHaveCount(0);
+  await fieldValuesForm.getByLabel("Статус").fill("published");
+  await fieldValuesForm.getByLabel("Подтверждено").check();
+  await fieldValuesForm.getByRole("button", { name: "Сохранить все поля" }).click();
+  await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();

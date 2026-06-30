@@ -29,6 +29,7 @@ class CardListRead(BaseModel):
 
 class CardUpdate(BaseModel):
     display_name: str | None = None
+    org_unit_id: UUID | None = None
     public_view_enabled: bool | None = None
     public_edit_enabled: bool | None = None
 
