@@ -293,10 +293,13 @@ Current stop point:
   synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No backend code, migrations, endpoints,
   report formats, full visual report builder, or MCP write tools are included.
-- Phase 4O Report Run Default Parameter Payload is completed locally:
+- Phase 4O Report Run Default Parameter Payload is completed and deployed:
   report generation now sends the selected template `default_parameters_json`
   when the manual run parameter JSON field is empty, while manual JSON still
-  overrides defaults. Deployment evidence is pending.
+  overrides defaults. Commit `c771562` is pushed, the server checkout is
+  synchronized to `origin/main`, frontend dist is deployed, healthcheck
+  passed, and server checks passed. No backend code, migrations, endpoints,
+  report formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -2960,7 +2963,7 @@ Production migration checkpoint:
 
 ### Phase 4O: Report Run Default Parameter Payload
 
-Status: completed locally; deployment pending.
+Status: completed.
 
 Purpose: close a report-polish bug where the Russian run form displayed
 template default parameters but generated a report with `parameters=null` when
@@ -3015,6 +3018,16 @@ Verification so far:
   `32 passed`, frontend build, and project tree check.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `c771562` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=c771562`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-Dlmu-q_H.js` with `/assets/index-bNU_0_Xh.css`.
 
 Production migration checkpoint:
 
