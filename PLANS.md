@@ -337,13 +337,16 @@ Current stop point:
   Alembic remains at `0014_report_pdf_output (head)`. No backend code,
   migrations, endpoints, report formats, full visual report builder, or MCP
   write tools are included.
-- Phase 4T Report Run Scalar Constraint Validation is completed locally:
+- Phase 4T Report Run Scalar Constraint Validation is completed and deployed:
   supported flat report run controls now read `minLength`, `maxLength`,
   `minimum`, and `maximum`, block generation when provided scalar values fail
   those constraints, and show a Russian validation message listing the failing
-  parameter labels. Deployment evidence is pending. No backend code,
-  migrations, endpoints, report formats, full visual report builder, or MCP
-  write tools are included.
+  parameter labels. Commit `9dc6e7b` is pushed, the server checkout is
+  synchronized to `origin/main`, frontend dist is deployed with
+  `index-Dutb14Jc.js`, healthcheck passed, server checks passed, and Alembic
+  remains at `0014_report_pdf_output (head)`. No backend code, migrations,
+  endpoints, report formats, full visual report builder, or MCP write tools are
+  included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3396,7 +3399,7 @@ Production migration checkpoint:
 
 ### Phase 4T: Report Run Scalar Constraint Validation
 
-Status: completed locally; deployment pending.
+Status: completed and deployed.
 
 Purpose: continue report-polish by honoring basic flat JSON Schema scalar
 constraints in the Russian report run form before calling the existing report
@@ -3470,6 +3473,22 @@ Verification so far:
   production build, and current project tree.
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add report scalar constraint validation"`
+  created commit `9dc6e7b5dffc1987cd65dc10dbaba065c033d20b` and pushed
+  `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Frontend deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`;
+  the server SPA now references `/assets/index-Dutb14Jc.js` and
+  `/assets/index-Be0bM7I8.css`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Direct server smoke passed: server checkout `9dc6e7b`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
