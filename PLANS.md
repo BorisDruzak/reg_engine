@@ -70,6 +70,7 @@ Completed phases:
 - Phase 4C: Report Template Settings Edit.
 - Phase 4D: CSV Report Output.
 - Phase 4E: Report Run List Polish.
+- Phase 4F: Report Archive Visibility.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -197,11 +198,13 @@ Current stop point:
   format and filename for generated runs. Commit `98bdeef` is pushed, the
   server checkout is synchronized to `origin/main`, frontend dist is deployed,
   healthcheck passed, and server checks passed. No migration was required.
-- Phase 4F Report Archive Visibility is in progress as the next report polish
-  slice: authenticated report template/run lists expose an archive toggle in
-  the Russian UI, archived report rows are visible in archive scope, archived
-  runs remain downloadable through `include_archive=true`, and archived rows
-  cannot be edited or archived again. No migration is required.
+- Phase 4F Report Archive Visibility is completed and deployed:
+  authenticated report template/run lists expose archive toggles in the
+  Russian UI, archived report rows are visible in archive scope, archived runs
+  remain downloadable through `include_archive=true`, and archived rows cannot
+  be edited or archived again. Commit `7a33e25` is pushed, the server checkout
+  is synchronized to `origin/main`, frontend dist is deployed, healthcheck
+  passed, and server checks passed. No migration was required.
 - Later explicit phases remain XLSX/PDF report outputs, MCP write tools, and
   additional report polish.
 - XLSX export/import, import/export frontend UI, binary attachment/document
@@ -1563,8 +1566,8 @@ Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, and report run list polish
-slices; Phase 4F report archive visibility is in progress. XLSX/PDF report
-outputs and additional report polish remain deferred.
+slices, plus Phase 4F report archive visibility. XLSX/PDF report outputs and
+additional report polish remain deferred.
 
 Planned overall scope:
 
@@ -1951,7 +1954,7 @@ Deployment checkpoint:
 
 ### Phase 4F: Report Archive Visibility
 
-Status: in progress.
+Status: completed.
 
 Purpose: close the next report polish gap by making archived report templates
 and report runs inspectable from the authenticated Russian report UI before
@@ -1994,7 +1997,7 @@ Known limitations:
   deferred.
 - No MCP report write tools.
 
-Verification so far:
+Verification:
 
 - RED frontend test failed before implementation because the report UI had no
   `Показывать архивные отчеты` control.
@@ -2015,7 +2018,16 @@ Production migration checkpoint:
 
 Deployment checkpoint:
 
-- Pending full local checks, push, frontend deploy, and server check.
+- Commit `7a33e25` was pushed to `origin/main`.
+- Server checkout was synchronized to commit `7a33e25` with
+  `scripts/deploy.ps1`.
+- Frontend dist was deployed with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `scripts/server-check.ps1` passed after deployment.
+- Server smoke confirmed `server_head=7a33e25`, Alembic remained
+  `0012_report_csv_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served the
+  updated asset `/assets/index-DVjJpnYY.js`.
 
 ### Phase 5: MCP Over API Only
 
