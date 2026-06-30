@@ -439,6 +439,25 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_transfer_card",
+        "title": "Transfer card",
+        "description": (
+            "Transfer a card to another organization through the Registry Engine API. "
+            "Requires confirm_transfer=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "target_organization_id": {"type": "string"},
+                "confirm_transfer": {"type": "boolean"},
+            },
+            "required": ["card_id", "target_organization_id", "confirm_transfer"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -649,6 +668,15 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/card-block-instances/{block_instance_id}")
+    if name == "reg_engine_transfer_card":
+        card_id = _required_str_arg(arguments, "card_id")
+        target_organization_id = _required_str_arg(arguments, "target_organization_id")
+        if _bool_arg(arguments, "confirm_transfer", False) is not True:
+            raise ValueError("Tool argument 'confirm_transfer' must be true.")
+        return client.post_json(
+            f"/api/v1/cards/{card_id}/transfer",
+            {"target_organization_id": target_organization_id},
+        )
     raise ValueError(f"Unknown MCP tool: {name}")
 
 

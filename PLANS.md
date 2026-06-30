@@ -102,6 +102,11 @@ Completed phases:
 
 Current stop point:
 
+- Phase 5J MCP Card Transfer Write Tool is completed locally and pending
+  push/deploy: the existing REST card transfer workflow is exposed through MCP
+  with explicit transfer confirmation, while source-card superseding,
+  target-card creation, dynamic value copy, `file_ref` copy/clear behavior,
+  permissions, and audit remain API-enforced.
 - Phase 5I MCP Card Block Instance Write Tools is completed and deployed:
   repeatable block-instance create/archive MCP tools call only existing REST
   API endpoints, with backend permissions, repeatable/non-repeatable rules,
@@ -4774,6 +4779,90 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5I; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5J: MCP Card Transfer Write Tool
+
+Status: completed locally; pending push/deploy.
+
+Purpose: extend the API-only MCP write surface with the existing card transfer
+workflow while keeping transfer permissions, source-card superseding,
+target-card creation, copied dynamic values, `file_ref` transfer rules,
+card relation creation, archive visibility, and audit in the existing REST
+API/service layer.
+
+Tool set:
+
+- `reg_engine_transfer_card`
+
+Argument schema:
+
+- `card_id`: required string.
+- `target_organization_id`: required string.
+- `confirm_transfer`: required boolean and must be `true`.
+- `additionalProperties=false`.
+
+API endpoint:
+
+- `POST /api/v1/cards/{card_id}/transfer`
+
+Security and audit decisions:
+
+- MCP tool calls only the REST API through `RegEngineApiClient`.
+- Transfer permission checks, target organization visibility, superseded edit
+  protection, dynamic value copy, `file_ref` copy/clear behavior, card
+  relation creation, and audit remain API-side in the existing card service.
+- Transfer creates a new card and changes the old card lifecycle to
+  `superseded`, so MCP requires explicit `confirm_transfer=true` before
+  sending the request.
+
+Scope:
+
+- Expose the tool with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F/5G/5H/5I write
+  behavior.
+- Reject calls unless `confirm_transfer=true`.
+- Do not mutate field values directly, create/archive cards outside the
+  transfer endpoint, mutate public links, upload or download attachments,
+  generate documents, run reports, import/export data, expose binary downloads,
+  or add other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes `reg_engine_transfer_card` as a write tool.
+- Transfer sends `POST /api/v1/cards/{card_id}/transfer` with
+  `target_organization_id`.
+- Transfer without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not transfer production cards without a
+  disposable production-safe target.
+- Report/document/public-link, attachment upload/download, and import/export
+  MCP write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 test failed before implementation because
+  `reg_engine_transfer_card` was absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `30 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `96 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5J; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification

@@ -201,6 +201,7 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_set_card_values",
         "reg_engine_create_card_block_instance",
         "reg_engine_archive_card_block_instance",
+        "reg_engine_transfer_card",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -1106,6 +1107,75 @@ def test_mcp_archive_card_block_instance_tool_requires_confirmation_before_delet
     )
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
+
+
+def test_mcp_transfer_card_tool_requires_confirmation_before_post() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_transfer_card")
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == [
+        "card_id",
+        "target_organization_id",
+        "confirm_transfer",
+    ]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    new_card_id = str(uuid4())
+    registry_id = str(uuid4())
+    target_organization_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": new_card_id,
+            "registry_id": registry_id,
+            "organization_id": target_organization_id,
+            "org_unit_id": None,
+            "display_name": "Transferred card",
+            "lifecycle_status": "active",
+            "public_view_enabled": False,
+            "public_edit_enabled": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_transfer_card",
+        {
+            "card_id": card_id,
+            "target_organization_id": target_organization_id,
+            "confirm_transfer": False,
+        },
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_transfer" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    transferred = call_tool(
+        "reg_engine_transfer_card",
+        {
+            "card_id": card_id,
+            "target_organization_id": target_organization_id,
+            "confirm_transfer": True,
+        },
+        client=client,
+    )
+
+    assert transferred["isError"] is False
+    assert transferred["structuredContent"]["id"] == new_card_id
+    assert transferred["structuredContent"]["organization_id"] == target_organization_id
+    assert transport.requests[0]["method"] == "POST"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}/transfer"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {"target_organization_id": target_organization_id}
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:
