@@ -77,6 +77,7 @@ Completed phases:
 - Phase 4H: PDF Report Output.
 - Phase 4I: Report Template Type And Format Edit.
 - Phase 4J: Report Run Parameters And Summary Visibility.
+- Phase 4K: Report Template Parameter Schema UI.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -259,6 +260,12 @@ Current stop point:
   `origin/main`, frontend dist is deployed, healthcheck passed, and server
   checks passed. No backend code, migrations, endpoints, report formats, or
   MCP write tools are included.
+- Phase 4K Report Template Parameter Schema UI is completed locally: the
+  Russian report template create/edit forms now expose existing
+  `parameters_schema_json` API support so registry admins can save a template
+  parameter schema JSON alongside default parameter JSON. Local checks passed;
+  server synchronization is pending. No backend code, migrations, endpoints,
+  report formats, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1808,7 +1815,8 @@ Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
 template type/format edit slices, and report run parameters/summary visibility.
-Additional report polish remains deferred.
+Report template parameter schema UI is completed locally; additional report
+polish remains deferred.
 
 Planned overall scope:
 
@@ -2624,6 +2632,64 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4J; no backend schema changes are included.
+
+### Phase 4K: Report Template Parameter Schema UI
+
+Status: completed locally.
+
+Purpose: close a report template settings polish gap by exposing the existing
+`parameters_schema_json` API field in the authenticated Russian report UI.
+
+Scope:
+
+- Add a Russian-first "Схема параметров JSON" control to report template
+  creation.
+- Add a Russian-first "Новая схема параметров JSON" control to report template
+  editing.
+- Send `parameters_schema_json` through the existing create and PATCH report
+  template API payloads.
+- Preserve existing default parameter JSON, report type, output format,
+  archive protection, and permission behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, visual report builder, or MCP write tools.
+
+Acceptance criteria:
+
+- Creating a report template can save `parameters_schema_json` from the Russian
+  UI.
+- Editing a report template can update `parameters_schema_json` from the
+  Russian UI.
+- Existing report create/edit/generate/download/archive behavior remains intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This phase only stores and edits the schema JSON; it does not generate a
+  visual parameter form from that schema.
+- JSON object validation remains the existing client-side object parsing plus
+  backend schema type validation.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because the create
+  form did not contain `Схема параметров JSON`.
+- GREEN targeted frontend report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4K; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

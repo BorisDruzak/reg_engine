@@ -33,12 +33,14 @@ export function ReportsPanel({
   const [templateDescription, setTemplateDescription] = useState("");
   const [reportType, setReportType] = useState("registry_cards");
   const [outputFormat, setOutputFormat] = useState("json");
+  const [templateParametersSchemaJson, setTemplateParametersSchemaJson] = useState("");
   const [templateParametersJson, setTemplateParametersJson] = useState("");
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editTemplateName, setEditTemplateName] = useState("");
   const [editTemplateDescription, setEditTemplateDescription] = useState("");
   const [editReportType, setEditReportType] = useState("registry_cards");
   const [editOutputFormat, setEditOutputFormat] = useState("json");
+  const [editTemplateParametersSchemaJson, setEditTemplateParametersSchemaJson] = useState("");
   const [editTemplateParametersJson, setEditTemplateParametersJson] = useState("");
   const [runParametersJson, setRunParametersJson] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -77,6 +79,7 @@ export function ReportsPanel({
         name: templateName.trim(),
         description: templateDescription.trim() || null,
         report_type: reportType,
+        parameters_schema_json: parseJsonObjectOrNull(templateParametersSchemaJson),
         default_parameters_json: parseJsonObjectOrNull(templateParametersJson),
         output_format: outputFormat,
       }),
@@ -89,6 +92,7 @@ export function ReportsPanel({
       setTemplateDescription("");
       setReportType("registry_cards");
       setOutputFormat("json");
+      setTemplateParametersSchemaJson("");
       setTemplateParametersJson("");
       await invalidateReportData(queryClient, token, selectedRegistryId);
     },
@@ -103,6 +107,7 @@ export function ReportsPanel({
         name: editTemplateName.trim(),
         description: editTemplateDescription.trim() || null,
         report_type: editReportType,
+        parameters_schema_json: parseJsonObjectOrNull(editTemplateParametersSchemaJson),
         default_parameters_json: parseJsonObjectOrNull(editTemplateParametersJson),
         output_format: editOutputFormat,
       });
@@ -167,6 +172,7 @@ export function ReportsPanel({
     setEditTemplateDescription(template.description ?? "");
     setEditReportType(template.report_type);
     setEditOutputFormat(template.output_format);
+    setEditTemplateParametersSchemaJson(formatJsonObjectForEdit(template.parameters_schema_json));
     setEditTemplateParametersJson(formatJsonObjectForEdit(template.default_parameters_json));
     setMessage(null);
     setLocalError(null);
@@ -178,6 +184,7 @@ export function ReportsPanel({
     setEditTemplateDescription("");
     setEditReportType("registry_cards");
     setEditOutputFormat("json");
+    setEditTemplateParametersSchemaJson("");
     setEditTemplateParametersJson("");
   }
 
@@ -245,6 +252,13 @@ export function ReportsPanel({
             </select>
           </label>
           <label className="field-editor-control template-body-control">
+            <span>Схема параметров JSON</span>
+            <textarea
+              value={templateParametersSchemaJson}
+              onChange={(event) => setTemplateParametersSchemaJson(event.target.value)}
+            />
+          </label>
+          <label className="field-editor-control template-body-control">
             <span>{uiText.reportTemplateParametersJson}</span>
             <textarea
               value={templateParametersJson}
@@ -308,6 +322,13 @@ export function ReportsPanel({
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="field-editor-control template-body-control">
+              <span>Новая схема параметров JSON</span>
+              <textarea
+                value={editTemplateParametersSchemaJson}
+                onChange={(event) => setEditTemplateParametersSchemaJson(event.target.value)}
+              />
             </label>
             <label className="field-editor-control template-body-control">
               <span>{uiText.reportTemplateEditParametersJson}</span>

@@ -1017,6 +1017,7 @@ beforeEach(() => {
             name: string;
             description: string | null;
             report_type: string;
+            parameters_schema_json: Record<string, unknown> | null;
             default_parameters_json: Record<string, unknown> | null;
             output_format: string;
           };
@@ -1027,7 +1028,7 @@ beforeEach(() => {
             name: payload.name,
             description: payload.description,
             report_type: payload.report_type,
-            parameters_schema_json: null,
+            parameters_schema_json: payload.parameters_schema_json,
             default_parameters_json: payload.default_parameters_json,
             output_format: payload.output_format,
             is_active: true,
@@ -1050,6 +1051,7 @@ beforeEach(() => {
             name?: string;
             description?: string | null;
             report_type?: string;
+            parameters_schema_json?: Record<string, unknown> | null;
             default_parameters_json?: Record<string, unknown> | null;
             output_format?: string;
           };
@@ -1063,6 +1065,9 @@ beforeEach(() => {
               ? (payload.description ?? null)
               : current.description,
             report_type: payload.report_type ?? current.report_type,
+            parameters_schema_json: Object.hasOwn(payload, "parameters_schema_json")
+              ? (payload.parameters_schema_json ?? null)
+              : current.parameters_schema_json,
             default_parameters_json: Object.hasOwn(payload, "default_parameters_json")
               ? (payload.default_parameters_json ?? null)
               : current.default_parameters_json,
@@ -3820,6 +3825,9 @@ test("manages report templates and report runs in Russian registry UI", async ()
     "pdf",
   ]);
   await user.selectOptions(reportFormatSelect, "pdf");
+  fireEvent.change(screen.getByLabelText("Схема параметров JSON"), {
+    target: { value: '{"type":"object","properties":{"limit":{"type":"number"}}}' },
+  });
   fireEvent.change(screen.getByLabelText("Параметры шаблона JSON"), {
     target: { value: '{"limit":20}' },
   });
@@ -3840,6 +3848,9 @@ test("manages report templates and report runs in Russian registry UI", async ()
   );
   await user.selectOptions(screen.getByLabelText("Новый тип отчета"), "period_summary");
   await user.selectOptions(screen.getByLabelText("Новый формат отчета"), "csv");
+  fireEvent.change(screen.getByLabelText("Новая схема параметров JSON"), {
+    target: { value: '{"type":"object","properties":{"limit":{"type":"integer"}}}' },
+  });
   fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
     target: { value: '{"limit":30}' },
   });
@@ -3928,6 +3939,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
           name?: string;
           description?: string | null;
           report_type?: string;
+          parameters_schema_json?: unknown;
           default_parameters_json?: unknown;
           output_format?: string;
         };
@@ -3936,6 +3948,8 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.name === "Отчет по карточкам" &&
           body.description === "Список видимых карточек" &&
           body.report_type === "registry_cards" &&
+          JSON.stringify(body.parameters_schema_json) ===
+            JSON.stringify({ type: "object", properties: { limit: { type: "number" } } }) &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
           body.output_format === "pdf"
         );
@@ -3954,6 +3968,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
           name?: string;
           description?: string | null;
           report_type?: string;
+          parameters_schema_json?: unknown;
           default_parameters_json?: unknown;
           output_format?: string;
         };
@@ -3962,6 +3977,8 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.description === "Обновленная сводка карточек" &&
           body.report_type === "period_summary" &&
           body.output_format === "csv" &&
+          JSON.stringify(body.parameters_schema_json) ===
+            JSON.stringify({ type: "object", properties: { limit: { type: "integer" } } }) &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 30 })
         );
       }),
