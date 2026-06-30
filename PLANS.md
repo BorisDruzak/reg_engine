@@ -97,6 +97,7 @@ Completed phases:
 - Phase 5E: MCP Registry Update And Archive Write Tools.
 - Phase 5F: MCP Schema Builder Write Tools.
 - Phase 5G: MCP Card Lifecycle Write Tools.
+- Phase 5H: MCP Card Field Value Write Tools.
 
 Current stop point:
 
@@ -260,6 +261,9 @@ Current stop point:
   three new tools with `readOnlyHint=false`, healthcheck passed, and Alembic
   remains at `0014_report_pdf_output (head)`. No production card was created,
   updated, or archived during smoke validation.
+- Phase 5H MCP Card Field Value Write Tools is completed locally and awaiting
+  deploy: the narrow MCP write-tool slice covers authenticated card
+  field-value updates through existing REST API endpoints only.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4538,6 +4542,103 @@ Production migration checkpoint:
 
 - Not required for Phase 5G; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5H: MCP Card Field Value Write Tools
+
+Status: completed locally; deploy pending.
+
+Purpose: extend the API-only MCP write surface with card field-value updates
+while keeping field validation, card edit permissions, archived/superseded edit
+protection, repeatable-block instance rules, `file_ref` metadata rules, and
+audit in the existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_set_card_field_value`
+- `reg_engine_set_card_values`
+
+Argument schemas:
+
+- `reg_engine_set_card_field_value`:
+  - `card_id`: required string.
+  - `field_id`: required string.
+  - `value`: required JSON value; may be `null`.
+  - `block_instance_id`: optional string.
+  - `additionalProperties=false`.
+- `reg_engine_set_card_values`:
+  - `card_id`: required string.
+  - `values`: required non-empty array of objects.
+  - each item has required `field_id`, required JSON `value`, optional
+    `block_instance_id`, and `additionalProperties=false`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `PATCH /api/v1/cards/{card_id}/fields/{field_id}`
+- `PATCH /api/v1/cards/{card_id}/values`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Field-value permissions, supported field-type validation, organization scope,
+  repeatable-block instance checks, `file_ref` same-card attachment checks,
+  public-link edit blocking, archived/superseded edit protection, and audit
+  remain API-side in the existing card service.
+- Bulk updates must use the existing atomic REST endpoint so partial validation
+  failures do not persist any value.
+
+Scope:
+
+- Expose the two tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F/5G write behavior.
+- Reject bulk calls with an empty `values` array before sending a request.
+- Forward `value` as a JSON value without MCP-side schema-specific coercion.
+- Do not upload files, download files, create attachments, create block
+  instances, archive block instances, transfer cards, create/archive cards,
+  mutate public links, generate documents, run reports, import/export data,
+  expose binary downloads, or add other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as write tools.
+- Single-value tool sends
+  `PATCH /api/v1/cards/{card_id}/fields/{field_id}` with `value` and optional
+  `block_instance_id`.
+- Bulk-value tool sends `PATCH /api/v1/cards/{card_id}/values` with the
+  existing `values: [{ field_id, value, block_instance_id }]` REST payload.
+- Bulk calls with an empty `values` array return an MCP tool error and send no
+  HTTP request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not mutate real production card values without a
+  disposable production-safe target.
+- Block-instance create/archive, card transfer, report/document/public-link,
+  attachment upload/download, and import/export MCP write tools remain future
+  phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_set_card_field_value` and `reg_engine_set_card_values` were
+  absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `27 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `93 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5H; no backend schema changes are included.
 
 ## Verification
 

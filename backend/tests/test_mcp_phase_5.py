@@ -197,6 +197,8 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_create_card",
         "reg_engine_update_card",
         "reg_engine_archive_card",
+        "reg_engine_set_card_field_value",
+        "reg_engine_set_card_values",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -857,6 +859,146 @@ def test_mcp_archive_card_tool_requires_confirmation_before_delete() -> None:
     assert transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}"
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
+
+
+def test_mcp_set_card_field_value_tool_patches_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_set_card_field_value"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "field_id", "value"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    field_id = str(uuid4())
+    block_instance_id = str(uuid4())
+    field_value_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": field_value_id,
+            "card_id": card_id,
+            "block_instance_id": block_instance_id,
+            "field_id": field_id,
+            "value": {"text": "Значение"},
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_set_card_field_value",
+        {
+            "card_id": card_id,
+            "field_id": field_id,
+            "value": {"text": "Значение"},
+            "block_instance_id": block_instance_id,
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == field_value_id
+    assert transport.requests[0]["method"] == "PATCH"
+    assert (
+        transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}/fields/{field_id}"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "value": {"text": "Значение"},
+        "block_instance_id": block_instance_id,
+    }
+
+
+def test_mcp_set_card_values_tool_patches_existing_bulk_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_set_card_values"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "values"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    first_field_id = str(uuid4())
+    second_field_id = str(uuid4())
+    block_instance_id = str(uuid4())
+    first_value_id = str(uuid4())
+    second_value_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "items": [
+                {
+                    "id": first_value_id,
+                    "card_id": card_id,
+                    "block_instance_id": block_instance_id,
+                    "field_id": first_field_id,
+                    "value": "Первое значение",
+                },
+                {
+                    "id": second_value_id,
+                    "card_id": card_id,
+                    "block_instance_id": block_instance_id,
+                    "field_id": second_field_id,
+                    "value": None,
+                },
+            ]
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    empty_bulk = call_tool(
+        "reg_engine_set_card_values", {"card_id": card_id, "values": []}, client=client
+    )
+    assert empty_bulk["isError"] is True
+    assert transport.requests == []
+
+    result = call_tool(
+        "reg_engine_set_card_values",
+        {
+            "card_id": card_id,
+            "values": [
+                {
+                    "field_id": first_field_id,
+                    "value": "Первое значение",
+                    "block_instance_id": block_instance_id,
+                },
+                {"field_id": second_field_id, "value": None},
+            ],
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["items"][0]["id"] == first_value_id
+    assert transport.requests[0]["method"] == "PATCH"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/cards/{card_id}/values"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "values": [
+            {
+                "field_id": first_field_id,
+                "value": "Первое значение",
+                "block_instance_id": block_instance_id,
+            },
+            {"field_id": second_field_id, "value": None},
+        ]
+    }
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:

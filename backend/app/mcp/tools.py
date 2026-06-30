@@ -362,6 +362,50 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_set_card_field_value",
+        "title": "Set card field value",
+        "description": "Set one card field value through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "field_id": {"type": "string"},
+                "value": {},
+                "block_instance_id": {"type": "string"},
+            },
+            "required": ["card_id", "field_id", "value"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_set_card_values",
+        "title": "Set card values",
+        "description": "Set multiple card field values through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "values": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field_id": {"type": "string"},
+                            "value": {},
+                            "block_instance_id": {"type": "string"},
+                        },
+                        "required": ["field_id", "value"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["card_id", "values"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -548,6 +592,21 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/cards/{card_id}")
+    if name == "reg_engine_set_card_field_value":
+        card_id = _required_str_arg(arguments, "card_id")
+        field_id = _required_str_arg(arguments, "field_id")
+        field_value_payload: dict[str, Any] = {"value": _required_json_arg(arguments, "value")}
+        _add_optional_str(field_value_payload, arguments, "block_instance_id")
+        return client.patch_json(
+            f"/api/v1/cards/{card_id}/fields/{field_id}",
+            field_value_payload,
+        )
+    if name == "reg_engine_set_card_values":
+        card_id = _required_str_arg(arguments, "card_id")
+        return client.patch_json(
+            f"/api/v1/cards/{card_id}/values",
+            {"values": _required_bulk_values_arg(arguments)},
+        )
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
@@ -597,6 +656,32 @@ def _optional_bool_arg(arguments: dict[str, Any], key: str) -> bool | None:
     if not isinstance(value, bool):
         raise ValueError(f"Tool argument {key!r} must be a boolean.")
     return value
+
+
+def _required_json_arg(arguments: dict[str, Any], key: str) -> Any:
+    if key not in arguments:
+        raise ValueError(f"Tool argument {key!r} is required.")
+    return arguments[key]
+
+
+def _required_bulk_values_arg(arguments: dict[str, Any]) -> list[dict[str, Any]]:
+    values = arguments.get("values")
+    if not isinstance(values, list):
+        raise ValueError("Tool argument 'values' must be an array.")
+    if not values:
+        raise ValueError("Tool argument 'values' must not be empty.")
+    return [_bulk_value_payload(value, index) for index, value in enumerate(values, start=1)]
+
+
+def _bulk_value_payload(value: object, index: int) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(f"Tool argument 'values[{index}]' must be an object.")
+    payload: dict[str, Any] = {
+        "field_id": _required_str_arg(value, "field_id"),
+        "value": _required_json_arg(value, "value"),
+    }
+    _add_optional_str(payload, value, "block_instance_id")
+    return payload
 
 
 def _add_optional_str(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
