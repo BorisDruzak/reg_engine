@@ -251,9 +251,15 @@ Current stop point:
   `tools/list` shows all six new tools with `readOnlyHint=false`, healthcheck
   passed, and Alembic remains at `0014_report_pdf_output (head)`. No
   production schema was updated or archived during smoke validation.
-- Phase 5G MCP Card Lifecycle Write Tools is completed locally and awaiting
-  deploy: the narrow MCP write-tool slice covers card create, metadata update,
-  and archive operations through existing REST API endpoints only.
+- Phase 5G MCP Card Lifecycle Write Tools is completed and deployed:
+  card lifecycle MCP tools call existing REST card create, metadata update,
+  and archive endpoints, require explicit `confirm_archive=true` for archive,
+  and keep permissions/audit API-enforced. Commit `21b16009` is pushed, the
+  server checkout is synchronized to `origin/main`, server checks passed,
+  server MCP targeted tests passed, server MCP stdio `tools/list` shows all
+  three new tools with `readOnlyHint=false`, healthcheck passed, and Alembic
+  remains at `0014_report_pdf_output (head)`. No production card was created,
+  updated, or archived during smoke validation.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4418,7 +4424,7 @@ Production migration checkpoint:
 
 ### Phase 5G: MCP Card Lifecycle Write Tools
 
-Status: completed locally; deploy pending.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with card lifecycle operations
 while keeping card visibility, edit permissions, validation, archive semantics,
@@ -4513,10 +4519,25 @@ Verification so far:
   with backend `91 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP card lifecycle write tools"`
+  created commit `21b16009` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes `reg_engine_create_card`,
+  `reg_engine_update_card`, and `reg_engine_archive_card` with
+  `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `21b16009`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
-- Not required for Phase 5G; no backend schema changes are included.
+- Not required for Phase 5G; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
 
