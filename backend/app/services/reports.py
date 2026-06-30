@@ -288,7 +288,9 @@ class ReportService:
             criteria.append(ReportRun.archived_at.is_(None))
         return list(
             self.session.scalars(
-                select(ReportRun).where(*criteria).order_by(ReportRun.created_at, ReportRun.id)
+                select(ReportRun)
+                .where(*criteria)
+                .order_by(ReportRun.created_at.desc(), ReportRun.id.desc())
             ).all()
         )
 

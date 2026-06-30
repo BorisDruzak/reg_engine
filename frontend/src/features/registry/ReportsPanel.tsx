@@ -365,7 +365,8 @@ function ReportTemplateList({
             <strong>{template.name}</strong>
             <span>
               {uiText.technicalCode}: {template.code} / {reportTypeLabel(template.report_type)} /{" "}
-              {template.output_format} / {formatUiDateTime(template.created_at)}
+              {reportOutputFormatLabel(template.output_format)} /{" "}
+              {formatUiDateTime(template.created_at)}
             </span>
           </div>
           <div className="row-actions">
@@ -417,13 +418,15 @@ function ReportRunList({
     <ul className="file-action-list">
       {items.map((run) => {
         const title = templateById.get(run.report_template_id)?.name ?? run.output_filename;
+        const outputFormat = reportRunOutputFormatLabel(run);
         return (
           <li key={run.id}>
             <div>
               <strong>{title}</strong>
               <span>
                 {reportTypeLabel(run.report_type)} / {reportRunStatusLabel(run.run_status)} /{" "}
-                {run.row_count} / {formatUiDateTime(run.created_at)}
+                {outputFormat} / {run.output_filename} / {run.row_count} /{" "}
+                {formatUiDateTime(run.created_at)}
               </span>
             </div>
             <div className="row-actions">
@@ -482,6 +485,16 @@ function formatJsonObjectForEdit(value: Record<string, unknown> | null) {
 
 function reportOutputFormatLabel(format: string) {
   return format.toUpperCase();
+}
+
+function reportRunOutputFormatLabel(run: ReportRunRead) {
+  if (run.output_content_type.includes("csv") || run.output_filename.endsWith(".csv")) {
+    return "CSV";
+  }
+  if (run.output_content_type.includes("json") || run.output_filename.endsWith(".json")) {
+    return "JSON";
+  }
+  return run.output_content_type;
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

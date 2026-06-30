@@ -2,6 +2,7 @@ import csv
 import json
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,16 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AccessGrant, AuditEvent, Permission, Role, StoredFile, User, role_permissions
+from app.models import (
+    AccessGrant,
+    AuditEvent,
+    Permission,
+    ReportRun,
+    Role,
+    StoredFile,
+    User,
+    role_permissions,
+)
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
@@ -454,6 +464,53 @@ def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
         ).all()
     )
     assert {"report_run_generate", "report_run_download"} <= audit_actions
+
+
+def test_report_runs_list_newest_runs_first(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _report_api_context(db_session)
+    template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="run-order",
+        report_type="registry_cards",
+    )
+
+    first_response = api_client.post(
+        f"/api/v1/report-templates/{template['id']}/runs",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"parameters": {"organization_id": str(context["child"].id), "q": "first"}},
+    )
+    assert first_response.status_code == 201, first_response.text
+    second_response = api_client.post(
+        f"/api/v1/report-templates/{template['id']}/runs",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"parameters": {"organization_id": str(context["child"].id), "q": "second"}},
+    )
+    assert second_response.status_code == 201, second_response.text
+    first_payload = first_response.json()
+    second_payload = second_response.json()
+
+    first_run = db_session.get(ReportRun, UUID(first_payload["id"]))
+    second_run = db_session.get(ReportRun, UUID(second_payload["id"]))
+    assert first_run is not None
+    assert second_run is not None
+    first_run.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    second_run.created_at = datetime(2026, 1, 2, tzinfo=UTC)
+    db_session.flush()
+
+    list_response = api_client.get(
+        f"/api/v1/registries/{context['registry'].id}/report-runs",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert [item["id"] for item in list_response.json()["items"]] == [
+        second_payload["id"],
+        first_payload["id"],
+    ]
 
 
 def test_registry_and_period_report_runs_are_scoped_stored_and_audited(

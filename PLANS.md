@@ -191,6 +191,9 @@ Current stop point:
   migrated to `0012_report_csv_output` after backup and preflight, frontend
   dist is deployed, OpenAPI exposes report routes, healthcheck passed, and
   server checks passed.
+- Phase 4E Report Run List Polish is implemented in the current checkpoint:
+  report runs are listed newest-first and the Russian report UI shows output
+  format and filename for generated runs. No migration is required.
 - Next planned work requires explicit prioritization: remaining report polish,
   XLSX/PDF report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
@@ -1867,6 +1870,65 @@ Production migration checkpoint:
 - `scripts/server-check.ps1` passed after migration and deployment.
 - Server OpenAPI smoke verified report routes and healthcheck:
   `GET /api/v1/health` returned `{"status":"ok","service":"reg_engine"}`.
+
+### Phase 4E: Report Run List Polish
+
+Status: implemented locally; pending full checks and deployment verification.
+
+Purpose: close a small report polish gap before larger XLSX/PDF report outputs,
+XLSX workflows, or MCP write tools.
+
+Scope:
+
+- List report runs newest-first for registry report run reads.
+- Show generated report output format and output filename in the Russian report
+  run list.
+- Keep the existing report template/run REST API boundary.
+- Do not add database schema changes or migrations.
+- Do not add XLSX/PDF output, scheduling, charts, public-link report workflows,
+  binary attachment/document report export, or MCP write tools.
+
+Acceptance criteria:
+
+- Newer report runs appear before older runs in
+  `GET /api/v1/registries/{registry_id}/report-runs`.
+- The authenticated Russian report UI shows a generated run's format and
+  filename, for example `CSV / report.csv`.
+- Existing report generate/download/archive behavior remains intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is list polish only; it does not add a visual report builder.
+- XLSX/PDF report outputs remain deferred.
+- Scheduled/background reports, charts, and public-link report workflows remain
+  deferred.
+- No MCP report write tools.
+
+Verification so far:
+
+- RED backend test failed before implementation because report runs were listed
+  oldest-first.
+- RED frontend test failed before implementation because the report run row did
+  not show `CSV / report.csv`.
+- GREEN backend targeted test passed on disposable PostgreSQL database
+  `reg_engine_phase4e_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_api_phase_4_reports.py::test_report_runs_list_newest_runs_first -q`.
+- GREEN frontend targeted test passed:
+  `npm test -- --run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Full PostgreSQL-backed report API suite passed on disposable database
+  `reg_engine_phase4e_test`:
+  `backend\.venv\Scripts\python.exe -m pytest backend/tests/test_api_phase_4_reports.py -q`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4E.
 
 ### Phase 5: MCP Over API Only
 

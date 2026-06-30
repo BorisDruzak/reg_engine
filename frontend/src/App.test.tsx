@@ -3520,7 +3520,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("Карточки реестра / Сформирован / 1"),
+        element.textContent?.includes("Карточки реестра / Сформирован / CSV / report.csv / 1"),
       ),
     ),
   ).toBeInTheDocument();
