@@ -209,10 +209,13 @@ Current stop point:
   without terminating the server loop, and returns tool argument failures as
   MCP tool errors. It is implemented, pushed, deployed, and verified on the
   server. No migration was required.
-- Phase 5C MCP Mutation Client Foundation is completed locally and pending
-  deploy: the MCP REST API client can send JSON `POST`, `PATCH`, and `DELETE`
-  requests with bearer auth and `X-Reg-Engine-Source: mcp`, while the published
-  MCP tool list remains read-only and no MCP write tools are exposed.
+- Phase 5C MCP Mutation Client Foundation is completed and deployed: the MCP
+  REST API client can send JSON `POST`, `PATCH`, and `DELETE` requests with
+  bearer auth and `X-Reg-Engine-Source: mcp`, while the published MCP tool list
+  remains read-only and no MCP write tools are exposed. Commit `c01e088` is
+  pushed, the server checkout is synchronized to `origin/main`, server checks
+  passed, server MCP targeted tests passed, live MCP stdio sanity passed, and
+  Alembic remains at `0014_report_pdf_output (head)`.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -3965,7 +3968,7 @@ Known limitations:
 
 ### Phase 5C: MCP Mutation Client Foundation
 
-Status: completed locally; deploy pending.
+Status: completed and deployed.
 
 Purpose: prepare the MCP gateway for future explicitly approved write tools by
 adding mutation-capable REST client primitives while keeping the published MCP
@@ -4013,10 +4016,22 @@ Verification so far:
   with backend `81 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP mutation client foundation"`
+  created commit `c01e0880` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed with `15 passed`.
+- Server MCP stdio sanity passed for `initialize` and `reg_engine_health`.
+- Direct server smoke passed: server checkout `c01e0880`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
-- Not required for Phase 5C; no backend schema changes are included.
+- Not required for Phase 5C; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
 
