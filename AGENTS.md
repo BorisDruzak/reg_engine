@@ -460,5 +460,6 @@ sudo systemctl status postgresql --no-pager
 - MCP tools must call the REST API only.
 - MCP code must not import SQLAlchemy, Alembic, database sessions, backend models, or backend service classes.
 - Phase 5A MCP tools are read-only and use HTTP `GET` only.
+- Current approved MCP write tools are limited to the explicit registry and schema-builder tools named in `PLANS.md` Phase 5D, Phase 5E, and Phase 5F.
 - MCP requests must send `X-Reg-Engine-Source: mcp` so API-side audit can record `source=mcp`.
 - Do not add MCP write tools unless an explicit later plan phase approves them.

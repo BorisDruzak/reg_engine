@@ -188,6 +188,12 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_create_registry",
         "reg_engine_update_registry",
         "reg_engine_archive_registry",
+        "reg_engine_create_form_block",
+        "reg_engine_update_form_block",
+        "reg_engine_archive_form_block",
+        "reg_engine_create_form_field",
+        "reg_engine_update_form_field",
+        "reg_engine_archive_form_field",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -373,6 +379,313 @@ def test_mcp_archive_registry_tool_requires_confirmation_before_delete() -> None
     assert transport.requests[0]["url"] == f"http://api.local/api/v1/registries/{registry_id}"
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
+
+
+def test_mcp_create_form_block_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_create_form_block"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["registry_id", "code", "title"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    registry_id = str(uuid4())
+    block_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": block_id,
+            "registry_id": registry_id,
+            "code": "main",
+            "title": "Main block",
+            "description": "Block description",
+            "position": 10,
+            "is_repeatable": True,
+            "is_active": True,
+            "public_visible": True,
+            "public_editable": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_form_block",
+        {
+            "registry_id": registry_id,
+            "code": "main",
+            "title": "Main block",
+            "description": "Block description",
+            "position": 10,
+            "is_repeatable": True,
+            "public_visible": True,
+            "public_editable": False,
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == block_id
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"] == f"http://api.local/api/v1/registries/{registry_id}/blocks"
+    )
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "code": "main",
+        "title": "Main block",
+        "description": "Block description",
+        "position": 10,
+        "is_repeatable": True,
+        "public_visible": True,
+        "public_editable": False,
+    }
+
+
+def test_mcp_update_and_archive_form_block_tools_use_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    update_tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_update_form_block"
+    )
+    archive_tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_archive_form_block"
+    )
+    assert update_tool["annotations"]["readOnlyHint"] is False
+    assert update_tool["inputSchema"]["required"] == ["block_id"]
+    assert update_tool["inputSchema"]["additionalProperties"] is False
+    assert archive_tool["annotations"]["readOnlyHint"] is False
+    assert archive_tool["inputSchema"]["required"] == ["block_id", "confirm_archive"]
+    assert archive_tool["inputSchema"]["additionalProperties"] is False
+
+    block_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": block_id,
+            "registry_id": str(uuid4()),
+            "code": "main",
+            "title": "Updated block",
+            "description": "Updated description",
+            "position": 20,
+            "is_repeatable": False,
+            "is_active": False,
+            "public_visible": True,
+            "public_editable": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    empty_update = call_tool("reg_engine_update_form_block", {"block_id": block_id}, client=client)
+    assert empty_update["isError"] is True
+    assert transport.requests == []
+
+    updated = call_tool(
+        "reg_engine_update_form_block",
+        {
+            "block_id": block_id,
+            "title": "Updated block",
+            "description": "Updated description",
+            "position": 20,
+        },
+        client=client,
+    )
+    assert updated["isError"] is False
+    assert transport.requests[0]["method"] == "PATCH"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/blocks/{block_id}"
+    update_body = transport.requests[0]["body"]
+    assert isinstance(update_body, bytes)
+    assert json.loads(update_body.decode("utf-8")) == {
+        "title": "Updated block",
+        "description": "Updated description",
+        "position": 20,
+    }
+
+    rejected = call_tool(
+        "reg_engine_archive_form_block",
+        {"block_id": block_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert len(transport.requests) == 1
+
+    archived = call_tool(
+        "reg_engine_archive_form_block",
+        {"block_id": block_id, "confirm_archive": True},
+        client=client,
+    )
+    assert archived["isError"] is False
+    assert transport.requests[1]["method"] == "DELETE"
+    assert transport.requests[1]["url"] == f"http://api.local/api/v1/blocks/{block_id}"
+    assert transport.requests[1]["body"] is None
+
+
+def test_mcp_create_form_field_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_create_form_field"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["block_id", "code", "label", "field_type"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    block_id = str(uuid4())
+    field_id = str(uuid4())
+    reference_list_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": field_id,
+            "block_id": block_id,
+            "code": "status",
+            "label": "Status",
+            "description": "Status description",
+            "field_type": "select",
+            "position": 5,
+            "options_source_type": "reference_list",
+            "options_source_id": reference_list_id,
+            "is_active": True,
+            "public_visible": True,
+            "public_editable": True,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_form_field",
+        {
+            "block_id": block_id,
+            "code": "status",
+            "label": "Status",
+            "field_type": "select",
+            "description": "Status description",
+            "position": 5,
+            "options_source_type": "reference_list",
+            "options_source_id": reference_list_id,
+            "public_visible": True,
+            "public_editable": True,
+        },
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == field_id
+    assert transport.requests[0]["method"] == "POST"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/blocks/{block_id}/fields"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "code": "status",
+        "label": "Status",
+        "field_type": "select",
+        "description": "Status description",
+        "position": 5,
+        "options_source_type": "reference_list",
+        "options_source_id": reference_list_id,
+        "public_visible": True,
+        "public_editable": True,
+    }
+
+
+def test_mcp_update_and_archive_form_field_tools_use_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    update_tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_update_form_field"
+    )
+    archive_tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_archive_form_field"
+    )
+    assert update_tool["annotations"]["readOnlyHint"] is False
+    assert update_tool["inputSchema"]["required"] == ["field_id"]
+    assert update_tool["inputSchema"]["additionalProperties"] is False
+    assert archive_tool["annotations"]["readOnlyHint"] is False
+    assert archive_tool["inputSchema"]["required"] == ["field_id", "confirm_archive"]
+    assert archive_tool["inputSchema"]["additionalProperties"] is False
+
+    field_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": field_id,
+            "block_id": str(uuid4()),
+            "code": "status",
+            "label": "Updated status",
+            "description": "Updated description",
+            "field_type": "text",
+            "position": 15,
+            "options_source_type": None,
+            "options_source_id": None,
+            "is_active": False,
+            "public_visible": True,
+            "public_editable": False,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    empty_update = call_tool("reg_engine_update_form_field", {"field_id": field_id}, client=client)
+    assert empty_update["isError"] is True
+    assert transport.requests == []
+
+    updated = call_tool(
+        "reg_engine_update_form_field",
+        {
+            "field_id": field_id,
+            "label": "Updated status",
+            "description": "Updated description",
+            "position": 15,
+            "is_active": False,
+        },
+        client=client,
+    )
+    assert updated["isError"] is False
+    assert transport.requests[0]["method"] == "PATCH"
+    assert transport.requests[0]["url"] == f"http://api.local/api/v1/fields/{field_id}"
+    update_body = transport.requests[0]["body"]
+    assert isinstance(update_body, bytes)
+    assert json.loads(update_body.decode("utf-8")) == {
+        "label": "Updated status",
+        "description": "Updated description",
+        "position": 15,
+        "is_active": False,
+    }
+
+    rejected = call_tool(
+        "reg_engine_archive_form_field",
+        {"field_id": field_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert len(transport.requests) == 1
+
+    archived = call_tool(
+        "reg_engine_archive_form_field",
+        {"field_id": field_id, "confirm_archive": True},
+        client=client,
+    )
+    assert archived["isError"] is False
+    assert transport.requests[1]["method"] == "DELETE"
+    assert transport.requests[1]["url"] == f"http://api.local/api/v1/fields/{field_id}"
+    assert transport.requests[1]["body"] is None
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:

@@ -95,6 +95,7 @@ Completed phases:
 - Phase 5C: MCP Mutation Client Foundation.
 - Phase 5D: MCP Registry Create Write Tool.
 - Phase 5E: MCP Registry Update And Archive Write Tools.
+- Phase 5F: MCP Schema Builder Write Tools.
 
 Current stop point:
 
@@ -240,6 +241,11 @@ Current stop point:
   `readOnlyHint=false`, healthcheck passed, and Alembic remains at
   `0014_report_pdf_output (head)`. No production registry was updated or
   archived during smoke validation.
+- Phase 5F MCP Schema Builder Write Tools is completed locally and pending
+  deploy: schema-builder MCP tools call existing REST form block and form
+  field create/update/archive endpoints, require explicit
+  `confirm_archive=true` for archive, and keep permissions/validation/audit
+  API-enforced.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4253,6 +4259,140 @@ Production migration checkpoint:
 
 - Not required for Phase 5E; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5F: MCP Schema Builder Write Tools
+
+Status: completed locally; deploy pending.
+
+Purpose: extend the API-only MCP write surface with schema-builder operations
+for form blocks and form fields while keeping all schema permissions,
+validation, and audit in the existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_create_form_block`
+- `reg_engine_update_form_block`
+- `reg_engine_archive_form_block`
+- `reg_engine_create_form_field`
+- `reg_engine_update_form_field`
+- `reg_engine_archive_form_field`
+
+Argument schemas:
+
+- `reg_engine_create_form_block`:
+  - `registry_id`: required string.
+  - `code`: required string.
+  - `title`: required string.
+  - `description`: optional string.
+  - `position`: optional integer.
+  - `is_repeatable`: optional boolean.
+  - `public_visible`: optional boolean.
+  - `public_editable`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_update_form_block`:
+  - `block_id`: required string.
+  - `title`: optional string.
+  - `description`: optional string.
+  - `position`: optional integer.
+  - `additionalProperties=false`.
+- `reg_engine_archive_form_block`:
+  - `block_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+- `reg_engine_create_form_field`:
+  - `block_id`: required string.
+  - `code`: required string.
+  - `label`: required string.
+  - `field_type`: required string.
+  - `description`: optional string.
+  - `position`: optional integer.
+  - `options_source_type`: optional string.
+  - `options_source_id`: optional string.
+  - `public_visible`: optional boolean.
+  - `public_editable`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_update_form_field`:
+  - `field_id`: required string.
+  - `label`: optional string.
+  - `description`: optional string.
+  - `position`: optional integer.
+  - `is_active`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_archive_form_field`:
+  - `field_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/registries/{registry_id}/blocks`
+- `PATCH /api/v1/blocks/{block_id}`
+- `DELETE /api/v1/blocks/{block_id}`
+- `POST /api/v1/blocks/{block_id}/fields`
+- `PATCH /api/v1/fields/{field_id}`
+- `DELETE /api/v1/fields/{field_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Schema permissions remain API-side through existing
+  `registry.schema.manage` checks.
+- Schema validation, locked/system block and field protection, archive
+  semantics, and audit remain in the existing backend service layer.
+- Archive tools require explicit `confirm_archive=true` before sending DELETE.
+
+Scope:
+
+- Expose the six tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E registry write behavior.
+- Reject archive calls unless `confirm_archive=true`.
+- Reject update calls with no update fields before sending a request.
+- Do not add card mutation, import, document, report, public-link, binary
+  download, or other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes all six new tools as write tools.
+- Create block and create field tools send POST requests with only provided
+  optional fields added to required payloads.
+- Update block and update field tools send PATCH requests with only provided
+  update fields and reject empty update payloads.
+- Archive block and archive field tools send DELETE requests only when
+  `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not archive or mutate real production schema
+  without a disposable production-safe target.
+- Card/report/document/public-link MCP write tools remain future phases.
+
+Verification so far:
+
+- RED targeted tests failed before implementation because
+  `reg_engine_create_form_block`, `reg_engine_update_form_block`,
+  `reg_engine_archive_form_block`, `reg_engine_create_form_field`,
+  `reg_engine_update_form_field`, and `reg_engine_archive_form_field` were
+  absent from `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted schema-builder MCP tool tests passed.
+- Full MCP Phase 5 test file passed locally with `22 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy app/mcp` passed
+  locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `88 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5F; no backend schema changes are planned.
 
 ## Verification
 

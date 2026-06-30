@@ -196,6 +196,119 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_create_form_block",
+        "title": "Create form block",
+        "description": "Create a form block through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "registry_id": {"type": "string"},
+                "code": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "position": {"type": "integer"},
+                "is_repeatable": {"type": "boolean"},
+                "public_visible": {"type": "boolean"},
+                "public_editable": {"type": "boolean"},
+            },
+            "required": ["registry_id", "code", "title"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_update_form_block",
+        "title": "Update form block",
+        "description": "Update form block settings through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "block_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "position": {"type": "integer"},
+            },
+            "required": ["block_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_form_block",
+        "title": "Archive form block",
+        "description": (
+            "Archive a form block through the Registry Engine API. Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "block_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["block_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_create_form_field",
+        "title": "Create form field",
+        "description": "Create a form field through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "block_id": {"type": "string"},
+                "code": {"type": "string"},
+                "label": {"type": "string"},
+                "field_type": {"type": "string"},
+                "description": {"type": "string"},
+                "position": {"type": "integer"},
+                "options_source_type": {"type": "string"},
+                "options_source_id": {"type": "string"},
+                "public_visible": {"type": "boolean"},
+                "public_editable": {"type": "boolean"},
+            },
+            "required": ["block_id", "code", "label", "field_type"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_update_form_field",
+        "title": "Update form field",
+        "description": "Update form field settings through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "field_id": {"type": "string"},
+                "label": {"type": "string"},
+                "description": {"type": "string"},
+                "position": {"type": "integer"},
+                "is_active": {"type": "boolean"},
+            },
+            "required": ["field_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_form_field",
+        "title": "Archive form field",
+        "description": (
+            "Archive a form field through the Registry Engine API. Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "field_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["field_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -303,6 +416,61 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/registries/{registry_id}")
+    if name == "reg_engine_create_form_block":
+        registry_id = _required_str_arg(arguments, "registry_id")
+        block_payload: dict[str, Any] = {
+            "code": _required_str_arg(arguments, "code"),
+            "title": _required_str_arg(arguments, "title"),
+        }
+        _add_optional_str(block_payload, arguments, "description")
+        _add_optional_int(block_payload, arguments, "position")
+        _add_optional_bool(block_payload, arguments, "is_repeatable")
+        _add_optional_bool(block_payload, arguments, "public_visible")
+        _add_optional_bool(block_payload, arguments, "public_editable")
+        return client.post_json(f"/api/v1/registries/{registry_id}/blocks", block_payload)
+    if name == "reg_engine_update_form_block":
+        block_id = _required_str_arg(arguments, "block_id")
+        block_update_payload: dict[str, Any] = {}
+        _add_optional_str(block_update_payload, arguments, "title")
+        _add_optional_str(block_update_payload, arguments, "description")
+        _add_optional_int(block_update_payload, arguments, "position")
+        if not block_update_payload:
+            raise ValueError("At least one form block update field is required.")
+        return client.patch_json(f"/api/v1/blocks/{block_id}", block_update_payload)
+    if name == "reg_engine_archive_form_block":
+        block_id = _required_str_arg(arguments, "block_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/blocks/{block_id}")
+    if name == "reg_engine_create_form_field":
+        block_id = _required_str_arg(arguments, "block_id")
+        field_payload: dict[str, Any] = {
+            "code": _required_str_arg(arguments, "code"),
+            "label": _required_str_arg(arguments, "label"),
+            "field_type": _required_str_arg(arguments, "field_type"),
+        }
+        _add_optional_str(field_payload, arguments, "description")
+        _add_optional_int(field_payload, arguments, "position")
+        _add_optional_str(field_payload, arguments, "options_source_type")
+        _add_optional_str(field_payload, arguments, "options_source_id")
+        _add_optional_bool(field_payload, arguments, "public_visible")
+        _add_optional_bool(field_payload, arguments, "public_editable")
+        return client.post_json(f"/api/v1/blocks/{block_id}/fields", field_payload)
+    if name == "reg_engine_update_form_field":
+        field_id = _required_str_arg(arguments, "field_id")
+        field_update_payload: dict[str, Any] = {}
+        _add_optional_str(field_update_payload, arguments, "label")
+        _add_optional_str(field_update_payload, arguments, "description")
+        _add_optional_int(field_update_payload, arguments, "position")
+        _add_optional_bool(field_update_payload, arguments, "is_active")
+        if not field_update_payload:
+            raise ValueError("At least one form field update field is required.")
+        return client.patch_json(f"/api/v1/fields/{field_id}", field_update_payload)
+    if name == "reg_engine_archive_form_field":
+        field_id = _required_str_arg(arguments, "field_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/fields/{field_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
@@ -331,6 +499,42 @@ def _bool_arg(arguments: dict[str, Any], key: str, default: bool) -> bool:
 
 def _int_arg(arguments: dict[str, Any], key: str, default: int) -> int:
     value = arguments.get(key, default)
-    if not isinstance(value, int):
+    if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"Tool argument {key!r} must be an integer.")
     return value
+
+
+def _optional_int_arg(arguments: dict[str, Any], key: str) -> int | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"Tool argument {key!r} must be an integer.")
+    return value
+
+
+def _optional_bool_arg(arguments: dict[str, Any], key: str) -> bool | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"Tool argument {key!r} must be a boolean.")
+    return value
+
+
+def _add_optional_str(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
+    value = _optional_str_arg(arguments, key)
+    if value is not None:
+        payload[key] = value
+
+
+def _add_optional_int(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
+    value = _optional_int_arg(arguments, key)
+    if value is not None:
+        payload[key] = value
+
+
+def _add_optional_bool(payload: dict[str, Any], arguments: dict[str, Any], key: str) -> None:
+    value = _optional_bool_arg(arguments, key)
+    if value is not None:
+        payload[key] = value
