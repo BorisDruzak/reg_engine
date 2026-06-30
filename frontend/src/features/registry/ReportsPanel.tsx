@@ -28,10 +28,12 @@ type ReportParameterField = {
   label: string;
   description: string | null;
   required: boolean;
+  pattern: string | null;
   minLength: number | null;
   maxLength: number | null;
   minimum: number | null;
   maximum: number | null;
+  multipleOf: number | null;
   type: ReportParameterFieldType;
   inputType: "date" | "number" | "text";
   options: ReportParameterOption[];
@@ -778,10 +780,12 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
         label,
         description,
         required: requiredCodes.has(code),
+        pattern: getStringConstraint(rawConfig.pattern),
         minLength: getNonNegativeIntegerConstraint(rawConfig.minLength),
         maxLength: getNonNegativeIntegerConstraint(rawConfig.maxLength),
         minimum: getFiniteNumberConstraint(rawConfig.minimum),
         maximum: getFiniteNumberConstraint(rawConfig.maximum),
+        multipleOf: getPositiveNumberConstraint(rawConfig.multipleOf),
         type: rawType,
         inputType: getReportParameterInputType(rawConfig, rawType),
         options: getReportParameterOptions(rawConfig, rawType),
@@ -837,6 +841,9 @@ function validateReportParameterConstraints(field: ReportParameterField, value: 
       ...(field.maxLength !== null && textValue.length > field.maxLength
         ? [`${field.label} должен быть не длиннее ${field.maxLength} символов`]
         : []),
+      ...(field.pattern !== null && !matchesReportParameterPattern(textValue, field.pattern)
+        ? [`${field.label} должен соответствовать шаблону`]
+        : []),
     ];
   }
   if (field.type !== "number" && field.type !== "integer") {
@@ -855,6 +862,9 @@ function validateReportParameterConstraints(field: ReportParameterField, value: 
     ...(field.maximum !== null && value > field.maximum
       ? [`${field.label} должен быть не больше ${field.maximum}`]
       : []),
+    ...(field.multipleOf !== null && !isReportParameterMultipleOf(value, field.multipleOf)
+      ? [`${field.label} должен быть кратен ${field.multipleOf}`]
+      : []),
   ];
 }
 
@@ -869,8 +879,29 @@ function getFiniteNumberConstraint(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function getPositiveNumberConstraint(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
 function getNonNegativeIntegerConstraint(value: unknown) {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function getStringConstraint(value: unknown) {
+  return typeof value === "string" && value ? value : null;
+}
+
+function matchesReportParameterPattern(value: string, pattern: string) {
+  try {
+    return new RegExp(pattern).test(value);
+  } catch {
+    return true;
+  }
+}
+
+function isReportParameterMultipleOf(value: number, multipleOf: number) {
+  const quotient = value / multipleOf;
+  return Math.abs(quotient - Math.round(quotient)) < Number.EPSILON;
 }
 
 function getReportParameterDefaults(schema: Record<string, unknown> | null) {

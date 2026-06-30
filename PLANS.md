@@ -87,6 +87,7 @@ Completed phases:
 - Phase 4R: Report Run Schema Default Parameters.
 - Phase 4S: Report Run Required Parameter Validation.
 - Phase 4T: Report Run Scalar Constraint Validation.
+- Phase 4U: Report Run Pattern And Multiple Validation.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -347,6 +348,12 @@ Current stop point:
   remains at `0014_report_pdf_output (head)`. No backend code, migrations,
   endpoints, report formats, full visual report builder, or MCP write tools are
   included.
+- Phase 4U Report Run Pattern And Multiple Validation is completed locally:
+  supported flat report run controls now read string `pattern` and numeric
+  `multipleOf`, block generation when provided values fail those constraints,
+  and show a Russian validation message listing the failing parameter labels.
+  Deployment evidence is pending. No backend code, migrations, endpoints,
+  report formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3493,6 +3500,87 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4T; no backend schema changes are included.
+
+### Phase 4U: Report Run Pattern And Multiple Validation
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by honoring additional flat JSON Schema scalar
+constraints in the Russian report run form before calling the existing report
+run API.
+
+Scope:
+
+- Detect `pattern` for supported flat string report parameters.
+- Detect `multipleOf` for supported flat number/integer report parameters.
+- Validate the resolved run parameter payload from manual JSON or merged
+  defaults before report generation.
+- Ignore invalid regex patterns instead of crashing the UI.
+- Show a Russian validation message listing the failing parameter labels.
+- Do not send the report run POST request when supported `pattern` or
+  `multipleOf` constraints fail.
+- Preserve existing manual JSON override, schema defaults, template defaults,
+  required validation, scalar min/max validation, number, integer, boolean,
+  enum, `oneOf`, date, description, output format, archive, download, and
+  metadata display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A flat string report parameter that does not match `pattern` blocks
+  generation in the Russian UI.
+- A flat number/integer report parameter that is not divisible by `multipleOf`
+  blocks generation in the Russian UI.
+- The validation message includes visible parameter labels.
+- No report run POST is sent while supported `pattern` or `multipleOf`
+  constraints fail.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is frontend validation only; backend remains the API/security boundary.
+- Only flat visual parameters supported by the current report form are checked.
+- Invalid regex patterns are ignored by the UI and remain an operator/template
+  configuration issue.
+- No nested schema validation, `exclusiveMinimum`, `exclusiveMaximum`,
+  conditional schema, arrays, objects, grouped controls, or full visual report
+  builder behavior is included.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because generation
+  was not blocked when a string failed `pattern` and an integer failed
+  `multipleOf`.
+- GREEN targeted pattern/multiple frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when pattern or multipleOf constraints fail"`.
+- Existing scalar-constraint targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when scalar schema constraints fail"`.
+- Existing required-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "blocks report generation when required"`.
+- Existing schema-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report parameter schema defaults"`.
+- Existing date-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Local format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `80 passed, 138 skipped`, frontend unit `38 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed` after clearing a stale local Vite
+  process from an earlier failed e2e webServer start on port `5173`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4U; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 
