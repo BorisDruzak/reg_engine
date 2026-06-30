@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -432,6 +432,62 @@ def test_pdf_report_output_renderer_creates_pdf_bytes() -> None:
     assert "card_count" in extracted_text
 
 
+def test_report_template_update_service_accepts_type_and_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSession:
+        def __init__(self) -> None:
+            self.flushed = False
+
+        def flush(self) -> None:
+            self.flushed = True
+
+    class FakeAuditService:
+        def __init__(self, session: FakeSession) -> None:
+            self.session = session
+            self.events: list[dict[str, Any]] = []
+
+        def record_user_event(self, **kwargs: Any) -> None:
+            self.events.append(kwargs)
+
+    session = FakeSession()
+    audit_service = FakeAuditService(session)
+    template = ReportTemplate(
+        id=uuid4(),
+        registry_id=uuid4(),
+        code="editable-report",
+        name="Editable report",
+        report_type="registry_cards",
+        output_format="json",
+    )
+    service = ReportService(session=session, storage=None)  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_template", lambda template_id: template)
+    monkeypatch.setattr(
+        service,
+        "_require_schema_permission",
+        lambda actor_user_id, registry_id: None,
+    )
+    monkeypatch.setattr("app.services.reports.AuditService", lambda session: audit_service)
+
+    updated = service.update_template_for_actor(
+        actor_user_id=uuid4(),
+        template_id=template.id,
+        updates={"report_type": "period_summary", "output_format": "pdf"},
+    )
+
+    assert updated.report_type == "period_summary"
+    assert updated.output_format == "pdf"
+    assert session.flushed is True
+    assert audit_service.events[0]["old_data_json"] == {
+        "report_type": "registry_cards",
+        "output_format": "json",
+    }
+    assert audit_service.events[0]["new_data_json"] == {
+        "report_type": "period_summary",
+        "output_format": "pdf",
+    }
+
+
 def test_report_template_settings_can_be_updated_and_audited(
     api_client: TestClient,
     db_session: Session,
@@ -451,15 +507,17 @@ def test_report_template_settings_can_be_updated_and_audited(
         json={
             "name": "Updated registry report",
             "description": "Updated report description",
+            "report_type": "period_summary",
             "default_parameters_json": {"limit": 25},
+            "output_format": "pdf",
         },
     )
     assert update_response.status_code == 200, update_response.text
     updated = update_response.json()
     assert updated["id"] == template["id"]
     assert updated["code"] == "editable-template"
-    assert updated["report_type"] == "registry_cards"
-    assert updated["output_format"] == "json"
+    assert updated["report_type"] == "period_summary"
+    assert updated["output_format"] == "pdf"
     assert updated["name"] == "Updated registry report"
     assert updated["description"] == "Updated report description"
     assert updated["default_parameters_json"] == {"limit": 25}
@@ -489,6 +547,21 @@ def test_report_template_settings_can_be_updated_and_audited(
         json={"name": "Archived update"},
     )
     assert archived_update_response.status_code == 400, archived_update_response.text
+
+    invalid_format_template = _create_report_template(
+        api_client,
+        registry_id=context["registry"].id,
+        actor_user_id=context["schema_admin"].id,
+        code="invalid-format-template",
+        report_type="registry_cards",
+    )
+    invalid_format_response = api_client.patch(
+        f"/api/v1/report-templates/{invalid_format_template['id']}",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={"output_format": "xml"},
+    )
+    assert invalid_format_response.status_code == 400, invalid_format_response.text
+    assert "Unsupported report output format" in invalid_format_response.text
 
     audit_actions = set(
         db_session.scalars(

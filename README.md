@@ -501,13 +501,16 @@ Report templates require `registry.schema.manage`. Report generation and run
 archive require card management scope, while report run reads/downloads use the
 same backend card visibility scope as card reads. Generated report content is
 audited with report template/run create, generate, download, and archive
-events.
+events. Report template updates support safe settings changes for `name`,
+`description`, `parameters_schema_json`, `default_parameters_json`,
+`report_type`, and `output_format`; existing report runs keep their original
+type and output metadata.
 
 The authenticated registry workspace includes Russian-first report controls for
-creating, updating, and archiving report templates, choosing JSON, CSV, XLSX, or PDF
-output, generating report runs, downloading generated report content, and
-archiving report runs through the existing report API. Report run lists show
-the newest runs first and display output format plus output filename. Archived
+creating, updating, and archiving report templates, choosing or editing JSON,
+CSV, XLSX, or PDF output, generating report runs, downloading generated report
+content, and archiving report runs through the existing report API. Report run
+lists show the newest runs first and display output format plus output filename. Archived
 report templates and report runs can be shown with Russian archive toggles;
 archived rows display `Архивировано`, archived templates cannot be edited or
 archived again, and archived report runs remain downloadable through

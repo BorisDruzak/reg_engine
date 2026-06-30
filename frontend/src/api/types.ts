@@ -668,8 +668,10 @@ export type ReportTemplateCreatePayload = {
 export type ReportTemplateUpdatePayload = {
   name?: string;
   description?: string | null;
+  report_type?: string;
   parameters_schema_json?: Record<string, unknown> | null;
   default_parameters_json?: Record<string, unknown> | null;
+  output_format?: string;
 };
 
 export type ReportTemplateListRead = {

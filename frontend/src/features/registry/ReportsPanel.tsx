@@ -37,6 +37,8 @@ export function ReportsPanel({
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editTemplateName, setEditTemplateName] = useState("");
   const [editTemplateDescription, setEditTemplateDescription] = useState("");
+  const [editReportType, setEditReportType] = useState("registry_cards");
+  const [editOutputFormat, setEditOutputFormat] = useState("json");
   const [editTemplateParametersJson, setEditTemplateParametersJson] = useState("");
   const [runParametersJson, setRunParametersJson] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -100,7 +102,9 @@ export function ReportsPanel({
       return updateReportTemplate(token, editingTemplateId, {
         name: editTemplateName.trim(),
         description: editTemplateDescription.trim() || null,
+        report_type: editReportType,
         default_parameters_json: parseJsonObjectOrNull(editTemplateParametersJson),
+        output_format: editOutputFormat,
       });
     },
     onSuccess: async () => {
@@ -161,6 +165,8 @@ export function ReportsPanel({
     setEditingTemplateId(template.id);
     setEditTemplateName(template.name);
     setEditTemplateDescription(template.description ?? "");
+    setEditReportType(template.report_type);
+    setEditOutputFormat(template.output_format);
     setEditTemplateParametersJson(formatJsonObjectForEdit(template.default_parameters_json));
     setMessage(null);
     setLocalError(null);
@@ -170,6 +176,8 @@ export function ReportsPanel({
     setEditingTemplateId(null);
     setEditTemplateName("");
     setEditTemplateDescription("");
+    setEditReportType("registry_cards");
+    setEditOutputFormat("json");
     setEditTemplateParametersJson("");
   }
 
@@ -274,6 +282,32 @@ export function ReportsPanel({
                 value={editTemplateDescription}
                 onChange={(event) => setEditTemplateDescription(event.target.value)}
               />
+            </label>
+            <label className="field-editor-control">
+              <span>Новый тип отчета</span>
+              <select
+                value={editReportType}
+                onChange={(event) => setEditReportType(event.target.value)}
+              >
+                {reportTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {reportTypeLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-editor-control">
+              <span>Новый формат отчета</span>
+              <select
+                value={editOutputFormat}
+                onChange={(event) => setEditOutputFormat(event.target.value)}
+              >
+                {reportOutputFormats.map((format) => (
+                  <option key={format} value={format}>
+                    {reportOutputFormatLabel(format)}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field-editor-control template-body-control">
               <span>{uiText.reportTemplateEditParametersJson}</span>

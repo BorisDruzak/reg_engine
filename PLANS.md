@@ -242,10 +242,11 @@ Current stop point:
   migrated to `0014_report_pdf_output` after backup and disposable PostgreSQL
   verification, frontend dist is deployed, healthcheck passed, and server
   checks passed.
-- Later explicit phases remain MCP write tools and
-  additional report polish.
-- Binary attachment/document export, additional report
-  polish, and MCP write tools remain deferred until their explicit phases.
+- Phase 4I Report Template Type And Format Edit is in progress as a bounded
+  report polish slice.
+- Later explicit phases remain MCP write tools and additional report polish.
+- Binary attachment/document export, additional report polish, and MCP write
+  tools remain deferred until their explicit phases.
 - Operational tooling supports same-origin frontend serving from `frontend/dist` through the backend service and `scripts/deploy-frontend.ps1`.
 
 ## Core Rules
@@ -1791,7 +1792,8 @@ Purpose: add report definitions and report runs.
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, and PDF report output slices.
-Additional report polish remains deferred.
+Phase 4I report template type/format edit polish is in progress. Additional
+report polish remains deferred.
 
 Planned overall scope:
 
@@ -2458,6 +2460,75 @@ Production migration checkpoint:
   `pdf`.
 - Backend service was restarted through frontend deployment; a first immediate
   health curl raced the restart, then repeated healthcheck returned `ok`.
+
+### Phase 4I: Report Template Type And Format Edit
+
+Status: in progress.
+
+Purpose: close a report settings polish gap by allowing authenticated registry
+schema admins to change an existing report template's `report_type` and
+`output_format` after creation, without adding new report workflows.
+
+Scope:
+
+- Extend the existing report template PATCH flow to accept `report_type` and
+  `output_format`.
+- Reuse existing validation for supported report types and output formats.
+- Preserve existing `registry.schema.manage` permission checks and archived
+  template protection.
+- Add Russian-first UI controls in the existing report-template edit form for
+  report type and output format.
+- Keep existing report runs unchanged; new runs use the updated template
+  settings.
+- Do not add migrations, new tables, new endpoints, scheduled reports, charts,
+  public-link report workflows, binary attachment/document report export,
+  visual report builder, or MCP write tools.
+
+Acceptance criteria:
+
+- PATCHing an active report template can update `report_type` and
+  `output_format`.
+- Unsupported `report_type` or `output_format` values are rejected by the
+  backend service.
+- Archived report templates still cannot be updated.
+- The Russian report UI can edit type and format for active templates.
+- Existing report create/generate/download/archive behavior remains intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- This is settings polish only; it does not add a visual report builder.
+- Existing report runs are immutable and keep their original type/format
+  metadata.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED backend service test failed before implementation with
+  `Unsupported report template update fields: output_format, report_type`.
+- RED frontend test failed before implementation because the report edit form
+  did not contain `Новый тип отчета`.
+- GREEN backend targeted service test passed:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_4_reports.py::test_report_template_update_service_accepts_type_and_format -q`.
+- GREEN frontend targeted report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Backend report suite without `TEST_DATABASE_URL` passed locally with
+  `3 passed, 7 skipped`:
+  `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_4_reports.py -q`.
+- Targeted `ruff check` and `mypy app` passed.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4I.
 
 ### Phase 5: MCP Over API Only
 

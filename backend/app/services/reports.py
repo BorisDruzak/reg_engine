@@ -126,8 +126,10 @@ class ReportService:
         allowed_fields = {
             "name",
             "description",
+            "report_type",
             "parameters_schema_json",
             "default_parameters_json",
+            "output_format",
         }
         unexpected_fields = set(updates) - allowed_fields
         if unexpected_fields:
@@ -149,6 +151,14 @@ class ReportService:
             description = updates["description"]
             template.description = description.strip() if isinstance(description, str) else None
             new_data["description"] = template.description
+        if "report_type" in updates:
+            old_data["report_type"] = template.report_type
+            report_type = updates["report_type"]
+            if not isinstance(report_type, str):
+                raise ReportServiceError("Report template report type must not be empty.")
+            self._validate_report_type(report_type)
+            template.report_type = report_type
+            new_data["report_type"] = template.report_type
         if "parameters_schema_json" in updates:
             old_data["parameters_schema_json"] = template.parameters_schema_json
             template.parameters_schema_json = updates["parameters_schema_json"]
@@ -157,6 +167,14 @@ class ReportService:
             old_data["default_parameters_json"] = template.default_parameters_json
             template.default_parameters_json = updates["default_parameters_json"]
             new_data["default_parameters_json"] = template.default_parameters_json
+        if "output_format" in updates:
+            old_data["output_format"] = template.output_format
+            output_format = updates["output_format"]
+            if not isinstance(output_format, str):
+                raise ReportServiceError("Report template output format must not be empty.")
+            self._validate_output_format(output_format)
+            template.output_format = output_format
+            new_data["output_format"] = template.output_format
 
         if old_data:
             template.updated_by = actor_user_id

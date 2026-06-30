@@ -1049,7 +1049,9 @@ beforeEach(() => {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             name?: string;
             description?: string | null;
+            report_type?: string;
             default_parameters_json?: Record<string, unknown> | null;
+            output_format?: string;
           };
           const current = reportTemplateItems.find(
             (item) => item.id === "52525252-5252-4252-8252-525252525252",
@@ -1060,9 +1062,11 @@ beforeEach(() => {
             description: Object.hasOwn(payload, "description")
               ? (payload.description ?? null)
               : current.description,
+            report_type: payload.report_type ?? current.report_type,
             default_parameters_json: Object.hasOwn(payload, "default_parameters_json")
               ? (payload.default_parameters_json ?? null)
               : current.default_parameters_json,
+            output_format: payload.output_format ?? current.output_format,
           };
           reportTemplateItems = reportTemplateItems.map((item) =>
             item.id === updated.id ? updated : item,
@@ -1100,7 +1104,7 @@ beforeEach(() => {
           report_template_id: "52525252-5252-4252-8252-525252525252",
           registry_id: "77777777-7777-4777-8777-777777777777",
           card_id: null,
-          report_type: "registry_cards",
+          report_type: template.report_type,
           run_status: "completed",
           parameters_json: payload.parameters,
           summary_json: { row_count: 1 },
@@ -3834,6 +3838,8 @@ test("manages report templates and report runs in Russian registry UI", async ()
     screen.getByLabelText("Новое описание шаблона отчета"),
     "Обновленная сводка карточек",
   );
+  await user.selectOptions(screen.getByLabelText("Новый тип отчета"), "period_summary");
+  await user.selectOptions(screen.getByLabelText("Новый формат отчета"), "csv");
   fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
     target: { value: '{"limit":30}' },
   });
@@ -3856,7 +3862,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("Карточки реестра / Сформирован / PDF / report.pdf / 1"),
+        element.textContent?.includes("Период / Сформирован / CSV / report.csv / 1"),
       ),
     ),
   ).toBeInTheDocument();
@@ -3874,14 +3880,14 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("Карточки реестра / Сформирован / PDF / report.pdf / 1") &&
+        element.textContent?.includes("Период / Сформирован / CSV / report.csv / 1") &&
         element.textContent?.includes("Архивировано"),
       ),
     ),
   ).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Скачать отчет report.pdf" }));
+  await user.click(screen.getByRole("button", { name: "Скачать отчет report.csv" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Архивировать отчет report.pdf" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Архивировать отчет report.csv" })).toBeDisabled();
 
   await user.click(screen.getByLabelText("Показывать архивные шаблоны отчетов"));
   expect(
@@ -3943,11 +3949,15 @@ test("manages report templates and report runs in Russian registry UI", async ()
         const body = JSON.parse(String(init.body ?? "{}")) as {
           name?: string;
           description?: string | null;
+          report_type?: string;
           default_parameters_json?: unknown;
+          output_format?: string;
         };
         return (
           body.name === "Обновленный отчет" &&
           body.description === "Обновленная сводка карточек" &&
+          body.report_type === "period_summary" &&
+          body.output_format === "csv" &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 30 })
         );
       }),
