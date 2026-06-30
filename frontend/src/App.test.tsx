@@ -3826,7 +3826,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   ]);
   await user.selectOptions(reportFormatSelect, "pdf");
   fireEvent.change(screen.getByLabelText("Схема параметров JSON"), {
-    target: { value: '{"type":"object","properties":{"limit":{"type":"number"}}}' },
+    target: { value: '{"type":"object","properties":{"limit":{"type":"number","title":"Лимит"}}}' },
   });
   fireEvent.change(screen.getByLabelText("Параметры шаблона JSON"), {
     target: { value: '{"limit":20}' },
@@ -3849,7 +3849,9 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.selectOptions(screen.getByLabelText("Новый тип отчета"), "period_summary");
   await user.selectOptions(screen.getByLabelText("Новый формат отчета"), "csv");
   fireEvent.change(screen.getByLabelText("Новая схема параметров JSON"), {
-    target: { value: '{"type":"object","properties":{"limit":{"type":"integer"}}}' },
+    target: {
+      value: '{"type":"object","properties":{"limit":{"type":"integer","title":"Лимит"}}}',
+    },
   });
   fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
     target: { value: '{"limit":30}' },
@@ -3863,9 +3865,10 @@ test("manages report templates and report runs in Russian registry UI", async ()
     screen.getByLabelText("Шаблон отчета"),
     "52525252-5252-4252-8252-525252525252",
   );
-  fireEvent.change(screen.getByLabelText("Параметры запуска JSON"), {
-    target: { value: '{"limit":20}' },
-  });
+  const limitParameterInput = await screen.findByLabelText("Лимит");
+  expect(limitParameterInput).toHaveValue(30);
+  await user.clear(limitParameterInput);
+  await user.type(limitParameterInput, "20");
   await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
 
   expect(await screen.findByText("Отчет сформирован")).toBeInTheDocument();
@@ -3949,7 +3952,10 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.description === "Список видимых карточек" &&
           body.report_type === "registry_cards" &&
           JSON.stringify(body.parameters_schema_json) ===
-            JSON.stringify({ type: "object", properties: { limit: { type: "number" } } }) &&
+            JSON.stringify({
+              type: "object",
+              properties: { limit: { type: "number", title: "Лимит" } },
+            }) &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 20 }) &&
           body.output_format === "pdf"
         );
@@ -3978,7 +3984,10 @@ test("manages report templates and report runs in Russian registry UI", async ()
           body.report_type === "period_summary" &&
           body.output_format === "csv" &&
           JSON.stringify(body.parameters_schema_json) ===
-            JSON.stringify({ type: "object", properties: { limit: { type: "integer" } } }) &&
+            JSON.stringify({
+              type: "object",
+              properties: { limit: { type: "integer", title: "Лимит" } },
+            }) &&
           JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 30 })
         );
       }),

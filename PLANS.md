@@ -78,6 +78,7 @@ Completed phases:
 - Phase 4I: Report Template Type And Format Edit.
 - Phase 4J: Report Run Parameters And Summary Visibility.
 - Phase 4K: Report Template Parameter Schema UI.
+- Phase 4L: Report Run Visual Parameter Form.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -267,6 +268,12 @@ Current stop point:
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, healthcheck passed, and server checks passed. No backend code,
   migrations, endpoints, report formats, or MCP write tools are included.
+- Phase 4L Report Run Visual Parameter Form is completed locally: the Russian
+  report run form now renders basic visual controls from existing
+  `parameters_schema_json` object properties and syncs changes into the
+  existing run parameters JSON payload. Local checks passed; server
+  synchronization is pending. No backend code, migrations, endpoints, report
+  formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1816,7 +1823,8 @@ Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
 template type/format edit slices, and report run parameters/summary visibility.
-report template parameter schema UI. Additional report polish remains deferred.
+report template parameter schema UI. Report run visual parameter form is
+completed locally; additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2700,6 +2708,70 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4K; no backend schema changes are included.
+
+### Phase 4L: Report Run Visual Parameter Form
+
+Status: completed locally.
+
+Purpose: close a report run usability polish gap by using existing
+`parameters_schema_json` object properties to render basic Russian UI controls
+for report generation parameters.
+
+Scope:
+
+- Render basic run-parameter controls from `parameters_schema_json.properties`
+  for `string`, `number`, `integer`, and `boolean` property types.
+- Use property `title` as the visible label when present, otherwise use the
+  property code.
+- Seed displayed values from existing `default_parameters_json` when manual run
+  JSON is empty.
+- Sync visual control changes into the existing `parameters` JSON payload used
+  by report generation.
+- Keep the manual `Параметры запуска JSON` field available for unsupported or
+  advanced schemas.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template with a basic schema property renders a visual run parameter
+  control in the Russian UI.
+- The visual control is prefilled from `default_parameters_json` when available.
+- Changing the visual control updates the report generation payload.
+- Existing manual JSON run-parameter input remains available.
+- Existing report create/edit/generate/download/archive behavior remains intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat object properties with basic scalar types are rendered visually.
+- Nested objects, arrays, enums, conditional schemas, validations, and a full
+  visual report builder remain deferred.
+- Backend remains the API/security boundary; frontend schema rendering is only
+  a usability layer.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because the run form
+  did not render schema property label `Лимит`.
+- GREEN targeted frontend report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4L; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 

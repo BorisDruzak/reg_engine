@@ -711,6 +711,14 @@ tr:last-child td {
   grid-template-columns: minmax(180px, 1fr) auto auto;
 }
 
+.report-parameter-fields {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
 .template-manager {
   display: grid;
   gap: 12px;

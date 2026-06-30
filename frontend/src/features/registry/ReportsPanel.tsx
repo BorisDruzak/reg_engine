@@ -18,6 +18,12 @@ import { errorText } from "@/components/common/dataUtils";
 
 const reportTypes = ["registry_cards", "card_detail", "period_summary"];
 const reportOutputFormats = ["json", "csv", "xlsx", "pdf"];
+type ReportParameterFieldType = "string" | "number" | "integer" | "boolean";
+type ReportParameterField = {
+  code: string;
+  label: string;
+  type: ReportParameterFieldType;
+};
 
 export function ReportsPanel({
   selectedRegistryId,
@@ -67,6 +73,14 @@ export function ReportsPanel({
   const templateById = useMemo(
     () => new Map(templates.map((template) => [template.id, template])),
     [templates],
+  );
+  const selectedTemplate = selectedTemplateId ? templateById.get(selectedTemplateId) : undefined;
+  const runParameterValues = useMemo(
+    () =>
+      parseJsonObjectForDisplay(runParametersJson) ??
+      selectedTemplate?.default_parameters_json ??
+      {},
+    [runParametersJson, selectedTemplate?.default_parameters_json],
   );
   const canCreateTemplate = Boolean(
     selectedRegistryId && templateCode.trim() && templateName.trim() && reportType,
@@ -186,6 +200,32 @@ export function ReportsPanel({
     setEditOutputFormat("json");
     setEditTemplateParametersSchemaJson("");
     setEditTemplateParametersJson("");
+  }
+
+  function updateRunParameterValue(code: string, type: ReportParameterFieldType, value: unknown) {
+    const nextParameters = {
+      ...(parseJsonObjectForDisplay(runParametersJson) ??
+        selectedTemplate?.default_parameters_json ??
+        {}),
+    };
+    if (type === "boolean") {
+      nextParameters[code] = Boolean(value);
+    } else if (type === "number" || type === "integer") {
+      const textValue = String(value ?? "").trim();
+      if (!textValue) {
+        delete nextParameters[code];
+      } else {
+        const numberValue = Number(textValue);
+        if (Number.isFinite(numberValue)) {
+          nextParameters[code] = type === "integer" ? Math.trunc(numberValue) : numberValue;
+        } else {
+          delete nextParameters[code];
+        }
+      }
+    } else {
+      nextParameters[code] = String(value ?? "");
+    }
+    setRunParametersJson(JSON.stringify(nextParameters));
   }
 
   return (
@@ -382,6 +422,11 @@ export function ReportsPanel({
             onChange={(event) => setRunParametersJson(event.target.value)}
           />
         </label>
+        <ReportRunParameterFields
+          template={selectedTemplate}
+          values={runParameterValues}
+          onChange={updateRunParameterValue}
+        />
         <button
           type="button"
           className="primary-button"
@@ -419,6 +464,44 @@ export function ReportsPanel({
         />
       </section>
     </Panel>
+  );
+}
+
+function ReportRunParameterFields({
+  template,
+  values,
+  onChange,
+}: {
+  template: ReportTemplateRead | undefined;
+  values: Record<string, unknown>;
+  onChange: (code: string, type: ReportParameterFieldType, value: unknown) => void;
+}) {
+  const fields = getReportParameterFields(template?.parameters_schema_json ?? null);
+  if (fields.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="report-parameter-fields">
+      {fields.map((field) => (
+        <label key={field.code} className="field-editor-control">
+          <span>{field.label}</span>
+          {field.type === "boolean" ? (
+            <input
+              type="checkbox"
+              checked={Boolean(values[field.code])}
+              onChange={(event) => onChange(field.code, field.type, event.currentTarget.checked)}
+            />
+          ) : (
+            <input
+              type={field.type === "string" ? "text" : "number"}
+              value={formatReportParameterInputValue(values[field.code])}
+              onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
+            />
+          )}
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -573,12 +656,55 @@ function parseJsonObjectOrNull(value: string) {
   return parsed as Record<string, unknown>;
 }
 
+function parseJsonObjectForDisplay(value: string) {
+  try {
+    return parseJsonObjectOrNull(value);
+  } catch {
+    return null;
+  }
+}
+
 function formatJsonObjectForEdit(value: Record<string, unknown> | null) {
   return value ? JSON.stringify(value, null, 2) : "";
 }
 
 function formatJsonObjectInline(value: Record<string, unknown> | null) {
   return value ? JSON.stringify(value) : uiText.noData;
+}
+
+function getReportParameterFields(schema: Record<string, unknown> | null): ReportParameterField[] {
+  const properties = isRecord(schema?.properties) ? schema.properties : null;
+  if (!properties) {
+    return [];
+  }
+
+  return Object.entries(properties).flatMap(([code, rawConfig]) => {
+    if (!isRecord(rawConfig)) {
+      return [];
+    }
+    const rawType = typeof rawConfig.type === "string" ? rawConfig.type : "string";
+    if (!isReportParameterFieldType(rawType)) {
+      return [];
+    }
+    const label =
+      typeof rawConfig.title === "string" && rawConfig.title.trim() ? rawConfig.title : code;
+    return [{ code, label, type: rawType }];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isReportParameterFieldType(value: string): value is ReportParameterFieldType {
+  return value === "string" || value === "number" || value === "integer" || value === "boolean";
+}
+
+function formatReportParameterInputValue(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+  return "";
 }
 
 function reportOutputFormatLabel(format: string) {
