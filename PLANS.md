@@ -69,6 +69,7 @@ Completed phases:
 - Phase 4B: Report Frontend UI.
 - Phase 4C: Report Template Settings Edit.
 - Phase 4D: CSV Report Output.
+- Phase 4E: Report Run List Polish.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -191,9 +192,11 @@ Current stop point:
   migrated to `0012_report_csv_output` after backup and preflight, frontend
   dist is deployed, OpenAPI exposes report routes, healthcheck passed, and
   server checks passed.
-- Phase 4E Report Run List Polish is implemented in the current checkpoint:
+- Phase 4E Report Run List Polish is completed and deployed:
   report runs are listed newest-first and the Russian report UI shows output
-  format and filename for generated runs. No migration is required.
+  format and filename for generated runs. Commit `98bdeef` is pushed, the
+  server checkout is synchronized to `origin/main`, frontend dist is deployed,
+  healthcheck passed, and server checks passed. No migration was required.
 - Next planned work requires explicit prioritization: remaining report polish,
   XLSX/PDF report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
@@ -1873,7 +1876,7 @@ Production migration checkpoint:
 
 ### Phase 4E: Report Run List Polish
 
-Status: implemented locally; pending full checks and deployment verification.
+Status: completed.
 
 Purpose: close a small report polish gap before larger XLSX/PDF report outputs,
 XLSX workflows, or MCP write tools.
@@ -1929,6 +1932,19 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4E.
+
+Deployment checkpoint:
+
+- Commit `98bdeef` was pushed to `origin/main`.
+- Server checkout was synchronized to commit `98bdeef` with
+  `scripts/deploy.ps1`.
+- Frontend dist was deployed with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `scripts/server-check.ps1` passed after deployment.
+- Server smoke confirmed `server_head=98bdeef`, Alembic remained
+  `0012_report_csv_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served the
+  updated asset `/assets/index-jkxU57z9.js`.
 
 ### Phase 5: MCP Over API Only
 
