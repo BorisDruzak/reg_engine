@@ -199,6 +199,8 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_archive_card",
         "reg_engine_set_card_field_value",
         "reg_engine_set_card_values",
+        "reg_engine_create_card_block_instance",
+        "reg_engine_archive_card_block_instance",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -999,6 +1001,111 @@ def test_mcp_set_card_values_tool_patches_existing_bulk_api_boundary() -> None:
             {"field_id": second_field_id, "value": None},
         ]
     }
+
+
+def test_mcp_create_card_block_instance_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_create_card_block_instance"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "block_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    block_id = str(uuid4())
+    block_instance_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": block_instance_id,
+            "card_id": card_id,
+            "block_id": block_id,
+            "ordinal": 2,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_create_card_block_instance",
+        {"card_id": card_id, "block_id": block_id},
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["id"] == block_instance_id
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/cards/{card_id}/blocks/{block_id}/instances"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {}
+
+
+def test_mcp_archive_card_block_instance_tool_requires_confirmation_before_delete() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_archive_card_block_instance"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["block_instance_id", "confirm_archive"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    block_instance_id = str(uuid4())
+    card_id = str(uuid4())
+    block_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": block_instance_id,
+            "card_id": card_id,
+            "block_id": block_id,
+            "ordinal": 2,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_archive_card_block_instance",
+        {"block_instance_id": block_instance_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_archive" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    archived = call_tool(
+        "reg_engine_archive_card_block_instance",
+        {"block_instance_id": block_instance_id, "confirm_archive": True},
+        client=client,
+    )
+
+    assert archived["isError"] is False
+    assert archived["structuredContent"]["id"] == block_instance_id
+    assert transport.requests[0]["method"] == "DELETE"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/card-block-instances/{block_instance_id}"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
 
 
 def test_mcp_tool_argument_errors_are_returned_as_tool_errors() -> None:

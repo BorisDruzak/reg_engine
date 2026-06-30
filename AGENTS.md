@@ -369,7 +369,7 @@ Runtime commands must be executed on the configured runtime server, not from the
 - `scripts/tree.ps1` prints a filtered project tree.
 - `scripts/dev-backend.ps1` starts the FastAPI dev server.
 - `scripts/dev-frontend.ps1` starts the Vite dev server.
-- `scripts/dev-mcp.ps1` starts the read-only MCP stdio gateway over the REST API.
+- `scripts/dev-mcp.ps1` starts the MCP stdio gateway over the REST API.
 - `scripts/server-check.ps1` verifies the server checkout, server GitHub access, PostgreSQL service, listen sockets, database access, and attachment storage configuration.
 - `scripts/service.ps1` installs and controls the configured server systemd API service; use `-Command start`, `status`, `logs`, `restart`, or `stop`.
 - `scripts/deploy-frontend.ps1` builds local `frontend/dist`, uploads the generated artifact to the configured server checkout, restarts the backend API service, and smoke-checks same-origin frontend/API serving.
@@ -460,6 +460,6 @@ sudo systemctl status postgresql --no-pager
 - MCP tools must call the REST API only.
 - MCP code must not import SQLAlchemy, Alembic, database sessions, backend models, or backend service classes.
 - Phase 5A MCP tools are read-only and use HTTP `GET` only.
-- Current approved MCP write tools are limited to the explicit registry, schema-builder, card lifecycle, and card field-value tools named in `PLANS.md` Phase 5D, Phase 5E, Phase 5F, Phase 5G, and Phase 5H.
+- Current approved MCP write tools are limited to the explicit registry, schema-builder, card lifecycle, card field-value, and card block-instance tools named in `PLANS.md` Phase 5D, Phase 5E, Phase 5F, Phase 5G, Phase 5H, and Phase 5I.
 - MCP requests must send `X-Reg-Engine-Source: mcp` so API-side audit can record `source=mcp`.
 - Do not add MCP write tools unless an explicit later plan phase approves them.

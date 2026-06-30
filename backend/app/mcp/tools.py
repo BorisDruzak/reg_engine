@@ -406,6 +406,39 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_create_card_block_instance",
+        "title": "Create card block instance",
+        "description": "Create a card block instance through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "block_id": {"type": "string"},
+            },
+            "required": ["card_id", "block_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_card_block_instance",
+        "title": "Archive card block instance",
+        "description": (
+            "Archive a card block instance through the Registry Engine API. "
+            "Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "block_instance_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["block_instance_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -607,6 +640,15 @@ def _call_tool_or_raise(
             f"/api/v1/cards/{card_id}/values",
             {"values": _required_bulk_values_arg(arguments)},
         )
+    if name == "reg_engine_create_card_block_instance":
+        card_id = _required_str_arg(arguments, "card_id")
+        block_id = _required_str_arg(arguments, "block_id")
+        return client.post_json(f"/api/v1/cards/{card_id}/blocks/{block_id}/instances", {})
+    if name == "reg_engine_archive_card_block_instance":
+        block_instance_id = _required_str_arg(arguments, "block_instance_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/card-block-instances/{block_instance_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 

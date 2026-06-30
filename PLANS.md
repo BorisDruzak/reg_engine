@@ -101,6 +101,11 @@ Completed phases:
 
 Current stop point:
 
+- Phase 5I MCP Card Block Instance Write Tools is completed locally and
+  pending push/deploy: repeatable block-instance create/archive MCP tools call
+  only existing REST API endpoints, with backend permissions,
+  repeatable/non-repeatable rules, archive protection, and audit remaining
+  API-enforced.
 - Phase 2I public-link attachment limit semantics and bugfixes are completed.
 - Phase 2K.0 admin workflow API gap audit is completed and recorded in
   `docs/PHASE_2K_ADMIN_API_READINESS.md`.
@@ -4659,6 +4664,97 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5H; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5I: MCP Card Block Instance Write Tools
+
+Status: completed locally; pending push/deploy.
+
+Purpose: extend the API-only MCP write surface with card block-instance
+operations while keeping repeatable/non-repeatable rules, locked/system block
+protection, minimum-instance protection, card edit permissions, archived and
+superseded edit protection, and audit in the existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_create_card_block_instance`
+- `reg_engine_archive_card_block_instance`
+
+Argument schemas:
+
+- `reg_engine_create_card_block_instance`:
+  - `card_id`: required string.
+  - `block_id`: required string.
+  - `additionalProperties=false`.
+- `reg_engine_archive_card_block_instance`:
+  - `block_instance_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/cards/{card_id}/blocks/{block_id}/instances`
+- `DELETE /api/v1/card-block-instances/{block_instance_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Repeatable block creation, non-repeatable block protection, locked/system
+  block protection, required-minimum instance protection, card edit
+  permissions, archived/superseded edit protection, and audit remain API-side
+  in the existing card service.
+- Archive requires explicit `confirm_archive=true` before sending `DELETE`.
+
+Scope:
+
+- Expose the two tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D/5E/5F/5G/5H write behavior.
+- Reject archive calls unless `confirm_archive=true`.
+- Do not mutate field values, transfer cards, mutate public links, upload or
+  download attachments, generate documents, run reports, import/export data,
+  expose binary downloads, or add other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as write tools.
+- Create block instance sends
+  `POST /api/v1/cards/{card_id}/blocks/{block_id}/instances`.
+- Archive block instance sends
+  `DELETE /api/v1/card-block-instances/{block_instance_id}` only when
+  `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not create or archive production card block
+  instances without a disposable production-safe target.
+- Card transfer, report/document/public-link, attachment upload/download, and
+  import/export MCP write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_create_card_block_instance` and
+  `reg_engine_archive_card_block_instance` were absent from
+  `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `29 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `95 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5I; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
