@@ -327,12 +327,15 @@ Current stop point:
   to `origin/main`, frontend dist is deployed, healthcheck passed, and server
   checks passed. No backend code, migrations, endpoints, report formats, full
   visual report builder, or MCP write tools are included.
-- Phase 4S Report Run Required Parameter Validation is completed locally:
+- Phase 4S Report Run Required Parameter Validation is completed and deployed:
   supported flat report run controls now read JSON Schema `required`, block
   generation when required values are empty, and show a Russian validation
-  message listing missing parameter labels. Deployment evidence is pending. No
-  backend code, migrations, endpoints, report formats, full visual report
-  builder, or MCP write tools are included.
+  message listing missing parameter labels. Commit `a2a0ea0` is pushed, the
+  server checkout is synchronized to `origin/main`, frontend dist is deployed
+  with `index-DQlO092U.js`, healthcheck passed, server checks passed, and
+  Alembic remains at `0014_report_pdf_output (head)`. No backend code,
+  migrations, endpoints, report formats, full visual report builder, or MCP
+  write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3297,7 +3300,7 @@ Production migration checkpoint:
 
 ### Phase 4S: Report Run Required Parameter Validation
 
-Status: completed locally; deployment pending.
+Status: completed and deployed.
 
 Purpose: continue report-polish by honoring flat JSON Schema `required`
 metadata in the Russian report run form before calling the existing report run
@@ -3362,6 +3365,22 @@ Verification so far:
   production build, and current project tree.
 - Frontend e2e passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add report required parameter validation"`
+  created commit `a2a0ea0f900ac8d37df5b65515abf4acc2095c27` and pushed
+  `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Frontend deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`;
+  the server SPA now references `/assets/index-DQlO092U.js` and
+  `/assets/index-Be0bM7I8.css`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Direct server smoke passed: server checkout `a2a0ea0`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
