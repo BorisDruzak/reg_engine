@@ -82,12 +82,21 @@ export function ReportsPanel({
     [templates],
   );
   const selectedTemplate = selectedTemplateId ? templateById.get(selectedTemplateId) : undefined;
-  const runParameterValues = useMemo(
+  const selectedTemplateSchemaDefaults = useMemo(
+    () => getReportParameterDefaults(selectedTemplate?.parameters_schema_json ?? null),
+    [selectedTemplate?.parameters_schema_json],
+  );
+  const selectedTemplateDefaultParameters = useMemo(
     () =>
-      parseJsonObjectForDisplay(runParametersJson) ??
-      selectedTemplate?.default_parameters_json ??
-      {},
-    [runParametersJson, selectedTemplate?.default_parameters_json],
+      mergeReportParameterDefaults(
+        selectedTemplateSchemaDefaults,
+        selectedTemplate?.default_parameters_json,
+      ),
+    [selectedTemplateSchemaDefaults, selectedTemplate?.default_parameters_json],
+  );
+  const runParameterValues = useMemo(
+    () => parseJsonObjectForDisplay(runParametersJson) ?? selectedTemplateDefaultParameters ?? {},
+    [runParametersJson, selectedTemplateDefaultParameters],
   );
   const canCreateTemplate = Boolean(
     selectedRegistryId && templateCode.trim() && templateName.trim() && reportType,
@@ -156,10 +165,7 @@ export function ReportsPanel({
   const generateRunMutation = useMutation({
     mutationFn: () =>
       generateReportRun(token, selectedTemplateId, {
-        parameters: parseReportRunParameters(
-          runParametersJson,
-          selectedTemplate?.default_parameters_json,
-        ),
+        parameters: parseReportRunParameters(runParametersJson, selectedTemplateDefaultParameters),
       }),
     onSuccess: async () => {
       setMessage(uiText.reportGenerated);
@@ -214,9 +220,7 @@ export function ReportsPanel({
 
   function updateRunParameterValue(code: string, type: ReportParameterFieldType, value: unknown) {
     const nextParameters = {
-      ...(parseJsonObjectForDisplay(runParametersJson) ??
-        selectedTemplate?.default_parameters_json ??
-        {}),
+      ...(parseJsonObjectForDisplay(runParametersJson) ?? selectedTemplateDefaultParameters ?? {}),
     };
     if (type === "boolean") {
       nextParameters[code] = Boolean(value);
@@ -691,6 +695,17 @@ function parseReportRunParameters(
   return defaultParameters ?? null;
 }
 
+function mergeReportParameterDefaults(
+  schemaDefaults: Record<string, unknown> | null,
+  templateDefaults: Record<string, unknown> | null | undefined,
+) {
+  const merged = {
+    ...(schemaDefaults ?? {}),
+    ...(templateDefaults ?? {}),
+  };
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
 function parseJsonObjectForDisplay(value: string) {
   try {
     return parseJsonObjectOrNull(value);
@@ -738,6 +753,34 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
       },
     ];
   });
+}
+
+function getReportParameterDefaults(schema: Record<string, unknown> | null) {
+  const properties = isRecord(schema?.properties) ? schema.properties : null;
+  if (!properties) {
+    return null;
+  }
+
+  const entries = Object.entries(properties).flatMap(([code, rawConfig]) => {
+    if (!isRecord(rawConfig)) {
+      return [];
+    }
+    const rawType = typeof rawConfig.type === "string" ? rawConfig.type : "string";
+    if (!isReportParameterFieldType(rawType) || !Object.hasOwn(rawConfig, "default")) {
+      return [];
+    }
+    const defaultValue = rawConfig.default;
+    if (!isReportParameterOptionValue(defaultValue, rawType)) {
+      return [];
+    }
+    const options = getReportParameterOptions(rawConfig, rawType);
+    if (options.length > 0 && !options.some((option) => option.value === defaultValue)) {
+      return [];
+    }
+    return [[code, defaultValue] as const];
+  });
+
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 function getReportParameterInputType(

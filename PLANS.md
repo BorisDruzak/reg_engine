@@ -84,6 +84,7 @@ Completed phases:
 - Phase 4O: Report Run Default Parameter Payload.
 - Phase 4P: Report Run Date Parameter Controls.
 - Phase 4Q: Report Run Parameter Description Hints.
+- Phase 4R: Report Run Schema Default Parameters.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -317,6 +318,13 @@ Current stop point:
   frontend dist is deployed, healthcheck passed, and server checks passed. No
   backend code, migrations, endpoints, report formats, full visual report
   builder, or MCP write tools are included.
+- Phase 4R Report Run Schema Default Parameters is completed locally:
+  report run parameter controls now use valid scalar JSON Schema property
+  `default` values when template `default_parameters_json` does not override
+  them, and empty manual run JSON sends those defaults in the existing report
+  run payload. Deployment evidence is pending. No backend code, migrations,
+  endpoints, report formats, full visual report builder, or MCP write tools are
+  included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3194,6 +3202,80 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4Q; no backend schema changes are included.
+
+### Phase 4R: Report Run Schema Default Parameters
+
+Status: completed locally; deployment pending.
+
+Purpose: continue report-polish by using JSON Schema property defaults as the
+initial run parameter payload when a template does not provide explicit default
+parameter JSON.
+
+Scope:
+
+- Detect flat `parameters_schema_json.properties.<code>.default` values for
+  supported scalar parameter types.
+- Use schema defaults to prefill visual report run controls.
+- Merge schema defaults with `default_parameters_json`, with explicit template
+  defaults taking precedence for the same parameter code.
+- Send the merged defaults in the existing report run `parameters` payload when
+  the manual run parameter JSON field is empty.
+- Ignore unsupported default values and defaults outside the declared scalar
+  enum/`oneOf` options.
+- Preserve existing manual JSON override, number, integer, boolean, enum,
+  `oneOf`, date, description, output format, archive, download, and metadata
+  display behavior.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template parameter with a scalar JSON Schema `default` is prefilled
+  in the visual control when template `default_parameters_json` is empty.
+- Empty manual run JSON submits schema defaults in the report run payload.
+- Template `default_parameters_json` remains the higher-priority default source
+  when it provides the same parameter code.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat scalar defaults for `string`, `number`, `integer`, and `boolean`
+  properties are used.
+- Object, array, nested schema, conditional schema, validation error display,
+  grouped controls, and full visual report builder behavior remain deferred.
+- Backend remains the API/security boundary; schema defaults are a frontend
+  usability layer over existing report template fields.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because schema
+  defaults were not used to prefill report run controls.
+- GREEN targeted schema-default frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report parameter schema defaults"`.
+- Existing template-default targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "uses report template default parameters"`.
+- Existing date-parameter targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders date report parameters"`.
+- Existing description targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "renders report parameter descriptions"`.
+- Existing report management targeted frontend test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `35 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4R; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 
