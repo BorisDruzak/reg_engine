@@ -99,14 +99,20 @@ Completed phases:
 - Phase 5G: MCP Card Lifecycle Write Tools.
 - Phase 5H: MCP Card Field Value Write Tools.
 - Phase 5I: MCP Card Block Instance Write Tools.
+- Phase 5J: MCP Card Transfer Write Tool.
 
 Current stop point:
 
-- Phase 5J MCP Card Transfer Write Tool is completed locally and pending
-  push/deploy: the existing REST card transfer workflow is exposed through MCP
-  with explicit transfer confirmation, while source-card superseding,
-  target-card creation, dynamic value copy, `file_ref` copy/clear behavior,
-  permissions, and audit remain API-enforced.
+- Phase 5J MCP Card Transfer Write Tool is completed and deployed:
+  the existing REST card transfer workflow is exposed through MCP with
+  explicit transfer confirmation, while source-card superseding, target-card
+  creation, dynamic value copy, `file_ref` copy/clear behavior, permissions,
+  and audit remain API-enforced. Commit `cefdd6da` is pushed, the server
+  checkout is synchronized to `origin/main`, server checks passed, server MCP
+  targeted tests passed, server MCP stdio `tools/list` shows the new tool with
+  `readOnlyHint=false`, healthcheck passed, and Alembic remains at
+  `0014_report_pdf_output (head)`. No production card was transferred during
+  smoke validation.
 - Phase 5I MCP Card Block Instance Write Tools is completed and deployed:
   repeatable block-instance create/archive MCP tools call only existing REST
   API endpoints, with backend permissions, repeatable/non-repeatable rules,
@@ -4783,7 +4789,7 @@ Production migration checkpoint:
 
 ### Phase 5J: MCP Card Transfer Write Tool
 
-Status: completed locally; pending push/deploy.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with the existing card transfer
 workflow while keeping transfer permissions, source-card superseding,
@@ -4859,6 +4865,19 @@ Verification so far:
   with backend `96 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP card transfer tool"`
+  created commit `cefdd6da` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed with `30 passed`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes `reg_engine_transfer_card` with
+  `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `cefdd6da`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
