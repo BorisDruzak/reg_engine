@@ -19,10 +19,15 @@ import { errorText } from "@/components/common/dataUtils";
 const reportTypes = ["registry_cards", "card_detail", "period_summary"];
 const reportOutputFormats = ["json", "csv", "xlsx", "pdf"];
 type ReportParameterFieldType = "string" | "number" | "integer" | "boolean";
+type ReportParameterOption = {
+  value: string | number | boolean;
+  label: string;
+};
 type ReportParameterField = {
   code: string;
   label: string;
   type: ReportParameterFieldType;
+  options: ReportParameterOption[];
 };
 
 export function ReportsPanel({
@@ -492,6 +497,17 @@ function ReportRunParameterFields({
               checked={Boolean(values[field.code])}
               onChange={(event) => onChange(field.code, field.type, event.currentTarget.checked)}
             />
+          ) : field.options.length > 0 ? (
+            <select
+              value={formatReportParameterInputValue(values[field.code])}
+              onChange={(event) => onChange(field.code, field.type, event.currentTarget.value)}
+            >
+              {field.options.map((option) => (
+                <option key={String(option.value)} value={String(option.value)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           ) : (
             <input
               type={field.type === "string" ? "text" : "number"}
@@ -688,8 +704,40 @@ function getReportParameterFields(schema: Record<string, unknown> | null): Repor
     }
     const label =
       typeof rawConfig.title === "string" && rawConfig.title.trim() ? rawConfig.title : code;
-    return [{ code, label, type: rawType }];
+    return [{ code, label, type: rawType, options: getReportParameterOptions(rawConfig, rawType) }];
   });
+}
+
+function getReportParameterOptions(
+  config: Record<string, unknown>,
+  type: ReportParameterFieldType,
+): ReportParameterOption[] {
+  if (!Array.isArray(config.enum)) {
+    return [];
+  }
+
+  return config.enum.flatMap((value) => {
+    if (!isReportParameterOptionValue(value, type)) {
+      return [];
+    }
+    return [{ value, label: String(value) }];
+  });
+}
+
+function isReportParameterOptionValue(
+  value: unknown,
+  type: ReportParameterFieldType,
+): value is string | number | boolean {
+  if (type === "string") {
+    return typeof value === "string";
+  }
+  if (type === "number") {
+    return typeof value === "number" && Number.isFinite(value);
+  }
+  if (type === "integer") {
+    return typeof value === "number" && Number.isInteger(value);
+  }
+  return typeof value === "boolean";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

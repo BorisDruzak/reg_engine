@@ -3850,11 +3850,12 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.selectOptions(screen.getByLabelText("Новый формат отчета"), "csv");
   fireEvent.change(screen.getByLabelText("Новая схема параметров JSON"), {
     target: {
-      value: '{"type":"object","properties":{"limit":{"type":"integer","title":"Лимит"}}}',
+      value:
+        '{"type":"object","properties":{"limit":{"type":"integer","title":"Лимит"},"section":{"type":"string","title":"Раздел","enum":["cards","summary"]}}}',
     },
   });
   fireEvent.change(screen.getByLabelText("Новые параметры шаблона JSON"), {
-    target: { value: '{"limit":30}' },
+    target: { value: '{"limit":30,"section":"cards"}' },
   });
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон отчета" }));
 
@@ -3869,6 +3870,13 @@ test("manages report templates and report runs in Russian registry UI", async ()
   expect(limitParameterInput).toHaveValue(30);
   await user.clear(limitParameterInput);
   await user.type(limitParameterInput, "20");
+  const sectionParameterSelect = (await screen.findByLabelText("Раздел")) as HTMLSelectElement;
+  expect([...sectionParameterSelect.options].map((option) => option.value)).toEqual([
+    "cards",
+    "summary",
+  ]);
+  expect(sectionParameterSelect).toHaveValue("cards");
+  await user.selectOptions(sectionParameterSelect, "summary");
   await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
 
   expect(await screen.findByText("Отчет сформирован")).toBeInTheDocument();
@@ -3880,7 +3888,15 @@ test("manages report templates and report runs in Russian registry UI", async ()
       ),
     ),
   ).toBeInTheDocument();
-  expect(screen.getByText('Параметры запуска: {"limit":20}')).toBeInTheDocument();
+  expect(
+    screen.getByText((_, element) =>
+      Boolean(
+        element?.textContent?.startsWith("Параметры запуска: ") &&
+        element.textContent.includes('"limit":20') &&
+        element.textContent.includes('"section":"summary"'),
+      ),
+    ),
+  ).toBeInTheDocument();
   expect(screen.getByText('Сводка отчета: {"row_count":1}')).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать отчет Обновленный отчет" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
@@ -3901,7 +3917,15 @@ test("manages report templates and report runs in Russian registry UI", async ()
       ),
     ),
   ).toBeInTheDocument();
-  expect(screen.getByText('Параметры запуска: {"limit":20}')).toBeInTheDocument();
+  expect(
+    screen.getByText((_, element) =>
+      Boolean(
+        element?.textContent?.startsWith("Параметры запуска: ") &&
+        element.textContent.includes('"limit":20') &&
+        element.textContent.includes('"section":"summary"'),
+      ),
+    ),
+  ).toBeInTheDocument();
   expect(screen.getByText('Сводка отчета: {"row_count":1}')).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать отчет report.csv" }));
   expect(await screen.findByText("Отчет скачан")).toBeInTheDocument();
@@ -3986,9 +4010,13 @@ test("manages report templates and report runs in Russian registry UI", async ()
           JSON.stringify(body.parameters_schema_json) ===
             JSON.stringify({
               type: "object",
-              properties: { limit: { type: "integer", title: "Лимит" } },
+              properties: {
+                limit: { type: "integer", title: "Лимит" },
+                section: { type: "string", title: "Раздел", enum: ["cards", "summary"] },
+              },
             }) &&
-          JSON.stringify(body.default_parameters_json) === JSON.stringify({ limit: 30 })
+          JSON.stringify(body.default_parameters_json) ===
+            JSON.stringify({ limit: 30, section: "cards" })
         );
       }),
     ).toBe(true);
@@ -4001,8 +4029,10 @@ test("manages report templates and report runs in Russian registry UI", async ()
         ) {
           return false;
         }
-        const body = JSON.parse(String(init.body ?? "{}")) as { parameters?: unknown };
-        return JSON.stringify(body.parameters) === JSON.stringify({ limit: 20 });
+        const body = JSON.parse(String(init.body ?? "{}")) as {
+          parameters?: { limit?: unknown; section?: unknown };
+        };
+        return body.parameters?.limit === 20 && body.parameters.section === "summary";
       }),
     ).toBe(true);
     expect(

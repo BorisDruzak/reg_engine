@@ -79,6 +79,7 @@ Completed phases:
 - Phase 4J: Report Run Parameters And Summary Visibility.
 - Phase 4K: Report Template Parameter Schema UI.
 - Phase 4L: Report Run Visual Parameter Form.
+- Phase 4M: Report Run Enum Parameter Controls.
 - Phase 5A: MCP Read-Only Gateway.
 - Phase 5B: MCP Hardening And Config.
 
@@ -276,6 +277,11 @@ Current stop point:
   healthcheck passed, and server checks passed. No backend code, migrations,
   endpoints, report formats, full visual report builder, or MCP write tools are
   included.
+- Phase 4M Report Run Enum Parameter Controls is completed locally: scalar
+  enum report parameters now render as visual select controls and sync selected
+  values into the existing report run parameters JSON payload. No backend code,
+  migrations, endpoints, report formats, full visual report builder, or MCP
+  write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -2784,6 +2790,70 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 4L; no backend schema changes are included.
+
+### Phase 4M: Report Run Enum Parameter Controls
+
+Status: completed.
+
+Purpose: continue the report-polish sequence by rendering simple enum
+parameters from existing report template JSON schema as visual select controls.
+
+Scope:
+
+- Render `parameters_schema_json.properties.<code>.enum` as a select control
+  when the property type is a supported scalar type.
+- Keep the existing Russian label behavior: property `title` is the visible
+  label when present, otherwise the property code is shown.
+- Sync selected enum values into the existing report run `parameters` JSON
+  payload.
+- Keep the manual `Параметры запуска JSON` field available for unsupported or
+  advanced schemas.
+- Do not add backend code, migrations, models, endpoints, report formats,
+  scheduled reports, charts, public-link report workflows, binary
+  attachment/document report export, full visual report builder, or MCP write
+  tools.
+
+Acceptance criteria:
+
+- A report template with a scalar enum schema property renders a visual select
+  control in the Russian UI.
+- The select control is prefilled from `default_parameters_json` when
+  available.
+- Changing the select control updates the report generation payload.
+- Existing manual JSON run-parameter input remains available.
+- Existing report create/edit/generate/download/archive behavior remains
+  intact.
+- README, PLANS, and project tree are updated or checked.
+
+Known limitations:
+
+- Only flat object properties with scalar `enum` values are rendered visually.
+- Enum display labels use the raw enum values in this slice.
+- Nested objects, arrays, enum label maps, conditional schemas, validations,
+  and a full visual report builder remain deferred.
+- Backend remains the API/security boundary; frontend schema rendering is only
+  a usability layer.
+- Scheduled/background reports, charts, public-link report workflows, binary
+  attachment/document report export, and MCP write tools remain deferred.
+
+Verification so far:
+
+- RED frontend report UI test failed before implementation because schema
+  enum parameter `Раздел` rendered as a text input without select options.
+- GREEN targeted frontend report UI test passed:
+  `pnpm -C frontend exec vitest run src/App.test.tsx --testNamePattern "manages report templates"`.
+- Format check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
+- Full local project check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend pytest `80 passed, 138 skipped`, frontend unit tests
+  `31 passed`, frontend build, and project tree check.
+- Frontend Playwright E2E passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 4M; no backend schema changes are included.
 
 ### Phase 5: MCP Over API Only
 
