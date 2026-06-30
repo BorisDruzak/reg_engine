@@ -183,11 +183,14 @@ Current stop point:
   checkout is synchronized to `origin/main`, frontend dist is deployed, the
   backend service is restarted, OpenAPI exposes the PATCH route, healthcheck
   passed, and server checks passed.
-- Phase 4D CSV Report Output is implemented in the current checkpoint:
+- Phase 4D CSV Report Output is completed and deployed:
   `csv` is accepted as a report template output format, report runs can store
   and download CSV files through the existing storage abstraction, and the
-  Russian report UI can create CSV templates. Production migration
-  `0012_report_csv_output` is required before live use.
+  Russian report UI can create CSV templates. Commit `b9f25d0` is pushed, the
+  server checkout is synchronized to `origin/main`, production PostgreSQL is
+  migrated to `0012_report_csv_output` after backup and preflight, frontend
+  dist is deployed, OpenAPI exposes report routes, healthcheck passed, and
+  server checks passed.
 - Next planned work requires explicit prioritization: remaining report polish,
   XLSX/PDF report outputs, XLSX workflows, MCP write tools, or another
   deferred phase.
@@ -1779,8 +1782,7 @@ Production migration checkpoint:
 
 ### Phase 4D: CSV Report Output
 
-Status: implemented and locally verified; pending production migration and
-deployment verification.
+Status: completed.
 
 Purpose: add the first non-JSON report output while keeping the existing report
 service/API boundary, storage abstraction, scope checks, and audit behavior.
@@ -1850,7 +1852,21 @@ Verification so far:
 
 Production migration checkpoint:
 
-- Pending for `0012_report_csv_output`.
+- Production PostgreSQL was migrated from `0011_mcp_audit_source` to
+  `0012_report_csv_output` on 2026-06-30.
+- Server checkout was synchronized to commit `b9f25d0` before migration.
+- Preflight confirmed target database `reg_engine` and no existing
+  `report_templates` rows requiring output-format cleanup.
+- Backup was created before migration:
+  `/var/backups/reg_engine/reg_engine_before_0012_report_csv_output_20260630T015931Z.dump`
+  (`126832` bytes).
+- Post-check confirmed Alembic `0012_report_csv_output (head)` and
+  `ck_report_templates_output_format` allows `json` and `csv`.
+- Frontend dist was deployed with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `scripts/server-check.ps1` passed after migration and deployment.
+- Server OpenAPI smoke verified report routes and healthcheck:
+  `GET /api/v1/health` returned `{"status":"ok","service":"reg_engine"}`.
 
 ### Phase 5: MCP Over API Only
 
