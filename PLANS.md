@@ -285,11 +285,13 @@ Current stop point:
   frontend dist is deployed, healthcheck passed, and server checks passed. No
   backend code, migrations, endpoints, report formats, full visual report
   builder, or MCP write tools are included.
-- Phase 4N Report Run Enum Option Labels is completed locally: report run
-  parameter select controls can display Russian option labels from
+- Phase 4N Report Run Enum Option Labels is completed and deployed: report
+  run parameter select controls can display Russian option labels from
   `oneOf[].title` while preserving scalar `const` values in the existing run
-  parameters JSON payload. No backend code, migrations, endpoints, report
-  formats, full visual report builder, or MCP write tools are included.
+  parameters JSON payload. Commit `01defa7` is pushed, the server checkout is
+  synchronized to `origin/main`, frontend dist is deployed, healthcheck
+  passed, and server checks passed. No backend code, migrations, endpoints,
+  report formats, full visual report builder, or MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -2936,6 +2938,16 @@ Verification so far:
   `31 passed`, frontend build, and project tree check.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `01defa7` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=01defa7`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-DjQ3ZAQi.js` with `/assets/index-bNU_0_Xh.css`.
 
 Production migration checkpoint:
 
