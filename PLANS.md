@@ -138,6 +138,13 @@ Current stop point:
   or archived during smoke validation. Binary `.docx` template upload, template
   version upload, generated document workflows, and document content download
   stay deferred for later MCP phases.
+- Phase 5N MCP Generated Document Write Tools is completed locally and pending
+  full local check, push, and deploy: generated-document create/PDF-create/
+  archive MCP tools call only existing REST API endpoints, while template/card
+  permissions, rendering, storage, archive semantics, and audit remain
+  API-enforced. Generated document content download, binary template
+  upload/version upload, public-link document workflows, attachment
+  upload/download, and import/export MCP tools stay deferred.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5262,6 +5269,111 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5M; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5N: MCP Generated Document Write Tools
+
+Status: completed locally; pending full local check, push, and deploy.
+
+Purpose: extend the API-only MCP write surface with generated document
+create/PDF-create/archive operations while keeping card/template permissions,
+document rendering, output storage, archive semantics, and audit in the
+existing REST API/service layer.
+
+Tool set:
+
+- `reg_engine_generate_document`
+- `reg_engine_generate_pdf_document`
+- `reg_engine_archive_generated_document`
+
+Argument schemas:
+
+- `reg_engine_generate_document`:
+  - `card_id`: required string.
+  - `template_id`: required string.
+  - `title`: optional string.
+  - `additionalProperties=false`.
+- `reg_engine_generate_pdf_document`:
+  - `card_id`: required string.
+  - `template_id`: required string.
+  - `title`: optional string.
+  - `additionalProperties=false`.
+- `reg_engine_archive_generated_document`:
+  - `generated_document_id`: required string.
+  - `confirm_archive`: required boolean and must be `true`.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `POST /api/v1/cards/{card_id}/generated-documents`
+- `POST /api/v1/cards/{card_id}/generated-documents/pdf`
+- `DELETE /api/v1/generated-documents/{generated_document_id}`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Card readability/editability, template visibility, render validation,
+  generated file storage, archive semantics, and audit remain API-side in the
+  existing document service.
+- Archive requires explicit `confirm_archive=true` before sending `DELETE`.
+
+Scope:
+
+- Expose the three tools with `readOnlyHint=false`.
+- Preserve existing read-only tools and Phase 5D through Phase 5M write
+  behavior.
+- Generate tools send the existing REST payload with `template_id` and
+  provided optional `title`.
+- Do not download generated document content, expose binary content, upload
+  binary `.docx` templates, upload template versions, mutate document
+  templates beyond Phase 5M, mutate public links, upload or download
+  attachments, import/export data, or add other MCP tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, or Alembic migrations.
+
+Acceptance criteria:
+
+- `tools/list` includes all three new tools as write tools.
+- Generate document sends `POST /api/v1/cards/{card_id}/generated-documents`
+  with required `template_id` and only provided optional `title`.
+- Generate PDF document sends
+  `POST /api/v1/cards/{card_id}/generated-documents/pdf` with required
+  `template_id` and only provided optional `title`.
+- Archive generated document sends
+  `DELETE /api/v1/generated-documents/{generated_document_id}` only when
+  `confirm_archive=true`.
+- Archive without confirmation returns an MCP tool error and sends no HTTP
+  request.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Production live smoke must not generate or archive production documents
+  without a disposable production-safe target.
+- MCP generated document content download, binary `.docx` template
+  upload/version upload, public-link document workflows, attachment
+  upload/download, and import/export write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `reg_engine_generate_document`, `reg_engine_generate_pdf_document`, and
+  `reg_engine_archive_generated_document` were absent from
+  `MCP_TOOL_DEFINITIONS`.
+- GREEN targeted MCP Phase 5 tests passed locally with `40 passed`.
+- Targeted `ruff check`, `ruff format --check`, and `mypy backend\app\mcp`
+  passed locally.
+- Local full check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  with backend `106 passed, 141 skipped`, frontend unit `39 passed`, frontend
+  production build, and current project tree.
+- Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5N; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification

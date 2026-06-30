@@ -209,6 +209,9 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
         "reg_engine_archive_report_run",
         "reg_engine_create_document_template",
         "reg_engine_archive_document_template",
+        "reg_engine_generate_document",
+        "reg_engine_generate_pdf_document",
+        "reg_engine_archive_generated_document",
     }
     read_only_tools = [
         tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] not in write_tool_names
@@ -1670,6 +1673,203 @@ def test_mcp_archive_document_template_tool_requires_confirmation_before_delete(
     assert transport.requests[0]["method"] == "DELETE"
     assert (
         transport.requests[0]["url"] == f"http://api.local/api/v1/document-templates/{template_id}"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
+
+
+def test_mcp_generate_document_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_generate_document"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "template_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    template_id = str(uuid4())
+    generated_document_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": generated_document_id,
+            "card_id": card_id,
+            "template_id": template_id,
+            "template_version_id": str(uuid4()),
+            "stored_file_id": str(uuid4()),
+            "title": "Summary",
+            "output_filename": "summary.docx",
+            "content_type": (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            "render_status": "completed",
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": None,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    without_title = call_tool(
+        "reg_engine_generate_document",
+        {"card_id": card_id, "template_id": template_id},
+        client=client,
+    )
+    assert without_title["isError"] is False
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/cards/{card_id}/generated-documents"
+    )
+    empty_title_body = transport.requests[0]["body"]
+    assert isinstance(empty_title_body, bytes)
+    assert json.loads(empty_title_body.decode("utf-8")) == {"template_id": template_id}
+
+    generated = call_tool(
+        "reg_engine_generate_document",
+        {"card_id": card_id, "template_id": template_id, "title": "Summary"},
+        client=client,
+    )
+
+    assert generated["isError"] is False
+    assert generated["structuredContent"]["id"] == generated_document_id
+    assert transport.requests[1]["method"] == "POST"
+    assert (
+        transport.requests[1]["url"]
+        == f"http://api.local/api/v1/cards/{card_id}/generated-documents"
+    )
+    assert transport.requests[1]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[1]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "template_id": template_id,
+        "title": "Summary",
+    }
+
+
+def test_mcp_generate_pdf_document_tool_posts_to_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_generate_pdf_document"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == ["card_id", "template_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    card_id = str(uuid4())
+    template_id = str(uuid4())
+    generated_document_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": generated_document_id,
+            "card_id": card_id,
+            "template_id": template_id,
+            "template_version_id": str(uuid4()),
+            "stored_file_id": str(uuid4()),
+            "title": "Summary PDF",
+            "output_filename": "summary.pdf",
+            "content_type": "application/pdf",
+            "render_status": "completed",
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": None,
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    generated = call_tool(
+        "reg_engine_generate_pdf_document",
+        {"card_id": card_id, "template_id": template_id, "title": "Summary PDF"},
+        client=client,
+    )
+
+    assert generated["isError"] is False
+    assert generated["structuredContent"]["id"] == generated_document_id
+    assert transport.requests[0]["method"] == "POST"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/cards/{card_id}/generated-documents/pdf"
+    )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    body = transport.requests[0]["body"]
+    assert isinstance(body, bytes)
+    assert json.loads(body.decode("utf-8")) == {
+        "template_id": template_id,
+        "title": "Summary PDF",
+    }
+
+
+def test_mcp_archive_generated_document_tool_requires_confirmation_before_delete() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_archive_generated_document"
+    )
+    assert tool["annotations"]["readOnlyHint"] is False
+    assert tool["inputSchema"]["required"] == [
+        "generated_document_id",
+        "confirm_archive",
+    ]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    generated_document_id = str(uuid4())
+    transport = RecordingTransport(
+        {
+            "id": generated_document_id,
+            "card_id": str(uuid4()),
+            "template_id": str(uuid4()),
+            "template_version_id": str(uuid4()),
+            "stored_file_id": str(uuid4()),
+            "title": "Archived summary",
+            "output_filename": "summary.docx",
+            "content_type": (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+            "render_status": "completed",
+            "created_at": "2026-01-01T00:00:00Z",
+            "archived_at": "2026-01-02T00:00:00Z",
+        }
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    rejected = call_tool(
+        "reg_engine_archive_generated_document",
+        {"generated_document_id": generated_document_id, "confirm_archive": False},
+        client=client,
+    )
+    assert rejected["isError"] is True
+    assert "confirm_archive" in rejected["content"][0]["text"]
+    assert transport.requests == []
+
+    archived = call_tool(
+        "reg_engine_archive_generated_document",
+        {"generated_document_id": generated_document_id, "confirm_archive": True},
+        client=client,
+    )
+
+    assert archived["isError"] is False
+    assert archived["structuredContent"]["id"] == generated_document_id
+    assert transport.requests[0]["method"] == "DELETE"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/generated-documents/{generated_document_id}"
     )
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None

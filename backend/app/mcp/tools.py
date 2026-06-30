@@ -586,6 +586,56 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         },
         "annotations": {"readOnlyHint": False},
     },
+    {
+        "name": "reg_engine_generate_document",
+        "title": "Generate document",
+        "description": "Generate a document through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "template_id": {"type": "string"},
+                "title": {"type": "string"},
+            },
+            "required": ["card_id", "template_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_generate_pdf_document",
+        "title": "Generate PDF document",
+        "description": "Generate a PDF document through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "card_id": {"type": "string"},
+                "template_id": {"type": "string"},
+                "title": {"type": "string"},
+            },
+            "required": ["card_id", "template_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
+    {
+        "name": "reg_engine_archive_generated_document",
+        "title": "Archive generated document",
+        "description": (
+            "Archive a generated document through the Registry Engine API. "
+            "Requires confirm_archive=true."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "generated_document_id": {"type": "string"},
+                "confirm_archive": {"type": "boolean"},
+            },
+            "required": ["generated_document_id", "confirm_archive"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": False},
+    },
 ]
 
 
@@ -883,6 +933,31 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/document-templates/{template_id}")
+    if name == "reg_engine_generate_document":
+        card_id = _required_str_arg(arguments, "card_id")
+        generated_document_payload: dict[str, Any] = {
+            "template_id": _required_str_arg(arguments, "template_id"),
+        }
+        _add_optional_str(generated_document_payload, arguments, "title")
+        return client.post_json(
+            f"/api/v1/cards/{card_id}/generated-documents",
+            generated_document_payload,
+        )
+    if name == "reg_engine_generate_pdf_document":
+        card_id = _required_str_arg(arguments, "card_id")
+        generated_document_payload = {
+            "template_id": _required_str_arg(arguments, "template_id"),
+        }
+        _add_optional_str(generated_document_payload, arguments, "title")
+        return client.post_json(
+            f"/api/v1/cards/{card_id}/generated-documents/pdf",
+            generated_document_payload,
+        )
+    if name == "reg_engine_archive_generated_document":
+        generated_document_id = _required_str_arg(arguments, "generated_document_id")
+        if _bool_arg(arguments, "confirm_archive", False) is not True:
+            raise ValueError("Tool argument 'confirm_archive' must be true.")
+        return client.delete_json(f"/api/v1/generated-documents/{generated_document_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
 
 
