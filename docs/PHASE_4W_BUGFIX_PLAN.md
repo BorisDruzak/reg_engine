@@ -2,7 +2,7 @@
 
 ## Status
 
-Completed locally; deploy pending.
+Completed and deployed.
 
 ## Purpose
 
@@ -205,6 +205,20 @@ Local evidence so far:
   with backend `80 passed, 141 skipped`, frontend unit `39 passed`, production
   frontend build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Harden report validation and storage cleanup"`
+  created commit `fbe5232b` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Backend service restart passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command restart`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Server PostgreSQL-backed report API suite passed against disposable
+  `reg_engine_test` with `13 passed`.
+- Direct server smoke passed: server checkout `fbe5232b`, Alembic
+  `0014_report_pdf_output (head)`, and healthcheck returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 ## Closeout Criteria
 

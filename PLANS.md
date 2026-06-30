@@ -369,14 +369,18 @@ Current stop point:
   passed, and Alembic remains at `0014_report_pdf_output (head)`. No backend
   code, migrations, endpoints, report formats, full visual report builder, or
   MCP write tools are included.
-- Phase 4W Cross-Cutting Bugfix And Stabilization is completed locally and
-  pending deploy: backend report generation now enforces the supported flat
-  template parameter schema subset at the service/API boundary, report template
-  create/update rejects invalid supported-schema structures and invalid default
-  parameters, and generated report output files are registered for cleanup on
-  transaction rollback. No frontend feature work, report formats, MCP write
-  tools, binary export, database schema changes, or Alembic migrations are
-  included; Alembic remains at `0014_report_pdf_output (head)`.
+- Phase 4W Cross-Cutting Bugfix And Stabilization is completed and deployed:
+  backend report generation now enforces the supported flat template parameter
+  schema subset at the service/API boundary, report template create/update
+  rejects invalid supported-schema structures and invalid default parameters,
+  and generated report output files are registered for cleanup on transaction
+  rollback. Commit `fbe5232` is pushed, the server checkout is synchronized to
+  `origin/main`, the backend service is restarted, server checks passed,
+  PostgreSQL-backed report API tests passed on disposable `reg_engine_test`,
+  healthcheck passed, and Alembic remains at
+  `0014_report_pdf_output (head)`. No frontend feature work, report formats,
+  MCP write tools, binary export, database schema changes, or Alembic
+  migrations are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -3712,7 +3716,7 @@ Production migration checkpoint:
 
 ### Phase 4W: Cross-Cutting Bugfix And Stabilization
 
-Status: completed locally; deploy pending.
+Status: completed and deployed.
 
 Purpose: harden cross-cutting report correctness issues after Phase 4V before
 starting MCP write tools, additional report polish, binary export, or other new
@@ -3781,11 +3785,27 @@ Verification so far:
   with backend `80 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Harden report validation and storage cleanup"`
+  created commit `fbe5232b` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Backend service restart passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command restart`;
+  post-restart healthcheck returned `{"status":"ok","service":"reg_engine"}`.
+- Final server check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`.
+- Server PostgreSQL-backed report API suite passed against disposable
+  `reg_engine_test` with `13 passed`.
+- Direct server smoke passed: server checkout `fbe5232b`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
-- Not required for Phase 4W; no backend schema changes are included and Alembic
-  remains at `0014_report_pdf_output (head)`.
+- Not required for Phase 4W; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
 
 ### Phase 5: MCP Over API Only
 
