@@ -251,11 +251,14 @@ Current stop point:
   pushed, the server checkout is synchronized to `origin/main`, frontend dist
   is deployed, disposable PostgreSQL-backed API verification passed,
   healthcheck passed, and server checks passed. No migration was required.
-- Phase 4J Report Run Parameters And Summary Visibility is completed locally:
+- Phase 4J Report Run Parameters And Summary Visibility is completed and
+  deployed:
   generated report rows now show run parameters and summary metadata in the
   Russian report UI using existing `parameters_json` and `summary_json` API
-  fields. Local checks passed; server synchronization is pending. No backend
-  code, migrations, endpoints, report formats, or MCP write tools are included.
+  fields. Commit `f66516d` is pushed, the server checkout is synchronized to
+  `origin/main`, frontend dist is deployed, healthcheck passed, and server
+  checks passed. No backend code, migrations, endpoints, report formats, or
+  MCP write tools are included.
 - Later explicit phases remain MCP write tools and additional report polish.
 - Binary attachment/document export, additional report polish, and MCP write
   tools remain deferred until their explicit phases.
@@ -1804,8 +1807,8 @@ Purpose: add report definitions and report runs.
 Status: completed for the approved backend report foundation, frontend UI,
 report template settings edit, CSV report output, report run list polish,
 report archive visibility, XLSX report output, PDF report output, and report
-template type/format edit slices. Report run parameters/summary visibility is
-completed locally; additional report polish remains deferred.
+template type/format edit slices, and report run parameters/summary visibility.
+Additional report polish remains deferred.
 
 Planned overall scope:
 
@@ -2560,7 +2563,7 @@ Production migration checkpoint:
 
 ### Phase 4J: Report Run Parameters And Summary Visibility
 
-Status: completed locally.
+Status: completed.
 
 Purpose: close a small report UI polish gap by making generated report run
 inputs and summary metadata visible in the existing Russian report run list.
@@ -2607,6 +2610,16 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Deployed commit `f66516d` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after deployment.
+- Server smoke confirmed `server_head=f66516d`, Alembic remained
+  `0014_report_pdf_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-luvTP2JJ.js`.
 
 Production migration checkpoint:
 
