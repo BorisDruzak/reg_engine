@@ -225,8 +225,14 @@ Current stop point:
   be edited or archived again. Commit `7a33e25` is pushed, the server checkout
   is synchronized to `origin/main`, frontend dist is deployed, healthcheck
   passed, and server checks passed. No migration was required.
-- Phase 4G XLSX Report Output is in progress as the next bounded report output
-  format slice.
+- Phase 4G XLSX Report Output is completed and deployed: `xlsx` is accepted as
+  a report template output format, generated XLSX report runs are stored
+  through the report storage abstraction, downloaded with the standard XLSX
+  content type, and selectable from the Russian report UI. Commit `8aed67b` is
+  pushed, the server checkout is synchronized to `origin/main`, production
+  PostgreSQL is migrated to `0013_report_xlsx_output` after backup and
+  disposable PostgreSQL verification, frontend dist is deployed, healthcheck
+  passed, and server checks passed.
 - Later explicit phases remain PDF report outputs, MCP write tools, and
   additional report polish.
 - Binary attachment/document export, PDF report outputs, additional report
@@ -1774,9 +1780,9 @@ Deployment checkpoint:
 Purpose: add report definitions and report runs.
 
 Status: completed for the approved backend report foundation, frontend UI,
-report template settings edit, CSV report output, and report run list polish
-slices, plus Phase 4F report archive visibility. XLSX/PDF report outputs and
-additional report polish remain deferred.
+report template settings edit, CSV report output, report run list polish,
+report archive visibility, and XLSX report output slices. PDF report outputs
+and additional report polish remain deferred.
 
 Planned overall scope:
 
@@ -2240,7 +2246,7 @@ Deployment checkpoint:
 
 ### Phase 4G: XLSX Report Output
 
-Status: in progress.
+Status: completed.
 
 Purpose: add the next non-JSON report output format while preserving the
 existing report service/API boundary, storage abstraction, visibility scope, and
@@ -2307,10 +2313,36 @@ Verification so far:
   `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`.
 - Frontend Playwright E2E passed:
   `pnpm -C frontend e2e` with `3 passed`.
+- Disposable PostgreSQL verification passed on server database
+  `reg_engine_phase4g_test`: clean `alembic upgrade head` reached
+  `0013_report_xlsx_output`, the targeted XLSX report API test passed, and
+  the disposable constraint check showed `json`, `csv`, and `xlsx`.
+- Deployed commit `8aed67b` to the configured server checkout with
+  `scripts/deploy.ps1`.
+- Deployed frontend dist with `scripts/deploy-frontend.ps1`; same-origin
+  frontend/API smoke passed after backend service restart.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1` passed
+  after migration and frontend deployment.
+- Server smoke confirmed `server_head=8aed67b`, Alembic
+  `0013_report_xlsx_output (head)`, `GET /api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`, and the SPA shell served
+  `/assets/index-ClVCSqB4.js`.
 
 Production migration checkpoint:
 
-- Pending for `0013_report_xlsx_output`.
+- Production PostgreSQL was migrated from `0012_report_csv_output` to
+  `0013_report_xlsx_output` on 2026-06-30.
+- Server checkout was synchronized to commit `8aed67b` before migration.
+- Preflight confirmed target database `reg_engine`, Alembic current
+  `0012_report_csv_output`, and zero `report_templates` rows with output
+  formats outside `json`, `csv`, or `xlsx`.
+- Backup was created before migration:
+  `/var/backups/reg_engine/reg_engine_before_0013_report_xlsx_output_20260630T032538Z.dump`
+  (`126895` bytes).
+- Post-check confirmed Alembic `0013_report_xlsx_output (head)` and
+  `ck_report_templates_output_format` allows `json`, `csv`, and `xlsx`.
+- Backend service was restarted; a first immediate health curl raced the
+  restart, then repeated healthcheck returned `ok`.
 
 ### Phase 5: MCP Over API Only
 
