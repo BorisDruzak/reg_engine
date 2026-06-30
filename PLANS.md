@@ -261,9 +261,15 @@ Current stop point:
   three new tools with `readOnlyHint=false`, healthcheck passed, and Alembic
   remains at `0014_report_pdf_output (head)`. No production card was created,
   updated, or archived during smoke validation.
-- Phase 5H MCP Card Field Value Write Tools is completed locally and awaiting
-  deploy: the narrow MCP write-tool slice covers authenticated card
-  field-value updates through existing REST API endpoints only.
+- Phase 5H MCP Card Field Value Write Tools is completed and deployed:
+  card field-value MCP tools call existing REST single and bulk card value
+  endpoints, reject empty bulk payloads, and keep validation, permissions,
+  atomic bulk behavior, and audit API-enforced. Commit `57a52bc0` is pushed,
+  the server checkout is synchronized to `origin/main`, server checks passed,
+  server MCP targeted tests passed, server MCP stdio `tools/list` shows both
+  new tools with `readOnlyHint=false`, healthcheck passed, and Alembic remains
+  at `0014_report_pdf_output (head)`. No production card value was changed
+  during smoke validation.
 - Phase 4B Report Frontend UI is completed: authenticated Russian-first
   report template/run controls use the existing Phase 4A REST API, without
   backend schema changes, migrations, non-JSON report outputs, scheduled
@@ -4545,7 +4551,7 @@ Production migration checkpoint:
 
 ### Phase 5H: MCP Card Field Value Write Tools
 
-Status: completed locally; deploy pending.
+Status: completed and deployed.
 
 Purpose: extend the API-only MCP write surface with card field-value updates
 while keeping field validation, card edit permissions, archived/superseded edit
@@ -4635,10 +4641,25 @@ Verification so far:
   with backend `93 passed, 141 skipped`, frontend unit `39 passed`, frontend
   production build, and current project tree.
 - Frontend e2e passed: `pnpm -C frontend e2e` with `3 passed`.
+- Commit/push passed through the standard workflow:
+  `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Add MCP card field value tools"`
+  created commit `57a52bc0` and pushed `main` to `origin/main`.
+- Server deploy passed:
+  `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`.
+- Server MCP Phase 5 tests passed with `27 passed`.
+- Server MCP stdio sanity passed for `initialize`, `tools/list`, and
+  `reg_engine_health`; `tools/list` includes
+  `reg_engine_set_card_field_value` and `reg_engine_set_card_values` with
+  `readOnlyHint=false`.
+- Direct server smoke passed: server checkout `57a52bc0`, Alembic
+  `0014_report_pdf_output (head)`, and
+  `curl http://127.0.0.1:8000/api/v1/health` returned
+  `{"status":"ok","service":"reg_engine"}`.
 
 Production migration checkpoint:
 
-- Not required for Phase 5H; no backend schema changes are included.
+- Not required for Phase 5H; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification
 
