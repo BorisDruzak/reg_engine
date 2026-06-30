@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import base64
 import json
 from typing import Any
 
-from app.mcp.api_client import RegEngineApiClient, RegEngineApiError
+from app.mcp.api_client import ApiResponse, RegEngineApiClient, RegEngineApiError
 
 McpToolDefinition = dict[str, Any]
 McpToolResult = dict[str, Any]
@@ -192,6 +193,38 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
         "name": "reg_engine_read_generated_document",
         "title": "Read generated document",
         "description": "Read safe generated document metadata.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "generated_document_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["generated_document_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "reg_engine_read_report_run_content",
+        "title": "Read report run content",
+        "description": "Read report run output content as base64 through the Registry Engine API.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "report_run_id": {"type": "string"},
+                "include_archive": {"type": "boolean"},
+            },
+            "required": ["report_run_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "reg_engine_read_generated_document_content",
+        "title": "Read generated document content",
+        "description": (
+            "Read generated document output content as base64 through the Registry Engine API."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -803,6 +836,30 @@ def _call_tool_or_raise(
             f"/api/v1/generated-documents/{generated_document_id}",
             {"include_archive": _bool_arg(arguments, "include_archive", False)},
         )
+    if name == "reg_engine_read_report_run_content":
+        report_run_id = _required_str_arg(arguments, "report_run_id")
+        response = client.get_bytes(
+            f"/api/v1/report-runs/{report_run_id}/content",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+        return _content_response_payload(
+            response,
+            object_id_key="report_run_id",
+            object_id=report_run_id,
+            filename_header="x-report-filename",
+        )
+    if name == "reg_engine_read_generated_document_content":
+        generated_document_id = _required_str_arg(arguments, "generated_document_id")
+        response = client.get_bytes(
+            f"/api/v1/generated-documents/{generated_document_id}/content",
+            {"include_archive": _bool_arg(arguments, "include_archive", False)},
+        )
+        return _content_response_payload(
+            response,
+            object_id_key="generated_document_id",
+            object_id=generated_document_id,
+            filename_header="x-document-filename",
+        )
     if name == "reg_engine_create_registry":
         payload: dict[str, Any] = {
             "code": _required_str_arg(arguments, "code"),
@@ -1059,6 +1116,28 @@ def _optional_str_arg(arguments: dict[str, Any], key: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"Tool argument {key!r} must be a string.")
     return value
+
+
+def _content_response_payload(
+    response: ApiResponse,
+    *,
+    object_id_key: str,
+    object_id: str,
+    filename_header: str,
+) -> dict[str, Any]:
+    headers = {key.lower(): value for key, value in response.headers.items()}
+    content_type = headers.get("content-type", "application/octet-stream")
+    content_disposition = headers.get("content-disposition")
+    payload: dict[str, Any] = {
+        object_id_key: object_id,
+        "content_base64": base64.b64encode(response.body).decode("ascii"),
+        "content_type": content_type,
+        "content_length_bytes": len(response.body),
+        "filename": headers.get(filename_header),
+    }
+    if content_disposition is not None:
+        payload["content_disposition"] = content_disposition
+    return payload
 
 
 def _bool_arg(arguments: dict[str, Any], key: str, default: bool) -> bool:

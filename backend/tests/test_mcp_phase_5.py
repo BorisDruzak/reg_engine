@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 import io
 import json
 from pathlib import Path
@@ -30,8 +31,18 @@ class FakeAuditSession:
 
 
 class RecordingTransport:
-    def __init__(self, payload: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        payload: dict[str, Any] | None = None,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+        status_code: int = 200,
+    ) -> None:
         self.payload = payload or {"items": [{"id": "card-1", "display_name": "Карточка"}]}
+        self.body = body
+        self.headers = headers or {"content-type": "application/json"}
+        self.status_code = status_code
         self.requests: list[dict[str, object]] = []
 
     def request(
@@ -53,9 +64,9 @@ class RecordingTransport:
             }
         )
         return ApiResponse(
-            status_code=200,
-            headers={"content-type": "application/json"},
-            body=json.dumps(self.payload).encode("utf-8"),
+            status_code=self.status_code,
+            headers=self.headers,
+            body=self.body if self.body is not None else json.dumps(self.payload).encode("utf-8"),
         )
 
 
@@ -106,6 +117,43 @@ def test_mcp_api_client_uses_get_bearer_token_and_mcp_source_header() -> None:
             "url": "https://registry.example.test/api/v1/registries?include_archive=false",
             "headers": {
                 "Accept": "application/json",
+                "Authorization": "Bearer test-token",
+                "User-Agent": "reg-engine-mcp/0.1",
+                "X-Reg-Engine-Source": "mcp",
+            },
+            "body": None,
+            "timeout_seconds": 7.5,
+        }
+    ]
+
+
+def test_mcp_api_client_get_bytes_uses_binary_accept_and_returns_response() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+
+    transport = RecordingTransport(
+        body=b"report-bytes",
+        headers={"Content-Type": "text/csv; charset=utf-8", "X-Report-Filename": "report.csv"},
+    )
+    client = RegEngineApiClient(
+        base_url="https://registry.example.test/",
+        token="test-token",
+        transport=transport,
+        timeout_seconds=7.5,
+    )
+
+    response = client.get_bytes("/api/v1/report-runs/run-1/content", {"include_archive": True})
+
+    assert response.body == b"report-bytes"
+    assert response.headers["X-Report-Filename"] == "report.csv"
+    assert transport.requests == [
+        {
+            "method": "GET",
+            "url": (
+                "https://registry.example.test/api/v1/report-runs/run-1/content"
+                "?include_archive=true"
+            ),
+            "headers": {
+                "Accept": "*/*",
                 "Authorization": "Bearer test-token",
                 "User-Agent": "reg-engine-mcp/0.1",
                 "X-Reg-Engine-Source": "mcp",
@@ -1739,6 +1787,116 @@ def test_mcp_read_generated_document_tool_gets_existing_api_boundary() -> None:
         == f"http://api.local/api/v1/generated-documents/{generated_document_id}"
         "?include_archive=true"
     )
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
+
+
+def test_mcp_read_report_run_content_tool_gets_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_read_report_run_content"
+    )
+    assert tool["annotations"]["readOnlyHint"] is True
+    assert tool["inputSchema"]["required"] == ["report_run_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    report_run_id = str(uuid4())
+    body = "id,name\n1,Карточка\n".encode()
+    transport = RecordingTransport(
+        body=body,
+        headers={
+            "Content-Type": "text/csv; charset=utf-8",
+            "X-Report-Filename": "report.csv",
+            "Content-Disposition": 'attachment; filename="report.csv"',
+        },
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_read_report_run_content",
+        {"report_run_id": report_run_id, "include_archive": True},
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"] == {
+        "report_run_id": report_run_id,
+        "content_base64": base64.b64encode(body).decode("ascii"),
+        "content_type": "text/csv; charset=utf-8",
+        "content_length_bytes": len(body),
+        "filename": "report.csv",
+        "content_disposition": 'attachment; filename="report.csv"',
+    }
+    assert transport.requests[0]["method"] == "GET"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/report-runs/{report_run_id}/content"
+        "?include_archive=true"
+    )
+    assert transport.requests[0]["headers"]["Accept"] == "*/*"
+    assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
+    assert transport.requests[0]["body"] is None
+
+
+def test_mcp_read_generated_document_content_tool_gets_existing_api_boundary() -> None:
+    from app.mcp.api_client import RegEngineApiClient
+    from app.mcp.tools import MCP_TOOL_DEFINITIONS, call_tool
+
+    tool = next(
+        tool
+        for tool in MCP_TOOL_DEFINITIONS
+        if tool["name"] == "reg_engine_read_generated_document_content"
+    )
+    assert tool["annotations"]["readOnlyHint"] is True
+    assert tool["inputSchema"]["required"] == ["generated_document_id"]
+    assert tool["inputSchema"]["additionalProperties"] is False
+
+    generated_document_id = str(uuid4())
+    body = b"%PDF-1.4\n%generated\n"
+    transport = RecordingTransport(
+        body=body,
+        headers={
+            "Content-Type": "application/pdf",
+            "X-Document-Filename": "summary.pdf",
+            "Content-Disposition": 'attachment; filename="summary.pdf"',
+        },
+    )
+    client = RegEngineApiClient(
+        base_url="http://api.local",
+        token="token",
+        transport=transport,
+    )
+
+    result = call_tool(
+        "reg_engine_read_generated_document_content",
+        {"generated_document_id": generated_document_id, "include_archive": True},
+        client=client,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"] == {
+        "generated_document_id": generated_document_id,
+        "content_base64": base64.b64encode(body).decode("ascii"),
+        "content_type": "application/pdf",
+        "content_length_bytes": len(body),
+        "filename": "summary.pdf",
+        "content_disposition": 'attachment; filename="summary.pdf"',
+    }
+    assert transport.requests[0]["method"] == "GET"
+    assert (
+        transport.requests[0]["url"]
+        == f"http://api.local/api/v1/generated-documents/{generated_document_id}/content"
+        "?include_archive=true"
+    )
+    assert transport.requests[0]["headers"]["Accept"] == "*/*"
     assert transport.requests[0]["headers"]["X-Reg-Engine-Source"] == "mcp"
     assert transport.requests[0]["body"] is None
 

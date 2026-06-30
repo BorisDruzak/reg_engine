@@ -164,6 +164,13 @@ Current stop point:
   smoke validation. Generated document content download, binary template content
   download, public-link document workflows, attachment upload/download,
   import/export MCP tools, and new write tools stay deferred.
+- Phase 5P MCP Report And Generated Document Content Read Tools is completed
+  locally and pending full local check, push, deploy, and server smoke:
+  report-run and generated-document content reads use existing authenticated
+  REST API `GET` content endpoints and return base64 content plus safe metadata
+  through MCP structured output. Attachment content, document-template content,
+  public-link workflows, import/export MCP tools, and new write tools stay
+  deferred.
 - Phase 5J MCP Card Transfer Write Tool is completed and deployed:
   the existing REST card transfer workflow is exposed through MCP with
   explicit transfer confirmation, while source-card superseding, target-card
@@ -5537,6 +5544,105 @@ Verification so far:
 Production migration checkpoint:
 
 - Not required for Phase 5O; no backend schema changes are included and
+  production Alembic remains at `0014_report_pdf_output (head)`.
+
+### Phase 5P: MCP Report And Generated Document Content Read Tools
+
+Status: completed locally; pending full local check, push, deploy, and server
+smoke.
+
+Purpose: add read-only MCP access to report-run output content and generated
+document content through existing REST API endpoints, without adding direct
+storage/database access or new mutations.
+
+Tool set:
+
+- `reg_engine_read_report_run_content`
+- `reg_engine_read_generated_document_content`
+
+Argument schemas:
+
+- `reg_engine_read_report_run_content`:
+  - `report_run_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+- `reg_engine_read_generated_document_content`:
+  - `generated_document_id`: required string.
+  - `include_archive`: optional boolean.
+  - `additionalProperties=false`.
+
+API endpoints:
+
+- `GET /api/v1/report-runs/{report_run_id}/content`
+- `GET /api/v1/generated-documents/{generated_document_id}/content`
+
+Security and audit decisions:
+
+- MCP tools call only the REST API through `RegEngineApiClient`.
+- Report/generated-document visibility, archive scope, download audit events,
+  storage reads, and safe filenames remain API-side in the existing services.
+- Both tools are read-only and use `readOnlyHint=true`.
+- MCP returns content as base64 in structured output with `content_type`,
+  `content_length_bytes`, safe filename metadata, and `content_disposition`.
+
+Scope:
+
+- Expose report-run and generated-document content reads only.
+- Preserve existing read-only tools and Phase 5D through Phase 5N write
+  behavior.
+- Do not expose attachment content, document-template binary content,
+  public-link document workflows, public-link attachment workflows,
+  import/export MCP tools, or new write tools in this phase.
+- Do not add direct database access, SQLAlchemy/Alembic imports, backend model
+  imports, backend service imports, standalone MCP auth, frontend UI, database
+  schema changes, Alembic migrations, or streaming downloads.
+
+Acceptance criteria:
+
+- `tools/list` includes both new tools as read-only tools.
+- Report-run content sends
+  `GET /api/v1/report-runs/{report_run_id}/content` with `include_archive`.
+- Generated-document content sends
+  `GET /api/v1/generated-documents/{generated_document_id}/content` with
+  `include_archive`.
+- MCP binary GET requests send `Accept: */*` and `X-Reg-Engine-Source: mcp`.
+- Content responses include base64 content and safe metadata without storage
+  keys, checksums, filesystem paths, or stored-file ids.
+- Existing MCP JSON-RPC hardening behavior remains intact.
+- MCP package guardrails continue proving no direct DB/model/service imports.
+
+Known limitations:
+
+- Content downloads still use the existing MVP REST/storage path that reads
+  bytes before response construction; real streaming remains deferred until the
+  storage boundary exposes streaming/open-file support.
+- Attachment content, document-template content, public-link workflows,
+  import/export MCP tools, and new write tools remain future phases.
+
+Verification so far:
+
+- RED targeted MCP Phase 5 tests failed before implementation because
+  `RegEngineApiClient.get_bytes`,
+  `reg_engine_read_report_run_content`, and
+  `reg_engine_read_generated_document_content` were absent.
+- GREEN targeted MCP Phase 5 tests passed locally with `47 passed`.
+- Targeted MCP ruff check passed:
+  `backend\.venv\Scripts\python.exe -m ruff check backend\app\mcp\api_client.py backend\app\mcp\tools.py backend\tests\test_mcp_phase_5.py`.
+- Targeted MCP ruff format check passed:
+  `backend\.venv\Scripts\python.exe -m ruff format --check backend\app\mcp\api_client.py backend\app\mcp\tools.py backend\tests\test_mcp_phase_5.py`.
+- Targeted MCP mypy passed:
+  `backend\.venv\Scripts\python.exe -m mypy backend\app\mcp`.
+- Full local check passed:
+  `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`.
+  This included backend ruff, backend format check, backend mypy, backend pytest
+  with `113 passed, 141 skipped`, frontend lint, frontend typecheck, frontend
+  unit tests with `39 passed`, frontend production build, and project-map check.
+- Frontend e2e passed:
+  `pnpm -C frontend e2e` with `3 passed`.
+
+Production migration checkpoint:
+
+- Not required for Phase 5P; no backend schema changes are included and
   production Alembic remains at `0014_report_pdf_output (head)`.
 
 ## Verification

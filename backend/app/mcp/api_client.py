@@ -83,6 +83,25 @@ class RegEngineApiClient:
     def get_json(self, path: str, query: Mapping[str, object | None] | None = None) -> Any:
         return self._request_json(method="GET", path=path, query=query)
 
+    def get_bytes(
+        self,
+        path: str,
+        query: Mapping[str, object | None] | None = None,
+    ) -> ApiResponse:
+        response = self.transport.request(
+            method="GET",
+            url=self._url(path, query),
+            headers=self._headers_with_accept(accept="*/*"),
+            body=None,
+            timeout_seconds=self.timeout_seconds,
+        )
+        if response.status_code >= 400:
+            raise RegEngineApiError(
+                _api_error_message(response.body),
+                status_code=response.status_code,
+            )
+        return response
+
     def post_json(self, path: str, payload: Mapping[str, Any]) -> Any:
         return self._request_json(method="POST", path=path, payload=payload)
 
@@ -124,8 +143,19 @@ class RegEngineApiClient:
         return f"{self.base_url}{normalized_path}{suffix}"
 
     def _headers(self, *, has_body: bool = False) -> dict[str, str]:
+        return self._headers_with_accept(
+            accept="application/json",
+            has_body=has_body,
+        )
+
+    def _headers_with_accept(
+        self,
+        *,
+        accept: str,
+        has_body: bool = False,
+    ) -> dict[str, str]:
         headers = {
-            "Accept": "application/json",
+            "Accept": accept,
             "User-Agent": MCP_USER_AGENT,
             MCP_SOURCE_HEADER: "mcp",
         }
