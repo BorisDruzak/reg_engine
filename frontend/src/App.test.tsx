@@ -2202,6 +2202,92 @@ test("logs in and renders authenticated admin workspace", async () => {
   });
 });
 
+test("renders refactored card workspace with focused tabs and simple metadata", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByRole("tablist", { name: "Разделы карточки" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Поля" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: "Вложения" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Публичные ссылки" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "История" })).toBeInTheDocument();
+  expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Карточка актива").length).toBeGreaterThan(0);
+
+  await user.click(screen.getByRole("tab", { name: "Вложения" }));
+  expect(screen.getByRole("tab", { name: "Вложения" })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Документы" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Создать карточку" }));
+  expect(await screen.findByRole("heading", { name: "Новая карточка" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
+  expect(screen.queryByText("Данные карточки")).not.toBeInTheDocument();
+});
+
+test("renders registry workspace as focused schema tabs", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  expect(
+    await screen.findByRole("tablist", { name: "Разделы настройки реестра" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Схема карточки" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getByRole("tab", { name: "Справочники" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Импорт и экспорт" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Отчеты" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Схема карточки" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Справочники" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("tab", { name: "Справочники" }));
+  expect(screen.getByRole("tab", { name: "Справочники" })).toHaveAttribute("aria-selected", "true");
+  expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Импорт и экспорт" })).not.toBeInTheDocument();
+});
+
+test("uses compact visible row actions with full accessible labels", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Организации" }));
+
+  const editOrganization = await screen.findByRole("button", {
+    name: "Редактировать организацию Главная организация",
+  });
+  expect(editOrganization).toHaveTextContent("Изменить");
+  const archiveOrganization = screen.getByRole("button", {
+    name: "Архивировать организацию Главная организация",
+  });
+  expect(archiveOrganization).toHaveTextContent("В архив");
+
+  await user.click(screen.getByRole("button", { name: "Реестры" }));
+  const editRegistry = await screen.findByRole("button", {
+    name: "Редактировать реестр Реестр активов",
+  });
+  expect(editRegistry).toHaveTextContent("Изменить");
+  const archiveRegistry = screen.getByRole("button", {
+    name: "Архивировать реестр Реестр активов",
+  });
+  expect(archiveRegistry).toHaveTextContent("В архив");
+});
+
 test("does not show global admin query errors while scoped user works with cards", async () => {
   denyAdminReadQueries = true;
   const user = userEvent.setup();
@@ -2314,8 +2400,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
         ([input, init]) =>
           String(input).endsWith(
             "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards",
-          ) &&
-          init?.method === "POST",
+          ) && init?.method === "POST",
       ).length;
 
   await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
@@ -2383,8 +2468,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
       ([input, init]) =>
         String(input).endsWith(
           "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards",
-        ) &&
-        init?.method === "POST",
+        ) && init?.method === "POST",
     );
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
@@ -2400,9 +2484,8 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
-          String(input).endsWith(
-            "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards",
-          ) && init?.method === "POST",
+          String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") &&
+          init?.method === "POST",
       ),
     ).toBe(false);
 
@@ -2551,9 +2634,10 @@ test("renders organization hierarchy and hides organization type choices", async
   await user.click(await screen.findByRole("button", { name: "Организации" }));
 
   const tree = await screen.findByRole("tree", { name: "Дерево организаций" });
-  expect(
-    within(tree).getByRole("treeitem", { name: /Главная организация/ }),
-  ).toHaveAttribute("aria-level", "1");
+  expect(within(tree).getByRole("treeitem", { name: /Главная организация/ })).toHaveAttribute(
+    "aria-level",
+    "1",
+  );
   expect(
     within(tree).getByRole("treeitem", { name: /Территориальное управление 1/ }),
   ).toHaveAttribute("aria-level", "2");
@@ -2565,14 +2649,15 @@ test("renders organization hierarchy and hides organization type choices", async
 
   await user.click(screen.getByRole("button", { name: "Создать организацию" }));
   expect(screen.queryByLabelText("Тип организации")).not.toBeInTheDocument();
-  expect(screen.queryByRole("option", { name: "Без родительской организации" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: "Без родительской организации" }),
+  ).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Код организации"), "branch");
   await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
   const postCountBeforeParentValidation = vi
     .mocked(fetch)
     .mock.calls.filter(
-      ([input, init]) =>
-        String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
+      ([input, init]) => String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
     ).length;
   await user.click(screen.getByRole("button", { name: "Создать" }));
   expect(await screen.findByText("Выберите родительскую организацию")).toBeInTheDocument();
@@ -2592,9 +2677,9 @@ test("renders organization hierarchy and hides organization type choices", async
   expect(await screen.findByText("Организация создана")).toBeInTheDocument();
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/organizations/tree"))).toBe(
-      true,
-    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/organizations/tree")),
+    ).toBe(true);
     expect(
       fetchMock.mock.calls.some(([input, init]) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -2665,6 +2750,7 @@ test("manages public links from authenticated card workspace", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.click(await screen.findByRole("tab", { name: "Публичные ссылки" }));
 
   expect(await screen.findByRole("heading", { name: "Публичные ссылки" })).toBeInTheDocument();
   expect(screen.getAllByText("Статус ссылки: Активна").length).toBeGreaterThan(0);
@@ -3478,6 +3564,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
 
   expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
   expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
@@ -3763,6 +3850,7 @@ test("shows localized locked reference list denial text", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
 
   expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
   expect(screen.getByText("Заблокирован для дочерних организаций")).toBeInTheDocument();
@@ -3822,11 +3910,10 @@ test("manages card attachments and generated documents in Russian UI", async () 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.click(await screen.findByRole("tab", { name: "Вложения" }));
 
   expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Документы" })).toBeInTheDocument();
   expect(screen.getByText("Нет файлов")).toBeInTheDocument();
-  expect(screen.getByText("Нет документов")).toBeInTheDocument();
 
   await user.type(screen.getByLabelText("Название файла"), "Акт проверки");
   await user.upload(
@@ -3840,6 +3927,9 @@ test("manages card attachments and generated documents in Russian UI", async () 
   await user.click(screen.getByRole("button", { name: "Скачать файл Акт проверки" }));
   expect(await screen.findByText("Файл скачан")).toBeInTheDocument();
 
+  await user.click(screen.getByRole("tab", { name: "Документы" }));
+  expect(await screen.findByRole("heading", { name: "Документы" })).toBeInTheDocument();
+  expect(screen.getByText("Нет документов")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сформировать документ" }));
   expect(await screen.findByText("Документ сформирован")).toBeInTheDocument();
   expect(
@@ -3853,10 +3943,11 @@ test("manages card attachments and generated documents in Russian UI", async () 
   await user.click(screen.getByRole("button", { name: "Скачать документ Сводка карточки" }));
   expect(await screen.findByText("Документ скачан")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Архивировать файл Акт проверки" }));
-  expect(await screen.findByText("Файл архивирован")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Архивировать документ Сводка карточки" }));
   expect(await screen.findByText("Документ архивирован")).toBeInTheDocument();
+  await user.click(screen.getByRole("tab", { name: "Вложения" }));
+  await user.click(screen.getByRole("button", { name: "Архивировать файл Акт проверки" }));
+  expect(await screen.findByText("Файл архивирован")).toBeInTheDocument();
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -4027,6 +4118,7 @@ test("creates and archives document templates in Russian UI", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.click(await screen.findByRole("tab", { name: "Документы" }));
 
   expect(await screen.findByRole("heading", { name: "Шаблоны документов" })).toBeInTheDocument();
 
@@ -4098,6 +4190,7 @@ test("exports and imports cards through Russian registry UI", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Импорт и экспорт" }));
 
   expect(await screen.findByRole("heading", { name: "Импорт и экспорт" })).toBeInTheDocument();
 
@@ -4267,6 +4360,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   expect(await screen.findByRole("heading", { name: "Отчеты" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Сформированные отчеты" })).toBeInTheDocument();
@@ -4578,6 +4672,7 @@ test("uses report template default parameters when run JSON is empty", async () 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   expect(await screen.findByLabelText("Лимит")).toHaveValue(30);
   expect(screen.getByLabelText("Раздел")).toHaveValue("cards");
@@ -4638,6 +4733,7 @@ test("uses report parameter schema defaults when template defaults are empty", a
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   expect(await screen.findByLabelText("Лимит")).toHaveValue(15);
   expect(screen.getByLabelText("Архив")).toBeChecked();
@@ -4700,6 +4796,7 @@ test("blocks report generation when required schema parameters are empty", async
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   expect(await screen.findByLabelText("Раздел")).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
@@ -4750,6 +4847,7 @@ test("blocks report generation when scalar schema constraints fail", async () =>
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   await user.type(await screen.findByLabelText("Лимит"), "0");
   await user.type(screen.getByLabelText("Раздел"), "ab");
@@ -4802,6 +4900,7 @@ test("blocks report generation when pattern or multipleOf constraints fail", asy
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   await user.type(await screen.findByLabelText("Код отчета"), "ABC");
   await user.type(screen.getByLabelText("Шаг"), "3");
@@ -4854,6 +4953,7 @@ test("blocks report generation when exclusive numeric bounds fail", async () => 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   await user.type(await screen.findByLabelText("Минимальный балл"), "10");
   await user.type(screen.getByLabelText("Коэффициент"), "1");
@@ -4901,6 +5001,7 @@ test("renders date report parameters as date inputs", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   const dateInput = await screen.findByLabelText("Дата начала");
   expect(dateInput).toHaveAttribute("type", "date");
@@ -4955,6 +5056,7 @@ test("renders report parameter descriptions from schema", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
 
   expect(await screen.findByLabelText("Раздел")).toHaveValue("cards");
   expect(screen.getByText("Выберите часть реестра для включения в отчет")).toBeInTheDocument();

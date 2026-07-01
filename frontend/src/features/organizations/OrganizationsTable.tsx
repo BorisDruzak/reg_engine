@@ -78,8 +78,7 @@ export function OrganizationsTable({
   );
   const canCreateRootOrganization = !rootOrganizationExists;
   const parentOptions = organizations.filter(
-    (organization) =>
-      organization.is_active && organization.id !== formState?.organizationId,
+    (organization) => organization.is_active && organization.id !== formState?.organizationId,
   );
 
   function openCreateForm() {
@@ -123,11 +122,7 @@ export function OrganizationsTable({
       setLocalError(uiText.requiredFields);
       return;
     }
-    if (
-      formState.mode === "create" &&
-      rootOrganizationExists &&
-      !formState.parentId
-    ) {
+    if (formState.mode === "create" && rootOrganizationExists && !formState.parentId) {
       setLocalError(uiText.parentOrganizationRequired);
       return;
     }
@@ -301,15 +296,21 @@ function OrganizationTreeNode({
         </div>
         <span className="organization-tree-status">{activityLabel(node.is_active)}</span>
         <div className="row-actions">
-          <button type="button" className="ghost-button" onClick={() => onEditOrganization(node)}>
-            {uiText.editOrganization} {node.name}
+          <button
+            type="button"
+            className="ghost-button"
+            aria-label={`${uiText.editOrganization} ${node.name}`}
+            onClick={() => onEditOrganization(node)}
+          >
+            {uiText.edit}
           </button>
           <button
             type="button"
             className="ghost-button"
+            aria-label={`${uiText.archiveOrganization} ${node.name}`}
             onClick={() => onArchiveOrganization(node)}
           >
-            {uiText.archiveOrganization} {node.name}
+            {uiText.moveToArchive}
           </button>
         </div>
       </div>

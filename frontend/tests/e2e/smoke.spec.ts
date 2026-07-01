@@ -969,6 +969,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Справочники" }).click();
   await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
   await expect(page.getByText("Статусы актива").first()).toBeVisible();
 
@@ -981,12 +982,27 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await fieldValuesForm.getByLabel("Подтверждено").check();
   await fieldValuesForm.getByRole("button", { name: "Сохранить все поля" }).click();
   await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
+  await page.getByRole("tab", { name: "Публичные ссылки" }).click();
   await expect(page.getByRole("heading", { name: "Публичные ссылки" })).toBeVisible();
   await expect(page.getByText("Загрузки вложений: 1 из 3")).toBeVisible();
+  await page.getByRole("tab", { name: "Вложения" }).click();
+  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Документы" })).toHaveCount(0);
   await expect(page.getByText("Нет файлов")).toBeVisible();
+  await page.getByLabel("Название файла").fill("Акт проверки");
+  await page.getByLabel("Файл", { exact: true }).setInputFiles({
+    name: "akt.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello world"),
+  });
+  await page.getByRole("button", { name: "Загрузить файл" }).click();
+  await expect(page.getByText("Файл загружен")).toBeVisible();
+  await expect(page.getByText("Акт проверки")).toBeVisible();
+  await page.getByRole("button", { name: "Скачать файл Акт проверки" }).click();
+  await expect(page.getByText("Файл скачан")).toBeVisible();
+  await page.getByRole("tab", { name: "Документы" }).click();
+  await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
   await expect(page.getByText("Нет документов")).toBeVisible();
   await page.getByLabel("Код шаблона").fill("acceptance_act");
   await page.getByLabel("Название шаблона").fill("Акт приема");
@@ -999,17 +1015,6 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Архивировать шаблон Акт приема" }).click();
   await expect(page.getByText("Шаблон архивирован")).toBeVisible();
   await expect(page.getByLabel("Шаблоны документов").getByText("Акт приема")).toHaveCount(0);
-  await page.getByLabel("Название файла").fill("Акт проверки");
-  await page.getByLabel("Файл", { exact: true }).setInputFiles({
-    name: "akt.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("hello world"),
-  });
-  await page.getByRole("button", { name: "Загрузить файл" }).click();
-  await expect(page.getByText("Файл загружен")).toBeVisible();
-  await expect(page.getByText("Акт проверки")).toBeVisible();
-  await page.getByRole("button", { name: "Скачать файл Акт проверки" }).click();
-  await expect(page.getByText("Файл скачан")).toBeVisible();
   await page.getByRole("button", { name: "Сформировать документ" }).click();
   await expect(page.getByText("Документ сформирован")).toBeVisible();
   await expect(
@@ -1017,10 +1022,11 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   ).toBeVisible();
   await page.getByRole("button", { name: "Скачать документ Сводка карточки" }).click();
   await expect(page.getByText("Документ скачан")).toBeVisible();
-  await page.getByRole("button", { name: "Архивировать файл Акт проверки" }).click();
-  await expect(page.getByText("Файл архивирован")).toBeVisible();
   await page.getByRole("button", { name: "Архивировать документ Сводка карточки" }).click();
   await expect(page.getByText("Документ архивирован")).toBeVisible();
+  await page.getByRole("tab", { name: "Вложения" }).click();
+  await page.getByRole("button", { name: "Архивировать файл Акт проверки" }).click();
+  await expect(page.getByText("Файл архивирован")).toBeVisible();
 
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
   await page.getByRole("button", { name: "Создать", exact: true }).click();
@@ -2108,6 +2114,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Блок формы создан")).toBeVisible();
   await expect(page.getByText("Основные сведения").first()).toBeVisible();
 
+  await page.getByRole("tab", { name: "Справочники" }).click();
   await page.getByRole("button", { name: "Создать справочник" }).click();
   await page.getByLabel("Код справочника").fill("qa_statuses");
   await page.getByLabel("Название справочника").fill("Статусы проверки");
@@ -2126,6 +2133,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Элемент справочника создан")).toBeVisible();
   await expect(page.getByText("Принято").first()).toBeVisible();
 
+  await page.getByRole("tab", { name: "Схема карточки" }).click();
   await page.getByRole("button", { name: "Создать поле формы" }).click();
   await page.getByLabel("Код поля формы").fill("qa_status");
   await page.getByLabel("Тип поля формы").selectOption("select");
@@ -2157,6 +2165,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await bulkForm.getByRole("button", { name: "Сохранить все поля" }).click();
   await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
 
+  await page.getByRole("tab", { name: "Вложения" }).click();
   await page.getByLabel("Название файла").fill("Файл проверки");
   await page.getByLabel("Файл", { exact: true }).setInputFiles({
     name: "qa.txt",
@@ -2166,12 +2175,14 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Загрузить файл" }).click();
   await expect(page.getByText("Файл загружен")).toBeVisible();
 
+  await page.getByRole("tab", { name: "Поля" }).click();
   await page
     .getByLabel("Файл проверки", { exact: true })
     .selectOption("11111111-aaaa-4111-8111-111111111111");
   await page.getByRole("button", { name: "Сохранить Файл проверки" }).click();
   await expect(page.getByText("Сохранено: Файл проверки")).toBeVisible();
 
+  await page.getByRole("tab", { name: "Документы" }).click();
   await page.getByLabel("Код шаблона").fill("qa_doc");
   await page.getByLabel("Название шаблона").fill("Документ проверки");
   await page.getByLabel("Текст шаблона").fill("Карточка: {{ card.display_name }}");
@@ -2180,6 +2191,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Сформировать документ" }).click();
   await expect(page.getByText("Документ сформирован")).toBeVisible();
 
+  await page.getByRole("tab", { name: "Публичные ссылки" }).click();
   await page.getByRole("button", { name: "Создать публичную ссылку" }).click();
   await page.getByLabel("Лимит загрузок вложений").fill("2");
   await page.getByRole("button", { name: "Создать", exact: true }).click();

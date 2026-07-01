@@ -45,6 +45,35 @@ export function SelectableList({
   );
 }
 
+export function WorkspaceTabs<T extends string>({
+  tabs,
+  activeTab,
+  ariaLabel,
+  onChange,
+}: {
+  tabs: { id: T; label: string }[];
+  activeTab: T;
+  ariaLabel: string;
+  onChange: (tabId: T) => void;
+}) {
+  return (
+    <div className="workspace-tabs" role="tablist" aria-label={ariaLabel}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          className={activeTab === tab.id ? "workspace-tab is-active" : "workspace-tab"}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function CompactList({ items }: { items: { id: string; title: string; detail: string }[] }) {
   if (items.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;

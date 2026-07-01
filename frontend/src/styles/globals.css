@@ -335,6 +335,21 @@ button {
   gap: 16px;
 }
 
+.card-workspace-grid,
+.registry-workspace-grid {
+  display: grid;
+  align-items: start;
+  gap: 16px;
+}
+
+.card-workspace-grid {
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.65fr);
+}
+
+.registry-workspace-grid {
+  grid-template-columns: minmax(280px, 0.78fr) minmax(0, 1.7fr);
+}
+
 .data-panel {
   overflow: hidden;
 }
@@ -362,7 +377,8 @@ button {
 table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  min-width: 720px;
+  table-layout: auto;
 }
 
 th,
@@ -371,7 +387,8 @@ td {
   border-bottom: 1px solid #edf0f4;
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 th {
@@ -422,7 +439,8 @@ tr:last-child td {
   color: #667085;
   font-size: 0.8rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .organization-tree,
@@ -440,7 +458,7 @@ tr:last-child td {
 
 .organization-tree-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
@@ -459,7 +477,8 @@ tr:last-child td {
   color: #101828;
   font-size: 0.9rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .organization-tree-main span,
@@ -467,7 +486,8 @@ tr:last-child td {
   color: #667085;
   font-size: 0.8rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .organization-tree-status {
@@ -552,7 +572,8 @@ tr:last-child td {
   color: #101828;
   font-size: 0.88rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .card-actions {
@@ -674,7 +695,47 @@ tr:last-child td {
   color: #667085;
   font-size: 0.8rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  padding: 8px;
+  background: #ffffff;
+}
+
+.card-metadata-panel .workspace-tabs {
+  margin-top: 2px;
+}
+
+.workspace-tab {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 7px 11px;
+  color: #344054;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workspace-tab:hover {
+  background: #eef3f2;
+}
+
+.workspace-tab.is-active {
+  color: #ffffff;
+  background: #17324d;
+}
+
+.schema-workspace {
+  display: grid;
 }
 
 .field-editor-list {
@@ -939,6 +1000,11 @@ tr:last-child td {
   gap: 8px;
 }
 
+.row-actions .ghost-button,
+.row-actions .danger-button {
+  white-space: nowrap;
+}
+
 .admin-mutation-form {
   display: grid;
   gap: 14px;
@@ -1090,7 +1156,9 @@ tr:last-child td {
   }
 
   .summary-grid,
-  .split-grid {
+  .split-grid,
+  .card-workspace-grid,
+  .registry-workspace-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1117,6 +1185,8 @@ tr:last-child td {
   .workspace-nav,
   .summary-grid,
   .split-grid,
+  .card-workspace-grid,
+  .registry-workspace-grid,
   .metadata-list,
   .bulk-field-grid,
   .field-editor-row,

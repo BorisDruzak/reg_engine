@@ -23,10 +23,14 @@ not a hardcoded employee registry.
 - Phase 6F production follow-up repaired the existing single-root production
   data to exactly one active root-owned default registry after a fresh
   server-side backup stored outside Git.
+- Phase 7A admin UI workspace refactor is implemented locally: cards use a
+  focused list/detail workflow with tabs, registry administration uses focused
+  setup tabs, and row actions use compact visible labels with full accessible
+  names.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint after Phase 6F is not selected yet.
+- Next implementation checkpoint after Phase 7A is not selected yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -688,3 +692,64 @@ Verification completed:
   deprecation plan.
 - Do not change production schema unless the active implementation phase
   requires a migration and the project migration rules are satisfied.
+
+## Phase 7A: Admin UI Workspace Refactor
+
+Status: completed locally.
+
+Purpose:
+
+Improve the existing Russian-first admin UI without adding backend business
+logic or new product features. The focus is faster navigation, clearer page
+structure, and less visual overload for card and registry workflows.
+
+Implemented scope:
+
+1. Card workspace:
+   - changed the layout to a focused card list plus selected-card detail area;
+   - added tabs for `Поля`, `Вложения`, `Документы`, `Публичные ссылки`, and
+     `История`;
+   - kept bulk field editing as the primary ordinary field editor;
+   - kept `file_ref` editing in the attachment-aware single-field editor;
+   - kept attachments, generated documents, and public links on their own tabs;
+   - kept card org-unit metadata hidden from the simple card workflow.
+2. Registry workspace:
+   - added tabs for `Схема карточки`, `Справочники`, `Импорт и экспорт`, and
+     `Отчеты`;
+   - kept registry/schema APIs and existing advanced functionality intact;
+   - made reference lists, import/export, and reports focused sections instead
+     of always-visible panels.
+3. Organization/registry row actions:
+   - visible row actions now use compact Russian labels such as `Изменить` and
+     `В архив`;
+   - full entity-specific action labels remain available through accessible
+     names, for example `Редактировать организацию <name>`.
+4. Layout hardening:
+   - added shared accessible workspace tabs;
+   - adjusted table and tree wrapping so Russian text does not break into
+     single-letter columns in ordinary desktop layouts.
+
+Non-goals:
+
+- No backend endpoint, service, auth, RBAC, schema, or migration changes.
+- No hardcoded employee/HR card fields.
+- No new import/export, reports, documents, or MCP capability.
+- No production migration.
+
+Verification completed:
+
+- `pnpm -C frontend test:run src/App.test.tsx`: 41 passed.
+- `pnpm -C frontend test:run`: 5 files passed, 50 tests passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed after updating the
+  browser scenarios to use the new tabs.
+
+Known limitations:
+
+- `История` is a placeholder tab in the card workspace and does not yet load a
+  dedicated card-scoped audit feed.
+- This phase is local/frontend-only until the normal `main` push and server
+  frontend deployment flow is run.

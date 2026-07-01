@@ -492,11 +492,7 @@ export async function updateCardFieldValues(
   });
 }
 
-export async function listCardFieldReferenceItems(
-  token: string,
-  cardId: string,
-  fieldId: string,
-) {
+export async function listCardFieldReferenceItems(token: string, cardId: string, fieldId: string) {
   return apiRequest<ReferenceItemListRead>(
     `/api/v1/cards/${cardId}/fields/${fieldId}/reference-items`,
     { token },

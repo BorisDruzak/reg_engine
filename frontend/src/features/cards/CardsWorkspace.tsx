@@ -41,7 +41,7 @@ import {
   ArchiveConfirmation,
   MutationFeedback,
 } from "@/components/common/AdminMutation";
-import { Panel, SelectableList } from "@/components/common/DataSurfaces";
+import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
 
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
@@ -54,6 +54,16 @@ import {
   formatValue as formatEditorValue,
   initialEditorValue,
 } from "./fieldEditorUtils";
+
+type CardWorkspaceTab = "fields" | "attachments" | "documents" | "links" | "history";
+
+const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
+  { id: "fields", label: uiText.cardFieldsTab },
+  { id: "attachments", label: uiText.attachments },
+  { id: "documents", label: uiText.documents },
+  { id: "links", label: uiText.publicLinks },
+  { id: "history", label: uiText.cardHistory },
+];
 
 export function CardsWorkspace({
   cards,
@@ -87,6 +97,7 @@ export function CardsWorkspace({
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | "edit" | null>(null);
+  const [activeTab, setActiveTab] = useState<CardWorkspaceTab>("fields");
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
     initialCreateCardForm(organizations),
   );
@@ -178,6 +189,7 @@ export function CardsWorkspace({
   function openCreateForm() {
     setCardForm(initialCreateCardForm(organizations));
     setCardFormMode("create");
+    setActiveTab("fields");
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -222,7 +234,7 @@ export function CardsWorkspace({
 
   return (
     <div className="stack">
-      <div className="split-grid">
+      <div className="card-workspace-grid">
         <Panel title={uiText.cards}>
           <div className="panel-toolbar">
             <button type="button" className="primary-button" onClick={openCreateForm}>
@@ -238,20 +250,6 @@ export function CardsWorkspace({
             onOrganizationChange={onCardOrganizationChange}
             onIncludeArchiveChange={onIncludeArchivedCardsChange}
           />
-          {cardFormMode === "create" && (
-            <div className="panel-form">
-              <CardMutationForm
-                mode="create"
-                form={cardForm}
-                organizations={organizations}
-                isSubmitting={createCardMutation.isPending}
-                error={localError ? new Error(localError) : createCardMutation.error}
-                onCancel={() => setCardFormMode(null)}
-                onChange={setCardForm}
-                onSubmit={handleCardFormSubmit}
-              />
-            </div>
-          )}
           <SelectableList
             items={cards.map((item) => ({
               id: item.id,
@@ -264,119 +262,153 @@ export function CardsWorkspace({
             onSelect={onSelectCard}
           />
         </Panel>
-        <Panel title={uiText.cardMetadata}>
-          {card && selectedCard ? (
-            <div className="card-metadata-panel">
-              <dl className="metadata-list">
-                <div>
-                  <dt>{uiText.cardDisplayName}</dt>
-                  <dd>{card.display_name}</dd>
-                </div>
-                <div>
-                  <dt>{uiText.organization}</dt>
-                  <dd>
-                    {organizationsById.get(card.organization_id)?.name ??
-                      shortId(card.organization_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{uiText.status}</dt>
-                  <dd>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</dd>
-                </div>
-                <div>
-                  <dt>{uiText.publicViewCard}</dt>
-                  <dd>{selectedCard.public_view_enabled ? uiText.yes : uiText.no}</dd>
-                </div>
-                <div>
-                  <dt>{uiText.publicEditCard}</dt>
-                  <dd>{selectedCard.public_edit_enabled ? uiText.yes : uiText.no}</dd>
-                </div>
-              </dl>
-              <div className="row-actions card-actions">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-label={`${uiText.editCard} ${card.display_name}`}
-                  onClick={openEditForm}
-                >
-                  {uiText.editCard}
-                </button>
-                <button
-                  type="button"
-                  className="danger-button"
-                  aria-label={`${uiText.archiveCard} ${card.display_name}`}
-                  onClick={() => {
-                    setArchiveTarget(selectedCard);
-                    setCardFormMode(null);
-                    setSuccessMessage(null);
-                  }}
-                >
-                  {uiText.archive}
-                </button>
-              </div>
-              {cardFormMode === "edit" && (
+        <div className="stack">
+          <Panel
+            title={
+              cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card
+            }
+          >
+            {cardFormMode === "create" ? (
+              <div className="panel-form">
                 <CardMutationForm
-                  mode="edit"
+                  mode="create"
                   form={cardForm}
                   organizations={organizations}
-                  isSubmitting={updateCardMutation.isPending}
-                  error={localError ? new Error(localError) : updateCardMutation.error}
+                  isSubmitting={createCardMutation.isPending}
+                  error={localError ? new Error(localError) : createCardMutation.error}
                   onCancel={() => setCardFormMode(null)}
                   onChange={setCardForm}
                   onSubmit={handleCardFormSubmit}
                 />
-              )}
-              {repeatableBlocks.length > 0 && (
-                <RepeatableBlockControls
-                  blocks={repeatableBlocks}
-                  card={card}
-                  isCreating={createBlockInstanceMutation.isPending}
-                  isArchiving={archiveBlockInstanceMutation.isPending}
-                  onAdd={(blockId) => createBlockInstanceMutation.mutate(blockId)}
-                  onArchive={(blockInstanceId) =>
-                    archiveBlockInstanceMutation.mutate(blockInstanceId)
+              </div>
+            ) : card && selectedCard ? (
+              <div className="card-metadata-panel">
+                <dl className="metadata-list">
+                  <div>
+                    <dt>{uiText.cardDisplayName}</dt>
+                    <dd>{card.display_name}</dd>
+                  </div>
+                  <div>
+                    <dt>{uiText.organization}</dt>
+                    <dd>
+                      {organizationsById.get(card.organization_id)?.name ??
+                        shortId(card.organization_id)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{uiText.status}</dt>
+                    <dd>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</dd>
+                  </div>
+                  <div>
+                    <dt>{uiText.publicViewCard}</dt>
+                    <dd>{selectedCard.public_view_enabled ? uiText.yes : uiText.no}</dd>
+                  </div>
+                  <div>
+                    <dt>{uiText.publicEditCard}</dt>
+                    <dd>{selectedCard.public_edit_enabled ? uiText.yes : uiText.no}</dd>
+                  </div>
+                </dl>
+                <div className="row-actions card-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`${uiText.editCard} ${card.display_name}`}
+                    onClick={openEditForm}
+                  >
+                    {uiText.editCard}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    aria-label={`${uiText.archiveCard} ${card.display_name}`}
+                    onClick={() => {
+                      setArchiveTarget(selectedCard);
+                      setCardFormMode(null);
+                      setSuccessMessage(null);
+                    }}
+                  >
+                    {uiText.archive}
+                  </button>
+                </div>
+                {cardFormMode === "edit" && (
+                  <CardMutationForm
+                    mode="edit"
+                    form={cardForm}
+                    organizations={organizations}
+                    isSubmitting={updateCardMutation.isPending}
+                    error={localError ? new Error(localError) : updateCardMutation.error}
+                    onCancel={() => setCardFormMode(null)}
+                    onChange={setCardForm}
+                    onSubmit={handleCardFormSubmit}
+                  />
+                )}
+                {repeatableBlocks.length > 0 && (
+                  <RepeatableBlockControls
+                    blocks={repeatableBlocks}
+                    card={card}
+                    isCreating={createBlockInstanceMutation.isPending}
+                    isArchiving={archiveBlockInstanceMutation.isPending}
+                    onAdd={(blockId) => createBlockInstanceMutation.mutate(blockId)}
+                    onArchive={(blockInstanceId) =>
+                      archiveBlockInstanceMutation.mutate(blockInstanceId)
+                    }
+                  />
+                )}
+                <MutationFeedback
+                  error={
+                    archiveCardMutation.error ??
+                    createBlockInstanceMutation.error ??
+                    archiveBlockInstanceMutation.error
                   }
+                  successMessage={successMessage}
+                />
+                <WorkspaceTabs
+                  tabs={cardWorkspaceTabs}
+                  activeTab={activeTab}
+                  ariaLabel={uiText.cardSections}
+                  onChange={setActiveTab}
+                />
+              </div>
+            ) : (
+              <p className="data-empty">{uiText.noData}</p>
+            )}
+          </Panel>
+          {card && cardFormMode !== "create" && activeTab === "fields" && (
+            <Panel title={uiText.cardFields}>
+              {bulkFieldRows.length > 0 && (
+                <BulkCardValuesForm
+                  key={fieldRows.map((field) => field.key).join("|")}
+                  card={card}
+                  fields={bulkFieldRows}
+                  token={token}
                 />
               )}
-              <MutationFeedback
-                error={
-                  archiveCardMutation.error ??
-                  createBlockInstanceMutation.error ??
-                  archiveBlockInstanceMutation.error
-                }
-                successMessage={successMessage}
-              />
-            </div>
-          ) : (
-            <p className="data-empty">{uiText.noData}</p>
+              {fileRefFieldRows.length > 0 && (
+                <div className="field-editor-list">
+                  {fileRefFieldRows.map((field) => (
+                    <CardFieldEditor key={field.key} cardId={card.id} field={field} token={token} />
+                  ))}
+                </div>
+              )}
+              {fieldRows.length === 0 && <p className="data-empty">{uiText.noData}</p>}
+            </Panel>
           )}
-        </Panel>
-      </div>
-      <Panel title={uiText.cardFields}>
-        {card && bulkFieldRows.length > 0 && (
-          <BulkCardValuesForm
-            key={fieldRows.map((field) => field.key).join("|")}
-            card={card}
-            fields={bulkFieldRows}
-            token={token}
-          />
-        )}
-        {card && fileRefFieldRows.length > 0 && (
-          <div className="field-editor-list">
-            {fileRefFieldRows.map((field) => (
-              <CardFieldEditor key={field.key} cardId={card.id} field={field} token={token} />
-            ))}
-          </div>
-        )}
-        {(!card || fieldRows.length === 0) && <p className="data-empty">{uiText.noData}</p>}
-      </Panel>
-      {card && (
-        <div className="split-grid">
-          <CardAttachmentsPanel cardId={card.id} token={token} />
-          <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
-          <PublicLinksPanel cardId={card.id} token={token} />
+          {card && cardFormMode !== "create" && activeTab === "attachments" && (
+            <CardAttachmentsPanel cardId={card.id} token={token} />
+          )}
+          {card && cardFormMode !== "create" && activeTab === "documents" && (
+            <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
+          )}
+          {card && cardFormMode !== "create" && activeTab === "links" && (
+            <PublicLinksPanel cardId={card.id} token={token} />
+          )}
+          {card && cardFormMode !== "create" && activeTab === "history" && (
+            <Panel title={uiText.cardHistory}>
+              <p className="data-empty">{uiText.noData}</p>
+            </Panel>
+          )}
         </div>
-      )}
+      </div>
       {archiveTarget && (
         <AdminMutationDialog title={uiText.archiveCard}>
           <ArchiveConfirmation
@@ -488,9 +520,7 @@ function CardMutationForm({
             <span>{uiText.cardOrganization}</span>
             <select
               value={form.organizationId}
-              onChange={(event) =>
-                onChange({ ...form, organizationId: event.currentTarget.value })
-              }
+              onChange={(event) => onChange({ ...form, organizationId: event.currentTarget.value })}
             >
               <option value="">{uiText.noData}</option>
               {organizations.map((organization) => (

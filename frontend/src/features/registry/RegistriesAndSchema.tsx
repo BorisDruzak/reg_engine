@@ -43,7 +43,7 @@ import {
   ArchiveConfirmation,
   MutationFeedback,
 } from "@/components/common/AdminMutation";
-import { Panel, SelectableList } from "@/components/common/DataSurfaces";
+import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { shortId } from "@/components/common/dataUtils";
 
 import { ImportExportPanel } from "./ImportExportPanel";
@@ -126,6 +126,15 @@ const supportedFieldTypes = [
 
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
 
+type RegistryWorkspaceTab = "schema" | "references" | "importExport" | "reports";
+
+const registryWorkspaceTabs: { id: RegistryWorkspaceTab; label: string }[] = [
+  { id: "schema", label: uiText.cardSchema },
+  { id: "references", label: uiText.referenceLists },
+  { id: "importExport", label: uiText.importExport },
+  { id: "reports", label: uiText.reports },
+];
+
 export function RegistriesAndSchema({
   registries,
   schema,
@@ -143,6 +152,7 @@ export function RegistriesAndSchema({
 }) {
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<RegistryFormState | null>(null);
+  const [activeTab, setActiveTab] = useState<RegistryWorkspaceTab>("schema");
   const [archiveTarget, setArchiveTarget] = useState<RegistryRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -273,7 +283,13 @@ export function RegistriesAndSchema({
 
   return (
     <div className="stack">
-      <div className="split-grid">
+      <WorkspaceTabs
+        tabs={registryWorkspaceTabs}
+        activeTab={activeTab}
+        ariaLabel={uiText.registrySettingsSections}
+        onChange={setActiveTab}
+      />
+      <div className="registry-workspace-grid">
         <Panel title={uiText.registries}>
           <div className="panel-toolbar">
             <button type="button" className="primary-button" onClick={openCreateForm}>
@@ -374,33 +390,47 @@ export function RegistriesAndSchema({
             onArchiveRegistry={handleArchive}
           />
         </Panel>
-        <Panel title={uiText.schemaBlocks}>
-          <SchemaBlocksPanel
-            blocks={schema?.blocks ?? []}
-            selectedRegistryId={selectedRegistryId}
-            token={token}
-          />
-        </Panel>
+        <div className="stack">
+          {activeTab === "schema" && (
+            <>
+              <Panel title={uiText.cardSchema}>
+                <div className="schema-workspace">
+                  <SchemaBlocksPanel
+                    blocks={schema?.blocks ?? []}
+                    selectedRegistryId={selectedRegistryId}
+                    token={token}
+                  />
+                </div>
+              </Panel>
+              <Panel title={uiText.schemaFields}>
+                <SchemaFieldsPanel
+                  blocks={schema?.blocks ?? []}
+                  blocksById={blocksById}
+                  fields={schema?.fields ?? []}
+                  referenceLists={referenceLists}
+                  token={token}
+                />
+              </Panel>
+            </>
+          )}
+          {activeTab === "references" && (
+            <Panel title={uiText.referenceLists}>
+              <ReferenceListsPanel
+                organizations={organizations}
+                referenceLists={referenceLists}
+                selectedRegistryId={selectedRegistryId}
+                token={token}
+              />
+            </Panel>
+          )}
+          {activeTab === "importExport" && (
+            <ImportExportPanel selectedRegistryId={selectedRegistryId} token={token} />
+          )}
+          {activeTab === "reports" && (
+            <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
+          )}
+        </div>
       </div>
-      <Panel title={uiText.schemaFields}>
-        <SchemaFieldsPanel
-          blocks={schema?.blocks ?? []}
-          blocksById={blocksById}
-          fields={schema?.fields ?? []}
-          referenceLists={referenceLists}
-          token={token}
-        />
-      </Panel>
-      <Panel title={uiText.referenceLists}>
-        <ReferenceListsPanel
-          organizations={organizations}
-          referenceLists={referenceLists}
-          selectedRegistryId={selectedRegistryId}
-          token={token}
-        />
-      </Panel>
-      <ImportExportPanel selectedRegistryId={selectedRegistryId} token={token} />
-      <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
     </div>
   );
 }
@@ -440,16 +470,18 @@ function RegistriesTable({
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.editRegistry} ${registry.name}`}
                     onClick={() => onEditRegistry(registry)}
                   >
-                    {uiText.editRegistry} {registry.name}
+                    {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.archiveRegistry} ${registry.name}`}
                     onClick={() => onArchiveRegistry(registry)}
                   >
-                    {uiText.archiveRegistry} {registry.name}
+                    {uiText.moveToArchive}
                   </button>
                 </div>
               </td>
@@ -757,15 +789,21 @@ function BlocksTable({
               <td>{activityLabel(block.is_active)}</td>
               <td>
                 <div className="row-actions">
-                  <button type="button" className="ghost-button" onClick={() => onEditBlock(block)}>
-                    {uiText.editFormBlock} {block.title}
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`${uiText.editFormBlock} ${block.title}`}
+                    onClick={() => onEditBlock(block)}
+                  >
+                    {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.archiveFormBlock} ${block.title}`}
                     onClick={() => onArchiveBlock(block)}
                   >
-                    {uiText.archiveFormBlock} {block.title}
+                    {uiText.moveToArchive}
                   </button>
                 </div>
               </td>
@@ -1179,15 +1217,21 @@ function FieldsTable({
               <td>{activityLabel(field.is_active)}</td>
               <td>
                 <div className="row-actions">
-                  <button type="button" className="ghost-button" onClick={() => onEditField(field)}>
-                    {uiText.editFormField} {field.label}
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`${uiText.editFormField} ${field.label}`}
+                    onClick={() => onEditField(field)}
+                  >
+                    {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.archiveFormField} ${field.label}`}
                     onClick={() => onArchiveField(field)}
                   >
-                    {uiText.archiveFormField} {field.label}
+                    {uiText.moveToArchive}
                   </button>
                 </div>
               </td>
@@ -1817,16 +1861,18 @@ function ReferenceListsTable({
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.editReferenceList} ${referenceList.name}`}
                     onClick={() => onEditReferenceList(referenceList)}
                   >
-                    {uiText.editReferenceList} {referenceList.name}
+                    {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.archiveReferenceList} ${referenceList.name}`}
                     onClick={() => onArchiveReferenceList(referenceList)}
                   >
-                    {uiText.archiveReferenceList} {referenceList.name}
+                    {uiText.moveToArchive}
                   </button>
                 </div>
               </td>
@@ -1877,16 +1923,18 @@ function ReferenceItemsTable({
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.editReferenceItem} ${item.label}`}
                     onClick={() => onEditReferenceItem(item)}
                   >
-                    {uiText.editReferenceItem} {item.label}
+                    {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
+                    aria-label={`${uiText.archiveReferenceItem} ${item.label}`}
                     onClick={() => onArchiveReferenceItem(item)}
                   >
-                    {uiText.archiveReferenceItem} {item.label}
+                    {uiText.moveToArchive}
                   </button>
                 </div>
               </td>
