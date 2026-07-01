@@ -8,422 +8,344 @@ not a hardcoded employee registry.
 ## Current Stop Point
 
 - Completed baseline: backend, frontend, attachments, generated documents,
-  import/export, reports, and MCP phases through Phase 5R are implemented and
-  deployed on `main`.
-- Current checkpoint: **Phase 5S: Live Scenario Verification** is completed
-  after focused `5S.7` bugfix reruns.
-- Source analysis file: `docs/LIVE_VERIFICATION_PLAN.md`.
-- This file was cleaned on 2026-07-01 to keep only the current live verification
-  plan and the minimum baseline needed for execution.
-- Live verification found focused blockers in `LC-010`, `LC-012`, and
-  `LC-014`; all tracked fixes were rerun on the disposable livecheck
-  environment.
-- Production PostgreSQL migration `0015_audit_created_at_default` was applied
-  on 2026-07-01 for the follow-up audit timestamp drift fix.
-- Follow-up production UI bugfix on 2026-07-01: admin display-name data
-  mojibake/question marks were repaired for the bootstrap production admin, and
-  organization/registry duplicate-code conflicts now return specific safe API
-  details mapped to Russian UI messages. A follow-up schema drift blocker is
-  tracked in Phase 5S.9.
-- Registry/organization architecture remains unchanged: registries are not
-  directly assigned to organizations; cards carry `organization_id`, and
-  visibility is enforced by organization scope.
+  import/export, reports, MCP phases through Phase 5R, live verification, and
+  production follow-up fixes are implemented on `main`.
+- Current active checkpoint: **Phase 6: Organization-Centered Card Workflow
+  Cleanup**.
+- This file was cleaned on 2026-07-01 to replace the old live-verification plan
+  with the current product/UI architecture plan.
+- This update is documentation-only. Do not change backend code, frontend code,
+  migrations, production data, or server runtime for this checkpoint.
 
-## Phase 5S: Live Scenario Verification
+## Accepted Product Decisions
+
+1. `organizations.type` must not be exposed as a user-facing concept.
+2. The UI must not ask users whether an organization is an organization,
+   department, unit, administration, or subdivision.
+3. Departments, subdivisions, offices, and administrations are not organization
+   types in the product model.
+4. If a lower entity owns cards, users, access, or visibility scope, create it
+   as a normal child organization in the organization tree.
+5. If a department/subdivision is only a value inside a card, represent it as a
+   card field value through a reference list or another explicit field type, not
+   through `organizations.type`.
+6. `org_units` remain optional internal/filter data and are not an RBAC
+   boundary. Do not physically delete `org_units` in this cleanup slice.
+7. The simple card workflow should hide `Подразделение карточки` until a
+   specific workflow needs card-level org-unit filtering.
+8. Organizations must be shown hierarchically in the UI.
+9. Do not create a separate registry for every organization.
+10. Ordinary card creation must not require the user to manually choose a
+    registry.
+11. A main/root organization should get one default card registry. Descendant
+    organizations should use that same registry automatically.
+12. Registry/schema administration may remain visible to system or registry
+    admins, but the ordinary card workflow should be organization-centered.
+13. A common registry schema should define blocks and fields for the whole
+    organization tree.
+14. Subordinate organizations must be able to use their own organization-owned
+    reference lists for fields whose values differ by organization.
+
+## Current Technical Facts
+
+- Cards already store both `registry_id` and `organization_id`.
+- Card visibility is already organization-scoped through access grants and
+  `organization_closure`.
+- Backend already exposes `GET /api/v1/organizations/tree`.
+- Frontend currently renders organizations as a flat table.
+- `organizations.type` exists in the database/API and the frontend form, but it
+  does not define RBAC or card visibility.
+- `org_units` are optional card-level metadata and filters, not access-control
+  boundaries.
+- `registries` currently do not have an owner/default organization field.
+- `form_blocks` and `form_fields` belong to a registry, not to an organization.
+- `reference_lists` already support:
+  - `registry_id`;
+  - `owner_organization_id`;
+  - `inherit_to_descendants`;
+  - `locked_for_descendants`;
+  - `managed_by_system_only`.
+- Current select/multi-select field configuration points to one
+  `options_source_id`. Organization-specific effective option resolution needs
+  explicit backend/frontend work before subordinate-owned lists can drive the
+  same field automatically.
+
+## Registry Workflow Analysis
+
+### Rejected Option: Registry Per Organization
+
+Creating a separate registry for every organization is rejected.
+
+Reasons:
+
+- It duplicates the card schema for every child organization.
+- Schema changes would have to be synchronized across many registries.
+- Reports, imports, exports, document templates, and MCP tools would have to
+  merge many registry schemas for one business workflow.
+- It conflicts with the existing Core Schema v1 decision that one registry can
+  contain cards from different organizations.
+
+### Weak Option: Keep Registries Global And Let UI Pick The First One
+
+This avoids a migration, but it is too implicit.
+
+Problems:
+
+- The system cannot prove which registry belongs to which organization tree.
+- Multiple registries would make card creation ambiguous.
+- It relies on frontend convention instead of a backend-enforced rule.
+
+### Recommended Option: Default Registry For Root Organization Tree
+
+Use one default card registry for a root organization tree.
+
+Proposed behavior:
+
+- When the first/main organization is created, the system creates or assigns
+  one default registry named `Реестр карточек`.
+- Child organizations do not get their own registries by default.
+- When a user creates a card, the UI asks for the card organization.
+- The backend resolves the default registry from that organization or its root
+  ancestor.
+- The card is saved with:
+  - `cards.registry_id = resolved default registry`;
+  - `cards.organization_id = selected organization`.
+- The existing registry/schema admin screen becomes an advanced settings area
+  for system/registry admins, not a required ordinary workflow.
+
+Likely technical model for implementation:
+
+- Add registry ownership/default metadata, for example:
+  - `registries.owner_organization_id`;
+  - `registries.is_default_for_owner_tree`;
+  - optionally `registries.available_to_descendants`.
+- Enforce at most one active default registry per owner organization.
+- Add a backend resolver that finds the default registry for an organization by
+  walking its ancestors through `organization_closure`.
+- Keep existing `/registries/{registry_id}/cards` endpoints for compatibility.
+- Add or expose a simplified organization-centered card-create path that does
+  not require the frontend to pass a registry id manually.
+
+Open decision before implementation:
+
+- Whether the first root organization always gets the default registry
+  automatically, or whether system admin explicitly marks one root organization
+  as the registry owner during setup. The product preference is automatic
+  creation for the first/main organization.
+
+## Reference List And Card Schema Analysis
+
+### Recommended Schema Rule
+
+Keep one common card schema for the root organization tree:
+
+- one default registry;
+- one set of form blocks;
+- one set of form fields;
+- schema changes controlled by system admin or registry admin.
+
+This keeps cards comparable across the main organization and all subordinate
+organizations.
+
+### Recommended Reference Rule
+
+Reference lists should be organization-aware while the schema remains common.
+
+Use reference list ownership like this:
+
+- Global/root-owned locked list: descendants can use it but cannot edit it.
+- Organization-owned local list: that organization can maintain its own items.
+- Inherited list: descendants can use it when `inherit_to_descendants=true`.
+- Locked inherited list: descendants cannot edit it when
+  `locked_for_descendants=true`.
+
+Example:
+
+- Field `Статус карточки` uses a central locked list. All organizations use the
+  same values.
+- Field `Подразделение/отдел` uses an organization-overridable list. Each
+  subordinate organization can maintain its own department names.
+
+### Effective Reference List Resolution
+
+For select/multi-select fields that allow local organization values, resolve the
+effective list by card organization:
+
+1. Exact list for `card.organization_id` with the same logical code.
+2. Nearest ancestor list with `inherit_to_descendants=true`.
+3. Registry-level/root list.
+4. Global fallback only when explicitly allowed.
+
+Recommended initial behavior: an exact organization-owned list replaces the
+inherited list for that field. Merging inherited and local items can be added
+later only if a real workflow needs it.
+
+Likely technical model for implementation:
+
+- Treat the selected/base reference list code as a logical list family.
+- Add field/reference policy metadata, preferably in existing
+  `form_fields.options_config_json`, for example:
+  - `reference_resolution = "fixed_list"` for central-only lists;
+  - `reference_resolution = "by_card_organization"` for local lists;
+  - `allow_owner_override = true` only for fields where local organization lists
+    are allowed.
+- Update card read/edit option loading so options are resolved for the card
+  organization, not only from the static `options_source_id`.
+- Update field-value validation so a submitted reference item must belong to the
+  effective list for that card organization.
+- Keep locked inherited lists protected from descendant edits.
+- Allow an org admin with the right scope to create/edit/archive only lists and
+  items owned by their organization or descendant organizations.
+
+## Phase 6A: Plan Cleanup And Product Decisions
 
 Status: completed.
 
-Purpose: verify Registry Engine as a real system, not only as isolated tests:
+Scope:
 
-```text
-user action -> backend/API -> database/storage/audit -> UI/MCP/API result
+- Clean `PLANS.md`.
+- Record accepted decisions for organization type removal from UI.
+- Record accepted decision for hierarchical organization display.
+- Analyze default registry behavior.
+- Analyze organization-owned reference list behavior.
+- Do not change backend/frontend code.
+
+Checks:
+
+```powershell
+git diff --check
+powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1
 ```
 
-Every live scenario must produce evidence that proves:
+## Phase 6B: Organization UI Simplification And Tree
 
-- the action was executed;
-- data was written or rejected correctly;
-- access rules were enforced;
-- an audit event exists when required;
-- archive behavior does not physically delete business records by default;
-- storage stays consistent and does not leak storage internals;
-- UI shows the correct Russian state;
-- forbidden actions are actually forbidden.
+Status: planned next.
 
-## Live Environment Rules
+Purpose:
 
-Live checks must not run against production personal data.
+Make organization management match the real product model.
 
-Recommended environment:
+Required work:
+
+1. Hide organization type selection in the create/edit organization UI.
+2. Submit `organization_type="organization"` internally while the backend still
+   requires the field.
+3. Replace or supplement the flat organization table with a hierarchical tree.
+4. Use `GET /api/v1/organizations/tree` for tree data.
+5. Keep edit/archive/create-child actions available from tree rows.
+6. Hide `Подразделение карточки` in the simple card create/edit flow unless an
+   explicit org-unit workflow is enabled later.
+7. Keep `org_units` API/model intact.
 
-- Database: `reg_engine_livecheck_test`.
-- Storage root: separate temporary test directory outside Git.
-- Backend: current `main` checkout.
-- Frontend: staging/test frontend build served by the backend or local Vite.
-- MCP: separate test bearer token.
-- Evidence artifacts: ignored folder such as `artifacts/live/<run_id>/`.
+Required tests:
 
-All test entities must use one run prefix:
+- Organization create form does not show type choices.
+- Created organization is still sent with the safe internal default type.
+- Organization tree renders parent/child nesting.
+- Child organization creation preserves parent relationship.
+- Card form can create/edit cards without selecting `org_unit_id`.
+- Backend RBAC behavior is unchanged.
 
-```text
-livecheck_YYYYMMDD_HHMM
-```
+Acceptance criteria:
 
-Example names:
+- Users no longer see organization type choices.
+- Lower entities are represented as normal child organizations.
+- Organization screen is visually hierarchical.
+- No database column is physically removed.
+- No hardcoded employee-specific fields are added.
 
-```text
-livecheck_20260701_1200_adm
-livecheck_20260701_1200_registry
-livecheck_20260701_1200_card_primary
-```
+## Phase 6C: Default Card Registry For Organization Tree
 
-The prefix is mandatory so SQL checks, audit queries, screenshots, and cleanup
-can be tied to the same run.
+Status: planned after Phase 6B; final technical model pending approval.
 
-## Evidence Template
-
-Each scenario record must use this structure:
-
-```text
-Scenario ID:
-Actor:
-UI/API/MCP action:
-Expected UI result:
-Expected DB result:
-Expected audit result:
-Expected storage result:
-Negative checks:
-Actual result:
-Bug? yes/no:
-Evidence:
-```
+Purpose:
 
-Evidence can include browser screenshots, Playwright snapshots, API responses,
-SQL output, storage listing output, MCP JSON-RPC responses, and command logs.
+Remove manual registry selection from ordinary card creation while keeping one
+common schema-driven registry for the main organization tree.
 
-## Test Actors And Organization Tree
+Recommended work:
 
-Minimum users:
-
-- `system_admin_livecheck`
-- `registry_admin_livecheck`
-- `org_admin_adm_livecheck`
-- `org_admin_tu1_livecheck`
-- `org_admin_tu2_livecheck`
-- `mcp_operator_livecheck`
-- public-link user without login
-
-Organization tree:
-
-```text
-ADM
-+-- TU-1
-|   +-- TU-1-Sub
-+-- TU-2
-```
-
-Expected visibility:
-
-- `system_admin_livecheck` sees all organizations and all test data.
-- `org_admin_adm_livecheck` sees `ADM`, `TU-1`, `TU-1-Sub`, and `TU-2`.
-- `org_admin_tu1_livecheck` sees `TU-1` and `TU-1-Sub`.
-- `org_admin_tu1_livecheck` does not see `ADM` or `TU-2`.
-- `org_admin_tu2_livecheck` does not see `TU-1` or `TU-1-Sub`.
-
-## Live Registry Fixture
-
-Create one schema-driven registry for the run.
-
-Registry:
-
-- code: `livecheck_person_registry`
-- name: `Livecheck Registry`
-
-Blocks:
-
-- `general_info`: non-repeatable
-- `education`: repeatable
-- `documents`: non-repeatable
-
-Fields:
-
-- `general_info.full_name`: `text`
-- `general_info.birth_date`: `date`
-- `general_info.is_active`: `bool`
-- `general_info.status`: `select`
-- `general_info.org_unit`: `org_unit_ref`
-- `education.institution`: `text`
-- `education.graduation_year`: `number`
-- `documents.main_document`: `file_ref`
-
-Reference list:
-
-- code: `livecheck_employee_status`
-- items: `active`, `dismissed`, `archive_review`
-
-This registry is a live-check fixture only. It must not introduce hardcoded HR
-tables or backend/frontend business fields.
-
-## Scenario Order
-
-Run scenarios in this order:
-
-1. `LC-001` Login, session, logout.
-2. `LC-002` Organization hierarchy and visibility.
-3. `LC-003` Registry, schema, and reference list creation.
-4. `LC-004` Card create, read, and scoped visibility.
-5. `LC-005` Bulk field update atomicity.
-6. `LC-006` Repeatable block instances.
-7. `LC-007` Attachment upload, download, archive.
-8. `LC-008` `file_ref` behavior.
-9. `LC-009` Public link field edit and attachments.
-10. `LC-010` Generated documents.
-11. `LC-011` Import/export CSV and XLSX.
-12. `LC-012` Reports.
-13. `LC-013` MCP read, write, and content tools.
-14. `LC-014` Scoped user no-error UX.
-15. `LC-015` Backup/restore drill.
-
-Detailed scenario SQL and expected negative checks are in
-`docs/LIVE_VERIFICATION_PLAN.md`.
-
-## Current Live Evidence
-
-Run id: `livecheck_20260701_040741`.
-
-Evidence folder: `artifacts/live/livecheck_20260701_040741/` (ignored by Git).
-
-Initial live run status:
-
-- `LC-001` through `LC-009`: passed with API/DB/storage/audit/browser evidence.
-- `LC-010`: failed because generated-document download did not write a
-  `generated_document_download` audit event.
-- `LC-011`: passed.
-- `LC-012`: failed because a report run accepted a provided empty string
-  despite `minLength`.
-- `LC-013`: passed.
-- `LC-014`: failed because opening an admin-only section rendered empty tables
-  instead of a Russian section-level access-denied state.
-- `LC-015`: passed against a restored disposable database and copied temporary
-  storage; restored Alembic head was `0014_report_pdf_output (head)`.
-
-Local bugfix status:
-
-- `LC-010`: regression tests added and local fix implemented for
-  generated-document download audit.
-- `LC-012`: regression tests added and local fix implemented so provided empty
-  strings are validated against report parameter schema constraints.
-- `LC-014`: regression test added and local fix implemented so forbidden
-  admin-only sections show a section-level Russian access-denied state and do
-  not render misleading empty admin tables.
-
-Required before closing Phase 5S:
-
-- Completed.
-- Bugfix commit `86530f3d` closed `LC-010`, `LC-012`, and the original
-  `LC-014` section-level access-denied issue.
-- Bugfix commit `f3fea07` closed the follow-up `LC-014` card-workflow
-  reference-item read 403.
-- API/DB/storage/MCP rerun evidence:
-  `artifacts/live/livecheck_20260701_040741/live_runner_rerun_result.json`,
-  result `bugs=0`, entity prefix `livecheck_20260701_040741_000036`.
-- Browser/UI rerun evidence:
-  `artifacts/live/livecheck_20260701_040741/ui_livecheck_result.json`,
-  result `bugs=[]`. The remaining 403 responses in that UI evidence are the
-  expected admin-only `/permissions`, `/users`, and `/roles` denials after the
-  scoped user explicitly opens the forbidden Users section; the section shows a
-  localized Russian access-denied state.
-
-## Scenario Acceptance Criteria
-
-### LC-001: Login, Session, Logout
-
-- Login as `system_admin_livecheck` opens the admin workspace.
-- `/auth/me` returns the current user.
-- Logout returns to the login screen.
-- Protected sections are not available after logout.
-- Disabled or archived users cannot log in.
-
-### LC-002: Organization Hierarchy And Visibility
-
-- Organization rows and `organization_closure` contain the expected tree.
-- Access grants point to the intended organization branch.
-- `org_admin_tu1_livecheck` sees `TU-1` and `TU-1-Sub` only.
-- Parent and sibling branches remain hidden.
-
-### LC-003: Registry, Schema, Reference Lists
-
-- Registry, blocks, fields, and reference items are persisted correctly.
-- `select` field is wired to its reference list.
-- Field types are stored correctly.
-- Org admins cannot modify schema without schema-management permission.
-- Adding fields to a registry keeps old cards readable with empty values.
-
-### LC-004: Card Create, Read, Scoped Visibility
-
-- Card creation writes `cards`, `field_values`, and audit rows.
-- The creating org admin and ancestor admin can read the card.
-- Sibling org admin cannot read the card.
-- UI success must match actual database state.
-
-### LC-005: Bulk Field Update Atomicity
-
-- Valid bulk update saves all submitted values.
-- Invalid bulk update saves nothing.
-- Single-field validation rules are not bypassed.
-- Audit must not claim a partially successful rollback as success.
-
-### LC-006: Repeatable Block Instances
-
-- Repeatable `education` block can have multiple instances.
-- Each instance keeps its own values.
-- Archiving one instance hides it from normal reads and preserves it in archive
-  scope.
-- Non-repeatable block rules and minimum instance rules stay enforced.
-
-### LC-007: Attachments
-
-- Attachment upload writes safe metadata and a stored file.
-- Download works only for actors with readable card access.
-- Archive hides the attachment from normal lists without exposing storage keys.
-- Audit is written for upload/download/archive where required.
-- Storage file retention is consistent with the current attachment policy.
-
-### LC-008: file_ref
-
-- `file_ref` can reference only an attachment from the same card.
-- Card reads expose safe attachment metadata only.
-- Archived referenced attachments do not break card reads.
-- Transfer copies active attachment references correctly and clears archived
-  references as designed.
-- Public links cannot edit `file_ref` without later explicit approval.
-
-### LC-009: Public Links
-
-- Public link opens without login while active and editable.
-- Public field edit updates only public-editable fields.
-- Public attachment upload/list/download obey active link and card state.
-- Field-edit counters and attachment-upload counters remain separate.
-- List/download do not increment upload counters.
-- Disabled, expired, archived, superseded, or non-editable card/link states deny
-  public operations.
-- Public links cannot archive/delete attachments.
-
-### LC-010: Generated Documents
-
-- Text `.docx` generated document and PDF generation work for in-scope cards.
-- Downloads return correct content type and safe filename behavior.
-- Archived generated document requires archive scope where applicable.
-- `file_ref` renders safe attachment title/original filename text, not storage
-  paths.
-- Audit exists for generation/download/archive.
-
-### LC-011: Import/Export
-
-- JSON, CSV, and XLSX exports include only visible cards.
-- Binary attachments/documents are metadata-only in card exports.
-- Preview does not mutate database state.
-- Valid import commit is atomic.
-- Invalid import commit does not partially create/update cards.
-- CSV/XLSX byte limits and row limits reject oversized input.
-
-### LC-012: Reports
-
-- Report templates can generate JSON, CSV, XLSX, and PDF outputs.
-- Backend validates report parameters, not only the frontend.
-- Generated report rows and stored files are consistent.
-- Report scope does not leak out-of-scope cards.
-- Archived report runs require archive scope for download.
-- Failed/rolled-back runs do not leave untracked storage files.
-
-### LC-013: MCP
-
-- `tools/list` returns expected read/write tools.
-- Read tools have `readOnlyHint=true`.
-- Write tools have `readOnlyHint=false`.
-- Destructive write tools require explicit `confirm_* = true`.
-- MCP tools call REST API only and send `X-Reg-Engine-Source: mcp`.
-- Content reads require confirmation and obey `REG_ENGINE_MCP_MAX_CONTENT_BYTES`.
-- MCP errors do not expose SQL traces, storage paths, checksums, stored-file ids,
-  private filenames, or raw backend internals.
-- Mutating MCP actions write audit with `source=mcp`.
-
-### LC-014: Scoped User No-Error UX
-
-- `org_admin_tu1_livecheck` can work in allowed card workflows without global
-  403 banners from users, roles, permissions, access grants, or audit endpoints.
-- Admin-only sections show section-local access errors when opened without
-  permission.
-- UI does not make the user think the card workflow is broken because unrelated
-  admin-only queries are forbidden.
-
-### LC-015: Backup/Restore Drill
-
-- Backup the livecheck database.
-- Restore into a disposable database.
-- Start backend against the restored database and temporary storage.
-- Verify Alembic state, login, card read, attachment download, generated
-  document download, report download, and MCP health/read.
-- Storage files must match restored database metadata.
-
-## Stop Rules
-
-- If `LC-002` RBAC or `LC-004` card scope fails, stop later document,
-  import/export, report, and MCP checks until access control is fixed.
-- If storage consistency fails, stop attachment, document, and report checks
-  until storage behavior is fixed.
-- If required audit rows are missing, do not mark the scenario complete.
-- Do not continue destructive or broad tests against production data.
-
-## What Counts As A Bug
-
-Record a bug if any of these happen:
-
-- UI shows success but database state did not change correctly.
-- Database state changes but required audit is absent.
-- Forbidden actor performs a protected action.
-- Actor sees parent, sibling, or out-of-scope data.
-- Archive physically deletes business data without an explicit policy.
-- Public link can do more than its approved workflow.
-- MCP bypasses the REST API.
-- Import preview mutates data.
-- Invalid import partially commits data.
-- Download exposes storage keys, filesystem paths, checksums, or stored-file ids.
-- Large file/report/import flow has no enforced limit.
-- Restored database and storage cannot serve existing data.
-
-## Execution Phases
-
-### Phase 5S.0: Plan Cleanup And Readiness
-
-Status: completed.
-
-Work:
-
-- Replace historical `PLANS.md` with this focused live verification plan.
-- Keep `docs/LIVE_VERIFICATION_PLAN.md` as the detailed source scenario file.
-- Confirm local browser automation capabilities.
-- Decide whether to run live checks locally, on the configured server, or on a
-  disposable staging backend.
-
-Acceptance:
-
-- `PLANS.md` contains the active Phase 5S plan and no long historical phase log.
-- Browser capability assessment is recorded.
-- No backend/frontend implementation is added.
-
-### Phase 5S.1: Live Environment Provisioning
-
-Status: completed.
-
-Work:
-
-- Create or verify disposable database `reg_engine_livecheck_test`.
-- Configure a temporary storage root outside Git.
-- Run Alembic to head on the disposable database.
-- Seed roles, permissions, and test users.
-- Deploy or start the current frontend/backend against test data.
-- Prepare MCP test token.
+1. Add registry owner/default metadata with an Alembic migration if approved.
+2. Create a resolver for the default registry of an organization.
+3. Automatically create or assign `Реестр карточек` for the first/main root
+   organization.
+4. Make descendant organizations inherit the root default registry.
+5. Add an organization-centered card create flow that resolves registry
+   automatically.
+6. Keep advanced registry/schema administration available only where useful.
+7. Keep existing registry-based APIs for compatibility.
+
+Required tests:
+
+- First/main root organization gets one default registry.
+- Descendant organization does not get a duplicate registry.
+- Creating a card for a descendant uses the root default registry.
+- Card still stores the selected descendant `organization_id`.
+- Sibling/root visibility rules remain organization-scoped.
+- No ordinary card workflow requires manual registry selection.
+
+Acceptance criteria:
+
+- One default card registry serves the root organization and descendants.
+- UI remains organization-centered and clean.
+- No separate registry is created for every organization.
+- Existing schema-driven card architecture remains intact.
+
+## Phase 6D: Common Schema With Organization-Owned References
+
+Status: planned after Phase 6C.
+
+Purpose:
+
+Keep blocks/fields common while allowing subordinate organizations to maintain
+their own allowed values for fields such as local departments.
+
+Required work:
+
+1. Define reference resolution policy for each select/multi-select field:
+   central fixed list or organization-effective list.
+2. Resolve effective reference lists by card organization.
+3. Validate selected reference items against the effective list.
+4. Allow scoped org admins to manage organization-owned reference lists/items
+   where their permissions allow it.
+5. Deny edits to locked inherited lists.
+6. Keep central schema editing restricted to system/registry admins.
+7. Show clear Russian UI labels separating:
+   - common schema fields;
+   - central reference lists;
+   - organization-owned reference lists.
+
+Required tests:
+
+- Central locked reference list is usable by descendants.
+- Descendant admin cannot edit locked inherited list.
+- Descendant admin can create/edit their own allowed local list.
+- Card in descendant organization sees local options for an organization-local
+  field.
+- Card in another organization does not see sibling local options.
+- Submitted reference item from the wrong organization scope is rejected.
+- Public-link select options use the same effective-list rules for the target
+  card organization.
+
+Acceptance criteria:
+
+- One registry schema can serve all organizations in the tree.
+- Subordinate organizations can maintain local value lists where allowed.
+- Sibling organization reference values do not leak.
+- Schema management and local dictionary management are separate permissions.
+
+## Phase 6E: Browser And Live Verification
+
+Status: planned.
+
+Scope:
+
+- Verify organization tree UI.
+- Verify clean card creation without manual registry selection.
+- Verify default registry resolution for root and descendant organizations.
+- Verify local organization reference lists in card editing and public-link
+  editing if public fields use those lists.
+- Verify audit events for create/update/archive actions changed by this phase.
 
 Checks:
 
@@ -432,245 +354,18 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 pnpm -C frontend e2e
 ```
 
-Server checks where applicable:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1
-powershell -ExecutionPolicy Bypass -File scripts/service.ps1 -Command status
-```
-
-### Phase 5S.2: Core Access And Schema Live Checks
-
-Status: completed.
-
-Scope:
-
-- `LC-001`
-- `LC-002`
-- `LC-003`
-- `LC-004`
-
-Exit:
-
-- Login/session, RBAC tree, schema creation, and card scope are proven with UI,
-  API/SQL, and audit evidence.
-
-### Phase 5S.3: Dynamic Card Data Live Checks
-
-Status: completed.
-
-Scope:
-
-- `LC-005`
-- `LC-006`
-- `LC-007`
-- `LC-008`
-
-Exit:
-
-- Bulk values, repeatable blocks, attachments, and `file_ref` are proven with
-  UI, API/SQL, storage, and audit evidence.
-
-### Phase 5S.4: Public, Document, Import, Report Live Checks
-
-Status: completed.
-
-Scope:
-
-- `LC-009`
-- `LC-010`
-- `LC-011`
-- `LC-012`
-
-Exit:
-
-- Public links, generated documents, import/export, and reports are proven with
-  UI, API/SQL, storage, download, and audit evidence.
-
-### Phase 5S.5: MCP And Scoped UX Live Checks
-
-Status: completed.
-
-Scope:
-
-- `LC-013`
-- `LC-014`
-
-Exit:
-
-- MCP REST-only safety, confirmation behavior, content limits, normalized
-  errors, audit source, and scoped frontend no-error UX are proven.
-
-### Phase 5S.6: Backup/Restore Drill
-
-Status: completed.
-
-Scope:
-
-- `LC-015`
-
-Exit:
-
-- Backup and restore into a disposable database is proven, including Alembic
-  state, login, card reads, attachment/document/report downloads, storage
-  consistency, and MCP health/read.
-
-### Phase 5S.7: Bugfix Loop If Live Checks Fail
-
-Status: completed.
-
-Rules:
-
-- Open a focused bug phase for each blocker or tightly related bug group.
-- Add failing regression tests before implementation where practical.
-- Keep fixes scoped; do not add unrelated product capabilities.
-- Update this plan with actual evidence and remaining risk after each fix.
-- Re-run the failed scenario and any affected downstream scenarios.
-
-Closed bugs:
-
-- `LC-010`: generated-document download now writes
-  `generated_document_download` audit rows.
-- `LC-012`: provided empty report string parameters are validated against
-  schema constraints such as `minLength` instead of being treated as omitted.
-- `LC-014`: forbidden admin-only sections now show a section-level Russian
-  access-denied state instead of misleading empty tables.
-- `LC-014`: scoped card workflows can read reference-list items needed by
-  select/multi-select fields without granting reference-list edit rights.
-
-### Phase 5S.8: Production UI Follow-Up Bugfix
-
-Status: completed.
-
-Scope:
-
-- Correct the already persisted production bootstrap admin display name from
-  question marks to `Системный администратор`.
-- Keep UTF-8 Russian seed/UI regression coverage so future seed and UI labels
-  do not regress into mojibake.
-- Return specific safe API details for `uq_organizations_code` and
-  `uq_registries_code` instead of a generic integrity message.
-- Map those details in the frontend to:
-  `Организация с таким кодом уже существует.` and
-  `Реестр с таким кодом уже существует.`
-
-Non-goals:
-
-- Duplicate-code API/UI message mapping itself required no schema migration;
-  the follow-up audit timestamp default drift is handled separately in
-  Phase 5S.9.
-- No change to the Core Schema v1 registry/organization model.
-- No direct organization-to-registry binding; cards remain the organization
-  scoped records inside a registry.
-
-### Phase 5S.9: Audit Timestamp Default Drift Bugfix
-
-Status: completed.
-
-Scope:
-
-- Restore the missing production default on `audit_events.created_at` with
-  migration `0015_audit_created_at_default`.
-- Verify the migration against a disposable PostgreSQL database before applying
-  it to production.
-- Create a fresh production backup before applying the migration.
-- Re-run organization and registry create checks after production upgrade.
-
-Evidence:
-
-- Disposable DB `reg_engine_migration_test` upgraded from
-  `0014_report_pdf_output` with a deliberately removed
-  `audit_events.created_at` default to `0015_audit_created_at_default (head)`.
-- Disposable insert smoke returned `INSERT|true` for an audit row without an
-  explicit `created_at`.
-- Production backup was created before migration:
-  `/var/backups/reg_engine/reg_engine_before_0015_20260701T061045Z.dump`.
-- Production Alembic moved from `0014_report_pdf_output` to
-  `0015_audit_created_at_default (head)`.
-- Production `audit_events.created_at` default changed from `<null>` to
-  `now()`.
-- Production API create checks passed:
-  organization `code=1` returned `201`, duplicate returned
-  `Organization code already exists.`;
-  registry `code=1` returned `201`, duplicate returned
-  `Registry code already exists.`
-- Browser check against `http://192.168.100.12:8000/` confirmed:
-  page title `Реестровая система`, admin name `Системный администратор`, no
-  visible `????????`, registry row `Реестр карточек`, and Russian duplicate
-  message `Реестр с таким кодом уже существует.`
-
-Root cause:
-
-- Production `audit_events.created_at` was `NOT NULL` without `DEFAULT now()`,
-  so audited create flows inserted audit rows with `created_at = null` and
-  surfaced as a generic 409 integrity error.
-
-Non-goals:
-
-- No business schema changes.
-- No new direct organization-to-registry binding.
-
-## Browser And Live Testing Capability Assessment
-
-Verified locally on 2026-07-01:
-
-- Node.js: `v24.15.0`
-- pnpm: `11.7.0`
-- npx: `11.12.1`
-- Playwright: `1.61.1`
-- Project e2e command exists: `pnpm -C frontend e2e`
-- Interactive Playwright MCP tools are available in this Codex session:
-  navigation, tabs, snapshots, screenshots, and viewport resize.
-
-I can run these parts myself:
-
-- Browser UI scenarios with Playwright MCP or Playwright CLI.
-- Screenshots and accessibility snapshots for evidence.
-- Frontend unit/e2e/build checks.
-- Backend API calls through curl, PowerShell, or Python test clients.
-- Server SSH checks through existing scripts.
-- PostgreSQL SQL verification through server-side `psql` when credentials and
-  target database are configured.
-- Storage consistency checks through server shell access.
-- MCP stdio/tool checks against a test bearer token.
-- GitHub/server synchronization through existing scripts when requested.
-
-I can fully conduct `LC-001` through `LC-014` myself if:
-
-- a disposable/staging database is available or I am allowed to create it;
-- a temporary storage root is configured outside Git;
-- test users/passwords or bootstrap permission to create them are available;
-- the backend/frontend are pointed at the livecheck environment;
-- an MCP test token is available or I can create one through the app/API.
-
-I can conduct `LC-015` myself if, in addition:
-
-- PostgreSQL backup/restore permissions are available;
-- restore targets are disposable databases ending with `_test`;
-- storage root backup/restore expectations are clear.
-
-I cannot honestly mark the full live scenario set complete if:
-
-- only production personal data is available;
-- credentials/tokens are missing and cannot be bootstrapped;
-- the staging backend cannot be pointed at disposable DB/storage;
-- PostgreSQL restore permissions are unavailable;
-- browser-only evidence is available but DB/audit/storage evidence is blocked.
-
-Practical answer: yes, I can perform the live scenarios end-to-end myself with
-the current toolset, but only against a disposable/staging environment with the
-required credentials and server/database access. Browser automation alone is
-not enough for Phase 5S; each scenario also needs DB, audit, storage, and
-negative-access evidence.
-
-## Verification For This Plan Update
-
-Required after editing documentation:
-
-```powershell
-git diff --check
-powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1
-```
-
-No backend tests are required for this documentation-only plan update unless a
-code change is introduced.
+Use a disposable/staging database for live workflow checks. Do not run
+destructive scenario data against production personal data.
+
+## Non-Goals For Phase 6
+
+- Do not create a hardcoded employee table.
+- Do not add HR-specific fixed backend columns.
+- Do not create one registry per organization.
+- Do not physically delete `organizations.type` or `org_units` in the UI
+  cleanup slice.
+- Do not bypass backend RBAC with frontend-only filtering.
+- Do not remove existing REST/MCP compatibility endpoints without a separate
+  deprecation plan.
+- Do not change production schema unless the active implementation phase
+  requires a migration and the project migration rules are satisfied.
