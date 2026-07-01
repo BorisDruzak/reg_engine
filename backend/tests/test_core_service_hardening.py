@@ -1,6 +1,7 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
@@ -708,6 +709,50 @@ def test_reference_list_inheritance_allows_use_but_blocks_locked_descendant_edit
             code="blocked",
             label="Blocked",
         )
+
+
+def test_reference_list_read_allows_registry_card_actor_without_edit_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = UUID("11111111-1111-4111-8111-111111111111")
+    list_id = UUID("22222222-2222-4222-8222-222222222222")
+    registry_id = UUID("33333333-3333-4333-8333-333333333333")
+    reference_list = SimpleNamespace(
+        id=list_id,
+        registry_id=registry_id,
+        owner_organization_id=None,
+        managed_by_system_only=False,
+    )
+
+    class FakePermissionService:
+        def __init__(self, session: object) -> None:
+            self.session = session
+
+        def is_superuser(self, user_id: UUID) -> bool:
+            assert user_id == actor_user_id
+            return False
+
+        def has_permission(
+            self,
+            user_id: UUID,
+            permission_code: str,
+            *,
+            organization_id: UUID | None = None,
+            registry_id: UUID | None = None,
+        ) -> bool:
+            assert user_id == actor_user_id
+            assert organization_id is None
+            assert registry_id == reference_list.registry_id
+            return permission_code == "cards.manage"
+
+    service = ReferenceListService(session=object())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda object_id: reference_list)
+    monkeypatch.setattr("app.services.references.PermissionService", FakePermissionService)
+
+    assert (
+        service.read_reference_list_for_actor(actor_user_id=actor_user_id, list_id=list_id)
+        is reference_list
+    )
 
 
 def test_unique_indexes_handle_nullable_registry_and_organization_scope(

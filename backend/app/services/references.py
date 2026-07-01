@@ -113,8 +113,7 @@ class ReferenceListService:
         list_id: UUID,
     ) -> ReferenceList:
         reference_list = self._get_active_reference_list(list_id)
-        if not PermissionService(self.session).is_superuser(actor_user_id):
-            self._require_reference_edit_permission(actor_user_id, reference_list)
+        self._require_reference_read_permission(actor_user_id, reference_list)
         return reference_list
 
     def list_reference_lists_for_actor(
@@ -414,6 +413,55 @@ class ReferenceListService:
             return
 
         raise PermissionDeniedError("Actor cannot manage this reference list owner scope.")
+
+    def _require_reference_read_permission(
+        self,
+        actor_user_id: UUID,
+        reference_list: ReferenceList,
+    ) -> None:
+        permissions = PermissionService(self.session)
+        if permissions.is_superuser(actor_user_id):
+            return
+
+        registry_id = reference_list.registry_id
+        if registry_id is None:
+            raise PermissionDeniedError("Only a system admin can read global references.")
+
+        if permissions.has_permission(
+            actor_user_id,
+            "registry.schema.manage",
+            registry_id=registry_id,
+        ):
+            return
+
+        if not permissions.has_permission(
+            actor_user_id,
+            "cards.manage",
+            registry_id=registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read reference lists.")
+
+        owner_id = reference_list.owner_organization_id
+        if owner_id is None:
+            return
+
+        actor_scope = permissions.get_organization_scope_ids(actor_user_id, registry_id=registry_id)
+        if owner_id in actor_scope:
+            return
+
+        if not reference_list.inherit_to_descendants:
+            raise PermissionDeniedError("Actor cannot read this reference list owner scope.")
+
+        inherited_scope_match = self.session.scalar(
+            select(OrganizationClosure.descendant_id).where(
+                OrganizationClosure.ancestor_id == owner_id,
+                OrganizationClosure.descendant_id.in_(actor_scope),
+            )
+        )
+        if inherited_scope_match is not None:
+            return
+
+        raise PermissionDeniedError("Actor cannot read this reference list owner scope.")
 
     def _get_active_reference_list(self, list_id: UUID) -> ReferenceList:
         reference_list = self.session.get(ReferenceList, list_id)
