@@ -64,6 +64,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0009_document_template_versions" in sql
     assert "0010_reports" in sql
     assert "0011_mcp_audit_source" in sql
+    assert "0015_audit_created_at_default" in sql
     assert (
         "CREATE TABLE document_template_versions" in sql
         or "CREATE TABLE public.document_template_versions" in sql
@@ -77,6 +78,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "ix_field_values_field_attachment" in sql
     assert "'file_ref'" in sql
     assert "'mcp'" in sql
+    assert "ALTER TABLE public.audit_events ALTER COLUMN created_at SET DEFAULT now()" in sql
     assert "CREATE TABLE employees" not in sql
 
 

@@ -18,13 +18,14 @@ not a hardcoded employee registry.
 - Live verification found focused blockers in `LC-010`, `LC-012`, and
   `LC-014`; all tracked fixes were rerun on the disposable livecheck
   environment.
-- No production PostgreSQL migration is planned. Current production Alembic
-  remains `0014_report_pdf_output (head)` unless a later bugfix phase changes
-  schema under the standard migration rules.
+- Production PostgreSQL migration `0015_audit_created_at_default` is required
+  for the follow-up audit timestamp drift fix before organization/registry live
+  create checks can pass.
 - Follow-up production UI bugfix on 2026-07-01: admin display-name data
   mojibake/question marks were repaired for the bootstrap production admin, and
   organization/registry duplicate-code conflicts now return specific safe API
-  details mapped to Russian UI messages. No schema migration was required.
+  details mapped to Russian UI messages. A follow-up schema drift blocker is
+  tracked in Phase 5S.9.
 - Registry/organization architecture remains unchanged: registries are not
   directly assigned to organizations; cards carry `organization_id`, and
   visibility is enforced by organization scope.
@@ -556,10 +557,36 @@ Scope:
 
 Non-goals:
 
-- No schema migration.
+- Duplicate-code API/UI message mapping itself required no schema migration;
+  the follow-up audit timestamp default drift is handled separately in
+  Phase 5S.9.
 - No change to the Core Schema v1 registry/organization model.
 - No direct organization-to-registry binding; cards remain the organization
   scoped records inside a registry.
+
+### Phase 5S.9: Audit Timestamp Default Drift Bugfix
+
+Status: in progress.
+
+Scope:
+
+- Restore the missing production default on `audit_events.created_at` with
+  migration `0015_audit_created_at_default`.
+- Verify the migration against a disposable PostgreSQL database before applying
+  it to production.
+- Create a fresh production backup before applying the migration.
+- Re-run organization and registry create checks after production upgrade.
+
+Root cause:
+
+- Production `audit_events.created_at` was `NOT NULL` without `DEFAULT now()`,
+  so audited create flows inserted audit rows with `created_at = null` and
+  surfaced as a generic 409 integrity error.
+
+Non-goals:
+
+- No business schema changes.
+- No new direct organization-to-registry binding.
 
 ## Browser And Live Testing Capability Assessment
 
