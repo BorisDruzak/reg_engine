@@ -188,6 +188,7 @@ const apiPayloads = {
         description: null,
         field_type: "text",
         position: 0,
+        required_mode: "not_required",
         options_source_type: null,
         options_source_id: null,
         options_config_json: null,
@@ -203,6 +204,7 @@ const apiPayloads = {
         description: null,
         field_type: "bool",
         position: 1,
+        required_mode: "not_required",
         options_source_type: null,
         options_source_id: null,
         options_config_json: null,
@@ -232,6 +234,7 @@ const apiPayloads = {
     description: null,
     field_type: "text",
     position: 0,
+    required_mode: "not_required",
     options_source_type: null,
     options_source_id: null,
     options_config_json: null,
@@ -247,6 +250,7 @@ const apiPayloads = {
     description: null,
     field_type: "file_ref",
     position: 2,
+    required_mode: "not_required",
     options_source_type: null,
     options_source_id: null,
     options_config_json: null,
@@ -1013,6 +1017,7 @@ beforeEach(() => {
             field_type: string;
             description?: string | null;
             position?: number;
+            required_mode?: string;
             options_source_type?: string | null;
             options_source_id?: string | null;
             options_config_json?: Record<string, unknown> | null;
@@ -1027,6 +1032,7 @@ beforeEach(() => {
             description: payload.description ?? null,
             field_type: payload.field_type,
             position: payload.position ?? 0,
+            required_mode: payload.required_mode ?? "not_required",
             options_source_type: payload.options_source_type ?? null,
             options_source_id: payload.options_source_id ?? null,
             options_config_json: payload.options_config_json ?? null,
@@ -1077,6 +1083,7 @@ beforeEach(() => {
             label?: string | null;
             description?: string | null;
             position?: number | null;
+            required_mode?: string | null;
             is_active?: boolean | null;
           };
           const updated: FormFieldRead = {
@@ -1084,6 +1091,7 @@ beforeEach(() => {
             label: payload.label ?? current.label,
             description: payload.description ?? current.description,
             position: payload.position ?? current.position,
+            required_mode: payload.required_mode ?? current.required_mode,
             is_active: payload.is_active ?? current.is_active,
           };
           schemaFieldItems = schemaFieldItems.map((item) => (item.id === fieldId ? updated : item));
@@ -1829,6 +1837,7 @@ beforeEach(() => {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             display_name?: string | null;
             org_unit_id?: string | null;
+            lifecycle_status?: string | null;
             public_view_enabled?: boolean | null;
             public_edit_enabled?: boolean | null;
           };
@@ -1838,6 +1847,7 @@ beforeEach(() => {
             org_unit_id: Object.prototype.hasOwnProperty.call(payload, "org_unit_id")
               ? (payload.org_unit_id ?? null)
               : current.org_unit_id,
+            lifecycle_status: payload.lifecycle_status ?? current.lifecycle_status,
             public_view_enabled: payload.public_view_enabled ?? current.public_view_enabled,
             public_edit_enabled: payload.public_edit_enabled ?? current.public_edit_enabled,
           };
@@ -2062,6 +2072,11 @@ function enableFileRefSchema() {
   schemaFieldItems = [...schemaFieldItems, apiPayloads.fileRefField];
 }
 
+async function openExistingCardEditor(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
+}
+
 type TestOrganizationTreeNode = OrganizationRead & {
   children: TestOrganizationTreeNode[];
 };
@@ -2150,9 +2165,10 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.queryByText("Manage users.")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Реестры" }));
   expect((await screen.findAllByText("Реестр активов")).length).toBeGreaterThan(0);
+  await user.click(screen.getByRole("tab", { name: "Схема карточки" }));
   expect(screen.getAllByText("Основной блок").length).toBeGreaterThan(0);
   expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
-  await user.click(screen.getByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
   expect((await screen.findAllByText("Карточка актива")).length).toBeGreaterThan(0);
   expect(screen.getAllByDisplayValue("drafted").length).toBeGreaterThan(0);
   const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
@@ -2211,24 +2227,144 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
 
+  expect(await screen.findByRole("tablist", { name: "Вкладки карточек" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Карточка актива").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("tablist", { name: "Разделы карточки" })).not.toBeInTheDocument();
+
+  await user.dblClick(screen.getByRole("button", { name: /Карточка актива/ }));
   expect(await screen.findByRole("tablist", { name: "Разделы карточки" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Поля" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tab", { name: "Вложения" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Публичные ссылки" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "История" })).toBeInTheDocument();
-  expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
-  expect(screen.getAllByText("Карточка актива").length).toBeGreaterThan(0);
-
   await user.click(screen.getByRole("tab", { name: "Вложения" }));
   expect(screen.getByRole("tab", { name: "Вложения" })).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Документы" })).not.toBeInTheDocument();
 
+  await user.click(screen.getByRole("tab", { name: "Список карточек" }));
   await user.click(screen.getByRole("button", { name: "Создать карточку" }));
-  expect(await screen.findByRole("heading", { name: "Новая карточка" })).toBeInTheDocument();
   expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
   expect(screen.queryByText("Данные карточки")).not.toBeInTheDocument();
+});
+
+test("opens card editor in tabs and restores unsaved draft after remount", async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByRole("tablist", { name: "Вкладки карточек" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
+
+  await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
+  expect(await screen.findByRole("tab", { name: "Карточка актива" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  const statusInput = within(bulkForm).getByLabelText("Статус");
+  await user.clear(statusInput);
+  await user.type(statusInput, "несохраненный текст");
+
+  expect(screen.getByRole("tab", { name: "Карточка актива *" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getByText("Есть несохраненные изменения")).toBeInTheDocument();
+
+  unmount();
+  render(<App />);
+
+  expect(await screen.findByRole("button", { name: "Карточки" })).toHaveClass("is-active");
+  expect(await screen.findByRole("tab", { name: "Карточка актива *" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(await screen.findByDisplayValue("несохраненный текст")).toBeInTheDocument();
+});
+
+test("shows required field errors in the card editor footer before bulk save", async () => {
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.id === "99999999-9999-4999-8999-999999999999"
+      ? {
+          ...field,
+          required_mode: "required",
+        }
+      : field,
+  );
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
+
+  const patchCountBeforeSave = vi.mocked(fetch).mock.calls.filter(
+    ([input, init]) =>
+      String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+      init?.method === "PATCH",
+  ).length;
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  const statusInput = within(bulkForm).getByLabelText("Статус");
+  await user.clear(statusInput);
+  await user.click(within(bulkForm).getByRole("button", { name: "Сохранить все поля" }));
+
+  expect(await screen.findByText("Заполните обязательные поля: Статус")).toBeInTheDocument();
+  expect(
+    vi.mocked(fetch).mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+        init?.method === "PATCH",
+    ).length,
+  ).toBe(patchCountBeforeSave);
+});
+
+test("creates form fields with required mode from Russian UI", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await user.click(await screen.findByRole("button", { name: "Создать поле формы" }));
+  await user.selectOptions(screen.getByLabelText("Блок формы"), [
+    "88888888-8888-4888-8888-888888888888",
+  ]);
+  await user.type(screen.getByLabelText("Название поля формы"), "Обязательное поле");
+  await user.selectOptions(screen.getByLabelText("Обязательность поля"), ["required"]);
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  await waitFor(() => {
+    const createFieldCall = vi.mocked(fetch).mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith(
+          "/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields",
+        ) && init?.method === "POST",
+    );
+    expect(createFieldCall).toBeTruthy();
+    const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as {
+      required_mode?: string;
+    };
+    expect(body.required_mode).toBe("required");
+  });
 });
 
 test("renders registry workspace as focused schema tabs", async () => {
@@ -2243,14 +2379,23 @@ test("renders registry workspace as focused schema tabs", async () => {
   expect(
     await screen.findByRole("tablist", { name: "Разделы настройки реестра" }),
   ).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Реестры" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getByRole("tab", { name: "Схема карточки" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Справочники" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Импорт и экспорт" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Отчеты" })).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { name: "Реестры" }).length).toBeGreaterThan(0);
+  expect(screen.queryByRole("heading", { name: "Схема карточки" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("tab", { name: "Схема карточки" }));
   expect(screen.getByRole("tab", { name: "Схема карточки" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  expect(screen.getByRole("tab", { name: "Справочники" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Импорт и экспорт" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Отчеты" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Схема карточки" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Схема карточки" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Справочники" })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("tab", { name: "Справочники" }));
@@ -2580,7 +2725,7 @@ test("loads card field reference options through card organization scope", async
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
 
   const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
   expect(await within(bulkForm).findByRole("option", { name: "Активен" })).toBeInTheDocument();
@@ -2749,7 +2894,7 @@ test("manages public links from authenticated card workspace", async () => {
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
   await user.click(await screen.findByRole("tab", { name: "Публичные ссылки" }));
 
   expect(await screen.findByRole("heading", { name: "Публичные ссылки" })).toBeInTheDocument();
@@ -3348,6 +3493,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
   const blockPostCount = () =>
     vi
@@ -3493,6 +3639,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       field_type: "number",
       description: "Числовое значение",
       position: 20,
+      required_mode: "not_required",
       options_source_type: null,
       options_source_id: null,
       public_visible: true,
@@ -3799,6 +3946,7 @@ test("wires select fields to reference lists without hardcoded options", async (
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
   await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
   expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
@@ -3870,6 +4018,7 @@ test("shows localized locked schema field denial text", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
   denyNextFieldArchive = true;
   await user.click(screen.getByRole("button", { name: "Архивировать поле формы Статус" }));
@@ -3905,7 +4054,7 @@ test("manages card attachments and generated documents in Russian UI", async () 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
   await user.click(await screen.findByRole("tab", { name: "Вложения" }));
 
   expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
@@ -4022,7 +4171,7 @@ test("selects and clears file_ref fields from existing card attachments", async 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
 
   const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
   expect(within(bulkForm).queryByLabelText("Файл карточки")).not.toBeInTheDocument();
@@ -4094,7 +4243,7 @@ test("shows file_ref empty and archived states in Russian UI", async () => {
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
 
   const saveButton = await screen.findByRole("button", { name: "Сохранить Файл карточки" });
   const fieldForm = saveButton.closest("form");
@@ -4113,7 +4262,7 @@ test("creates and archives document templates in Russian UI", async () => {
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
-  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await openExistingCardEditor(user);
   await user.click(await screen.findByRole("tab", { name: "Документы" }));
 
   expect(await screen.findByRole("heading", { name: "Шаблоны документов" })).toBeInTheDocument();

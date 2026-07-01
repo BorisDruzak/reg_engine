@@ -229,6 +229,7 @@ def update_card(
             display_name=payload.display_name,
             org_unit_id=payload.org_unit_id,
             update_org_unit="org_unit_id" in payload.model_fields_set,
+            lifecycle_status=payload.lifecycle_status,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
         )

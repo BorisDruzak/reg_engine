@@ -29,10 +29,13 @@ not a hardcoded employee registry.
   names.
 - Phase 7B technical-code autogeneration in create forms is implemented on
   `main`, deployed to the server frontend, and live-verified in the browser.
+- Phase 7C card editor tabs, draft-state persistence, required field mode, and
+  required-field validation are implemented and locally verified. No database
+  migration is required because `form_fields.required_mode` already exists.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint after Phase 7B is not selected yet.
+- Next implementation checkpoint after Phase 7C is not selected yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -829,3 +832,75 @@ Known limitations:
   unique constraints remain authoritative for concurrent or stale-client cases.
 - Technical code editing for existing entities remains intentionally out of
   scope.
+
+## Phase 7C: Card Tabs, Draft Persistence, And Required Fields
+
+Status: completed locally and ready for GitHub/server synchronization.
+
+Purpose:
+
+Make the card workspace safer for ordinary users before deeper UI redesign
+work: opening cards should not destroy list context, unsaved values should not
+disappear on refresh, and required card fields must be explicit and enforced by
+the backend, not only by the frontend.
+
+Implemented scope:
+
+1. Card workspace:
+   - added top-level card workspace tabs with `Список карточек` as the search
+     and filter tab;
+   - opening an existing card by double click creates a dedicated card tab;
+   - opened card tabs and the active card tab are saved in local storage;
+   - unsaved bulk field edits are saved as a per-user/per-card local draft;
+   - dirty card tabs show `*` and restore after remount/page refresh;
+   - the lower editor panel shows validation errors, unsaved state, and saved
+     state in Russian.
+2. Registry workspace:
+   - kept `Реестры` as its own setup subtab;
+   - schema blocks/fields remain under `Схема карточки`;
+   - e2e and unit flows now use the explicit registry setup tabs.
+3. Required fields:
+   - exposed `required_mode` in form-field create/read/update schemas and API
+     payloads;
+   - added Russian UI control `Обязательность поля`;
+   - supported `not_required`, `required`, and `required_on_publish`;
+   - backend bulk field save rejects empty active `required` fields;
+   - single field save and public-link field save reject empty `required`
+     assignments;
+   - card activation to `active` validates both `required` and
+     `required_on_publish` fields;
+   - normal card metadata update can activate a draft card through
+     `lifecycle_status="active"`.
+
+Non-goals:
+
+- No new database migration.
+- No new business-specific card fields or employee/HR columns.
+- No new import/export, report, document, attachment, MCP, auth, or RBAC
+  capability.
+- No public-link `file_ref` editing changes.
+
+Verification completed:
+
+- `backend\.venv\Scripts\python.exe -m pytest`: 128 passed, 160 skipped.
+- `pnpm -C frontend test:run`: 6 files passed, 56 tests passed.
+- `backend\.venv\Scripts\ruff.exe check .`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check .`: passed.
+- `backend\.venv\Scripts\mypy.exe app`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: 3 passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
+  and checked `docs/PROJECT_TREE.md`.
+
+Known limitations:
+
+- `TEST_DATABASE_URL` was not set in the local PowerShell environment, so
+  PostgreSQL-backed optional service smoke tests that require a disposable
+  `_test` database remained skipped in the normal backend test run.
+- Card tab drafts are MVP local-browser state, consistent with the current
+  documented browser-session limitations; they are not a production-grade
+  server-side autosave system.

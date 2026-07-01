@@ -295,6 +295,7 @@ class CardService:
             organization_id=card.organization_id,
             actor_user_id=actor_user_id,
         )
+        self._ensure_required_assignment_is_not_empty(field_model, assignment)
         block_instance = self._resolve_block_instance_for_value(
             card=card,
             block=block,
@@ -326,6 +327,7 @@ class CardService:
         values: Sequence[BulkFieldValueInput],
     ) -> list[FieldValue]:
         with self.session.begin_nested():
+            card = self._get_editable_card(card_id)
             field_values = [
                 self.set_field_value_for_actor(
                     actor_user_id=actor_user_id,
@@ -336,6 +338,7 @@ class CardService:
                 )
                 for item in values
             ]
+            self._validate_required_fields_for_card(card, include_publish_required=False)
         return field_values
 
     def validate_field_value_for_actor(
@@ -409,6 +412,7 @@ class CardService:
             organization_id=card.organization_id,
             public_context=True,
         )
+        self._ensure_required_assignment_is_not_empty(field_model, assignment)
         block_instance = self._resolve_block_instance_for_value(
             card=card,
             block=block,
@@ -433,6 +437,7 @@ class CardService:
         display_name: str | None = None,
         org_unit_id: UUID | None = None,
         update_org_unit: bool = False,
+        lifecycle_status: str | None = None,
         public_view_enabled: bool | None = None,
         public_edit_enabled: bool | None = None,
     ) -> Card:
@@ -445,14 +450,21 @@ class CardService:
         old_data = {
             "display_name": card.display_name,
             "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
+            "lifecycle_status": card.lifecycle_status,
             "public_view_enabled": card.public_view_enabled,
             "public_edit_enabled": card.public_edit_enabled,
         }
+        if lifecycle_status is not None and lifecycle_status not in {"draft", "active"}:
+            raise CardServiceError(f"Unsupported card lifecycle status: {lifecycle_status}")
         if display_name is not None:
             card.display_name = display_name
         if update_org_unit:
             self._validate_org_unit_for_organization(org_unit_id, card.organization_id)
             card.org_unit_id = org_unit_id
+        if lifecycle_status is not None:
+            if lifecycle_status == "active":
+                self._validate_required_fields_for_card(card, include_publish_required=True)
+            card.lifecycle_status = lifecycle_status
         if public_view_enabled is not None:
             card.public_view_enabled = public_view_enabled
         if public_edit_enabled is not None:
@@ -468,6 +480,7 @@ class CardService:
             new_data_json={
                 "display_name": card.display_name,
                 "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
+                "lifecycle_status": card.lifecycle_status,
                 "public_view_enabled": card.public_view_enabled,
                 "public_edit_enabled": card.public_edit_enabled,
             },
@@ -894,6 +907,118 @@ class CardService:
         self.session.add(field_value)
         self.session.flush()
         return field_value
+
+    def _ensure_required_assignment_is_not_empty(
+        self,
+        field_model: FormField,
+        assignment: _FieldAssignment,
+    ) -> None:
+        if field_model.required_mode != "required":
+            return
+        if self._field_assignment_is_empty(assignment):
+            raise InvalidFieldValueError(f"Required field is empty: {field_model.label}")
+
+    def _validate_required_fields_for_card(
+        self,
+        card: Card,
+        *,
+        include_publish_required: bool,
+    ) -> None:
+        required_modes = {"required"}
+        if include_publish_required:
+            required_modes.add("required_on_publish")
+
+        schema_rows = [
+            (block, field_model)
+            for block, field_model in self._active_schema_rows_for_registry(card.registry_id)
+            if field_model.required_mode in required_modes
+        ]
+        if not schema_rows:
+            return
+
+        field_ids = [field_model.id for _, field_model in schema_rows]
+        field_values = list(
+            self.session.scalars(
+                select(FieldValue).where(
+                    FieldValue.card_id == card.id,
+                    FieldValue.field_id.in_(field_ids),
+                )
+            ).all()
+        )
+        item_ids_by_value_id = self._multi_select_item_ids(field_values)
+        values_by_instance_field = {
+            (field_value.block_instance_id, field_value.field_id): field_value
+            for field_value in field_values
+        }
+        values_by_field: dict[UUID, list[FieldValue]] = {}
+        for field_value in field_values:
+            values_by_field.setdefault(field_value.field_id, []).append(field_value)
+
+        instances_by_block = self._block_instances_for_card(card.id)
+        missing_labels: list[str] = []
+        for block, field_model in schema_rows:
+            if block.is_repeatable:
+                for instance in instances_by_block.get(block.id, []):
+                    instance_field_value = values_by_instance_field.get(
+                        (instance.id, field_model.id)
+                    )
+                    if self._field_value_is_empty(
+                        field_model,
+                        instance_field_value,
+                        item_ids_by_value_id,
+                    ):
+                        missing_labels.append(f"{field_model.label} ({block.title})")
+                continue
+
+            values = values_by_field.get(field_model.id, [])
+            if not any(
+                not self._field_value_is_empty(field_model, value, item_ids_by_value_id)
+                for value in values
+            ):
+                missing_labels.append(field_model.label)
+
+        if missing_labels:
+            raise InvalidFieldValueError(
+                "Required fields are empty: " + ", ".join(sorted(set(missing_labels)))
+            )
+
+    def _field_assignment_is_empty(self, assignment: _FieldAssignment) -> bool:
+        if assignment.item_ids:
+            return False
+        if assignment.value_text is not None:
+            return not assignment.value_text.strip()
+        return all(
+            value is None
+            for value in [
+                assignment.value_number,
+                assignment.value_date,
+                assignment.value_datetime,
+                assignment.value_bool,
+                assignment.value_json,
+                assignment.value_reference_item_id,
+                assignment.value_card_id,
+                assignment.value_user_id,
+                assignment.value_organization_id,
+                assignment.value_org_unit_id,
+                assignment.value_registry_id,
+                assignment.value_attachment_id,
+            ]
+        )
+
+    def _field_value_is_empty(
+        self,
+        field_model: FormField,
+        field_value: FieldValue | None,
+        item_ids_by_value_id: dict[UUID, list[UUID]],
+    ) -> bool:
+        value = self._read_field_value(field_model, field_value, item_ids_by_value_id)
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip()
+        if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+            return len(value) == 0
+        return False
 
     def _coerce_field_assignment(
         self,

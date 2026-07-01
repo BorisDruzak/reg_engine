@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-02 02:01:09 +05:00
+- Generated: 2026-07-02 03:02:32 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -150,6 +150,7 @@
 - `backend/tests/test_phase_2c_generated_documents_architecture.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
+- `backend/tests/test_required_field_payloads.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ADR/0002-browser-session-storage.md`

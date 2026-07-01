@@ -19,10 +19,12 @@ export function SelectableList({
   items,
   selectedId,
   onSelect,
+  onOpen,
 }: {
   items: { id: string; title: string; detail: string }[];
   selectedId: string;
   onSelect: (id: string) => void;
+  onOpen?: (id: string) => void;
 }) {
   if (items.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;
@@ -36,6 +38,7 @@ export function SelectableList({
           key={item.id}
           className={item.id === selectedId ? "selectable-row is-selected" : "selectable-row"}
           onClick={() => onSelect(item.id)}
+          onDoubleClick={() => onOpen?.(item.id)}
         >
           <strong>{item.title}</strong>
           <span>{item.detail}</span>

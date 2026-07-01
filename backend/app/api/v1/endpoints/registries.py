@@ -226,6 +226,7 @@ def create_field(
             field_type=payload.field_type,
             description=payload.description,
             position=payload.position,
+            required_mode=payload.required_mode,
             options_source_type=payload.options_source_type,
             options_source_id=payload.options_source_id,
             options_config_json=payload.options_config_json,
@@ -251,6 +252,7 @@ def update_field(
             label=payload.label,
             description=payload.description,
             position=payload.position,
+            required_mode=payload.required_mode,
             is_active=payload.is_active,
         )
     except Exception as exc:

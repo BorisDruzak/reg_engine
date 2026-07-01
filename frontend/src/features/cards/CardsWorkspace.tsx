@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   archivePublicLink,
@@ -65,11 +65,16 @@ const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
   { id: "history", label: uiText.cardHistory },
 ];
 
+type CardShellTab = "list" | `card:${string}`;
+
+const cardTabsStorageKey = "reg_engine.card_tabs.v1";
+
 export function CardsWorkspace({
   cards,
   card,
   schema,
   token,
+  currentUserId,
   organizations,
   selectedCardId,
   cardSearch,
@@ -84,6 +89,7 @@ export function CardsWorkspace({
   card: CardRead | null;
   schema: RegistrySchemaRead | null;
   token: string;
+  currentUserId: string;
   organizations: OrganizationRead[];
   selectedCardId: string;
   cardSearch: string;
@@ -98,6 +104,11 @@ export function CardsWorkspace({
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | "edit" | null>(null);
   const [activeTab, setActiveTab] = useState<CardWorkspaceTab>("fields");
+  const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
+  const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
+    () => loadCardTabs().activeTab,
+  );
+  const [dirtyCardIds, setDirtyCardIds] = useState<Set<string>>(() => new Set());
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
     initialCreateCardForm(organizations),
   );
@@ -107,6 +118,25 @@ export function CardsWorkspace({
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
+  );
+  const visibleOpenCardIds = useMemo(
+    () => openCardIds.filter((cardId) => cards.some((item) => item.id === cardId)),
+    [cards, openCardIds],
+  );
+  const cardShellTabs = useMemo(
+    () => [
+      { id: "list" as CardShellTab, label: uiText.cardListTab },
+      ...visibleOpenCardIds.map((cardId) => {
+        const item = cards.find((cardItem) => cardItem.id === cardId);
+        const title = item?.display_name ?? shortId(cardId);
+        const isDirty = dirtyCardIds.has(cardId) || hasCardDraft(currentUserId, cardId);
+        return {
+          id: `card:${cardId}` as CardShellTab,
+          label: isDirty ? `${title} *` : title,
+        };
+      }),
+    ],
+    [cards, currentUserId, dirtyCardIds, visibleOpenCardIds],
   );
   const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
   const bulkFieldRows = useMemo(
@@ -132,6 +162,10 @@ export function CardsWorkspace({
       setSuccessMessage(uiText.cardCreated);
       setCardFormMode(null);
       onSelectCard(created.id);
+      setOpenCardIds((current) =>
+        current.includes(created.id) ? current : [...current, created.id],
+      );
+      setActiveShellTab(`card:${created.id}`);
       await invalidateCardQueries(queryClient, token, created.registry_id, created.id);
     },
   });
@@ -152,12 +186,33 @@ export function CardsWorkspace({
       await invalidateCardQueries(queryClient, token, updated.registry_id, updated.id);
     },
   });
+  const activateCardMutation = useMutation({
+    mutationFn: () => {
+      if (!card) {
+        throw new Error(uiText.notFound);
+      }
+      return updateCard(token, card.id, {
+        lifecycle_status: "active",
+      });
+    },
+    onSuccess: async (updated) => {
+      setSuccessMessage(uiText.cardActivated);
+      await invalidateCardQueries(queryClient, token, updated.registry_id, updated.id);
+    },
+  });
   const archiveCardMutation = useMutation({
     mutationFn: (target: CardSummaryRead) => archiveCard(token, target.id),
     onSuccess: async (archived) => {
       setSuccessMessage(uiText.cardArchived);
       setArchiveTarget(null);
       const nextCardId = cards.find((item) => item.id !== archived.id)?.id ?? "";
+      setOpenCardIds((current) => current.filter((cardId) => cardId !== archived.id));
+      setDirtyCardIds((current) => {
+        const next = new Set(current);
+        next.delete(archived.id);
+        return next;
+      });
+      setActiveShellTab("list");
       onSelectCard(nextCardId);
       await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
     },
@@ -186,9 +241,17 @@ export function CardsWorkspace({
     },
   });
 
+  useEffect(() => {
+    saveCardTabs({
+      activeTab: activeShellTab,
+      openCardIds: visibleOpenCardIds,
+    });
+  }, [activeShellTab, visibleOpenCardIds]);
+
   function openCreateForm() {
     setCardForm(initialCreateCardForm(organizations));
     setCardFormMode("create");
+    setActiveShellTab("list");
     setActiveTab("fields");
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -232,9 +295,50 @@ export function CardsWorkspace({
     }
   }
 
+  function openCardEditor(cardId: string) {
+    setOpenCardIds((current) => (current.includes(cardId) ? current : [...current, cardId]));
+    setActiveShellTab(`card:${cardId}`);
+    setActiveTab("fields");
+    setCardFormMode(null);
+    setArchiveTarget(null);
+    setSuccessMessage(null);
+    setLocalError(null);
+    onSelectCard(cardId);
+  }
+
+  function handleShellTabChange(tabId: CardShellTab) {
+    setActiveShellTab(tabId);
+    setCardFormMode(null);
+    setArchiveTarget(null);
+    if (tabId.startsWith("card:")) {
+      onSelectCard(tabId.slice("card:".length));
+    }
+  }
+
+  function handleCardDirtyChange(cardId: string, isDirty: boolean) {
+    setDirtyCardIds((current) => {
+      if (current.has(cardId) === isDirty) {
+        return current;
+      }
+      const next = new Set(current);
+      if (isDirty) {
+        next.add(cardId);
+      } else {
+        next.delete(cardId);
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="stack">
-      <div className="card-workspace-grid">
+      <WorkspaceTabs
+        tabs={cardShellTabs}
+        activeTab={activeShellTab}
+        ariaLabel={uiText.cardEditorTabs}
+        onChange={handleShellTabChange}
+      />
+      {activeShellTab === "list" ? (
         <Panel title={uiText.cards}>
           <div className="panel-toolbar">
             <button type="button" className="primary-button" onClick={openCreateForm}>
@@ -260,28 +364,28 @@ export function CardsWorkspace({
             }))}
             selectedId={selectedCardId}
             onSelect={onSelectCard}
+            onOpen={openCardEditor}
           />
+          <MutationFeedback error={archiveCardMutation.error} successMessage={successMessage} />
+          {cardFormMode === "create" && (
+            <div className="panel-form">
+              <CardMutationForm
+                mode="create"
+                form={cardForm}
+                organizations={organizations}
+                isSubmitting={createCardMutation.isPending}
+                error={localError ? new Error(localError) : createCardMutation.error}
+                onCancel={() => setCardFormMode(null)}
+                onChange={setCardForm}
+                onSubmit={handleCardFormSubmit}
+              />
+            </div>
+          )}
         </Panel>
+      ) : (
         <div className="stack">
-          <Panel
-            title={
-              cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card
-            }
-          >
-            {cardFormMode === "create" ? (
-              <div className="panel-form">
-                <CardMutationForm
-                  mode="create"
-                  form={cardForm}
-                  organizations={organizations}
-                  isSubmitting={createCardMutation.isPending}
-                  error={localError ? new Error(localError) : createCardMutation.error}
-                  onCancel={() => setCardFormMode(null)}
-                  onChange={setCardForm}
-                  onSubmit={handleCardFormSubmit}
-                />
-              </div>
-            ) : card && selectedCard ? (
+          <Panel title={cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card}>
+            {card && selectedCard ? (
               <div className="card-metadata-panel">
                 <dl className="metadata-list">
                   <div>
@@ -317,6 +421,17 @@ export function CardsWorkspace({
                   >
                     {uiText.editCard}
                   </button>
+                  {selectedCard.lifecycle_status === "draft" && (
+                    <button
+                      type="button"
+                      className="primary-button"
+                      aria-label={`${uiText.activateCard} ${card.display_name}`}
+                      disabled={activateCardMutation.isPending}
+                      onClick={() => activateCardMutation.mutate()}
+                    >
+                      {uiText.activateCard}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="danger-button"
@@ -356,6 +471,7 @@ export function CardsWorkspace({
                 )}
                 <MutationFeedback
                   error={
+                    activateCardMutation.error ??
                     archiveCardMutation.error ??
                     createBlockInstanceMutation.error ??
                     archiveBlockInstanceMutation.error
@@ -373,7 +489,7 @@ export function CardsWorkspace({
               <p className="data-empty">{uiText.noData}</p>
             )}
           </Panel>
-          {card && cardFormMode !== "create" && activeTab === "fields" && (
+          {card && activeTab === "fields" && (
             <Panel title={uiText.cardFields}>
               {bulkFieldRows.length > 0 && (
                 <BulkCardValuesForm
@@ -381,6 +497,8 @@ export function CardsWorkspace({
                   card={card}
                   fields={bulkFieldRows}
                   token={token}
+                  currentUserId={currentUserId}
+                  onDirtyChange={handleCardDirtyChange}
                 />
               )}
               {fileRefFieldRows.length > 0 && (
@@ -393,22 +511,20 @@ export function CardsWorkspace({
               {fieldRows.length === 0 && <p className="data-empty">{uiText.noData}</p>}
             </Panel>
           )}
-          {card && cardFormMode !== "create" && activeTab === "attachments" && (
+          {card && activeTab === "attachments" && (
             <CardAttachmentsPanel cardId={card.id} token={token} />
           )}
-          {card && cardFormMode !== "create" && activeTab === "documents" && (
+          {card && activeTab === "documents" && (
             <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
           )}
-          {card && cardFormMode !== "create" && activeTab === "links" && (
-            <PublicLinksPanel cardId={card.id} token={token} />
-          )}
-          {card && cardFormMode !== "create" && activeTab === "history" && (
+          {card && activeTab === "links" && <PublicLinksPanel cardId={card.id} token={token} />}
+          {card && activeTab === "history" && (
             <Panel title={uiText.cardHistory}>
               <p className="data-empty">{uiText.noData}</p>
             </Panel>
           )}
         </div>
-      </div>
+      )}
       {archiveTarget && (
         <AdminMutationDialog title={uiText.archiveCard}>
           <ArchiveConfirmation
@@ -856,15 +972,31 @@ function BulkCardValuesForm({
   card,
   fields,
   token,
+  currentUserId,
+  onDirtyChange,
 }: {
   card: CardRead;
   fields: EditableCardField[];
   token: string;
+  currentUserId: string;
+  onDirtyChange: (cardId: string, isDirty: boolean) => void;
 }) {
   const queryClient = useQueryClient();
-  const [draftValues, setDraftValues] = useState<Record<string, FieldEditorState>>({});
+  const draftStorageKey = cardDraftStorageKey(currentUserId, card.id);
+  const [draftValues, setDraftValues] = useState<Record<string, FieldEditorState>>(() =>
+    loadCardDraft(draftStorageKey),
+  );
   const [localError, setLocalError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const isDirty = Object.keys(draftValues).length > 0;
+
+  useEffect(() => {
+    saveCardDraft(draftStorageKey, draftValues);
+  }, [draftStorageKey, draftValues]);
+
+  useEffect(() => {
+    onDirtyChange(card.id, isDirty);
+  }, [card.id, isDirty, onDirtyChange]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -880,6 +1012,7 @@ function BulkCardValuesForm({
     onSuccess: async () => {
       setSaved(true);
       setDraftValues({});
+      onDirtyChange(card.id, false);
       await queryClient.invalidateQueries({ queryKey: ["card", token, card.id] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },
@@ -889,6 +1022,11 @@ function BulkCardValuesForm({
     event.preventDefault();
     setLocalError(null);
     setSaved(false);
+    const missingRequiredFields = requiredMissingFieldLabels(fields, draftValues);
+    if (missingRequiredFields.length > 0) {
+      setLocalError(`${uiText.requiredFields}: ${missingRequiredFields.join(", ")}`);
+      return;
+    }
     try {
       mutation.mutate();
     } catch (error) {
@@ -920,10 +1058,15 @@ function BulkCardValuesForm({
           />
         ))}
       </div>
-      {(localError || mutation.error) && (
-        <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
-      )}
-      {saved && <p className="inline-success">{uiText.cardFieldsSaved}</p>}
+      <footer className="card-editor-footer" aria-label={uiText.cardEditorFooter}>
+        {(localError || mutation.error) && (
+          <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
+        )}
+        {isDirty && !localError && !mutation.error && (
+          <p className="inline-alert">{uiText.unsavedCardChanges}</p>
+        )}
+        {saved && <p className="inline-success">{uiText.cardFieldsSaved}</p>}
+      </footer>
     </form>
   );
 }
@@ -982,6 +1125,95 @@ function currentBulkValue(field: EditableCardField, draftValues: Record<string, 
     return draftValues[field.key];
   }
   return initialEditorValue(field.field);
+}
+
+function requiredMissingFieldLabels(
+  fields: EditableCardField[],
+  draftValues: Record<string, FieldEditorState>,
+) {
+  return fields
+    .filter((field) => field.schema?.required_mode === "required")
+    .filter((field) => isEditorValueEmpty(field.field.field_type, currentBulkValue(field, draftValues)))
+    .map((field) => field.label);
+}
+
+function isEditorValueEmpty(fieldType: string, value: FieldEditorState) {
+  if (fieldType === "bool") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  if (typeof value === "string") {
+    return value.trim() === "";
+  }
+  return false;
+}
+
+function loadCardTabs(): { activeTab: CardShellTab; openCardIds: string[] } {
+  try {
+    const raw = localStorage.getItem(cardTabsStorageKey);
+    if (!raw) {
+      return { activeTab: "list", openCardIds: [] };
+    }
+    const parsed = JSON.parse(raw) as { activeTab?: unknown; openCardIds?: unknown };
+    const openCardIds = Array.isArray(parsed.openCardIds)
+      ? parsed.openCardIds.filter((item): item is string => typeof item === "string")
+      : [];
+    const activeTab =
+      typeof parsed.activeTab === "string" &&
+      (parsed.activeTab === "list" || parsed.activeTab.startsWith("card:"))
+        ? (parsed.activeTab as CardShellTab)
+        : "list";
+    if (activeTab.startsWith("card:") && !openCardIds.includes(activeTab.slice("card:".length))) {
+      return { activeTab: "list", openCardIds };
+    }
+    return { activeTab, openCardIds };
+  } catch {
+    return { activeTab: "list", openCardIds: [] };
+  }
+}
+
+function saveCardTabs(state: { activeTab: CardShellTab; openCardIds: string[] }) {
+  localStorage.setItem(cardTabsStorageKey, JSON.stringify(state));
+}
+
+function cardDraftStorageKey(currentUserId: string, cardId: string) {
+  return `reg_engine.card_draft.v1:${currentUserId}:${cardId}`;
+}
+
+function loadCardDraft(storageKey: string): Record<string, FieldEditorState> {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, FieldEditorState] => {
+        const value = entry[1];
+        return (
+          typeof value === "string" ||
+          typeof value === "boolean" ||
+          (Array.isArray(value) && value.every((item) => typeof item === "string"))
+        );
+      }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveCardDraft(storageKey: string, draftValues: Record<string, FieldEditorState>) {
+  if (Object.keys(draftValues).length === 0) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+  localStorage.setItem(storageKey, JSON.stringify(draftValues));
+}
+
+function hasCardDraft(currentUserId: string, cardId: string) {
+  return Object.keys(loadCardDraft(cardDraftStorageKey(currentUserId, cardId))).length > 0;
 }
 
 function initialPublicLinkForm(): PublicLinkFormState {

@@ -141,6 +141,7 @@ export type FormFieldRead = {
   description: string | null;
   field_type: string;
   position: number;
+  required_mode: string;
   options_source_type: string | null;
   options_source_id: string | null;
   options_config_json: Record<string, unknown> | null;
@@ -155,6 +156,7 @@ export type FormFieldCreatePayload = {
   field_type: string;
   description?: string | null;
   position?: number;
+  required_mode?: string;
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
@@ -166,6 +168,7 @@ export type FormFieldUpdatePayload = {
   label?: string | null;
   description?: string | null;
   position?: number | null;
+  required_mode?: string | null;
   is_active?: boolean | null;
 };
 
@@ -268,6 +271,7 @@ export type OrganizationCardCreatePayload = {
 export type CardUpdatePayload = {
   display_name?: string | null;
   org_unit_id?: string | null;
+  lifecycle_status?: string | null;
   public_view_enabled?: boolean | null;
   public_edit_enabled?: boolean | null;
 };

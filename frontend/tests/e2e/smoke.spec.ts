@@ -968,6 +968,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Схема карточки" }).click();
   await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Справочники" }).click();
   await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
@@ -975,6 +976,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
   await expect(page.getByText("Карточка актива").first()).toBeVisible();
+  await page.getByRole("button", { name: /Карточка актива/ }).dblclick();
   const fieldValuesForm = page.getByRole("form", { name: "Массовое сохранение полей" });
   await expect(fieldValuesForm.getByLabel("Статус")).toHaveValue("drafted");
   await expect(page.getByRole("button", { name: "Сохранить Статус" })).toHaveCount(0);
@@ -1028,6 +1030,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Архивировать файл Акт проверки" }).click();
   await expect(page.getByText("Файл архивирован")).toBeVisible();
 
+  await page.getByRole("tab", { name: "Список карточек" }).click();
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Заполните обязательные поля")).toBeVisible();
@@ -1045,7 +1048,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Редактировать карточку Новая карточка" }).click();
   await page.getByLabel("Название карточки").fill("Новая карточка обновлена");
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.getByText("Карточка обновлена")).toBeVisible();
+  await expect(page.getByText("Карточка обновлена", { exact: true })).toBeVisible();
   await expect(page.getByText("Новая карточка обновлена").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
@@ -2107,6 +2110,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Право доступа выдано")).toBeVisible();
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
+  await page.getByRole("tab", { name: "Схема карточки" }).click();
   await page.getByRole("button", { name: "Создать блок формы" }).click();
   await expect(page.getByLabel("Код блока формы")).toHaveCount(0);
   await page.getByLabel("Название блока формы").fill("Основные сведения");

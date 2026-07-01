@@ -28,6 +28,8 @@ export const uiText = {
   registryArchived: "Реестр архивирован",
   cards: "Карточки",
   newCard: "Новая карточка",
+  cardListTab: "Список карточек",
+  cardEditorTabs: "Вкладки карточек",
   cardSections: "Разделы карточки",
   cardFieldsTab: "Поля",
   cardHistory: "История",
@@ -42,7 +44,9 @@ export const uiText = {
   archiveCard: "Архивировать карточку",
   cardCreated: "Карточка создана",
   cardUpdated: "Карточка обновлена",
+  cardActivated: "Карточка активирована",
   cardArchived: "Карточка архивирована",
+  activateCard: "Активировать карточку",
   cardSearch: "Поиск карточек",
   cardSearchPlaceholder: "Название или текст карточки",
   filterByOrganization: "Фильтр по организации",
@@ -121,6 +125,10 @@ export const uiText = {
   formFieldDescription: "Описание поля формы",
   formFieldType: "Тип поля формы",
   formFieldPosition: "Позиция поля формы",
+  formFieldRequiredMode: "Обязательность поля",
+  notRequiredField: "Не обязательное",
+  requiredField: "Обязательное",
+  requiredOnPublishField: "Обязательное при активации",
   activeFormField: "Активное поле",
   publicVisibleField: "Показывать поле в публичной ссылке",
   publicEditableField: "Редактировать поле в публичной ссылке",
@@ -168,6 +176,8 @@ export const uiText = {
   bulkFieldValues: "Массовое сохранение полей",
   saveAllFields: "Сохранить все поля",
   cardFieldsSaved: "Поля карточки сохранены",
+  unsavedCardChanges: "Есть несохраненные изменения",
+  cardEditorFooter: "Состояние редактора карточки",
   repeatableBlocks: "Повторяемые блоки",
   addBlockInstance: "Добавить экземпляр блока",
   archiveBlockInstance: "Архивировать экземпляр блока",
@@ -443,6 +453,15 @@ export function optionsSourceLabel(value: string | null | undefined) {
     reference_list: "Справочник",
   };
   return value ? (labels[value] ?? value) : uiText.none;
+}
+
+export function requiredModeLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    not_required: uiText.notRequiredField,
+    required: uiText.requiredField,
+    required_on_publish: uiText.requiredOnPublishField,
+  };
+  return value ? (labels[value] ?? value) : uiText.notRequiredField;
 }
 
 export function lifecycleStatusLabel(value: string) {

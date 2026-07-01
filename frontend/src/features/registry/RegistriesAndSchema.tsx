@@ -36,6 +36,7 @@ import {
   fieldTypeLabel,
   lifecycleStatusLabel,
   optionsSourceLabel,
+  requiredModeLabel,
   uiText,
 } from "@/app/uiText";
 import {
@@ -80,6 +81,7 @@ type FieldFormState = {
   description: string;
   fieldType: string;
   position: string;
+  requiredMode: string;
   optionsSourceId: string;
   isActive: boolean;
   publicVisible: boolean;
@@ -127,9 +129,10 @@ const supportedFieldTypes = [
 
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
 
-type RegistryWorkspaceTab = "schema" | "references" | "importExport" | "reports";
+type RegistryWorkspaceTab = "registries" | "schema" | "references" | "importExport" | "reports";
 
 const registryWorkspaceTabs: { id: RegistryWorkspaceTab; label: string }[] = [
+  { id: "registries", label: uiText.registries },
   { id: "schema", label: uiText.cardSchema },
   { id: "references", label: uiText.referenceLists },
   { id: "importExport", label: uiText.importExport },
@@ -153,7 +156,7 @@ export function RegistriesAndSchema({
 }) {
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<RegistryFormState | null>(null);
-  const [activeTab, setActiveTab] = useState<RegistryWorkspaceTab>("schema");
+  const [activeTab, setActiveTab] = useState<RegistryWorkspaceTab>("registries");
   const [archiveTarget, setArchiveTarget] = useState<RegistryRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -293,96 +296,98 @@ export function RegistriesAndSchema({
         ariaLabel={uiText.registrySettingsSections}
         onChange={setActiveTab}
       />
-      <div className="registry-workspace-grid">
-        <Panel title={uiText.registries}>
-          <div className="panel-toolbar">
-            <button type="button" className="primary-button" onClick={openCreateForm}>
-              {uiText.createRegistry}
-            </button>
-          </div>
-          <div className="panel-feedback">
-            <MutationFeedback
-              error={formState ? null : mutationError}
-              successMessage={successMessage}
-            />
-          </div>
-          {formState && (
-            <div className="panel-form">
-              <AdminMutationForm
-                title={formState.mode === "create" ? uiText.createRegistry : uiText.editRegistry}
-                submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
-                isSubmitting={isFormSubmitting}
-                error={mutationError}
-                successMessage={null}
-                onCancel={closeForm}
-                onSubmit={handleFormSubmit}
-              >
-                <label>
-                  {uiText.registryName}
-                  <input
-                    value={formState.name}
-                    onChange={(event) =>
-                      setFormState({ ...formState, name: event.currentTarget.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {uiText.registryDescription}
-                  <textarea
-                    value={formState.description}
-                    onChange={(event) =>
-                      setFormState({ ...formState, description: event.currentTarget.value })
-                    }
-                  />
-                </label>
-                {formState.mode === "edit" && (
-                  <label>
-                    {uiText.registryStatus}
-                    <select
-                      value={formState.lifecycleStatus}
-                      onChange={(event) =>
-                        setFormState({
-                          ...formState,
-                          lifecycleStatus: event.currentTarget.value,
-                        })
-                      }
-                    >
-                      <option value="draft">{lifecycleStatusLabel("draft")}</option>
-                      <option value="active">{lifecycleStatusLabel("active")}</option>
-                    </select>
-                  </label>
-                )}
-              </AdminMutationForm>
+      <div className={activeTab === "registries" ? "registry-workspace-grid" : "stack"}>
+        {activeTab === "registries" && (
+          <Panel title={uiText.registries}>
+            <div className="panel-toolbar">
+              <button type="button" className="primary-button" onClick={openCreateForm}>
+                {uiText.createRegistry}
+              </button>
             </div>
-          )}
-          {archiveTarget && (
-            <AdminMutationDialog title={uiText.archiveRegistry}>
-              <ArchiveConfirmation
-                entityLabel={uiText.registry}
-                itemLabel={archiveTarget.name}
-                isPending={archiveMutation.isPending}
-                onCancel={() => setArchiveTarget(null)}
-                onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
+            <div className="panel-feedback">
+              <MutationFeedback
+                error={formState ? null : mutationError}
+                successMessage={successMessage}
               />
-            </AdminMutationDialog>
-          )}
-          <SelectableList
-            items={registries.map((registry) => ({
-              id: registry.id,
-              title: registry.name,
-              detail: `${registry.code} / v${registry.schema_version} / ${lifecycleStatusLabel(
-                registry.lifecycle_status,
-              )}`,
-            }))}
-            selectedId={selectedRegistryId}
-            onSelect={onSelectRegistry}
-          />
-          <RegistriesTable
-            registries={registries}
-            onEditRegistry={openEditForm}
-            onArchiveRegistry={handleArchive}
-          />
-        </Panel>
+            </div>
+            {formState && (
+              <div className="panel-form">
+                <AdminMutationForm
+                  title={formState.mode === "create" ? uiText.createRegistry : uiText.editRegistry}
+                  submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
+                  isSubmitting={isFormSubmitting}
+                  error={mutationError}
+                  successMessage={null}
+                  onCancel={closeForm}
+                  onSubmit={handleFormSubmit}
+                >
+                  <label>
+                    {uiText.registryName}
+                    <input
+                      value={formState.name}
+                      onChange={(event) =>
+                        setFormState({ ...formState, name: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {uiText.registryDescription}
+                    <textarea
+                      value={formState.description}
+                      onChange={(event) =>
+                        setFormState({ ...formState, description: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                  {formState.mode === "edit" && (
+                    <label>
+                      {uiText.registryStatus}
+                      <select
+                        value={formState.lifecycleStatus}
+                        onChange={(event) =>
+                          setFormState({
+                            ...formState,
+                            lifecycleStatus: event.currentTarget.value,
+                          })
+                        }
+                      >
+                        <option value="draft">{lifecycleStatusLabel("draft")}</option>
+                        <option value="active">{lifecycleStatusLabel("active")}</option>
+                      </select>
+                    </label>
+                  )}
+                </AdminMutationForm>
+              </div>
+            )}
+            {archiveTarget && (
+              <AdminMutationDialog title={uiText.archiveRegistry}>
+                <ArchiveConfirmation
+                  entityLabel={uiText.registry}
+                  itemLabel={archiveTarget.name}
+                  isPending={archiveMutation.isPending}
+                  onCancel={() => setArchiveTarget(null)}
+                  onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
+                />
+              </AdminMutationDialog>
+            )}
+            <SelectableList
+              items={registries.map((registry) => ({
+                id: registry.id,
+                title: registry.name,
+                detail: `${registry.code} / v${registry.schema_version} / ${lifecycleStatusLabel(
+                  registry.lifecycle_status,
+                )}`,
+              }))}
+              selectedId={selectedRegistryId}
+              onSelect={onSelectRegistry}
+            />
+            <RegistriesTable
+              registries={registries}
+              onEditRegistry={openEditForm}
+              onArchiveRegistry={handleArchive}
+            />
+          </Panel>
+        )}
         <div className="stack">
           {activeTab === "schema" && (
             <>
@@ -833,6 +838,7 @@ function SchemaFieldsPanel({
       field_type: string;
       description: string | null;
       position: number;
+      required_mode: string;
       options_source_type: string | null;
       options_source_id: string | null;
       public_visible: boolean;
@@ -844,6 +850,7 @@ function SchemaFieldsPanel({
         field_type: payload.field_type,
         description: payload.description,
         position: payload.position,
+        required_mode: payload.required_mode,
         options_source_type: payload.options_source_type,
         options_source_id: payload.options_source_id,
         public_visible: payload.public_visible,
@@ -861,12 +868,14 @@ function SchemaFieldsPanel({
       label: string;
       description: string | null;
       position: number;
+      required_mode: string;
       is_active: boolean;
     }) =>
       updateFormField(token, payload.fieldId, {
         label: payload.label,
         description: payload.description,
         position: payload.position,
+        required_mode: payload.required_mode,
         is_active: payload.is_active,
       }),
     onSuccess: async () => {
@@ -900,6 +909,7 @@ function SchemaFieldsPanel({
       description: "",
       fieldType: "text",
       position: "0",
+      requiredMode: "not_required",
       optionsSourceId: "",
       isActive: true,
       publicVisible: true,
@@ -919,6 +929,7 @@ function SchemaFieldsPanel({
       description: field.description ?? "",
       fieldType: field.field_type,
       position: String(field.position),
+      requiredMode: field.required_mode,
       optionsSourceId:
         field.options_source_type === "reference_list" ? (field.options_source_id ?? "") : "",
       isActive: field.is_active,
@@ -962,6 +973,7 @@ function SchemaFieldsPanel({
         field_type: formState.fieldType,
         description: description || null,
         position: positionNumber(formState.position),
+        required_mode: formState.requiredMode,
         options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
         options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
         public_visible: formState.publicVisible,
@@ -976,6 +988,7 @@ function SchemaFieldsPanel({
         label,
         description: description || null,
         position: positionNumber(formState.position),
+        required_mode: formState.requiredMode,
         is_active: formState.isActive,
       });
     }
@@ -1077,6 +1090,19 @@ function SchemaFieldsPanel({
                   setFormState({ ...formState, position: event.currentTarget.value })
                 }
               />
+            </label>
+            <label>
+              {uiText.formFieldRequiredMode}
+              <select
+                value={formState.requiredMode}
+                onChange={(event) =>
+                  setFormState({ ...formState, requiredMode: event.currentTarget.value })
+                }
+              >
+                <option value="not_required">{uiText.notRequiredField}</option>
+                <option value="required">{uiText.requiredField}</option>
+                <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
+              </select>
             </label>
             {formState.mode === "create" && (
               <>
@@ -1180,6 +1206,7 @@ function FieldsTable({
             <th>{uiText.code}</th>
             <th>{uiText.block}</th>
             <th>{uiText.type}</th>
+            <th>{uiText.formFieldRequiredMode}</th>
             <th>{uiText.options}</th>
             <th>{uiText.status}</th>
             <th>{uiText.action}</th>
@@ -1192,6 +1219,7 @@ function FieldsTable({
               <td>{field.code}</td>
               <td>{blocksById.get(field.block_id)?.title ?? shortId(field.block_id)}</td>
               <td>{fieldTypeLabel(field.field_type)}</td>
+              <td>{requiredModeLabel(field.required_mode)}</td>
               <td>{optionsSourceLabel(field.options_source_type)}</td>
               <td>{activityLabel(field.is_active)}</td>
               <td>

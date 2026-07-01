@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.domain.constants import FIELD_TYPES
+from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
 from app.models import Card, FormBlock, FormField, Organization, OrganizationClosure, Registry
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
@@ -461,6 +461,7 @@ class RegistrySchemaService:
         field_type: str,
         description: str | None = None,
         position: int = 0,
+        required_mode: str = "not_required",
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
         options_config_json: dict[str, object] | None = None,
@@ -472,6 +473,7 @@ class RegistrySchemaService:
         block = self._get_active_block(block_id)
         self._require_schema_permission(actor_user_id, block.registry_id)
         self._validate_field_type(field_type)
+        self._validate_required_mode(required_mode)
 
         field = FormField(
             block_id=block_id,
@@ -480,6 +482,7 @@ class RegistrySchemaService:
             description=description,
             field_type=field_type,
             position=position,
+            required_mode=required_mode,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
             options_config_json=options_config_json,
@@ -496,7 +499,12 @@ class RegistrySchemaService:
             action="create",
             object_type="form_field",
             object_id=field.id,
-            new_data_json={"block_id": str(block_id), "code": code, "field_type": field_type},
+            new_data_json={
+                "block_id": str(block_id),
+                "code": code,
+                "field_type": field_type,
+                "required_mode": required_mode,
+            },
         )
         return field
 
@@ -514,6 +522,7 @@ class RegistrySchemaService:
         label: str | None = None,
         description: str | None = None,
         position: int | None = None,
+        required_mode: str | None = None,
         is_active: bool | None = None,
     ) -> FormField:
         field = self._get_active_field(field_id)
@@ -524,8 +533,11 @@ class RegistrySchemaService:
             "label": field.label,
             "description": field.description,
             "position": field.position,
+            "required_mode": field.required_mode,
             "is_active": field.is_active,
         }
+        if required_mode is not None:
+            self._validate_required_mode(required_mode)
 
         if label is not None:
             field.label = label
@@ -533,6 +545,8 @@ class RegistrySchemaService:
             field.description = description
         if position is not None:
             field.position = position
+        if required_mode is not None:
+            field.required_mode = required_mode
         if is_active is not None:
             field.is_active = is_active
         self.session.flush()
@@ -546,6 +560,7 @@ class RegistrySchemaService:
                 "label": field.label,
                 "description": field.description,
                 "position": field.position,
+                "required_mode": field.required_mode,
                 "is_active": field.is_active,
             },
         )
@@ -632,6 +647,10 @@ class RegistrySchemaService:
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:
             raise RegistrySchemaError(f"Unsupported field type: {field_type}")
+
+    def _validate_required_mode(self, required_mode: str) -> None:
+        if required_mode not in REQUIRED_MODES:
+            raise RegistrySchemaError(f"Unsupported required mode: {required_mode}")
 
     def _ensure_default_registry_archive_allowed(self, registry: Registry) -> None:
         if not registry.is_default_for_owner_tree:

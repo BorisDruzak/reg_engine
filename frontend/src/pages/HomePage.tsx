@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
@@ -34,15 +34,31 @@ import { Overview } from "@/features/overview/Overview";
 import { RegistriesAndSchema } from "@/features/registry/RegistriesAndSchema";
 import { UsersAndRoles } from "@/features/users/UsersAndRoles";
 
+type WorkspaceUiState = {
+  activeSection: VisibleSection;
+  selectedRegistryId: string | null;
+  selectedCardId: string | null;
+  cardSearch: string;
+  cardOrganizationId: string;
+  includeArchivedCards: boolean;
+};
+
+const workspaceUiStateKey = "reg_engine.admin_workspace_state.v1";
+
 export function HomePage() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<SessionState | null>(() => loadSession());
-  const [activeSection, setActiveSection] = useState<VisibleSection>("overview");
-  const [selectedRegistryId, setSelectedRegistryId] = useState<string | null>(null);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [cardSearch, setCardSearch] = useState("");
-  const [cardOrganizationId, setCardOrganizationId] = useState("");
-  const [includeArchivedCards, setIncludeArchivedCards] = useState(false);
+  const [workspaceUiState, setWorkspaceUiState] = useState<WorkspaceUiState>(() =>
+    loadWorkspaceUiState(),
+  );
+  const {
+    activeSection,
+    selectedRegistryId,
+    selectedCardId,
+    cardSearch,
+    cardOrganizationId,
+    includeArchivedCards,
+  } = workspaceUiState;
 
   const token = session?.token ?? "";
   const needsRegistrySchema = activeSection === "registries" || activeSection === "cards";
@@ -162,6 +178,34 @@ export function HomePage() {
     ],
   );
 
+  useEffect(() => {
+    saveWorkspaceUiState(workspaceUiState);
+  }, [workspaceUiState]);
+
+  function setActiveSection(value: VisibleSection) {
+    setWorkspaceUiState((current) => ({ ...current, activeSection: value }));
+  }
+
+  function setSelectedRegistryId(value: string | null) {
+    setWorkspaceUiState((current) => ({ ...current, selectedRegistryId: value }));
+  }
+
+  function setSelectedCardId(value: string | null) {
+    setWorkspaceUiState((current) => ({ ...current, selectedCardId: value }));
+  }
+
+  function setCardSearch(value: string) {
+    setWorkspaceUiState((current) => ({ ...current, cardSearch: value }));
+  }
+
+  function setCardOrganizationId(value: string) {
+    setWorkspaceUiState((current) => ({ ...current, cardOrganizationId: value }));
+  }
+
+  function setIncludeArchivedCards(value: boolean) {
+    setWorkspaceUiState((current) => ({ ...current, includeArchivedCards: value }));
+  }
+
   function handleLogin(nextSession: SessionState) {
     saveSession(nextSession);
     setSession(nextSession);
@@ -171,12 +215,9 @@ export function HomePage() {
     clearSession();
     queryClient.clear();
     setSession(null);
-    setActiveSection("overview");
-    setSelectedRegistryId(null);
-    setSelectedCardId(null);
-    setCardSearch("");
-    setCardOrganizationId("");
-    setIncludeArchivedCards(false);
+    const nextState = defaultWorkspaceUiState();
+    localStorage.removeItem(workspaceUiStateKey);
+    setWorkspaceUiState(nextState);
   }
 
   function handleCardSearchChange(value: string) {
@@ -296,6 +337,7 @@ export function HomePage() {
             card={cardReadQuery.data ?? null}
             schema={registrySchemaQuery.data ?? null}
             token={token}
+            currentUserId={currentUser?.id ?? "unknown"}
             organizations={organizationsQuery.data?.items ?? []}
             selectedCardId={activeCardId}
             cardSearch={cardSearch}
@@ -353,6 +395,56 @@ export function HomePage() {
 
 function hasAccessDeniedError(errors: unknown[]) {
   return errors.some((error) => error instanceof ApiError && error.status === 403);
+}
+
+function defaultWorkspaceUiState(): WorkspaceUiState {
+  return {
+    activeSection: "overview",
+    selectedRegistryId: null,
+    selectedCardId: null,
+    cardSearch: "",
+    cardOrganizationId: "",
+    includeArchivedCards: false,
+  };
+}
+
+function loadWorkspaceUiState(): WorkspaceUiState {
+  try {
+    const raw = localStorage.getItem(workspaceUiStateKey);
+    if (!raw) {
+      return defaultWorkspaceUiState();
+    }
+    const parsed = JSON.parse(raw) as Partial<WorkspaceUiState>;
+    return {
+      activeSection: isVisibleSection(parsed.activeSection) ? parsed.activeSection : "overview",
+      selectedRegistryId:
+        typeof parsed.selectedRegistryId === "string" ? parsed.selectedRegistryId : null,
+      selectedCardId: typeof parsed.selectedCardId === "string" ? parsed.selectedCardId : null,
+      cardSearch: typeof parsed.cardSearch === "string" ? parsed.cardSearch : "",
+      cardOrganizationId:
+        typeof parsed.cardOrganizationId === "string" ? parsed.cardOrganizationId : "",
+      includeArchivedCards:
+        typeof parsed.includeArchivedCards === "boolean" ? parsed.includeArchivedCards : false,
+    };
+  } catch {
+    return defaultWorkspaceUiState();
+  }
+}
+
+function saveWorkspaceUiState(state: WorkspaceUiState) {
+  localStorage.setItem(workspaceUiStateKey, JSON.stringify(state));
+}
+
+function isVisibleSection(value: unknown): value is VisibleSection {
+  return (
+    value === "overview" ||
+    value === "organizations" ||
+    value === "registries" ||
+    value === "cards" ||
+    value === "users" ||
+    value === "access" ||
+    value === "audit"
+  );
 }
 
 function SectionAccessDenied() {

@@ -28,7 +28,12 @@ from app.models import (
     User,
     role_permissions,
 )
-from app.services.cards import CardService, CardServiceError, InvalidFieldValueError
+from app.services.cards import (
+    BulkFieldValueInput,
+    CardService,
+    CardServiceError,
+    InvalidFieldValueError,
+)
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.references import ReferenceListService
@@ -644,6 +649,101 @@ def test_existing_card_org_unit_can_be_corrected_inside_same_organization(
             org_unit_id=sibling_unit.id,
             update_org_unit=True,
         )
+
+
+def test_required_field_mode_is_saved_and_enforced_on_bulk_save(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="required-values",
+        title="Required values",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="required_text",
+        label="Required text",
+        field_type="text",
+        required_mode="required",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Required card",
+    )
+
+    assert field.required_mode == "required"
+
+    with pytest.raises(InvalidFieldValueError, match="Required text"):
+        card_service.set_field_values_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            values=[
+                BulkFieldValueInput(field_id=field.id, value=""),
+            ],
+        )
+
+    saved = card_service.set_field_values_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        values=[
+            BulkFieldValueInput(field_id=field.id, value="filled"),
+        ],
+    )
+
+    assert saved[0].value_text == "filled"
+
+
+def test_card_activation_validates_publish_required_fields(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="publish-values",
+        title="Publish values",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="publish_text",
+        label="Publish text",
+        field_type="text",
+        required_mode="required_on_publish",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Publish card",
+    )
+
+    with pytest.raises(InvalidFieldValueError, match="Publish text"):
+        card_service.update_card_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            lifecycle_status="active",
+        )
+
+    card_service.set_field_values_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        values=[
+            BulkFieldValueInput(field_id=field.id, value="ready"),
+        ],
+    )
+    updated = card_service.update_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        lifecycle_status="active",
+    )
+
+    assert updated.lifecycle_status == "active"
 
 
 def test_dynamic_typed_values_are_saved_to_typed_columns(db_session: Session) -> None:
