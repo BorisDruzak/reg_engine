@@ -848,7 +848,11 @@ def test_audit_request_metadata_and_integrity_error_mapping(
 
     duplicate = api_client.post(
         "/api/v1/organizations",
-        json={"code": "phase1g-audit-root", "name": "Duplicate Root"},
+        json={
+            "code": "phase1g-audit-root",
+            "name": "Duplicate Organization Code",
+            "parent_id": organization["id"],
+        },
         headers=_actor_headers(system_admin.id),
     )
     assert duplicate.status_code == 409, duplicate.text
