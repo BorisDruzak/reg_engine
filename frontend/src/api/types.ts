@@ -31,6 +31,14 @@ export type OrganizationListRead = {
   items: OrganizationRead[];
 };
 
+export type OrganizationTreeNodeRead = OrganizationRead & {
+  children: OrganizationTreeNodeRead[];
+};
+
+export type OrganizationTreeRead = {
+  items: OrganizationTreeNodeRead[];
+};
+
 export type OrganizationCreatePayload = {
   code: string;
   name: string;
@@ -76,6 +84,8 @@ export type RegistryRead = {
   description: string | null;
   lifecycle_status: string;
   schema_version: number;
+  owner_organization_id: string | null;
+  is_default_for_owner_tree: boolean;
 };
 
 export type RegistryListRead = {
@@ -133,6 +143,7 @@ export type FormFieldRead = {
   position: number;
   options_source_type: string | null;
   options_source_id: string | null;
+  options_config_json: Record<string, unknown> | null;
   is_active: boolean;
   public_visible: boolean;
   public_editable: boolean;
@@ -146,6 +157,7 @@ export type FormFieldCreatePayload = {
   position?: number;
   options_source_type?: string | null;
   options_source_id?: string | null;
+  options_config_json?: Record<string, unknown> | null;
   public_visible?: boolean;
   public_editable?: boolean;
 };
@@ -243,6 +255,12 @@ export type CardCreatePayload = {
   organization_id: string;
   display_name: string;
   org_unit_id?: string | null;
+  public_view_enabled?: boolean;
+  public_edit_enabled?: boolean;
+};
+
+export type OrganizationCardCreatePayload = {
+  display_name: string;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
 };

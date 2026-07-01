@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models import OrganizationClosure, ReferenceItem, ReferenceList
+from app.models import FormField, OrganizationClosure, ReferenceItem, ReferenceList
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -288,6 +288,70 @@ class ReferenceListService:
             raise ReferenceListError("Reference item does not belong to the configured list.")
         return item
 
+    def list_effective_items_for_field(
+        self,
+        *,
+        field_model: FormField,
+        registry_id: UUID,
+        organization_id: UUID,
+    ) -> list[ReferenceItem]:
+        reference_list = self.resolve_effective_reference_list_for_field(
+            field_model=field_model,
+            registry_id=registry_id,
+            organization_id=organization_id,
+        )
+        return self.list_items(reference_list.id)
+
+    def ensure_item_belongs_to_effective_list(
+        self,
+        *,
+        item_id: UUID,
+        field_model: FormField,
+        registry_id: UUID,
+        organization_id: UUID,
+    ) -> ReferenceItem:
+        reference_list = self.resolve_effective_reference_list_for_field(
+            field_model=field_model,
+            registry_id=registry_id,
+            organization_id=organization_id,
+        )
+        item = self._get_active_reference_item(item_id)
+        if item.list_id != reference_list.id:
+            raise ReferenceListError(
+                "Reference item does not belong to the effective reference list."
+            )
+        return item
+
+    def resolve_effective_reference_list_for_field(
+        self,
+        *,
+        field_model: FormField,
+        registry_id: UUID,
+        organization_id: UUID,
+    ) -> ReferenceList:
+        if (
+            field_model.options_source_type != "reference_list"
+            or field_model.options_source_id is None
+        ):
+            raise ReferenceListError("Reference field is not configured with a reference list.")
+
+        base_list = self._get_active_reference_list(field_model.options_source_id)
+        if not self._uses_organization_reference_resolution(field_model):
+            return base_list
+
+        exact_list = self._reference_list_for_owner(
+            base_list=base_list,
+            owner_organization_id=organization_id,
+        )
+        if exact_list is not None:
+            return exact_list
+
+        inherited_list = self._nearest_inherited_reference_list(
+            base_list=base_list,
+            organization_id=organization_id,
+        )
+        return inherited_list or base_list
+
     def list_available_reference_lists_for_actor(
         self,
         *,
@@ -478,3 +542,55 @@ class ReferenceListService:
         if item is None or item.archived_at is not None or not item.is_active:
             raise ReferenceListError("Reference item was not found.")
         return item
+
+    def _uses_organization_reference_resolution(self, field_model: FormField) -> bool:
+        config = field_model.options_config_json or {}
+        return (
+            config.get("reference_resolution") == "by_card_organization"
+            or config.get("allow_owner_override") is True
+        )
+
+    def _reference_list_for_owner(
+        self,
+        *,
+        base_list: ReferenceList,
+        owner_organization_id: UUID,
+    ) -> ReferenceList | None:
+        return self.session.scalar(
+            select(ReferenceList)
+            .where(
+                ReferenceList.registry_id == base_list.registry_id,
+                ReferenceList.code == base_list.code,
+                ReferenceList.owner_organization_id == owner_organization_id,
+                ReferenceList.archived_at.is_(None),
+                ReferenceList.is_active.is_(True),
+            )
+            .order_by(ReferenceList.id)
+            .limit(1)
+        )
+
+    def _nearest_inherited_reference_list(
+        self,
+        *,
+        base_list: ReferenceList,
+        organization_id: UUID,
+    ) -> ReferenceList | None:
+        return self.session.scalar(
+            select(ReferenceList)
+            .join(
+                OrganizationClosure,
+                OrganizationClosure.ancestor_id == ReferenceList.owner_organization_id,
+            )
+            .where(
+                ReferenceList.registry_id == base_list.registry_id,
+                ReferenceList.code == base_list.code,
+                ReferenceList.owner_organization_id.is_not(None),
+                ReferenceList.inherit_to_descendants.is_(True),
+                ReferenceList.archived_at.is_(None),
+                ReferenceList.is_active.is_(True),
+                OrganizationClosure.descendant_id == organization_id,
+                OrganizationClosure.depth > 0,
+            )
+            .order_by(OrganizationClosure.depth.asc(), ReferenceList.id)
+            .limit(1)
+        )

@@ -8,6 +8,7 @@ import {
   listAccessGrants,
   listAuditEvents,
   listCards,
+  listOrganizationTree,
   listOrganizations,
   listPermissions,
   listRegistries,
@@ -51,6 +52,7 @@ export function HomePage() {
   const needsPermissions = activeSection === "users";
   const needsAccessGrants = activeSection === "access";
   const needsAudit = activeSection === "audit";
+  const needsOrganizationTree = activeSection === "organizations";
   const currentUserQuery = useQuery({
     queryKey: ["current-user", token],
     queryFn: () => getCurrentUser(token),
@@ -60,6 +62,11 @@ export function HomePage() {
     queryKey: ["organizations", token],
     queryFn: () => listOrganizations(token),
     enabled: Boolean(token),
+  });
+  const organizationTreeQuery = useQuery({
+    queryKey: ["organizations-tree", token],
+    queryFn: () => listOrganizationTree(token),
+    enabled: Boolean(token && needsOrganizationTree),
   });
   const registriesQuery = useQuery({
     queryKey: ["registries", token],
@@ -229,6 +236,7 @@ export function HomePage() {
           error={[
             currentUserQuery.error,
             organizationsQuery.error,
+            activeSection === "organizations" ? organizationTreeQuery.error : null,
             registriesQuery.error,
             activeSection === "registries" || activeSection === "cards"
               ? registrySchemaQuery.error
@@ -252,7 +260,11 @@ export function HomePage() {
           />
         )}
         {activeSection === "organizations" && (
-          <OrganizationsTable organizations={organizationsQuery.data?.items ?? []} token={token} />
+          <OrganizationsTable
+            organizations={organizationsQuery.data?.items ?? []}
+            organizationTree={organizationTreeQuery.data?.items ?? []}
+            token={token}
+          />
         )}
         {activeSection === "registries" && (
           <RegistriesAndSchema
@@ -274,7 +286,6 @@ export function HomePage() {
             schema={registrySchemaQuery.data ?? null}
             token={token}
             organizations={organizationsQuery.data?.items ?? []}
-            selectedRegistryId={activeRegistryId}
             selectedCardId={activeCardId}
             cardSearch={cardSearch}
             cardOrganizationId={cardOrganizationId}

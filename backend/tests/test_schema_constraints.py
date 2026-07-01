@@ -47,7 +47,10 @@ def test_important_unique_constraints_exist() -> None:
 def test_important_check_constraints_exist() -> None:
     expected_constraints = {
         "users": {"ck_users_status"},
-        "registries": {"ck_registries_status"},
+        "registries": {
+            "ck_registries_status",
+            "ck_registries_default_owner_requires_owner",
+        },
         "form_fields": {"ck_form_fields_field_type", "ck_form_fields_required_mode"},
         "cards": {"ck_cards_lifecycle_status"},
         "stored_files": {
@@ -88,6 +91,10 @@ def test_important_indexes_exist() -> None:
         "organization_closure": {"ix_organization_closure_descendant_id"},
         "org_units": {"ix_org_units_organization_id", "ix_org_units_parent_id"},
         "access_grants": {"ix_access_grants_user_id", "ix_access_grants_organization_id"},
+        "registries": {
+            "ix_registries_owner_organization_id",
+            "uq_registries_default_owner_tree_active",
+        },
         "form_blocks": {"ix_form_blocks_registry_id"},
         "form_fields": {"ix_form_fields_block_id"},
         "reference_lists": {

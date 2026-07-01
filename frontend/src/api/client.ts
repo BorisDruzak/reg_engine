@@ -35,8 +35,10 @@ import type {
   GeneratedDocumentRead,
   LoginResponse,
   OrganizationCreatePayload,
+  OrganizationCardCreatePayload,
   OrganizationListRead,
   OrganizationRead,
+  OrganizationTreeRead,
   OrganizationUpdatePayload,
   OrgUnitCreatePayload,
   OrgUnitListRead,
@@ -109,6 +111,10 @@ export async function getCurrentUser(token: string) {
 
 export async function listOrganizations(token: string) {
   return apiRequest<OrganizationListRead>("/api/v1/organizations", { token });
+}
+
+export async function listOrganizationTree(token: string) {
+  return apiRequest<OrganizationTreeRead>("/api/v1/organizations/tree", { token });
 }
 
 export async function createOrganization(token: string, payload: OrganizationCreatePayload) {
@@ -309,6 +315,18 @@ export async function createCard(token: string, registryId: string, payload: Car
   });
 }
 
+export async function createOrganizationCard(
+  token: string,
+  organizationId: string,
+  payload: OrganizationCardCreatePayload,
+) {
+  return apiRequest<CardSummaryRead>(`/api/v1/organizations/${organizationId}/cards`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
 }
@@ -450,6 +468,17 @@ export async function updateCardFieldValues(
     token,
     body: payload,
   });
+}
+
+export async function listCardFieldReferenceItems(
+  token: string,
+  cardId: string,
+  fieldId: string,
+) {
+  return apiRequest<ReferenceItemListRead>(
+    `/api/v1/cards/${cardId}/fields/${fieldId}/reference-items`,
+    { token },
+  );
 }
 
 export async function listReferenceItems(token: string, listId: string) {

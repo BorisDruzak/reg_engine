@@ -250,3 +250,14 @@ def test_public_link_attachment_limit_columns_are_explicit() -> None:
         "attachment_upload_count",
     }:
         assert column_name in card_public_links.c
+
+
+def test_registry_default_owner_metadata_is_registered() -> None:
+    registries = Base.metadata.tables["registries"]
+
+    assert "owner_organization_id" in registries.c
+    assert "is_default_for_owner_tree" in registries.c
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in registries.c.owner_organization_id.foreign_keys
+    } == {("organizations", "id")}

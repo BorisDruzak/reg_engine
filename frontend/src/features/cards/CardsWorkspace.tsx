@@ -5,13 +5,13 @@ import {
   archivePublicLink,
   archiveCard,
   archiveCardBlockInstance,
-  createCard,
+  createOrganizationCard,
   createCardBlockInstance,
   createPublicLink,
+  listCardFieldReferenceItems,
   listOrgUnits,
   listAttachments,
   listPublicLinks,
-  listReferenceItems,
   updateCard,
   updateCardFieldValue,
   updateCardFieldValues,
@@ -21,7 +21,6 @@ import type {
   CardSummaryRead,
   FormBlockRead,
   FormFieldRead,
-  OrgUnitRead,
   OrganizationRead,
   PublicLinkCreatePayload,
   PublicLinkRead,
@@ -63,7 +62,6 @@ export function CardsWorkspace({
   schema,
   token,
   organizations,
-  selectedRegistryId,
   selectedCardId,
   cardSearch,
   cardOrganizationId,
@@ -78,7 +76,6 @@ export function CardsWorkspace({
   schema: RegistrySchemaRead | null;
   token: string;
   organizations: OrganizationRead[];
-  selectedRegistryId: string;
   selectedCardId: string;
   cardSearch: string;
   cardOrganizationId: string;
@@ -92,7 +89,7 @@ export function CardsWorkspace({
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | "edit" | null>(null);
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
-    initialCreateCardForm(selectedRegistryId, organizations),
+    initialCreateCardForm(organizations),
   );
   const [archiveTarget, setArchiveTarget] = useState<CardSummaryRead | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -114,19 +111,15 @@ export function CardsWorkspace({
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
   );
-  const orgUnitOrganizationId = cardFormMode
-    ? cardForm.organizationId
-    : (card?.organization_id ?? "");
+  const orgUnitOrganizationId = card?.organization_id ?? "";
   const orgUnitsQuery = useQuery({
     queryKey: ["org-units", token, orgUnitOrganizationId],
     queryFn: () => listOrgUnits(token, orgUnitOrganizationId),
-    enabled: Boolean(token && orgUnitOrganizationId && (cardFormMode || selectedCard)),
+    enabled: Boolean(token && orgUnitOrganizationId && selectedCard?.org_unit_id),
   });
   const createCardMutation = useMutation({
     mutationFn: () =>
-      createCard(token, cardForm.registryId, {
-        organization_id: cardForm.organizationId,
-        org_unit_id: optionalId(cardForm.orgUnitId),
+      createOrganizationCard(token, cardForm.organizationId, {
         display_name: cardForm.displayName.trim(),
         public_view_enabled: cardForm.publicViewEnabled,
         public_edit_enabled: cardForm.publicEditEnabled,
@@ -145,7 +138,6 @@ export function CardsWorkspace({
       }
       return updateCard(token, card.id, {
         display_name: cardForm.displayName.trim(),
-        org_unit_id: optionalId(cardForm.orgUnitId),
         public_view_enabled: cardForm.publicViewEnabled,
         public_edit_enabled: cardForm.publicEditEnabled,
       });
@@ -191,7 +183,7 @@ export function CardsWorkspace({
   });
 
   function openCreateForm() {
-    setCardForm(initialCreateCardForm(selectedRegistryId, organizations));
+    setCardForm(initialCreateCardForm(organizations));
     setCardFormMode("create");
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -203,7 +195,6 @@ export function CardsWorkspace({
       return;
     }
     setCardForm({
-      registryId: card.registry_id,
       organizationId: card.organization_id,
       orgUnitId: selectedCard?.org_unit_id ?? "",
       displayName: card.display_name,
@@ -260,8 +251,6 @@ export function CardsWorkspace({
                 mode="create"
                 form={cardForm}
                 organizations={organizations}
-                orgUnits={orgUnitsQuery.data?.items ?? []}
-                registryName={schema?.registry.name ?? selectedRegistryId}
                 isSubmitting={createCardMutation.isPending}
                 error={localError ? new Error(localError) : createCardMutation.error}
                 onCancel={() => setCardFormMode(null)}
@@ -347,8 +336,6 @@ export function CardsWorkspace({
                   mode="edit"
                   form={cardForm}
                   organizations={organizations}
-                  orgUnits={orgUnitsQuery.data?.items ?? []}
-                  registryName={schema?.registry.name ?? selectedRegistryId}
                   isSubmitting={updateCardMutation.isPending}
                   error={localError ? new Error(localError) : updateCardMutation.error}
                   onCancel={() => setCardFormMode(null)}
@@ -423,7 +410,6 @@ export function CardsWorkspace({
 }
 
 type CardFormState = {
-  registryId: string;
   organizationId: string;
   orgUnitId: string;
   displayName: string;
@@ -489,8 +475,6 @@ function CardMutationForm({
   mode,
   form,
   organizations,
-  orgUnits,
-  registryName,
   isSubmitting,
   error,
   onCancel,
@@ -500,8 +484,6 @@ function CardMutationForm({
   mode: "create" | "edit";
   form: CardFormState;
   organizations: OrganizationRead[];
-  orgUnits: OrgUnitRead[];
-  registryName: string;
   isSubmitting: boolean;
   error?: unknown;
   onCancel: () => void;
@@ -520,17 +502,11 @@ function CardMutationForm({
       {mode === "create" && (
         <>
           <label>
-            <span>{uiText.cardRegistry}</span>
-            <select value={form.registryId} disabled>
-              <option value={form.registryId}>{registryName}</option>
-            </select>
-          </label>
-          <label>
             <span>{uiText.cardOrganization}</span>
             <select
               value={form.organizationId}
               onChange={(event) =>
-                onChange({ ...form, organizationId: event.currentTarget.value, orgUnitId: "" })
+                onChange({ ...form, organizationId: event.currentTarget.value })
               }
             >
               <option value="">{uiText.noData}</option>
@@ -543,20 +519,6 @@ function CardMutationForm({
           </label>
         </>
       )}
-      <label>
-        <span>{uiText.cardOrgUnit}</span>
-        <select
-          value={form.orgUnitId}
-          onChange={(event) => onChange({ ...form, orgUnitId: event.currentTarget.value })}
-        >
-          <option value="">{uiText.noOrgUnit}</option>
-          {orgUnits.map((orgUnit) => (
-            <option key={orgUnit.id} value={orgUnit.id}>
-              {orgUnit.name}
-            </option>
-          ))}
-        </select>
-      </label>
       <label>
         <span>{uiText.cardDisplayName}</span>
         <input
@@ -933,6 +895,7 @@ function BulkCardValuesForm({
         {fields.map((field) => (
           <BulkFieldEditor
             key={field.key}
+            cardId={card.id}
             field={field}
             token={token}
             value={currentBulkValue(field, draftValues)}
@@ -953,24 +916,25 @@ function BulkCardValuesForm({
 }
 
 function BulkFieldEditor({
+  cardId,
   field,
   token,
   value,
   onChange,
 }: {
+  cardId: string;
   field: EditableCardField;
   token: string;
   value: FieldEditorState;
   onChange: (value: FieldEditorState) => void;
 }) {
-  const referenceListId =
-    field.schema?.options_source_type === "reference_list" ? field.schema.options_source_id : null;
+  const isReferenceField =
+    field.schema?.options_source_type === "reference_list" &&
+    ["select", "multi_select"].includes(field.field.field_type);
   const referenceItemsQuery = useQuery({
-    queryKey: ["reference-items", token, referenceListId],
-    queryFn: () => listReferenceItems(token, referenceListId ?? ""),
-    enabled:
-      Boolean(token && referenceListId) &&
-      ["select", "multi_select"].includes(field.field.field_type),
+    queryKey: ["card-field-reference-items", token, cardId, field.field.field_id],
+    queryFn: () => listCardFieldReferenceItems(token, cardId, field.field.field_id),
+    enabled: Boolean(token && cardId && isReferenceField),
   });
 
   return (
@@ -990,12 +954,8 @@ function BulkFieldEditor({
   );
 }
 
-function initialCreateCardForm(
-  selectedRegistryId: string,
-  organizations: OrganizationRead[],
-): CardFormState {
+function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
   return {
-    registryId: selectedRegistryId,
     organizationId: organizations[0]?.id ?? "",
     orgUnitId: "",
     displayName: "",
@@ -1009,10 +969,6 @@ function currentBulkValue(field: EditableCardField, draftValues: Record<string, 
     return draftValues[field.key];
   }
   return initialEditorValue(field.field);
-}
-
-function optionalId(value: string) {
-  return value.trim() ? value : null;
 }
 
 function initialPublicLinkForm(): PublicLinkFormState {
@@ -1113,14 +1069,13 @@ function CardFieldEditor({
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field.field));
   const [localError, setLocalError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const referenceListId =
-    field.schema?.options_source_type === "reference_list" ? field.schema.options_source_id : null;
+  const isReferenceField =
+    field.schema?.options_source_type === "reference_list" &&
+    ["select", "multi_select"].includes(field.field.field_type);
   const referenceItemsQuery = useQuery({
-    queryKey: ["reference-items", token, referenceListId],
-    queryFn: () => listReferenceItems(token, referenceListId ?? ""),
-    enabled:
-      Boolean(token && referenceListId) &&
-      ["select", "multi_select"].includes(field.field.field_type),
+    queryKey: ["card-field-reference-items", token, cardId, field.field.field_id],
+    queryFn: () => listCardFieldReferenceItems(token, cardId, field.field.field_id),
+    enabled: Boolean(token && cardId && isReferenceField),
   });
   const attachmentsQuery = useQuery({
     queryKey: ["attachments", token, cardId],

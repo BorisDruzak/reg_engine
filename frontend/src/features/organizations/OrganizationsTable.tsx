@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 
 import { archiveOrganization, createOrganization, updateOrganization } from "@/api/client";
-import type { OrganizationRead } from "@/api/types";
-import { activityLabel, organizationTypeLabel, uiText } from "@/app/uiText";
+import type { OrganizationRead, OrganizationTreeNodeRead } from "@/api/types";
+import { activityLabel, uiText } from "@/app/uiText";
 import {
   AdminMutationDialog,
   AdminMutationForm,
@@ -18,16 +18,17 @@ type OrganizationFormState = {
   code: string;
   name: string;
   parentId: string;
-  organizationType: string;
 };
 
 const defaultOrganizationType = "organization";
 
 export function OrganizationsTable({
   organizations,
+  organizationTree,
   token,
 }: {
   organizations: OrganizationRead[];
+  organizationTree: OrganizationTreeNodeRead[];
   token: string;
 }) {
   const queryClient = useQueryClient();
@@ -49,10 +50,10 @@ export function OrganizationsTable({
     },
   });
   const updateMutation = useMutation({
-    mutationFn: (payload: { organizationId: string; name: string; organization_type: string }) =>
+    mutationFn: (payload: { organizationId: string; name: string }) =>
       updateOrganization(token, payload.organizationId, {
         name: payload.name,
-        organization_type: payload.organization_type,
+        organization_type: defaultOrganizationType,
       }),
     onSuccess: async () => {
       setFormState(null);
@@ -72,6 +73,14 @@ export function OrganizationsTable({
     ? new Error(localError)
     : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
+  const rootOrganizationExists = organizations.some(
+    (organization) => organization.is_active && organization.parent_id === null,
+  );
+  const canCreateRootOrganization = !rootOrganizationExists;
+  const parentOptions = organizations.filter(
+    (organization) =>
+      organization.is_active && organization.id !== formState?.organizationId,
+  );
 
   function openCreateForm() {
     setLocalError(null);
@@ -82,7 +91,6 @@ export function OrganizationsTable({
       code: "",
       name: "",
       parentId: "",
-      organizationType: defaultOrganizationType,
     });
   }
 
@@ -95,7 +103,6 @@ export function OrganizationsTable({
       code: organization.code,
       name: organization.name,
       parentId: organization.parent_id ?? "",
-      organizationType: organization.type,
     });
   }
 
@@ -116,6 +123,14 @@ export function OrganizationsTable({
       setLocalError(uiText.requiredFields);
       return;
     }
+    if (
+      formState.mode === "create" &&
+      rootOrganizationExists &&
+      !formState.parentId
+    ) {
+      setLocalError(uiText.parentOrganizationRequired);
+      return;
+    }
 
     setLocalError(null);
     setSuccessMessage(null);
@@ -124,7 +139,7 @@ export function OrganizationsTable({
         code,
         name,
         parent_id: formState.parentId || null,
-        organization_type: formState.organizationType,
+        organization_type: defaultOrganizationType,
       });
       return;
     }
@@ -133,7 +148,6 @@ export function OrganizationsTable({
       updateMutation.mutate({
         organizationId: formState.organizationId,
         name,
-        organization_type: formState.organizationType,
       });
     }
   }
@@ -198,27 +212,14 @@ export function OrganizationsTable({
                   setFormState({ ...formState, parentId: event.currentTarget.value })
                 }
               >
-                <option value="">{uiText.noParentOrganization}</option>
-                {organizations
-                  .filter((organization) => organization.id !== formState.organizationId)
-                  .map((organization) => (
-                    <option value={organization.id} key={organization.id}>
-                      {organization.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              {uiText.organizationType}
-              <select
-                value={formState.organizationType}
-                onChange={(event) =>
-                  setFormState({ ...formState, organizationType: event.currentTarget.value })
-                }
-              >
-                <option value="organization">{organizationTypeLabel("organization")}</option>
-                <option value="department">{organizationTypeLabel("department")}</option>
-                <option value="unit">{organizationTypeLabel("unit")}</option>
+                {(formState.mode === "edit" || canCreateRootOrganization) && (
+                  <option value="">{uiText.noParentOrganization}</option>
+                )}
+                {parentOptions.map((organization) => (
+                  <option value={organization.id} key={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
               </select>
             </label>
           </AdminMutationForm>
@@ -235,52 +236,102 @@ export function OrganizationsTable({
           />
         </AdminMutationDialog>
       )}
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{uiText.organizationName}</th>
-              <th>{uiText.code}</th>
-              <th>{uiText.type}</th>
-              <th>{uiText.status}</th>
-              <th>{uiText.action}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {organizations.map((organization) => (
-              <tr key={organization.id}>
-                <td>{organization.name}</td>
-                <td>{organization.code}</td>
-                <td>{organizationTypeLabel(organization.type)}</td>
-                <td>{activityLabel(organization.is_active)}</td>
-                <td>
-                  <div className="row-actions">
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => openEditForm(organization)}
-                    >
-                      {uiText.editOrganization} {organization.name}
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => handleArchive(organization)}
-                    >
-                      {uiText.archiveOrganization} {organization.name}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {organizationTree.length > 0 ? (
+        <OrganizationTree
+          nodes={organizationTree}
+          onEditOrganization={openEditForm}
+          onArchiveOrganization={handleArchive}
+        />
+      ) : (
+        <p className="data-empty">{uiText.noData}</p>
+      )}
     </Panel>
+  );
+}
+
+function OrganizationTree({
+  nodes,
+  onEditOrganization,
+  onArchiveOrganization,
+}: {
+  nodes: OrganizationTreeNodeRead[];
+  onEditOrganization: (organization: OrganizationRead) => void;
+  onArchiveOrganization: (organization: OrganizationRead) => void;
+}) {
+  return (
+    <ul className="organization-tree" role="tree" aria-label={uiText.organizationTree}>
+      {nodes.map((node) => (
+        <OrganizationTreeNode
+          key={node.id}
+          node={node}
+          level={1}
+          onEditOrganization={onEditOrganization}
+          onArchiveOrganization={onArchiveOrganization}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function OrganizationTreeNode({
+  node,
+  level,
+  onEditOrganization,
+  onArchiveOrganization,
+}: {
+  node: OrganizationTreeNodeRead;
+  level: number;
+  onEditOrganization: (organization: OrganizationRead) => void;
+  onArchiveOrganization: (organization: OrganizationRead) => void;
+}) {
+  return (
+    <li className="organization-tree-node">
+      <div
+        className="organization-tree-row"
+        role="treeitem"
+        aria-label={node.name}
+        aria-level={level}
+        style={{ "--tree-level": String(level - 1) } as CSSProperties}
+      >
+        <div className="organization-tree-main">
+          <strong>{node.name}</strong>
+          <span>
+            {uiText.technicalCode}: {node.code}
+          </span>
+        </div>
+        <span className="organization-tree-status">{activityLabel(node.is_active)}</span>
+        <div className="row-actions">
+          <button type="button" className="ghost-button" onClick={() => onEditOrganization(node)}>
+            {uiText.editOrganization} {node.name}
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onArchiveOrganization(node)}
+          >
+            {uiText.archiveOrganization} {node.name}
+          </button>
+        </div>
+      </div>
+      {node.children.length > 0 && (
+        <ul role="group">
+          {node.children.map((child) => (
+            <OrganizationTreeNode
+              key={child.id}
+              node={child}
+              level={level + 1}
+              onEditOrganization={onEditOrganization}
+              onArchiveOrganization={onArchiveOrganization}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
 async function invalidateOrganizationData(queryClient: QueryClient, token: string) {
   await queryClient.invalidateQueries({ queryKey: ["organizations", token] });
+  await queryClient.invalidateQueries({ queryKey: ["organizations-tree", token] });
   await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
 }

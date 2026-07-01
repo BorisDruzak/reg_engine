@@ -72,12 +72,14 @@ export const uiText = {
   organizationType: "Тип организации",
   parentOrganization: "Родительская организация",
   noParentOrganization: "Без родительской организации",
+  parentOrganizationRequired: "Выберите родительскую организацию",
   createOrganization: "Создать организацию",
   editOrganization: "Редактировать организацию",
   archiveOrganization: "Архивировать организацию",
   organizationCreated: "Организация создана",
   organizationUpdated: "Организация обновлена",
   organizationArchived: "Организация архивирована",
+  organizationTree: "Дерево организаций",
   displayName: "Имя",
   code: "Код",
   type: "Тип",
@@ -588,6 +590,7 @@ export function runtimeErrorMessageLabel(message: string) {
     uiText.numberRequired,
     uiText.publicLinkExpiresInvalid,
     uiText.publicLinkUploadLimitInvalid,
+    uiText.parentOrganizationRequired,
     uiText.requiredFields,
   ]);
   return localMessages.has(message) ? message : apiErrorMessageLabel(message);

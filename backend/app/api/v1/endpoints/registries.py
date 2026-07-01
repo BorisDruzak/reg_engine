@@ -228,6 +228,7 @@ def create_field(
             position=payload.position,
             options_source_type=payload.options_source_type,
             options_source_id=payload.options_source_id,
+            options_config_json=payload.options_config_json,
             public_visible=payload.public_visible,
             public_editable=payload.public_editable,
         )

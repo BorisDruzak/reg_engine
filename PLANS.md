@@ -12,6 +12,13 @@ not a hardcoded employee registry.
   production follow-up fixes are implemented on `main`.
 - Current active checkpoint: **Phase 6: Organization-Centered Card Workflow
   Cleanup**.
+- Phase 6B UI simplification/tree work is implemented locally and covered by
+  targeted frontend tests.
+- Phase 6C and Phase 6D code paths are implemented locally, including migration
+  `0016_default_registry_tree`, organization-centered card creation, and
+  organization-effective reference options.
+- Phase 6E live/browser verification and disposable PostgreSQL migration/service
+  verification are still pending before production rollout.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -256,7 +263,7 @@ powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1
 
 ## Phase 6B: Organization UI Simplification And Tree
 
-Status: planned next.
+Status: implemented locally; pending Phase 6E live verification.
 
 Purpose:
 
@@ -306,7 +313,8 @@ Acceptance criteria:
 
 ## Phase 6C: Default Card Registry For Main Organization Tree
 
-Status: planned after Phase 6B; technical model approved for Phase 6 v1.
+Status: implemented locally; pending disposable PostgreSQL verification, live
+verification, and production migration flow if deployed.
 
 Purpose:
 
@@ -361,9 +369,21 @@ Acceptance criteria:
 - Existing schema-driven card architecture remains intact.
 - Default registry behavior is backend-enforced, not frontend-only guessing.
 
+Implementation notes:
+
+- Added Alembic revision `0016_default_registry_tree`.
+- Added `registries.owner_organization_id` and
+  `registries.is_default_for_owner_tree`.
+- Added default-registry resolver through `organization_closure`.
+- Added `POST /api/v1/organizations/{organization_id}/cards` for
+  organization-centered card creation.
+- Frontend ordinary card creation no longer asks for a registry.
+- Production migration is not applied in this local implementation checkpoint.
+
 ## Phase 6D: Common Schema With Organization-Owned References
 
-Status: planned after Phase 6C.
+Status: implemented locally; pending disposable PostgreSQL verification and
+Phase 6E live/browser verification.
 
 Purpose:
 
@@ -404,9 +424,25 @@ Acceptance criteria:
 - Sibling organization reference values do not leak.
 - Schema management and local dictionary management are separate permissions.
 
+Implementation notes:
+
+- Uses existing `form_fields.options_config_json` for reference resolution
+  policy.
+- `reference_resolution="by_card_organization"` and/or
+  `allow_owner_override=true` make select/multi-select fields resolve values by
+  the target card organization.
+- Exact organization-owned list replaces inherited values for that field.
+- Fixed lists keep the existing `options_source_id` behavior.
+- Authenticated card field option loading uses
+  `GET /api/v1/cards/{card_id}/fields/{field_id}/reference-items`.
+- Public-link preview/edit uses the same effective-list resolver for the target
+  card organization.
+- PostgreSQL-backed service tests are present but require `TEST_DATABASE_URL`
+  pointing to a disposable `_test` database.
+
 ## Phase 6E: Browser And Live Verification
 
-Status: planned.
+Status: planned next.
 
 Scope:
 

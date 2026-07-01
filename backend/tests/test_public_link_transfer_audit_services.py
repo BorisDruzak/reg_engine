@@ -27,7 +27,7 @@ from app.models import (
     role_permissions,
 )
 from app.services.audit import AuditService
-from app.services.cards import CardService
+from app.services.cards import CardService, InvalidFieldValueError
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkService, PublicLinkToken, hash_public_token
@@ -333,6 +333,86 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
             raw_token=created.raw_token,
             field_id=context["public_field"].id,
             value="blocked",
+        )
+
+
+def test_public_link_uses_card_organization_effective_reference_list(
+    db_session: Session,
+) -> None:
+    context = _phase_1e_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    reference_service = ReferenceListService(db_session)
+    root_list = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["root"].id,
+        code="departments",
+        name="Root departments",
+        inherit_to_descendants=True,
+        locked_for_descendants=True,
+    )
+    root_item = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=root_list.id,
+        code="root",
+        label="Root department",
+    )
+    source_list = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["source_org"].id,
+        code="departments",
+        name="Source departments",
+        inherit_to_descendants=True,
+        locked_for_descendants=False,
+    )
+    source_item = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=source_list.id,
+        code="source",
+        label="Source department",
+    )
+    public_select_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=context["block"].id,
+        code="department",
+        label="Department",
+        field_type="select",
+        options_source_type="reference_list",
+        options_source_id=root_list.id,
+        options_config_json={
+            "reference_resolution": "by_card_organization",
+            "allow_owner_override": True,
+        },
+        public_editable=True,
+    )
+    public_link_service = PublicLinkService(db_session)
+    created = public_link_service.create_public_link_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    preview = public_link_service.preview_public_link(raw_token=created.raw_token)
+    preview_field = next(
+        field
+        for block in preview.blocks
+        for instance in block.instances
+        for field in instance.fields
+        if field.field_id == public_select_field.id
+    )
+    field_value = public_link_service.edit_card_field_with_token(
+        raw_token=created.raw_token,
+        field_id=public_select_field.id,
+        value=source_item.id,
+    )
+
+    assert [option.id for option in preview_field.options] == [source_item.id]
+    assert field_value.value_reference_item_id == source_item.id
+    with pytest.raises(InvalidFieldValueError, match="effective reference list"):
+        public_link_service.edit_card_field_with_token(
+            raw_token=created.raw_token,
+            field_id=public_select_field.id,
+            value=root_item.id,
         )
 
 

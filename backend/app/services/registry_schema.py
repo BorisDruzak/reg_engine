@@ -1,13 +1,15 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES
-from app.models import FormBlock, FormField, Registry
+from app.models import Card, FormBlock, FormField, OrganizationClosure, Registry
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
+
+DEFAULT_CARD_REGISTRY_NAME = "Реестр карточек"
 
 
 class RegistrySchemaError(ValueError):
@@ -79,6 +81,71 @@ class RegistrySchemaService:
         )
         return registry
 
+    def ensure_default_registry_for_root_organization(
+        self,
+        *,
+        root_organization_id: UUID,
+        root_organization_code: str,
+        actor_user_id: UUID | None = None,
+    ) -> Registry:
+        existing = self.session.scalar(
+            select(Registry).where(
+                Registry.owner_organization_id == root_organization_id,
+                Registry.is_default_for_owner_tree.is_(True),
+                Registry.archived_at.is_(None),
+                Registry.lifecycle_status != "archived",
+            )
+        )
+        if existing is not None:
+            return existing
+
+        registry = Registry(
+            code=self._default_registry_code(root_organization_code, root_organization_id),
+            name=DEFAULT_CARD_REGISTRY_NAME,
+            owner_organization_id=root_organization_id,
+            is_default_for_owner_tree=True,
+            created_by=actor_user_id,
+        )
+        self.session.add(registry)
+        self.session.flush()
+        if actor_user_id is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="create",
+                object_type="registry",
+                object_id=registry.id,
+                new_data_json={
+                    "code": registry.code,
+                    "name": registry.name,
+                    "owner_organization_id": str(root_organization_id),
+                    "is_default_for_owner_tree": True,
+                },
+            )
+        return registry
+
+    def resolve_default_registry_for_organization(self, organization_id: UUID) -> Registry:
+        registry = self.session.scalar(
+            select(Registry)
+            .join(
+                OrganizationClosure,
+                OrganizationClosure.ancestor_id == Registry.owner_organization_id,
+            )
+            .where(
+                OrganizationClosure.descendant_id == organization_id,
+                Registry.is_default_for_owner_tree.is_(True),
+                Registry.owner_organization_id.is_not(None),
+                Registry.archived_at.is_(None),
+                Registry.lifecycle_status != "archived",
+            )
+            .order_by(OrganizationClosure.depth.asc(), Registry.code, Registry.id)
+            .limit(1)
+        )
+        if registry is None:
+            raise RegistrySchemaError(
+                "Default card registry is not configured for this organization."
+            )
+        return registry
+
     def read_registry_for_actor(
         self,
         *,
@@ -140,6 +207,7 @@ class RegistrySchemaService:
     ) -> Registry:
         registry = self._get_active_registry(registry_id)
         self._require_schema_permission(actor_user_id, registry.id)
+        self._ensure_default_registry_archive_allowed(registry)
         registry.archived_at = datetime.now(UTC)
         registry.lifecycle_status = "archived"
         self.session.flush()
@@ -307,6 +375,7 @@ class RegistrySchemaService:
         position: int = 0,
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
+        options_config_json: dict[str, object] | None = None,
         is_system: bool = False,
         is_locked: bool = False,
         public_visible: bool = True,
@@ -325,6 +394,7 @@ class RegistrySchemaService:
             position=position,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
+            options_config_json=options_config_json,
             is_system=is_system,
             is_locked=is_locked,
             public_visible=public_visible,
@@ -474,3 +544,27 @@ class RegistrySchemaService:
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:
             raise RegistrySchemaError(f"Unsupported field type: {field_type}")
+
+    def _ensure_default_registry_archive_allowed(self, registry: Registry) -> None:
+        if not registry.is_default_for_owner_tree:
+            return
+
+        active_card_count = self.session.scalar(
+            select(func.count())
+            .select_from(Card)
+            .where(
+                Card.registry_id == registry.id,
+                Card.archived_at.is_(None),
+                Card.lifecycle_status.in_(("draft", "active")),
+            )
+        )
+        if active_card_count:
+            raise RegistrySchemaError("Default registry has active or draft cards.")
+
+    def _default_registry_code(
+        self, root_organization_code: str, root_organization_id: UUID
+    ) -> str:
+        base_code = f"{root_organization_code}_cards"
+        if not self.session.scalar(select(Registry.id).where(Registry.code == base_code)):
+            return base_code
+        return f"{base_code}_{str(root_organization_id).split('-', maxsplit=1)[0]}"

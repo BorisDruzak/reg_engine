@@ -12,6 +12,12 @@ class CardCreate(BaseModel):
     public_edit_enabled: bool = False
 
 
+class OrganizationCardCreate(BaseModel):
+    display_name: str
+    public_view_enabled: bool = False
+    public_edit_enabled: bool = False
+
+
 class CardSummaryRead(BaseModel):
     id: UUID
     registry_id: UUID

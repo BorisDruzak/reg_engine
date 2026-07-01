@@ -149,6 +149,8 @@ const apiPayloads = {
         description: "Учет активов",
         lifecycle_status: "active",
         schema_version: 1,
+        owner_organization_id: "22222222-2222-4222-8222-222222222222",
+        is_default_for_owner_tree: true,
       },
     ],
   },
@@ -160,6 +162,8 @@ const apiPayloads = {
       description: "Учет активов",
       lifecycle_status: "active",
       schema_version: 1,
+      owner_organization_id: "22222222-2222-4222-8222-222222222222",
+      is_default_for_owner_tree: true,
     },
     blocks: [
       {
@@ -186,6 +190,7 @@ const apiPayloads = {
         position: 0,
         options_source_type: null,
         options_source_id: null,
+        options_config_json: null,
         is_active: true,
         public_visible: true,
         public_editable: false,
@@ -200,6 +205,7 @@ const apiPayloads = {
         position: 1,
         options_source_type: null,
         options_source_id: null,
+        options_config_json: null,
         is_active: true,
         public_visible: true,
         public_editable: false,
@@ -228,6 +234,7 @@ const apiPayloads = {
     position: 0,
     options_source_type: null,
     options_source_id: null,
+    options_config_json: null,
     is_active: true,
     public_visible: false,
     public_editable: false,
@@ -242,6 +249,7 @@ const apiPayloads = {
     position: 2,
     options_source_type: null,
     options_source_id: null,
+    options_config_json: null,
     is_active: true,
     public_visible: false,
     public_editable: false,
@@ -624,8 +632,37 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/auth/me")) {
         return jsonResponse(apiPayloads.login.user);
       }
+      if (url.endsWith("/api/v1/organizations/tree")) {
+        return jsonResponse({ items: organizationTreeItems() });
+      }
       if (url.endsWith("/api/v1/organizations/22222222-2222-4222-8222-222222222222/org-units")) {
         return jsonResponse({ items: orgUnitItems });
+      }
+      const organizationCardMatch = pathname.match(/\/api\/v1\/organizations\/([^/]+)\/cards$/);
+      if (organizationCardMatch && init?.method === "POST") {
+        const payload = JSON.parse(String(init.body ?? "{}")) as {
+          display_name: string;
+          public_view_enabled?: boolean;
+          public_edit_enabled?: boolean;
+        };
+        const created: CardSummaryRead = {
+          id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          organization_id: organizationCardMatch[1],
+          org_unit_id: null,
+          display_name: payload.display_name,
+          lifecycle_status: "draft",
+          public_view_enabled: payload.public_view_enabled ?? false,
+          public_edit_enabled: payload.public_edit_enabled ?? false,
+        };
+        cardItems = [...cardItems, created];
+        cardValueStateById[created.id] = {
+          status: "",
+          approved: false,
+          repeatableNotes: [],
+          fileRef: null,
+        };
+        return jsonResponse(created, { status: 201 });
       }
       if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
         const organizationId = url.split("/api/v1/organizations/")[1];
@@ -960,6 +997,7 @@ beforeEach(() => {
             position?: number;
             options_source_type?: string | null;
             options_source_id?: string | null;
+            options_config_json?: Record<string, unknown> | null;
             public_visible?: boolean;
             public_editable?: boolean;
           };
@@ -973,6 +1011,7 @@ beforeEach(() => {
             position: payload.position ?? 0,
             options_source_type: payload.options_source_type ?? null,
             options_source_id: payload.options_source_id ?? null,
+            options_config_json: payload.options_config_json ?? null,
             is_active: true,
             public_visible: payload.public_visible ?? true,
             public_editable: payload.public_editable ?? false,
@@ -1387,6 +1426,8 @@ beforeEach(() => {
             description: payload.description ?? null,
             lifecycle_status: "draft",
             schema_version: 1,
+            owner_organization_id: null,
+            is_default_for_owner_tree: false,
           };
           registryItems = [...registryItems, created];
           return jsonResponse(created, { status: 201 });
@@ -1477,6 +1518,17 @@ beforeEach(() => {
       }
       if (url.endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/public-links")) {
         return jsonResponse({ items: [] });
+      }
+      const cardFieldReferenceItemsMatch = pathname.match(
+        /\/api\/v1\/cards\/([^/]+)\/fields\/([^/]+)\/reference-items$/,
+      );
+      if (cardFieldReferenceItemsMatch) {
+        const fieldId = cardFieldReferenceItemsMatch[2]!;
+        const field = schemaFieldItems.find((item) => item.id === fieldId);
+        const listId = field?.options_source_id;
+        return jsonResponse({
+          items: listId ? referenceItemItems.filter((item) => item.list_id === listId) : [],
+        });
       }
       if (url.includes("/api/v1/public-links/") && init?.method === "DELETE") {
         const publicLinkId = url.split("/api/v1/public-links/")[1];
@@ -1878,6 +1930,12 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     cardItems.find((item) => item.id === cardId) ??
     cardItems.find((item) => item.id === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") ??
     apiPayloads.cards.items[0];
+  const statusSchema = schemaFieldItems.find(
+    (field) => field.id === "99999999-9999-4999-8999-999999999999",
+  );
+  const approvedSchema = schemaFieldItems.find(
+    (field) => field.id === "99999999-9999-4999-8999-999999999998",
+  );
   const state = cardValueStateById[cardSummary.id] ?? {
     status: "",
     approved: false,
@@ -1895,13 +1953,13 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
             status: {
               field_id: "99999999-9999-4999-8999-999999999999",
               code: "status",
-              field_type: "text",
+              field_type: statusSchema?.field_type ?? "text",
               value: state.status,
             },
             approved: {
               field_id: "99999999-9999-4999-8999-999999999998",
               code: "approved",
-              field_type: "bool",
+              field_type: approvedSchema?.field_type ?? "bool",
               value: state.approved,
             },
           },
@@ -1945,13 +2003,13 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     status: {
       field_id: "99999999-9999-4999-8999-999999999999",
       code: "status",
-      field_type: "text",
+      field_type: statusSchema?.field_type ?? "text",
       value: state.status,
     },
     approved: {
       field_id: "99999999-9999-4999-8999-999999999998",
       code: "approved",
-      field_type: "bool",
+      field_type: approvedSchema?.field_type ?? "bool",
       value: state.approved,
     },
   };
@@ -1984,6 +2042,33 @@ function enableRepeatableDetailsSchema() {
 
 function enableFileRefSchema() {
   schemaFieldItems = [...schemaFieldItems, apiPayloads.fileRefField];
+}
+
+type TestOrganizationTreeNode = OrganizationRead & {
+  children: TestOrganizationTreeNode[];
+};
+
+function organizationTreeItems(): TestOrganizationTreeNode[] {
+  const byParent = new Map<string | null, OrganizationRead[]>();
+  const visibleIds = new Set(organizationItems.map((organization) => organization.id));
+  for (const organization of organizationItems) {
+    const parentId =
+      organization.parent_id && visibleIds.has(organization.parent_id)
+        ? organization.parent_id
+        : null;
+    byParent.set(parentId, [...(byParent.get(parentId) ?? []), organization]);
+  }
+
+  function build(parentId: string | null): TestOrganizationTreeNode[] {
+    return [...(byParent.get(parentId) ?? [])]
+      .sort((left, right) => left.code.localeCompare(right.code) || left.id.localeCompare(right.id))
+      .map((organization) => ({
+        ...organization,
+        children: build(organization.id),
+      }));
+  }
+
+  return build(null);
 }
 
 function currentRegistrySchema() {
@@ -2199,11 +2284,14 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
       .mocked(fetch)
       .mock.calls.filter(
         ([input, init]) =>
-          String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") &&
+          String(input).endsWith(
+            "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards",
+          ) &&
           init?.method === "POST",
       ).length;
 
   await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
+  expect(screen.queryByLabelText("Реестр карточки")).not.toBeInTheDocument();
   const postCountBeforeValidation = cardPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -2214,9 +2302,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
   await user.selectOptions(screen.getByLabelText("Организация карточки"), [
     "22222222-2222-4222-8222-222222222222",
   ]);
-  await user.selectOptions(await screen.findByLabelText("Подразделение карточки"), [
-    "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
-  ]);
+  expect(screen.queryByLabelText("Подразделение карточки")).not.toBeInTheDocument();
   await user.click(screen.getByLabelText("Публичный просмотр карточки"));
   await user.click(screen.getByLabelText("Публичное редактирование карточки"));
   await user.click(screen.getByRole("button", { name: "Создать" }));
@@ -2266,20 +2352,30 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
     const fetchMock = vi.mocked(fetch);
     const createCall = fetchMock.mock.calls.find(
       ([input, init]) =>
-        String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") &&
+        String(input).endsWith(
+          "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards",
+        ) &&
         init?.method === "POST",
     );
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
     expect(createBody).toEqual({
-      organization_id: "22222222-2222-4222-8222-222222222222",
-      org_unit_id: "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f",
       display_name: "Новая карточка",
       public_view_enabled: true,
       public_edit_enabled: true,
     });
+    expect(createBody).not.toHaveProperty("organization_id");
+    expect(createBody).not.toHaveProperty("org_unit_id");
     expect(createBody).not.toHaveProperty("employees");
     expect(createBody).not.toHaveProperty("full_name");
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards",
+          ) && init?.method === "POST",
+      ),
+    ).toBe(false);
 
     expect(
       fetchMock.mock.calls.some(([input, init]) => {
@@ -2288,7 +2384,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
           String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
           init?.method === "PATCH" &&
           body.display_name === "Новая карточка обновлена" &&
-          body.org_unit_id === "2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f" &&
+          !Object.prototype.hasOwnProperty.call(body, "org_unit_id") &&
           body.public_view_enabled === true &&
           body.public_edit_enabled === true
         );
@@ -2345,6 +2441,189 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
           String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") &&
           init?.method === "DELETE",
       ),
+    ).toBe(true);
+  });
+});
+
+test("loads card field reference options through card organization scope", async () => {
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.id === "99999999-9999-4999-8999-999999999999"
+      ? {
+          ...field,
+          field_type: "select",
+          options_source_type: "reference_list",
+          options_source_id: "abababab-abab-4aba-8aba-abababababab",
+          options_config_json: {
+            reference_resolution: "by_card_organization",
+            allow_owner_override: true,
+          },
+        }
+      : field,
+  );
+  cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].status =
+    "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc";
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  expect(await within(bulkForm).findByRole("option", { name: "Активен" })).toBeInTheDocument();
+
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/fields/99999999-9999-4999-8999-999999999999/reference-items",
+          ) && init?.method !== "POST",
+      ),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith(
+          "/api/v1/reference-lists/abababab-abab-4aba-8aba-abababababab/items",
+        ),
+      ),
+    ).toBe(false);
+  });
+});
+
+test("renders organization hierarchy and hides organization type choices", async () => {
+  organizationItems = [
+    ...apiPayloads.organizations.items,
+    {
+      id: "23232323-2323-4232-8232-232323232323",
+      parent_id: "22222222-2222-4222-8222-222222222222",
+      code: "tu-1",
+      name: "Территориальное управление 1",
+      type: "department",
+      is_active: true,
+    },
+    {
+      id: "24242424-2424-4242-8242-242424242424",
+      parent_id: "23232323-2323-4232-8232-232323232323",
+      code: "sub-1",
+      name: "Подведомственная организация",
+      type: "unit",
+      is_active: true,
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Организации" }));
+
+  const tree = await screen.findByRole("tree", { name: "Дерево организаций" });
+  expect(
+    within(tree).getByRole("treeitem", { name: /Главная организация/ }),
+  ).toHaveAttribute("aria-level", "1");
+  expect(
+    within(tree).getByRole("treeitem", { name: /Территориальное управление 1/ }),
+  ).toHaveAttribute("aria-level", "2");
+  expect(
+    within(tree).getByRole("treeitem", { name: /Подведомственная организация/ }),
+  ).toHaveAttribute("aria-level", "3");
+  expect(screen.queryByText("Подразделение")).not.toBeInTheDocument();
+  expect(screen.queryByText("Отдел")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Создать организацию" }));
+  expect(screen.queryByLabelText("Тип организации")).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Без родительской организации" })).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("Код организации"), "branch");
+  await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
+  const postCountBeforeParentValidation = vi
+    .mocked(fetch)
+    .mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
+    ).length;
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+  expect(await screen.findByText("Выберите родительскую организацию")).toBeInTheDocument();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
+      ).length,
+  ).toBe(postCountBeforeParentValidation);
+  await user.selectOptions(screen.getByLabelText("Родительская организация"), [
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Организация создана")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/v1/organizations/tree"))).toBe(
+      true,
+    );
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          code?: string;
+          name?: string;
+          parent_id?: string | null;
+          organization_type?: string;
+        };
+        return (
+          String(input).endsWith("/api/v1/organizations") &&
+          init?.method === "POST" &&
+          body.code === "branch" &&
+          body.name === "Дочерняя организация" &&
+          body.parent_id === "22222222-2222-4222-8222-222222222222" &&
+          body.organization_type === "organization"
+        );
+      }),
+    ).toBe(true);
+  });
+});
+
+test("allows the first organization to be created as the main root", async () => {
+  organizationItems = [];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Организации" }));
+
+  expect(await screen.findByText("Нет данных")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать организацию" }));
+  expect(screen.getByRole("option", { name: "Без родительской организации" })).toBeInTheDocument();
+  await user.type(screen.getByLabelText("Код организации"), "root");
+  await user.type(screen.getByLabelText("Название организации"), "Главная организация");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Организация создана")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          code?: string;
+          name?: string;
+          parent_id?: string | null;
+          organization_type?: string;
+        };
+        return (
+          String(input).endsWith("/api/v1/organizations") &&
+          init?.method === "POST" &&
+          body.code === "root" &&
+          body.name === "Главная организация" &&
+          body.parent_id === null &&
+          body.organization_type === "organization"
+        );
+      }),
     ).toBe(true);
   });
 });

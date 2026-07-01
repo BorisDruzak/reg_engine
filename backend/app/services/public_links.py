@@ -16,11 +16,11 @@ from app.models import (
     FieldValueItem,
     FormBlock,
     FormField,
-    ReferenceItem,
 )
 from app.services.audit import AuditService
 from app.services.cards import CardService, CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.references import ReferenceListError, ReferenceListService
 
 DEFAULT_PUBLIC_LINK_TTL_DAYS = 7
 
@@ -209,6 +209,8 @@ class PublicLinkService:
                             else None
                         ),
                         item_ids_by_value_id=item_ids_by_value_id,
+                        registry_id=card.registry_id,
+                        organization_id=card.organization_id,
                     )
                     for field_model in block_fields
                 ]
@@ -431,6 +433,8 @@ class PublicLinkService:
         field_model: FormField,
         field_value: FieldValue | None,
         item_ids_by_value_id: dict[UUID, list[UUID]],
+        registry_id: UUID,
+        organization_id: UUID,
     ) -> PublicPreviewField:
         return PublicPreviewField(
             field_id=field_model.id,
@@ -440,10 +444,20 @@ class PublicLinkService:
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
             options_source_type=field_model.options_source_type,
             options_source_id=field_model.options_source_id,
-            options=self._reference_options(field_model),
+            options=self._reference_options(
+                field_model,
+                registry_id=registry_id,
+                organization_id=organization_id,
+            ),
         )
 
-    def _reference_options(self, field_model: FormField) -> list[PublicPreviewOption]:
+    def _reference_options(
+        self,
+        field_model: FormField,
+        *,
+        registry_id: UUID,
+        organization_id: UUID,
+    ) -> list[PublicPreviewOption]:
         if (
             field_model.field_type not in {"select", "multi_select"}
             or field_model.options_source_type != "reference_list"
@@ -451,18 +465,16 @@ class PublicLinkService:
         ):
             return []
 
-        return [
-            PublicPreviewOption(id=item.id, code=item.code, label=item.label)
-            for item in self.session.scalars(
-                select(ReferenceItem)
-                .where(
-                    ReferenceItem.list_id == field_model.options_source_id,
-                    ReferenceItem.archived_at.is_(None),
-                    ReferenceItem.is_active.is_(True),
-                )
-                .order_by(ReferenceItem.position, ReferenceItem.code, ReferenceItem.id)
-            ).all()
-        ]
+        try:
+            items = ReferenceListService(self.session).list_effective_items_for_field(
+                field_model=field_model,
+                registry_id=registry_id,
+                organization_id=organization_id,
+            )
+        except ReferenceListError as exc:
+            raise PublicLinkError(str(exc)) from exc
+
+        return [PublicPreviewOption(id=item.id, code=item.code, label=item.label) for item in items]
 
     def _read_field_value(
         self,

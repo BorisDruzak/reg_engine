@@ -425,6 +425,56 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.organization-tree,
+.organization-tree ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.organization-tree {
+  border-top: 1px solid #edf0f4;
+}
+
+.organization-tree-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  padding-left: calc(14px + (var(--tree-level, 0) * 24px));
+  border-bottom: 1px solid #edf0f4;
+  background: #ffffff;
+}
+
+.organization-tree-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.organization-tree-main strong {
+  color: #101828;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.organization-tree-main span,
+.organization-tree-status {
+  color: #667085;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.organization-tree-status {
+  justify-self: start;
+  white-space: nowrap;
+}
+
 .data-empty {
   margin: 0;
   padding: 12px 14px;
@@ -1079,6 +1129,16 @@ tr:last-child td {
 
   .row-actions {
     justify-content: flex-start;
+  }
+
+  .organization-tree-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .organization-tree-status,
+  .organization-tree-row .row-actions {
+    justify-self: start;
   }
 
   .workspace-topbar h2 {

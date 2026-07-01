@@ -19,6 +19,8 @@ class RegistryRead(BaseModel):
     description: str | None
     lifecycle_status: str
     schema_version: int
+    owner_organization_id: UUID | None
+    is_default_for_owner_tree: bool
 
 
 class RegistryListRead(BaseModel):
@@ -76,6 +78,7 @@ class FormFieldCreate(BaseModel):
     position: int = 0
     options_source_type: str | None = None
     options_source_id: UUID | None = None
+    options_config_json: dict[str, Any] | None = None
     public_visible: bool = True
     public_editable: bool = False
 
@@ -92,6 +95,7 @@ class FormFieldRead(BaseModel):
     position: int
     options_source_type: str | None
     options_source_id: UUID | None
+    options_config_json: dict[str, Any] | None
     is_active: bool
     public_visible: bool
     public_editable: bool

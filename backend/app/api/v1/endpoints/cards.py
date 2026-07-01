@@ -22,7 +22,9 @@ from app.schemas.cards import (
     FieldValueRead,
     FieldValuesBulkUpdate,
     FieldValueUpdate,
+    OrganizationCardCreate,
 )
+from app.schemas.registries import ReferenceItemListRead, ReferenceItemRead
 from app.services.cards import BulkFieldValueInput, CardService, FileRefValueRead
 from app.services.cards import CardFieldRead as ServiceCardFieldRead
 from app.services.cards import CardRead as ServiceCardRead
@@ -48,6 +50,30 @@ def create_card(
             organization_id=payload.organization_id,
             display_name=payload.display_name,
             org_unit_id=payload.org_unit_id,
+            public_view_enabled=payload.public_view_enabled,
+            public_edit_enabled=payload.public_edit_enabled,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card)
+
+
+@router.post(
+    "/organizations/{organization_id}/cards",
+    response_model=CardSummaryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_organization_card(
+    organization_id: UUID,
+    payload: OrganizationCardCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card = CardService(session).create_card_for_organization_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            display_name=payload.display_name,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
         )
@@ -94,6 +120,27 @@ def read_card(
     except Exception as exc:
         raise_service_http_error(exc)
     return _card_read_to_schema(card_read)
+
+
+@router.get(
+    "/cards/{card_id}/fields/{field_id}/reference-items",
+    response_model=ReferenceItemListRead,
+)
+def list_card_field_reference_items(
+    card_id: UUID,
+    field_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> ReferenceItemListRead:
+    try:
+        items = CardService(session).list_reference_items_for_card_field_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            field_id=field_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return ReferenceItemListRead(items=[ReferenceItemRead.model_validate(item) for item in items])
 
 
 @router.patch("/cards/{card_id}/fields/{field_id}", response_model=FieldValueRead)

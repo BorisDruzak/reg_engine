@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models import Organization, OrganizationClosure, OrgUnit
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.registry_schema import RegistrySchemaService
 
 
 class OrganizationNotFoundError(ValueError):
@@ -93,6 +94,11 @@ class OrganizationService:
                 object_type="organization",
                 object_id=organization.id,
                 new_data_json={"code": code, "name": name, "parent_id": None},
+            )
+            RegistrySchemaService(self.session).ensure_default_registry_for_root_organization(
+                root_organization_id=organization.id,
+                root_organization_code=organization.code,
+                actor_user_id=created_by,
             )
         return organization
 

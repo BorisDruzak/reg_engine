@@ -22,6 +22,7 @@ from app.models import (
     FormBlock,
     FormField,
     Permission,
+    Registry,
     Role,
     User,
     role_permissions,
@@ -30,7 +31,7 @@ from app.services.cards import CardService, CardServiceError, InvalidFieldValueE
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.references import ReferenceListService
-from app.services.registry_schema import RegistrySchemaService
+from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
 
 def _require_test_database_url() -> str:
@@ -232,7 +233,157 @@ def test_registry_schema_is_not_duplicated_per_organization(db_session: Session)
     registry = context["registry"]
 
     assert registry.code == "phase1d-assets"
-    assert not hasattr(registry, "organization_id")
+    assert registry.owner_organization_id is None
+    assert registry.is_default_for_owner_tree is False
+
+
+def test_main_root_organization_gets_one_default_registry(db_session: Session) -> None:
+    system_admin = _create_user(db_session, "phase6c-system@example.test", is_superuser=True)
+    organization_service = OrganizationService(db_session)
+
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6c-root",
+        name="Phase 6C Root",
+    )
+    child = organization_service.create_child(
+        parent_id=root.id,
+        code="phase6c-child",
+        name="Phase 6C Child",
+        created_by=system_admin.id,
+    )
+
+    registries = list(
+        db_session.scalars(
+            select(Registry).where(
+                Registry.owner_organization_id == root.id,
+                Registry.is_default_for_owner_tree.is_(True),
+                Registry.archived_at.is_(None),
+            )
+        ).all()
+    )
+
+    assert len(registries) == 1
+    assert registries[0].name == "Реестр карточек"
+    assert not db_session.scalars(
+        select(Registry).where(
+            Registry.owner_organization_id == child.id,
+            Registry.is_default_for_owner_tree.is_(True),
+        )
+    ).first()
+
+
+def test_default_registry_resolves_for_descendant_and_archived_default_is_ignored(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase6c-resolve-system@example.test",
+        is_superuser=True,
+    )
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6c-resolve-root",
+        name="Phase 6C Resolve Root",
+    )
+    child = organization_service.create_child(
+        parent_id=root.id,
+        code="phase6c-resolve-child",
+        name="Phase 6C Resolve Child",
+        created_by=system_admin.id,
+    )
+    schema_service = RegistrySchemaService(db_session)
+
+    default_registry = schema_service.resolve_default_registry_for_organization(child.id)
+
+    assert default_registry.owner_organization_id == root.id
+    default_registry.archived_at = datetime.now(UTC)
+    default_registry.lifecycle_status = "archived"
+    db_session.flush()
+
+    with pytest.raises(RegistrySchemaError, match="Default card registry is not configured"):
+        schema_service.resolve_default_registry_for_organization(child.id)
+
+
+def test_organization_centered_card_create_uses_root_default_registry(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase6c-card-system@example.test",
+        is_superuser=True,
+    )
+    org_admin = _create_user(db_session, "phase6c-card-admin@example.test")
+    card_role = _create_role_with_permissions(
+        db_session,
+        "phase6c_card_admin",
+        ["cards.manage"],
+    )
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6c-card-root",
+        name="Phase 6C Card Root",
+    )
+    child = organization_service.create_child(
+        parent_id=root.id,
+        code="phase6c-card-child",
+        name="Phase 6C Card Child",
+        created_by=system_admin.id,
+    )
+    default_registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        child.id
+    )
+    _grant_access(
+        db_session,
+        user_id=org_admin.id,
+        role_id=card_role.id,
+        organization_id=child.id,
+        registry_id=default_registry.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+
+    card = CardService(db_session).create_card_for_organization_for_actor(
+        actor_user_id=org_admin.id,
+        organization_id=child.id,
+        display_name="Organization-centered card",
+    )
+
+    assert card.registry_id == default_registry.id
+    assert card.organization_id == child.id
+
+
+def test_active_default_registry_with_cards_cannot_be_archived(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase6c-archive-system@example.test",
+        is_superuser=True,
+    )
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6c-archive-root",
+        name="Phase 6C Archive Root",
+    )
+    default_registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        root.id
+    )
+    CardService(db_session).create_card(
+        registry_id=default_registry.id,
+        organization_id=root.id,
+        display_name="Draft card blocks archive",
+        created_by=system_admin.id,
+    )
+
+    with pytest.raises(RegistrySchemaError, match="Default registry has active or draft cards"):
+        RegistrySchemaService(db_session).archive_registry_for_actor(
+            actor_user_id=system_admin.id,
+            registry_id=default_registry.id,
+        )
 
 
 def test_registry_admin_can_manage_schema_but_org_admin_cannot(
@@ -584,6 +735,170 @@ def test_select_and_multi_select_use_reference_items_and_validate_list_scope(
             card_id=card.id,
             field_id=multi_select_field.id,
             value=[laptop.id, invalid_item.id],
+        )
+
+
+def test_organization_effective_reference_list_replaces_inherited_values(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    reference_service = ReferenceListService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="local_refs",
+        title="Local references",
+    )
+    root_departments = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["root"].id,
+        code="departments",
+        name="Root departments",
+        inherit_to_descendants=True,
+        locked_for_descendants=True,
+    )
+    root_department = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=root_departments.id,
+        code="root-admin",
+        label="Root Admin",
+    )
+    child_departments = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["child"].id,
+        code="departments",
+        name="Child departments",
+        inherit_to_descendants=True,
+        locked_for_descendants=False,
+    )
+    child_department = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=child_departments.id,
+        code="child-admin",
+        label="Child Admin",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="department",
+        label="Department",
+        field_type="select",
+        options_source_type="reference_list",
+        options_source_id=root_departments.id,
+        options_config_json={
+            "reference_resolution": "by_card_organization",
+            "allow_owner_override": True,
+        },
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Local reference card",
+    )
+
+    effective_items = card_service.list_reference_items_for_card_field_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+    )
+    field_value = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value=child_department.id,
+    )
+
+    assert [item.id for item in effective_items] == [child_department.id]
+    assert field_value.value_reference_item_id == child_department.id
+    with pytest.raises(InvalidFieldValueError, match="effective reference list"):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value=root_department.id,
+        )
+
+
+def test_fixed_reference_list_ignores_local_override(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    reference_service = ReferenceListService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="fixed_refs",
+        title="Fixed references",
+    )
+    central_statuses = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["root"].id,
+        code="statuses",
+        name="Central statuses",
+        inherit_to_descendants=True,
+        locked_for_descendants=True,
+    )
+    central_status = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=central_statuses.id,
+        code="central",
+        label="Central",
+    )
+    local_statuses = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["child"].id,
+        code="statuses",
+        name="Local statuses",
+    )
+    local_status = reference_service.create_reference_item_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=local_statuses.id,
+        code="local",
+        label="Local",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="status",
+        label="Status",
+        field_type="select",
+        options_source_type="reference_list",
+        options_source_id=central_statuses.id,
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Fixed reference card",
+    )
+
+    effective_items = card_service.list_reference_items_for_card_field_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+    )
+    field_value = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value=central_status.id,
+    )
+
+    assert [item.id for item in effective_items] == [central_status.id]
+    assert field_value.value_reference_item_id == central_status.id
+    with pytest.raises(InvalidFieldValueError, match="configured list"):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value=local_status.id,
         )
 
 

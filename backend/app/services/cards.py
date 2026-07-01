@@ -19,6 +19,7 @@ from app.models import (
     FormField,
     Organization,
     OrgUnit,
+    ReferenceItem,
     Registry,
     StoredFile,
     User,
@@ -26,6 +27,7 @@ from app.models import (
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
+from app.services.registry_schema import RegistrySchemaService
 
 
 class CardServiceError(ValueError):
@@ -153,6 +155,27 @@ class CardService:
         )
         return card
 
+    def create_card_for_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        display_name: str,
+        public_view_enabled: bool = False,
+        public_edit_enabled: bool = False,
+    ) -> Card:
+        registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
+            organization_id
+        )
+        return self.create_card_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry.id,
+            organization_id=organization_id,
+            display_name=display_name,
+            public_view_enabled=public_view_enabled,
+            public_edit_enabled=public_edit_enabled,
+        )
+
     def create_card(
         self,
         *,
@@ -241,6 +264,8 @@ class CardService:
             field_model,
             value,
             card_id=card.id,
+            registry_id=card.registry_id,
+            organization_id=card.organization_id,
             actor_user_id=actor_user_id,
         )
         block_instance = self._resolve_block_instance_for_value(
@@ -329,6 +354,8 @@ class CardService:
             field_model,
             value,
             card_id=card_context_id,
+            registry_id=registry_id,
+            organization_id=organization_id,
             actor_user_id=actor_user_id,
         )
 
@@ -351,6 +378,8 @@ class CardService:
             field_model,
             value,
             card_id=card.id,
+            registry_id=card.registry_id,
+            organization_id=card.organization_id,
             public_context=True,
         )
         block_instance = self._resolve_block_instance_for_value(
@@ -511,6 +540,37 @@ class CardService:
             blocks=read_blocks,
             fields=read_fields,
         )
+
+    def list_reference_items_for_card_field_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        field_id: UUID,
+    ) -> list[ReferenceItem]:
+        card = self._get_readable_card(card_id, include_archive=False)
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read this card.")
+
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Field does not belong to the card registry.")
+        if field_model.field_type not in {"select", "multi_select"}:
+            return []
+
+        try:
+            return ReferenceListService(self.session).list_effective_items_for_field(
+                field_model=field_model,
+                registry_id=card.registry_id,
+                organization_id=card.organization_id,
+            )
+        except ReferenceListError as exc:
+            raise InvalidFieldValueError(str(exc)) from exc
 
     def archive_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> Card:
         card = self._get_editable_card(card_id)
@@ -814,6 +874,8 @@ class CardService:
         value: object,
         *,
         card_id: UUID | None = None,
+        registry_id: UUID | None = None,
+        organization_id: UUID | None = None,
         actor_user_id: UUID | None = None,
         public_context: bool = False,
     ) -> _FieldAssignment:
@@ -850,7 +912,12 @@ class CardService:
 
         if field_model.field_type == "select":
             item_id = self._ensure_uuid(value, "Select fields require a reference item id.")
-            self._ensure_reference_item_for_field(field_model, item_id)
+            self._ensure_reference_item_for_field(
+                field_model,
+                item_id,
+                registry_id=registry_id,
+                organization_id=organization_id,
+            )
             return _FieldAssignment(value_reference_item_id=item_id)
 
         if field_model.field_type == "multi_select":
@@ -859,7 +926,12 @@ class CardService:
                 "Multi-select fields require a list of reference item ids.",
             )
             for item_id in item_ids:
-                self._ensure_reference_item_for_field(field_model, item_id)
+                self._ensure_reference_item_for_field(
+                    field_model,
+                    item_id,
+                    registry_id=registry_id,
+                    organization_id=organization_id,
+                )
             return _FieldAssignment(item_ids=item_ids)
 
         if field_model.field_type == "organization_ref":
@@ -932,20 +1004,45 @@ class CardService:
             item_ids.append(item_id)
         return item_ids
 
-    def _ensure_reference_item_for_field(self, field_model: FormField, item_id: UUID) -> None:
+    def _ensure_reference_item_for_field(
+        self,
+        field_model: FormField,
+        item_id: UUID,
+        *,
+        registry_id: UUID | None,
+        organization_id: UUID | None,
+    ) -> None:
         if (
             field_model.options_source_type != "reference_list"
             or field_model.options_source_id is None
         ):
             raise InvalidFieldValueError("Reference field is not configured with a reference list.")
 
+        reference_service = ReferenceListService(self.session)
         try:
-            ReferenceListService(self.session).ensure_item_belongs_to_list(
-                item_id,
-                field_model.options_source_id,
-            )
+            if self._uses_organization_reference_resolution(field_model):
+                if registry_id is None or organization_id is None:
+                    raise InvalidFieldValueError(
+                        "Organization-aware reference fields require card organization context."
+                    )
+                reference_service.ensure_item_belongs_to_effective_list(
+                    item_id=item_id,
+                    field_model=field_model,
+                    registry_id=registry_id,
+                    organization_id=organization_id,
+                )
+                return
+
+            reference_service.ensure_item_belongs_to_list(item_id, field_model.options_source_id)
         except ReferenceListError as exc:
             raise InvalidFieldValueError(str(exc)) from exc
+
+    def _uses_organization_reference_resolution(self, field_model: FormField) -> bool:
+        config = field_model.options_config_json or {}
+        return (
+            config.get("reference_resolution") == "by_card_organization"
+            or config.get("allow_owner_override") is True
+        )
 
     def _ensure_active_organization_reference(self, organization_id: UUID) -> None:
         organization = self.session.get(Organization, organization_id)

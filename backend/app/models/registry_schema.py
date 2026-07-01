@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -24,7 +25,18 @@ class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __table_args__ = (
         UniqueConstraint("code", name="uq_registries_code"),
         CheckConstraint(f"lifecycle_status in ({quoted(REGISTRY_STATUSES)})", name="status"),
+        CheckConstraint(
+            "is_default_for_owner_tree = false or owner_organization_id is not null",
+            name="default_owner_requires_owner",
+        ),
         Index("ix_registries_code", "code"),
+        Index("ix_registries_owner_organization_id", "owner_organization_id"),
+        Index(
+            "uq_registries_default_owner_tree_active",
+            "owner_organization_id",
+            unique=True,
+            postgresql_where=text("is_default_for_owner_tree = true and archived_at is null"),
+        ),
     )
 
     code: Mapped[str] = mapped_column(String, nullable=False)
@@ -32,6 +44,12 @@ class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     lifecycle_status: Mapped[str] = mapped_column(String, nullable=False, server_default="active")
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    owner_organization_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
+    )
+    is_default_for_owner_tree: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     display_name_field_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey(
