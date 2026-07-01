@@ -528,6 +528,11 @@ tr:last-child td {
   min-height: 40px;
 }
 
+.card-workspace-grid .filter-grid {
+  grid-template-columns: 1fr;
+  padding-top: 12px;
+}
+
 .panel-feedback {
   display: grid;
   gap: 8px;
