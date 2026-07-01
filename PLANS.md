@@ -10,21 +10,21 @@ not a hardcoded employee registry.
 - Completed baseline: backend, frontend, attachments, generated documents,
   import/export, reports, and MCP phases through Phase 5R are implemented and
   deployed on `main`.
-- Active plan: **Phase 5S: Live Scenario Verification** and focused Phase
-  `5S.7` bugfix rerun.
+- Current checkpoint: **Phase 5S: Live Scenario Verification** is completed
+  after focused `5S.7` bugfix reruns.
 - Source analysis file: `docs/LIVE_VERIFICATION_PLAN.md`.
 - This file was cleaned on 2026-07-01 to keep only the current live verification
   plan and the minimum baseline needed for execution.
-- Live verification found three focused blockers in `LC-010`, `LC-012`, and
-  `LC-014`; fixes are tracked in `Phase 5S.7` and must be rerun on the
-  disposable livecheck environment before the phase is closed.
+- Live verification found focused blockers in `LC-010`, `LC-012`, and
+  `LC-014`; all tracked fixes were rerun on the disposable livecheck
+  environment.
 - No production PostgreSQL migration is planned. Current production Alembic
   remains `0014_report_pdf_output (head)` unless a later bugfix phase changes
   schema under the standard migration rules.
 
 ## Phase 5S: Live Scenario Verification
 
-Status: in progress.
+Status: completed.
 
 Purpose: verify Registry Engine as a real system, not only as isolated tests:
 
@@ -212,9 +212,20 @@ Local bugfix status:
 
 Required before closing Phase 5S:
 
-- Sync the bugfix commit to the disposable livecheck backend/frontend.
-- Re-run affected live checks: `LC-010`, `LC-012`, and `LC-014`.
-- Record rerun evidence in this file.
+- Completed.
+- Bugfix commit `86530f3d` closed `LC-010`, `LC-012`, and the original
+  `LC-014` section-level access-denied issue.
+- Bugfix commit `f3fea07` closed the follow-up `LC-014` card-workflow
+  reference-item read 403.
+- API/DB/storage/MCP rerun evidence:
+  `artifacts/live/livecheck_20260701_040741/live_runner_rerun_result.json`,
+  result `bugs=0`, entity prefix `livecheck_20260701_040741_000036`.
+- Browser/UI rerun evidence:
+  `artifacts/live/livecheck_20260701_040741/ui_livecheck_result.json`,
+  result `bugs=[]`. The remaining 403 responses in that UI evidence are the
+  expected admin-only `/permissions`, `/users`, and `/roles` denials after the
+  scoped user explicitly opens the forbidden Users section; the section shows a
+  localized Russian access-denied state.
 
 ## Scenario Acceptance Criteria
 
@@ -455,7 +466,7 @@ Exit:
 
 ### Phase 5S.4: Public, Document, Import, Report Live Checks
 
-Status: in progress.
+Status: completed.
 
 Scope:
 
@@ -471,7 +482,7 @@ Exit:
 
 ### Phase 5S.5: MCP And Scoped UX Live Checks
 
-Status: in progress.
+Status: completed.
 
 Scope:
 
@@ -499,7 +510,7 @@ Exit:
 
 ### Phase 5S.7: Bugfix Loop If Live Checks Fail
 
-Status: in progress.
+Status: completed.
 
 Rules:
 
@@ -508,6 +519,17 @@ Rules:
 - Keep fixes scoped; do not add unrelated product capabilities.
 - Update this plan with actual evidence and remaining risk after each fix.
 - Re-run the failed scenario and any affected downstream scenarios.
+
+Closed bugs:
+
+- `LC-010`: generated-document download now writes
+  `generated_document_download` audit rows.
+- `LC-012`: provided empty report string parameters are validated against
+  schema constraints such as `minLength` instead of being treated as omitted.
+- `LC-014`: forbidden admin-only sections now show a section-level Russian
+  access-denied state instead of misleading empty tables.
+- `LC-014`: scoped card workflows can read reference-list items needed by
+  select/multi-select fields without granting reference-list edit rights.
 
 ## Browser And Live Testing Capability Assessment
 
