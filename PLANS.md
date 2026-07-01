@@ -27,8 +27,8 @@ not a hardcoded employee registry.
   focused list/detail workflow with tabs, registry administration uses focused
   setup tabs, and row actions use compact visible labels with full accessible
   names.
-- Phase 7B technical-code autogeneration in create forms is implemented
-  locally and under verification.
+- Phase 7B technical-code autogeneration in create forms is implemented on
+  `main`, deployed to the server frontend, and live-verified in the browser.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -761,7 +761,7 @@ Known limitations:
 
 ## Phase 7B: Technical Code Autogeneration In UI
 
-Status: completed locally.
+Status: completed, pushed to `main`, deployed, and live-verified.
 
 Purpose:
 
@@ -814,6 +814,14 @@ Verification completed:
   passed, including backend ruff, backend format check, backend mypy, backend
   pytest, frontend lint, frontend typecheck, frontend tests, frontend build,
   and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
+  fast-forwarded to commit `2786847` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  rebuilt and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed same-origin frontend/API smoke checks.
+- Browser live check on `http://192.168.100.12:8000/` verified Russian page
+  title, active authenticated admin shell, and absence of manual technical-code
+  fields in create forms for organization, registry, form block, and form field.
 
 Known limitations:
 
