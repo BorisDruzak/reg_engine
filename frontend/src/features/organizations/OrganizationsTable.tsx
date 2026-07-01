@@ -3,6 +3,7 @@ import { useState, type CSSProperties, type FormEvent } from "react";
 
 import { archiveOrganization, createOrganization, updateOrganization } from "@/api/client";
 import type { OrganizationRead, OrganizationTreeNodeRead } from "@/api/types";
+import { generateTechnicalCode } from "@/app/technicalCode";
 import { activityLabel, uiText } from "@/app/uiText";
 import {
   AdminMutationDialog,
@@ -116,9 +117,8 @@ export function OrganizationsTable({
       return;
     }
 
-    const code = formState.code.trim();
     const name = formState.name.trim();
-    if (!name || (formState.mode === "create" && !code)) {
+    if (!name) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -131,7 +131,11 @@ export function OrganizationsTable({
     setSuccessMessage(null);
     if (formState.mode === "create") {
       createMutation.mutate({
-        code,
+        code: generateTechnicalCode(
+          name,
+          "org",
+          organizations.map((organization) => organization.code),
+        ),
         name,
         parent_id: formState.parentId || null,
         organization_type: defaultOrganizationType,
@@ -178,17 +182,6 @@ export function OrganizationsTable({
             onCancel={closeForm}
             onSubmit={handleFormSubmit}
           >
-            {formState.mode === "create" && (
-              <label>
-                {uiText.organizationCode}
-                <input
-                  value={formState.code}
-                  onChange={(event) =>
-                    setFormState({ ...formState, code: event.currentTarget.value })
-                  }
-                />
-              </label>
-            )}
             <label>
               {uiText.organizationName} организации
               <input

@@ -1004,7 +1004,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
   await expect(page.getByText("Нет документов")).toBeVisible();
-  await page.getByLabel("Код шаблона").fill("acceptance_act");
+  await expect(page.getByLabel("Код шаблона")).toHaveCount(0);
   await page.getByLabel("Название шаблона").fill("Акт приема");
   await page.getByLabel("Описание шаблона").fill("Документ по карточке");
   await page.getByLabel("Шаблон имени файла").fill("{{ card.display_name }}-act.docx");
@@ -2067,7 +2067,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Организации", exact: true }).click();
   await page.getByRole("button", { name: "Создать организацию" }).click();
-  await page.getByLabel("Код организации").fill("qa-department");
+  await expect(page.getByLabel("Код организации")).toHaveCount(0);
   await page.getByLabel("Название организации").fill("Отдел контроля");
   await page
     .getByLabel("Родительская организация")
@@ -2087,7 +2087,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("button", { name: "Создать реестр" }).click();
-  await page.getByLabel("Код реестра").fill("qa_checks");
+  await expect(page.getByLabel("Код реестра")).toHaveCount(0);
   await page.getByLabel("Название реестра").fill("Реестр проверок");
   await page.getByLabel("Описание реестра").fill("Контрольные карточки");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
@@ -2108,7 +2108,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("button", { name: "Создать блок формы" }).click();
-  await page.getByLabel("Код блока формы").fill("main");
+  await expect(page.getByLabel("Код блока формы")).toHaveCount(0);
   await page.getByLabel("Название блока формы").fill("Основные сведения");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Блок формы создан")).toBeVisible();
@@ -2116,7 +2116,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("tab", { name: "Справочники" }).click();
   await page.getByRole("button", { name: "Создать справочник" }).click();
-  await page.getByLabel("Код справочника").fill("qa_statuses");
+  await expect(page.getByLabel("Код справочника")).toHaveCount(0);
   await page.getByLabel("Название справочника").fill("Статусы проверки");
   await page.getByLabel("Описание справочника").fill("Результаты проверки");
   await page
@@ -2127,7 +2127,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Справочник создан")).toBeVisible();
 
   await page.getByRole("button", { name: "Создать элемент справочника" }).click();
-  await page.getByLabel("Код элемента справочника").fill("accepted");
+  await expect(page.getByLabel("Код элемента справочника")).toHaveCount(0);
   await page.getByLabel("Название элемента справочника").fill("Принято");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Элемент справочника создан")).toBeVisible();
@@ -2135,7 +2135,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("tab", { name: "Схема карточки" }).click();
   await page.getByRole("button", { name: "Создать поле формы" }).click();
-  await page.getByLabel("Код поля формы").fill("qa_status");
+  await expect(page.getByLabel("Код поля формы")).toHaveCount(0);
   await page.getByLabel("Тип поля формы").selectOption("select");
   await page.getByLabel("Название поля формы").fill("Статус проверки");
   await page.getByLabel("Справочник для поля").selectOption("61616161-6161-4616-8616-616161616161");
@@ -2143,7 +2143,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Поле формы создано")).toBeVisible();
 
   await page.getByRole("button", { name: "Создать поле формы" }).click();
-  await page.getByLabel("Код поля формы").fill("qa_file");
+  await expect(page.getByLabel("Код поля формы")).toHaveCount(0);
   await page.getByLabel("Тип поля формы").selectOption("file_ref");
   await page.getByLabel("Название поля формы").fill("Файл проверки");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
@@ -2183,7 +2183,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Сохранено: Файл проверки")).toBeVisible();
 
   await page.getByRole("tab", { name: "Документы" }).click();
-  await page.getByLabel("Код шаблона").fill("qa_doc");
+  await expect(page.getByLabel("Код шаблона")).toHaveCount(0);
   await page.getByLabel("Название шаблона").fill("Документ проверки");
   await page.getByLabel("Текст шаблона").fill("Карточка: {{ card.display_name }}");
   await page.getByRole("button", { name: "Создать шаблон" }).click();

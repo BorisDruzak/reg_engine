@@ -12,6 +12,7 @@ import {
   listGeneratedDocuments,
 } from "@/api/client";
 import type { DocumentTemplateRead, GeneratedDocumentRead } from "@/api/types";
+import { generateTechnicalCode } from "@/app/technicalCode";
 import { formatUiDateTime, uiText } from "@/app/uiText";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
@@ -27,7 +28,6 @@ export function GeneratedDocumentsPanel({
 }) {
   const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState("");
-  const [templateCode, setTemplateCode] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateBody, setTemplateBody] = useState("");
@@ -51,15 +51,16 @@ export function GeneratedDocumentsPanel({
     (template) => template.id === selectedTemplateId,
   );
   const canCreateTemplate = Boolean(
-    templateCode.trim() &&
-    templateName.trim() &&
-    templateBody.trim() &&
-    outputFilenameTemplate.trim(),
+    templateName.trim() && templateBody.trim() && outputFilenameTemplate.trim(),
   );
   const createTemplateMutation = useMutation({
     mutationFn: () =>
       createDocumentTemplate(token, registryId, {
-        code: templateCode.trim(),
+        code: generateTechnicalCode(
+          templateName,
+          "template",
+          (templatesQuery.data?.items ?? []).map((template) => template.code),
+        ),
         name: templateName.trim(),
         description: templateDescription.trim() || null,
         template_body: templateBody,
@@ -69,7 +70,6 @@ export function GeneratedDocumentsPanel({
       setMessage(uiText.templateCreated);
       setLocalError(null);
       setTemplateId(template.id);
-      setTemplateCode("");
       setTemplateName("");
       setTemplateDescription("");
       setTemplateBody("");
@@ -184,14 +184,6 @@ export function GeneratedDocumentsPanel({
             createTemplateMutation.mutate();
           }}
         >
-          <label className="field-editor-control">
-            <span>{uiText.templateCode}</span>
-            <input
-              required
-              value={templateCode}
-              onChange={(event) => setTemplateCode(event.target.value)}
-            />
-          </label>
           <label className="field-editor-control">
             <span>{uiText.templateName}</span>
             <input

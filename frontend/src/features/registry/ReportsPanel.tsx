@@ -12,6 +12,7 @@ import {
   updateReportTemplate,
 } from "@/api/client";
 import type { ReportRunRead, ReportTemplateRead } from "@/api/types";
+import { generateTechnicalCode } from "@/app/technicalCode";
 import { formatUiDateTime, reportRunStatusLabel, reportTypeLabel, uiText } from "@/app/uiText";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
@@ -50,7 +51,6 @@ export function ReportsPanel({
 }) {
   const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState("");
-  const [templateCode, setTemplateCode] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [reportType, setReportType] = useState("registry_cards");
@@ -107,14 +107,16 @@ export function ReportsPanel({
     () => parseJsonObjectForDisplay(runParametersJson) ?? selectedTemplateDefaultParameters ?? {},
     [runParametersJson, selectedTemplateDefaultParameters],
   );
-  const canCreateTemplate = Boolean(
-    selectedRegistryId && templateCode.trim() && templateName.trim() && reportType,
-  );
+  const canCreateTemplate = Boolean(selectedRegistryId && templateName.trim() && reportType);
   const canUpdateTemplate = Boolean(editingTemplateId && editTemplateName.trim());
   const createTemplateMutation = useMutation({
     mutationFn: () =>
       createReportTemplate(token, selectedRegistryId, {
-        code: templateCode.trim(),
+        code: generateTechnicalCode(
+          templateName,
+          "report",
+          templates.map((template) => template.code),
+        ),
         name: templateName.trim(),
         description: templateDescription.trim() || null,
         report_type: reportType,
@@ -126,7 +128,6 @@ export function ReportsPanel({
       setMessage(uiText.reportTemplateCreated);
       setLocalError(null);
       setTemplateId(template.id);
-      setTemplateCode("");
       setTemplateName("");
       setTemplateDescription("");
       setReportType("registry_cards");
@@ -292,14 +293,6 @@ export function ReportsPanel({
             createTemplateMutation.mutate();
           }}
         >
-          <label className="field-editor-control">
-            <span>{uiText.reportTemplateCode}</span>
-            <input
-              required
-              value={templateCode}
-              onChange={(event) => setTemplateCode(event.target.value)}
-            />
-          </label>
           <label className="field-editor-control">
             <span>{uiText.reportTemplateName}</span>
             <input

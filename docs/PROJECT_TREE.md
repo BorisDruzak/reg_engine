@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-01 16:50:23 +05:00
+- Generated: 2026-07-02 02:01:09 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -193,6 +193,8 @@
 - `frontend/src/App.tsx`
 - `frontend/src/app/AppProviders.tsx`
 - `frontend/src/app/router.tsx`
+- `frontend/src/app/technicalCode.test.ts`
+- `frontend/src/app/technicalCode.ts`
 - `frontend/src/app/uiText.test.ts`
 - `frontend/src/app/uiText.ts`
 - `frontend/src/app/uiTextUnicode.test.ts`

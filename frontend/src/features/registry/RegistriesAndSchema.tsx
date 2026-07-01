@@ -29,6 +29,7 @@ import type {
   RegistryRead,
   RegistrySchemaRead,
 } from "@/api/types";
+import { generateTechnicalCode } from "@/app/technicalCode";
 import {
   activityLabel,
   booleanLabel,
@@ -246,10 +247,9 @@ export function RegistriesAndSchema({
       return;
     }
 
-    const code = formState.code.trim();
     const name = formState.name.trim();
     const description = formState.description.trim();
-    if (!name || (formState.mode === "create" && !code)) {
+    if (!name) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -258,7 +258,11 @@ export function RegistriesAndSchema({
     setSuccessMessage(null);
     if (formState.mode === "create") {
       createMutation.mutate({
-        code,
+        code: generateTechnicalCode(
+          name,
+          "registry",
+          registries.map((registry) => registry.code),
+        ),
         name,
         description: description || null,
       });
@@ -313,17 +317,6 @@ export function RegistriesAndSchema({
                 onCancel={closeForm}
                 onSubmit={handleFormSubmit}
               >
-                {formState.mode === "create" && (
-                  <label>
-                    {uiText.registryCode}
-                    <input
-                      value={formState.code}
-                      onChange={(event) =>
-                        setFormState({ ...formState, code: event.currentTarget.value })
-                      }
-                    />
-                  </label>
-                )}
                 <label>
                   {uiText.registryName}
                   <input
@@ -597,10 +590,9 @@ function SchemaBlocksPanel({
       return;
     }
 
-    const code = formState.code.trim();
     const title = formState.title.trim();
     const description = formState.description.trim();
-    if (!title || (formState.mode === "create" && !code)) {
+    if (!title) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -609,7 +601,11 @@ function SchemaBlocksPanel({
     setSuccessMessage(null);
     if (formState.mode === "create") {
       createMutation.mutate({
-        code,
+        code: generateTechnicalCode(
+          title,
+          "block",
+          blocks.map((block) => block.code),
+        ),
         title,
         description: description || null,
         position: positionNumber(formState.position),
@@ -659,17 +655,6 @@ function SchemaBlocksPanel({
             onCancel={closeForm}
             onSubmit={handleFormSubmit}
           >
-            {formState.mode === "create" && (
-              <label>
-                {uiText.formBlockCode}
-                <input
-                  value={formState.code}
-                  onChange={(event) =>
-                    setFormState({ ...formState, code: event.currentTarget.value })
-                  }
-                />
-              </label>
-            )}
             <label>
               {uiText.formBlockTitle}
               <input
@@ -953,12 +938,11 @@ function SchemaFieldsPanel({
       return;
     }
 
-    const code = formState.code.trim();
     const label = formState.label.trim();
     const blockId = formState.blockId.trim();
     const description = formState.description.trim();
     const optionsSourceId = formState.optionsSourceId.trim();
-    if (!label || (formState.mode === "create" && (!code || !blockId))) {
+    if (!label || (formState.mode === "create" && !blockId)) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -969,7 +953,11 @@ function SchemaFieldsPanel({
       const usesReferenceList = referenceBackedFieldTypes.has(formState.fieldType);
       createMutation.mutate({
         blockId,
-        code,
+        code: generateTechnicalCode(
+          label,
+          "field",
+          fields.map((field) => field.code),
+        ),
         label,
         field_type: formState.fieldType,
         description: description || null,
@@ -1038,15 +1026,6 @@ function SchemaFieldsPanel({
                       </option>
                     ))}
                   </select>
-                </label>
-                <label>
-                  {uiText.formFieldCode}
-                  <input
-                    value={formState.code}
-                    onChange={(event) =>
-                      setFormState({ ...formState, code: event.currentTarget.value })
-                    }
-                  />
                 </label>
                 <label>
                   {uiText.formFieldType}
@@ -1463,10 +1442,9 @@ function ReferenceListsPanel({
       return;
     }
 
-    const code = listFormState.code.trim();
     const name = listFormState.name.trim();
     const description = listFormState.description.trim();
-    if (!name || (listFormState.mode === "create" && !code)) {
+    if (!name) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -1475,7 +1453,11 @@ function ReferenceListsPanel({
     setSuccessMessage(null);
     if (listFormState.mode === "create") {
       createListMutation.mutate({
-        code,
+        code: generateTechnicalCode(
+          name,
+          "list",
+          referenceLists.map((referenceList) => referenceList.code),
+        ),
         name,
         owner_organization_id: listFormState.ownerOrganizationId || null,
         description: description || null,
@@ -1501,10 +1483,9 @@ function ReferenceListsPanel({
       return;
     }
 
-    const code = itemFormState.code.trim();
     const label = itemFormState.label.trim();
     const description = itemFormState.description.trim();
-    if (!label || (itemFormState.mode === "create" && !code)) {
+    if (!label) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -1514,7 +1495,11 @@ function ReferenceListsPanel({
     if (itemFormState.mode === "create") {
       createItemMutation.mutate({
         listId: activeReferenceListId,
-        code,
+        code: generateTechnicalCode(
+          label,
+          "item",
+          (referenceItemsQuery.data?.items ?? []).map((item) => item.code),
+        ),
         label,
         parent_id: itemFormState.parentId || null,
         description: description || null,
@@ -1568,17 +1553,6 @@ function ReferenceListsPanel({
                 onCancel={closeListForm}
                 onSubmit={handleListFormSubmit}
               >
-                {listFormState.mode === "create" && (
-                  <label>
-                    {uiText.referenceListCode}
-                    <input
-                      value={listFormState.code}
-                      onChange={(event) =>
-                        setListFormState({ ...listFormState, code: event.currentTarget.value })
-                      }
-                    />
-                  </label>
-                )}
                 <label>
                   {uiText.referenceListName}
                   <input
@@ -1729,17 +1703,6 @@ function ReferenceListsPanel({
                 onCancel={closeItemForm}
                 onSubmit={handleItemFormSubmit}
               >
-                {itemFormState.mode === "create" && (
-                  <label>
-                    {uiText.referenceItemCode}
-                    <input
-                      value={itemFormState.code}
-                      onChange={(event) =>
-                        setItemFormState({ ...itemFormState, code: event.currentTarget.value })
-                      }
-                    />
-                  </label>
-                )}
                 <label>
                   {uiText.referenceItemLabel}
                   <input

@@ -23,14 +23,16 @@ not a hardcoded employee registry.
 - Phase 6F production follow-up repaired the existing single-root production
   data to exactly one active root-owned default registry after a fresh
   server-side backup stored outside Git.
-- Phase 7A admin UI workspace refactor is implemented locally: cards use a
+- Phase 7A admin UI workspace refactor is implemented on `main`: cards use a
   focused list/detail workflow with tabs, registry administration uses focused
   setup tabs, and row actions use compact visible labels with full accessible
   names.
+- Phase 7B technical-code autogeneration in create forms is implemented
+  locally and under verification.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint after Phase 7A is not selected yet.
+- Next implementation checkpoint after Phase 7B is not selected yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -75,6 +77,9 @@ not a hardcoded employee registry.
     organization tree.
 18. Subordinate organizations must be able to use their own organization-owned
     reference lists for fields whose values differ by organization.
+19. Ordinary create forms must not require users to manually invent technical
+    codes. The UI should generate stable codes from Russian user-facing names
+    and keep technical codes visible only as diagnostic metadata where useful.
 
 ## Current Technical Facts
 
@@ -751,5 +756,68 @@ Known limitations:
 
 - `История` is a placeholder tab in the card workspace and does not yet load a
   dedicated card-scoped audit feed.
-- This phase is local/frontend-only until the normal `main` push and server
-  frontend deployment flow is run.
+- This phase is frontend-only and does not change backend APIs, migrations, or
+  production data.
+
+## Phase 7B: Technical Code Autogeneration In UI
+
+Status: completed locally.
+
+Purpose:
+
+Remove avoidable user-facing technical-code input from ordinary admin create
+forms while preserving the backend's existing schema-driven `code` contract.
+
+Implemented scope:
+
+1. Added a shared frontend technical-code generator:
+   - transliterates Cyrillic names to lowercase Latin slugs;
+   - normalizes separators to `_`;
+   - uses a safe prefix fallback when the source name is empty or starts with a
+     digit;
+   - appends `_2`, `_3`, and later suffixes when the generated code already
+     exists in the currently loaded list.
+2. Hid manual technical-code inputs in create forms for:
+   - organizations;
+   - registries;
+   - form blocks;
+   - form fields;
+   - reference lists;
+   - reference items;
+   - document templates;
+   - report templates.
+3. Kept technical codes visible in tables/details as diagnostic metadata.
+4. Kept edit flows from changing existing technical codes.
+5. Kept backend APIs, services, schemas, migrations, auth, RBAC, import/export,
+   documents, reports, and MCP capabilities unchanged.
+
+Required behavior:
+
+- Backend payloads still include `code`.
+- User-visible create forms ask for names/titles/labels, not manual technical
+  codes.
+- Empty-name validation still prevents create requests without a user-facing
+  name.
+- Duplicate generated codes are handled client-side with suffixes, while the
+  backend remains the final constraint authority.
+
+Verification completed:
+
+- `pnpm -C frontend test:run src/app/technicalCode.test.ts`: 3 passed.
+- `pnpm -C frontend test:run`: 6 files passed, 53 tests passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed, including backend ruff, backend format check, backend mypy, backend
+  pytest, frontend lint, frontend typecheck, frontend tests, frontend build,
+  and project-map check.
+
+Known limitations:
+
+- The frontend only checks collisions against currently loaded entities. Backend
+  unique constraints remain authoritative for concurrent or stale-client cases.
+- Technical code editing for existing entities remains intentionally out of
+  scope.

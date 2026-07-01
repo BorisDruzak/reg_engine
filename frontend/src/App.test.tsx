@@ -2649,10 +2649,10 @@ test("renders organization hierarchy and hides organization type choices", async
 
   await user.click(screen.getByRole("button", { name: "Создать организацию" }));
   expect(screen.queryByLabelText("Тип организации")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Код организации")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("option", { name: "Без родительской организации" }),
   ).not.toBeInTheDocument();
-  await user.type(screen.getByLabelText("Код организации"), "branch");
   await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
   const postCountBeforeParentValidation = vi
     .mocked(fetch)
@@ -2691,7 +2691,7 @@ test("renders organization hierarchy and hides organization type choices", async
         return (
           String(input).endsWith("/api/v1/organizations") &&
           init?.method === "POST" &&
-          body.code === "branch" &&
+          body.code === "dochernyaya_organizatsiya" &&
           body.name === "Дочерняя организация" &&
           body.parent_id === "22222222-2222-4222-8222-222222222222" &&
           body.organization_type === "organization"
@@ -2714,7 +2714,7 @@ test("allows the first organization to be created as the main root", async () =>
   expect(await screen.findByText("Нет данных")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Создать организацию" }));
   expect(screen.getByRole("option", { name: "Без родительской организации" })).toBeInTheDocument();
-  await user.type(screen.getByLabelText("Код организации"), "root");
+  expect(screen.queryByLabelText("Код организации")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название организации"), "Главная организация");
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -2732,7 +2732,7 @@ test("allows the first organization to be created as the main root", async () =>
         return (
           String(input).endsWith("/api/v1/organizations") &&
           init?.method === "POST" &&
-          body.code === "root" &&
+          body.code === "glavnaya_organizatsiya" &&
           body.name === "Главная организация" &&
           body.parent_id === null &&
           body.organization_type === "organization"
@@ -2834,7 +2834,7 @@ test("creates edits and archives organizations in Russian UI", async () => {
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(organizationPostCount()).toBe(postCountBeforeValidation);
 
-  await user.type(screen.getByLabelText("Код организации"), "branch");
+  expect(screen.queryByLabelText("Код организации")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
   await user.selectOptions(screen.getByLabelText("Родительская организация"), [
     "22222222-2222-4222-8222-222222222222",
@@ -2881,7 +2881,7 @@ test("creates edits and archives organizations in Russian UI", async () => {
         return (
           String(input).endsWith("/api/v1/organizations") &&
           init?.method === "POST" &&
-          body.code === "branch" &&
+          body.code === "dochernyaya_organizatsiya" &&
           body.name === "Дочерняя организация" &&
           body.parent_id === "22222222-2222-4222-8222-222222222222" &&
           body.organization_type === "organization"
@@ -3235,14 +3235,14 @@ test("creates edits and archives registries in Russian UI", async () => {
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(registryPostCount()).toBe(postCountBeforeValidation);
 
-  await user.type(screen.getByLabelText("Код реестра"), "contracts");
+  expect(screen.queryByLabelText("Код реестра")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название реестра"), "Реестр договоров");
   await user.type(screen.getByLabelText("Описание реестра"), "Договорная работа");
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Реестр создан")).toBeInTheDocument();
   expect(screen.getAllByText("Реестр договоров").length).toBeGreaterThan(0);
-  expect(screen.getByText(/contracts \/ v1 \/ Черновик/)).toBeInTheDocument();
+  expect(screen.getByText(/reestr_dogovorov \/ v1 \/ Черновик/)).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Редактировать реестр Реестр договоров" }));
   const editNameInput = await screen.findByLabelText("Название реестра");
@@ -3256,7 +3256,7 @@ test("creates edits and archives registries in Russian UI", async () => {
 
   expect(await screen.findByText("Реестр обновлен")).toBeInTheDocument();
   expect(screen.getAllByText("Реестр договоров обновленный").length).toBeGreaterThan(0);
-  expect(screen.getByText(/contracts \/ v1 \/ Активно/)).toBeInTheDocument();
+  expect(screen.getByText(/reestr_dogovorov \/ v1 \/ Активно/)).toBeInTheDocument();
 
   await user.click(
     screen.getByRole("button", {
@@ -3279,7 +3279,7 @@ test("creates edits and archives registries in Russian UI", async () => {
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
     expect(createBody).toEqual({
-      code: "contracts",
+      code: "reestr_dogovorov",
       name: "Реестр договоров",
       description: "Договорная работа",
     });
@@ -3366,7 +3366,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(blockPostCount()).toBe(blockPostCountBeforeValidation);
 
-  fireEvent.change(screen.getByLabelText("Код блока формы"), { target: { value: "details" } });
+  expect(screen.queryByLabelText("Код блока формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название блока формы"), {
     target: { value: "Детали карточки" },
   });
@@ -3399,7 +3399,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   await user.selectOptions(screen.getByLabelText("Блок формы"), [
     "26262626-2626-4262-8262-262626262626",
   ]);
-  fireEvent.change(screen.getByLabelText("Код поля формы"), { target: { value: "amount" } });
+  expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название поля формы"), { target: { value: "Сумма" } });
   fireEvent.change(screen.getByLabelText("Описание поля формы"), {
     target: { value: "Числовое значение" },
@@ -3468,7 +3468,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       unknown
     >;
     expect(createBlockBody).toEqual({
-      code: "details",
+      code: "detali_kartochki",
       title: "Детали карточки",
       description: "Дополнительные данные",
       position: 10,
@@ -3488,7 +3488,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       unknown
     >;
     expect(createFieldBody).toEqual({
-      code: "amount",
+      code: "summa",
       label: "Сумма",
       field_type: "number",
       description: "Числовое значение",
@@ -3587,9 +3587,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(referenceListPostCount()).toBe(postCountBeforeValidation);
 
-  fireEvent.change(screen.getByLabelText("Код справочника"), {
-    target: { value: "priority_levels" },
-  });
+  expect(screen.queryByLabelText("Код справочника")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название справочника"), {
     target: { value: "Приоритеты" },
   });
@@ -3634,9 +3632,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(referenceItemPostCount()).toBe(itemPostCountBeforeValidation);
 
-  fireEvent.change(screen.getByLabelText("Код элемента справочника"), {
-    target: { value: "high" },
-  });
+  expect(screen.queryByLabelText("Код элемента справочника")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название элемента справочника"), {
     target: { value: "Высокий" },
   });
@@ -3705,7 +3701,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
       unknown
     >;
     expect(createListBody).toEqual({
-      code: "priority_levels",
+      code: "prioritety",
       name: "Приоритеты",
       owner_organization_id: "22222222-2222-4222-8222-222222222222",
       description: "Уровни приоритета карточки",
@@ -3726,7 +3722,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
       unknown
     >;
     expect(createItemBody).toEqual({
-      code: "high",
+      code: "vysokiy",
       label: "Высокий",
       parent_id: null,
       description: "Высокий приоритет",
@@ -3805,7 +3801,7 @@ test("wires select fields to reference lists without hardcoded options", async (
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
 
   await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
-  fireEvent.change(screen.getByLabelText("Код поля формы"), { target: { value: "state" } });
+  expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название поля формы"), {
     target: { value: "Состояние" },
   });
@@ -3831,7 +3827,7 @@ test("wires select fields to reference lists without hardcoded options", async (
     expect(createFieldCall).toBeTruthy();
     const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
     expect(body).toMatchObject({
-      code: "state",
+      code: "sostoyanie",
       label: "Состояние",
       field_type: "select",
       options_source_type: "reference_list",
@@ -4122,7 +4118,7 @@ test("creates and archives document templates in Russian UI", async () => {
 
   expect(await screen.findByRole("heading", { name: "Шаблоны документов" })).toBeInTheDocument();
 
-  await user.type(screen.getByLabelText("Код шаблона"), "acceptance_act");
+  expect(screen.queryByLabelText("Код шаблона")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название шаблона"), "Акт приема");
   await user.type(screen.getByLabelText("Описание шаблона"), "Документ по карточке");
   fireEvent.change(screen.getByLabelText("Шаблон имени файла"), {
@@ -4162,7 +4158,7 @@ test("creates and archives document templates in Russian UI", async () => {
           output_filename_template?: string;
         };
         return (
-          body.code === "acceptance_act" &&
+          body.code === "akt_priema" &&
           body.name === "Акт приема" &&
           body.description === "Документ по карточке" &&
           body.template_body === "Карточка: {{ card.display_name }}" &&
@@ -4367,7 +4363,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   expect(screen.getAllByText("Сводный отчет").length).toBeGreaterThan(0);
   expect(screen.getByText("Нет сформированных отчетов")).toBeInTheDocument();
 
-  await user.type(screen.getByLabelText("Код шаблона отчета"), "cards_summary");
+  expect(screen.queryByLabelText("Код шаблона отчета")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название шаблона отчета"), "Отчет по карточкам");
   await user.type(screen.getByLabelText("Описание шаблона отчета"), "Список видимых карточек");
   await user.selectOptions(screen.getByLabelText("Тип отчета"), "registry_cards");
@@ -4494,7 +4490,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
     await screen.findByText((_, element) =>
       Boolean(
         element?.tagName === "SPAN" &&
-        element.textContent?.includes("cards_summary") &&
+        element.textContent?.includes("otchet_po_kartochkam") &&
         element.textContent?.includes("Архивировано"),
       ),
     ),
@@ -4529,7 +4525,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
           output_format?: string;
         };
         return (
-          body.code === "cards_summary" &&
+          body.code === "otchet_po_kartochkam" &&
           body.name === "Отчет по карточкам" &&
           body.description === "Список видимых карточек" &&
           body.report_type === "registry_cards" &&
