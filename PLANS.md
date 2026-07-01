@@ -19,8 +19,10 @@ not a hardcoded employee registry.
 - Phase 6E disposable PostgreSQL, production migration, frontend deployment,
   API live checks, and browser live checks are completed.
 - Phase 6F root/default-registry enforcement and ordinary card workflow fixes
-  are implemented locally. Full disposable PostgreSQL and live checks are the
-  current verification focus.
+  are completed, deployed to `main`, and live-verified.
+- Phase 6F production follow-up repaired the existing single-root production
+  data to exactly one active root-owned default registry after a fresh
+  server-side backup stored outside Git.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -524,8 +526,7 @@ Live notes:
 
 ## Phase 6F: Root/Default Registry Enforcement And Card Workflow Fixes
 
-Status: implementation completed locally; full PostgreSQL/live verification in
-progress.
+Status: completed.
 
 Purpose:
 
@@ -646,6 +647,33 @@ Acceptance criteria:
 - Existing registry-based APIs remain available.
 - Full backend, frontend, e2e, disposable PostgreSQL, and Phase 6 live checks are
   recorded before marking the phase fully completed.
+
+Verification completed:
+
+- Local `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend ruff, backend format check, backend mypy, backend pytest,
+  frontend lint, frontend typecheck, frontend unit tests, frontend build, and
+  project-map check.
+- Local `pnpm -C frontend e2e` passed: 3 Playwright smoke tests.
+- Disposable PostgreSQL verification on the server passed against a database
+  whose name ended with `_test`: `tests/test_database_smoke.py`,
+  `tests/test_registry_card_services.py`, and `tests/test_api_phase_1g.py`
+  reported 28 passed.
+- Production Phase 6F preflight initially found one active root organization and
+  no active default registry. A fresh server-side backup was created outside Git,
+  then `python -m app.cli.phase6f ensure-default-registry` assigned the existing
+  active registry as the root default.
+- Production post-check reported one active root organization, one active default
+  registry, and one root-owned active default registry.
+- Server checkout was synchronized to `origin/main`; server checks passed.
+- API service restart passed healthcheck on the deployed server.
+- Live API check on a temporary uvicorn runtime with disposable PostgreSQL
+  verified:
+  - second root creation returns 400;
+  - organization-centered card list includes the default-registry card;
+  - organization-centered card list does not leak an arbitrary registry card.
+- Browser live smoke on the deployed server verified the Russian login page,
+  title `Реестровая система`, and visible `Войти` action.
 
 ## Non-Goals For Phase 6
 
