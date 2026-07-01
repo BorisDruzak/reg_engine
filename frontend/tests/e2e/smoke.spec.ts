@@ -471,28 +471,37 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       });
       return;
     }
-    if (url.pathname === "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards") {
-      const body = request.postDataJSON() as {
-        display_name: string;
-        public_view_enabled?: boolean;
-        public_edit_enabled?: boolean;
-      };
-      createdCard = {
-        id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
-        registry_id: "77777777-7777-4777-8777-777777777777",
-        organization_id: "22222222-2222-4222-8222-222222222222",
-        org_unit_id: null,
-        display_name: body.display_name,
-        lifecycle_status: "draft",
-        public_view_enabled: Boolean(body.public_view_enabled),
-        public_edit_enabled: Boolean(body.public_edit_enabled),
-      };
-      cardItems = [...cardItems, createdCard];
-      appendAuditEvent("create", "card", createdCard.id);
+    const organizationCardsMatch = url.pathname.match(/^\/api\/v1\/organizations\/([^/]+)\/cards$/);
+    if (organizationCardsMatch) {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          display_name: string;
+          public_view_enabled?: boolean;
+          public_edit_enabled?: boolean;
+        };
+        createdCard = {
+          id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          registry_id: "77777777-7777-4777-8777-777777777777",
+          organization_id: organizationCardsMatch[1],
+          org_unit_id: null,
+          display_name: body.display_name,
+          lifecycle_status: "draft",
+          public_view_enabled: Boolean(body.public_view_enabled),
+          public_edit_enabled: Boolean(body.public_edit_enabled),
+        };
+        cardItems = [...cardItems, createdCard];
+        appendAuditEvent("create", "card", createdCard.id);
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(createdCard),
+        });
+        return;
+      }
       await route.fulfill({
-        status: 201,
+        status: 200,
         contentType: "application/json",
-        body: JSON.stringify(createdCard),
+        body: JSON.stringify({ items: cardItems }),
       });
       return;
     }
@@ -1140,6 +1149,8 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     description: string | null;
     lifecycle_status: string;
     schema_version: number;
+    owner_organization_id: string | null;
+    is_default_for_owner_tree: boolean;
   };
   type SetupAccessGrant = {
     id: string;
@@ -1548,6 +1559,8 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           description: body.description ?? null,
           lifecycle_status: "draft",
           schema_version: 1,
+          owner_organization_id: rootOrganizationId,
+          is_default_for_owner_tree: true,
         };
         registries = [...registries, created];
         appendAuditEvent("create", "registry", created.id);
@@ -1725,28 +1738,39 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       });
       return;
     }
-    if (url.pathname === `/api/v1/organizations/${ids.organization}/cards`) {
-      const body = request.postDataJSON() as {
-        display_name: string;
-        public_view_enabled?: boolean;
-        public_edit_enabled?: boolean;
-      };
-      const created = {
-        id: ids.card,
-        registry_id: ids.registry,
-        organization_id: ids.organization,
-        org_unit_id: null,
-        display_name: body.display_name,
-        lifecycle_status: "draft",
-        public_view_enabled: Boolean(body.public_view_enabled),
-        public_edit_enabled: Boolean(body.public_edit_enabled),
-      };
-      cards = [...cards, created];
-      appendAuditEvent("create", "card", created.id);
+    const setupOrganizationCardsMatch = url.pathname.match(
+      /^\/api\/v1\/organizations\/([^/]+)\/cards$/,
+    );
+    if (setupOrganizationCardsMatch) {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          display_name: string;
+          public_view_enabled?: boolean;
+          public_edit_enabled?: boolean;
+        };
+        const created = {
+          id: ids.card,
+          registry_id: ids.registry,
+          organization_id: setupOrganizationCardsMatch[1],
+          org_unit_id: null,
+          display_name: body.display_name,
+          lifecycle_status: "draft",
+          public_view_enabled: Boolean(body.public_view_enabled),
+          public_edit_enabled: Boolean(body.public_edit_enabled),
+        };
+        cards = [...cards, created];
+        appendAuditEvent("create", "card", created.id);
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(created),
+        });
+        return;
+      }
       await route.fulfill({
-        status: 201,
+        status: 200,
         contentType: "application/json",
-        body: JSON.stringify(created),
+        body: JSON.stringify({ items: cards }),
       });
       return;
     }

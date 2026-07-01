@@ -104,6 +104,28 @@ def list_cards(
     return CardListRead(items=[_card_to_summary(card) for card in cards])
 
 
+@router.get("/organizations/{organization_id}/cards", response_model=CardListRead)
+def list_organization_cards(
+    organization_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    scope_organization_id: Annotated[UUID | None, Query(alias="organization_id")] = None,
+    include_archive: Annotated[bool, Query()] = False,
+    q: Annotated[str | None, Query()] = None,
+) -> CardListRead:
+    try:
+        cards = CardService(session).list_visible_cards_for_organization_for_actor(
+            actor_user_id=actor_user_id,
+            resolver_organization_id=organization_id,
+            organization_id=scope_organization_id,
+            include_archive=include_archive,
+            query=q,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardListRead(items=[_card_to_summary(card) for card in cards])
+
+
 @router.get("/cards/{card_id}", response_model=CardRead)
 def read_card(
     card_id: UUID,

@@ -639,30 +639,48 @@ beforeEach(() => {
         return jsonResponse({ items: orgUnitItems });
       }
       const organizationCardMatch = pathname.match(/\/api\/v1\/organizations\/([^/]+)\/cards$/);
-      if (organizationCardMatch && init?.method === "POST") {
-        const payload = JSON.parse(String(init.body ?? "{}")) as {
-          display_name: string;
-          public_view_enabled?: boolean;
-          public_edit_enabled?: boolean;
-        };
-        const created: CardSummaryRead = {
-          id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
-          registry_id: "77777777-7777-4777-8777-777777777777",
-          organization_id: organizationCardMatch[1],
-          org_unit_id: null,
-          display_name: payload.display_name,
-          lifecycle_status: "draft",
-          public_view_enabled: payload.public_view_enabled ?? false,
-          public_edit_enabled: payload.public_edit_enabled ?? false,
-        };
-        cardItems = [...cardItems, created];
-        cardValueStateById[created.id] = {
-          status: "",
-          approved: false,
-          repeatableNotes: [],
-          fileRef: null,
-        };
-        return jsonResponse(created, { status: 201 });
+      if (organizationCardMatch) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            display_name: string;
+            public_view_enabled?: boolean;
+            public_edit_enabled?: boolean;
+          };
+          const created: CardSummaryRead = {
+            id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            organization_id: organizationCardMatch[1],
+            org_unit_id: null,
+            display_name: payload.display_name,
+            lifecycle_status: "draft",
+            public_view_enabled: payload.public_view_enabled ?? false,
+            public_edit_enabled: payload.public_edit_enabled ?? false,
+          };
+          cardItems = [...cardItems, created];
+          cardValueStateById[created.id] = {
+            status: "",
+            approved: false,
+            repeatableNotes: [],
+            fileRef: null,
+          };
+          return jsonResponse(created, { status: 201 });
+        }
+        const organizationId = requestUrl.searchParams.get("organization_id");
+        const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
+        const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
+        const filteredCards = cardItems.filter((item) => {
+          if (organizationId && item.organization_id !== organizationId) {
+            return false;
+          }
+          if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
+            return false;
+          }
+          if (query && !item.display_name.toLowerCase().includes(query)) {
+            return false;
+          }
+          return true;
+        });
+        return jsonResponse({ items: filteredCards });
       }
       if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
         const organizationId = url.split("/api/v1/organizations/")[1];
@@ -2258,7 +2276,7 @@ test("filters cards by search organization and archive visibility", async () => 
       fetchMock.mock.calls.some(([input, init]) => {
         const url = input instanceof Request ? input.url : String(input);
         return (
-          url.includes("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards?") &&
+          url.includes("/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards?") &&
           url.includes("q=%D0%90%D1%80%D1%85%D0%B8%D0%B2%D0%BD%D0%B0%D1%8F") &&
           url.includes("include_archive=true") &&
           url.includes("organization_id=22222222-2222-4222-8222-222222222222") &&
@@ -2266,6 +2284,16 @@ test("filters cards by search organization and archive visibility", async () => 
         );
       }),
     ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        return (
+          url.includes("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards?") &&
+          url.includes("q=%D0%90%D1%80%D1%85%D0%B8%D0%B2%D0%BD%D0%B0%D1%8F") &&
+          init?.method === "GET"
+        );
+      }),
+    ).toBe(false);
   });
 });
 
@@ -2291,6 +2319,7 @@ test("creates updates archives cards and manages repeatable blocks with bulk sav
       ).length;
 
   await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
+  expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Реестр карточки")).not.toBeInTheDocument();
   const postCountBeforeValidation = cardPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));

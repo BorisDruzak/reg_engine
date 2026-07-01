@@ -240,6 +240,33 @@ class CardService:
             ).all()
         )
 
+    def list_visible_cards_for_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        resolver_organization_id: UUID,
+        organization_id: UUID | None = None,
+        include_archive: bool = False,
+        query: str | None = None,
+    ) -> list[Card]:
+        registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
+            resolver_organization_id
+        )
+        permissions = PermissionService(self.session)
+        if not permissions.can_see_organization(
+            actor_user_id,
+            resolver_organization_id,
+            registry_id=registry.id,
+        ):
+            return []
+        return self.list_visible_cards(
+            actor_user_id=actor_user_id,
+            registry_id=registry.id,
+            organization_id=organization_id,
+            include_archive=include_archive,
+            query=query,
+        )
+
     def set_field_value_for_actor(
         self,
         *,

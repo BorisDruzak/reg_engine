@@ -258,7 +258,8 @@ def test_dev_actor_header_disabled_by_default_blocks_protected_endpoints() -> No
 
 def test_phase_1g_routes_are_registered_without_database() -> None:
     app = create_app()
-    paths = set(app.openapi()["paths"])
+    openapi_paths = app.openapi()["paths"]
+    paths = set(openapi_paths)
 
     expected_paths = {
         "/api/v1/organizations",
@@ -273,6 +274,7 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
         "/api/v1/reference-lists/{list_id}/items",
         "/api/v1/reference-items/{item_id}",
         "/api/v1/registries/{registry_id}/cards",
+        "/api/v1/organizations/{organization_id}/cards",
         "/api/v1/cards/{card_id}",
         "/api/v1/cards/{card_id}/blocks/{block_id}/instances",
         "/api/v1/cards/{card_id}/public-links",
@@ -281,6 +283,7 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
     }
 
     assert expected_paths <= paths
+    assert "get" in openapi_paths["/api/v1/organizations/{organization_id}/cards"]
 
 
 def test_phase_1g_rest_workflow_completion(
@@ -311,10 +314,17 @@ def test_phase_1g_rest_workflow_completion(
         {"code": "phase1g-child", "name": "Phase 1G Child", "parent_id": root["id"]},
         actor_id=system_admin.id,
     )
+    second_root_response = api_client.post(
+        "/api/v1/organizations",
+        json={"code": "phase1g-second-root", "name": "Phase 1G Second Root"},
+        headers=_actor_headers(system_admin.id),
+    )
+    assert second_root_response.status_code == 400
+    assert "one active root organization" in second_root_response.json()["detail"]
     archived_org = _post_json(
         api_client,
         "/api/v1/organizations",
-        {"code": "phase1g-archive-org", "name": "Archive Org"},
+        {"code": "phase1g-archive-org", "name": "Archive Org", "parent_id": root["id"]},
         actor_id=system_admin.id,
     )
 
@@ -415,6 +425,14 @@ def test_phase_1g_rest_workflow_completion(
             "organization_id": root["id"],
             "display_name": "Phase 1G Card",
             "public_edit_enabled": True,
+        },
+        actor_id=system_admin.id,
+    )
+    organization_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{root['id']}/cards",
+        {
+            "display_name": "Phase 1G Organization Card",
         },
         actor_id=system_admin.id,
     )
@@ -550,6 +568,13 @@ def test_phase_1g_rest_workflow_completion(
         actor_id=system_admin.id,
     )
     assert any(item["id"] == card["id"] for item in cards["items"])
+    organization_cards = _request_json(
+        api_client,
+        "GET",
+        f"/api/v1/organizations/{root['id']}/cards?q=Phase%201G",
+        actor_id=system_admin.id,
+    )
+    assert {item["id"] for item in organization_cards["items"]} == {organization_card["id"]}
 
     updated_card = _request_json(
         api_client,

@@ -7,7 +7,7 @@ import {
   getRegistrySchema,
   listAccessGrants,
   listAuditEvents,
-  listCards,
+  listOrganizationCards,
   listOrganizationTree,
   listOrganizations,
   listPermissions,
@@ -73,30 +73,41 @@ export function HomePage() {
     queryFn: () => listRegistries(token),
     enabled: Boolean(token),
   });
+  const cardListOrganizationId =
+    cardOrganizationId ||
+    organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ||
+    organizationsQuery.data?.items[0]?.id ||
+    "";
   const activeRegistryId = selectedRegistryId ?? registriesQuery.data?.items[0]?.id ?? "";
-  const registrySchemaQuery = useQuery({
-    queryKey: ["registry-schema", token, activeRegistryId],
-    queryFn: () => getRegistrySchema(token, activeRegistryId),
-    enabled: Boolean(token && activeRegistryId && needsRegistrySchema),
-  });
   const cardsQuery = useQuery({
     queryKey: [
-      "cards",
+      "organization-cards",
       token,
-      activeRegistryId,
+      cardListOrganizationId,
       cardOrganizationId,
       includeArchivedCards,
       cardSearch,
     ],
     queryFn: () =>
-      listCards(token, activeRegistryId, {
+      listOrganizationCards(token, cardListOrganizationId, {
         organizationId: cardOrganizationId || undefined,
         includeArchive: includeArchivedCards,
         q: cardSearch || undefined,
       }),
-    enabled: Boolean(token && activeRegistryId && needsCards),
+    enabled: Boolean(token && cardListOrganizationId && needsCards),
   });
   const activeCardId = selectedCardId ?? cardsQuery.data?.items[0]?.id ?? "";
+  const cardWorkflowRegistryId =
+    cardsQuery.data?.items.find((item) => item.id === activeCardId)?.registry_id ??
+    cardsQuery.data?.items[0]?.registry_id ??
+    registriesQuery.data?.items.find((registry) => registry.is_default_for_owner_tree)?.id ??
+    "";
+  const schemaRegistryId = activeSection === "cards" ? cardWorkflowRegistryId : activeRegistryId;
+  const registrySchemaQuery = useQuery({
+    queryKey: ["registry-schema", token, schemaRegistryId],
+    queryFn: () => getRegistrySchema(token, schemaRegistryId),
+    enabled: Boolean(token && schemaRegistryId && needsRegistrySchema),
+  });
   const cardReadQuery = useQuery({
     queryKey: ["card", token, activeCardId],
     queryFn: () => readCard(token, activeCardId),

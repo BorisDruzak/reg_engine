@@ -18,10 +18,13 @@ not a hardcoded employee registry.
   organization-effective reference options.
 - Phase 6E disposable PostgreSQL, production migration, frontend deployment,
   API live checks, and browser live checks are completed.
+- Phase 6F root/default-registry enforcement and ordinary card workflow fixes
+  are implemented locally. Full disposable PostgreSQL and live checks are the
+  current verification focus.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint is not selected yet.
+- Next implementation checkpoint after Phase 6F is not selected yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -518,6 +521,131 @@ Live notes:
   and stores `Системный администратор` correctly, so this is not a Phase 6
   application blocker. Future ad hoc live seed scripts should avoid passing
   Cyrillic display names through shell paths that do not preserve UTF-8.
+
+## Phase 6F: Root/Default Registry Enforcement And Card Workflow Fixes
+
+Status: implementation completed locally; full PostgreSQL/live verification in
+progress.
+
+Purpose:
+
+Close Phase 6 v1 gaps where the UI hid invalid choices but backend and ordinary
+card list workflows could still drift from the accepted one-root/default-registry
+model.
+
+Required work:
+
+1. Reject creating a second active root organization in backend service/API
+   flows. UI hiding is not the security boundary.
+2. Add tests proving a direct backend/API create-root attempt without
+   `parent_id` is rejected after the first active root exists.
+3. Add an idempotent maintenance service/CLI path to ensure the existing single
+   active root organization has exactly one active default registry.
+4. Keep the repair path safe:
+   - if there is exactly one active root and exactly one active registry with no
+     active default, assign that registry as the root default;
+   - if there are no active registries, create the standard root default
+     registry;
+   - if multiple active registries or invalid active defaults exist, fail and
+     require an explicit operator decision.
+5. Add `GET /api/v1/organizations/{organization_id}/cards` using the
+   default-registry resolver. Preserve existing
+   `GET /api/v1/registries/{registry_id}/cards` for compatibility.
+6. Fix ordinary frontend card list workflow so it calls the organization-centered
+   list endpoint and never uses `registries[0]` as an implicit card registry.
+7. Hide card `org_unit_id` metadata from the simple card workflow until an
+   explicit advanced metadata/filter workflow is approved.
+8. Do not implement multi-root support.
+9. Do not add `available_to_descendants`.
+10. Do not create one registry per organization.
+11. Do not remove existing registry-based APIs.
+
+Implementation notes:
+
+- Added `OrganizationTopologyError` and a backend guard before root creation.
+- Added `RegistrySchemaService.ensure_single_root_default_registry()`.
+- Added CLI:
+
+```powershell
+cd backend
+python -m app.cli.phase6f preflight
+python -m app.cli.phase6f ensure-default-registry
+```
+
+- Added organization-centered card list API:
+
+```http
+GET /api/v1/organizations/{organization_id}/cards
+```
+
+- The query parameter `organization_id` remains available on the new endpoint as
+  a card-organization filter; the path organization is the default-registry
+  resolver context.
+- The frontend ordinary card workspace now uses the organization-centered list
+  endpoint and keeps old registry-based APIs for advanced/import/export/report
+  surfaces.
+
+Production/staging SQL preflight:
+
+Run before Phase 6F live checks or before applying the repair CLI to a
+non-disposable database. Expected result is one active root organization, one
+active default registry, and the default registry owner equal to the active root
+id.
+
+```sql
+with active_roots as (
+    select id
+    from organizations
+    where parent_id is null
+      and archived_at is null
+      and is_active = true
+),
+active_defaults as (
+    select id, owner_organization_id
+    from registries
+    where is_default_for_owner_tree = true
+      and archived_at is null
+      and lifecycle_status <> 'archived'
+)
+select
+    (select count(*) from active_roots) as active_root_organizations,
+    (select count(*) from active_defaults) as active_default_registries,
+    (
+        select count(*)
+        from active_defaults d
+        join active_roots r on r.id = d.owner_organization_id
+    ) as defaults_owned_by_active_root;
+```
+
+Detailed owner check:
+
+```sql
+select
+    d.id as default_registry_id,
+    d.owner_organization_id,
+    r.id as root_organization_id,
+    (d.owner_organization_id = r.id) as default_owner_equals_root
+from registries d
+cross join organizations r
+where d.is_default_for_owner_tree = true
+  and d.archived_at is null
+  and d.lifecycle_status <> 'archived'
+  and r.parent_id is null
+  and r.archived_at is null
+  and r.is_active = true;
+```
+
+Acceptance criteria:
+
+- Backend rejects a second active root organization.
+- Tests prove direct backend/API calls are protected, not only the UI.
+- Existing data can be safely checked and repaired to one root default registry.
+- Ordinary card list uses the resolved default registry, not an arbitrary first
+  registry.
+- Simple card UI does not show card org-unit metadata.
+- Existing registry-based APIs remain available.
+- Full backend, frontend, e2e, disposable PostgreSQL, and Phase 6 live checks are
+  recorded before marking the phase fully completed.
 
 ## Non-Goals For Phase 6
 

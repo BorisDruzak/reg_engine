@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-01 14:59:46 +05:00
+- Generated: 2026-07-01 16:50:23 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -48,6 +48,7 @@
 - `backend/app/api/v1/router.py`
 - `backend/app/cli/__init__.py`
 - `backend/app/cli/bootstrap.py`
+- `backend/app/cli/phase6f.py`
 - `backend/app/core/__init__.py`
 - `backend/app/core/config.py`
 - `backend/app/core/database.py`

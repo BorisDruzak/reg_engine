@@ -14,6 +14,10 @@ class OrganizationNotFoundError(ValueError):
     """Raised when an organization operation references a missing or archived organization."""
 
 
+class OrganizationTopologyError(ValueError):
+    """Raised when an organization tree operation violates the Phase 6 topology contract."""
+
+
 class OrgUnitNotFoundError(OrganizationNotFoundError):
     """Raised when an org unit operation references a missing or archived org unit."""
 
@@ -71,6 +75,7 @@ class OrganizationService:
         organization_type: str = "organization",
         created_by: UUID | None = None,
     ) -> Organization:
+        self._ensure_single_active_root_absent()
         organization = Organization(
             code=code,
             name=name,
@@ -445,6 +450,21 @@ class OrganizationService:
         ):
             raise OrganizationNotFoundError("Organization was not found.")
         return organization
+
+    def _ensure_single_active_root_absent(self) -> None:
+        existing_root_id = self.session.scalar(
+            select(Organization.id)
+            .where(
+                Organization.parent_id.is_(None),
+                Organization.archived_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+            .limit(1)
+        )
+        if existing_root_id is not None:
+            raise OrganizationTopologyError(
+                "Phase 6 v1 supports only one active root organization."
+            )
 
     def _get_active_org_unit(self, org_unit_id: UUID) -> OrgUnit:
         org_unit = self.session.get(OrgUnit, org_unit_id)

@@ -9,7 +9,6 @@ import {
   createCardBlockInstance,
   createPublicLink,
   listCardFieldReferenceItems,
-  listOrgUnits,
   listAttachments,
   listPublicLinks,
   updateCard,
@@ -111,12 +110,6 @@ export function CardsWorkspace({
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
   );
-  const orgUnitOrganizationId = card?.organization_id ?? "";
-  const orgUnitsQuery = useQuery({
-    queryKey: ["org-units", token, orgUnitOrganizationId],
-    queryFn: () => listOrgUnits(token, orgUnitOrganizationId),
-    enabled: Boolean(token && orgUnitOrganizationId && selectedCard?.org_unit_id),
-  });
   const createCardMutation = useMutation({
     mutationFn: () =>
       createOrganizationCard(token, cardForm.organizationId, {
@@ -284,16 +277,6 @@ export function CardsWorkspace({
                   <dd>
                     {organizationsById.get(card.organization_id)?.name ??
                       shortId(card.organization_id)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{uiText.cardOrgUnit}</dt>
-                  <dd>
-                    {selectedCard.org_unit_id
-                      ? (orgUnitsQuery.data?.items.find(
-                          (orgUnit) => orgUnit.id === selectedCard.org_unit_id,
-                        )?.name ?? shortId(selectedCard.org_unit_id))
-                      : uiText.noOrgUnit}
                   </dd>
                 </div>
                 <div>
@@ -1042,6 +1025,7 @@ async function invalidateCardQueries(
   cardId: string,
 ) {
   await queryClient.invalidateQueries({ queryKey: ["cards", token, registryId] });
+  await queryClient.invalidateQueries({ queryKey: ["organization-cards", token] });
   await queryClient.invalidateQueries({ queryKey: ["card", token, cardId] });
   await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
 }

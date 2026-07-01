@@ -16,7 +16,7 @@ from app.services.auth import AuthError, AuthService
 from app.services.cards import CardServiceError, InvalidFieldValueError
 from app.services.documents import DocumentServiceError
 from app.services.import_export import ImportExportServiceError
-from app.services.organizations import OrganizationNotFoundError
+from app.services.organizations import OrganizationNotFoundError, OrganizationTopologyError
 from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkError
 from app.services.references import ReferenceListError
@@ -137,6 +137,7 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             DocumentServiceError,
             InvalidFieldValueError,
             ImportExportServiceError,
+            OrganizationTopologyError,
             PublicLinkError,
             ReferenceListError,
             RegistrySchemaError,

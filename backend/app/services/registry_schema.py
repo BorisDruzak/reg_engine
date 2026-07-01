@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES
-from app.models import Card, FormBlock, FormField, OrganizationClosure, Registry
+from app.models import Card, FormBlock, FormField, Organization, OrganizationClosure, Registry
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -118,6 +118,94 @@ class RegistrySchemaService:
                     "code": registry.code,
                     "name": registry.name,
                     "owner_organization_id": str(root_organization_id),
+                    "is_default_for_owner_tree": True,
+                },
+            )
+        return registry
+
+    def ensure_single_root_default_registry(
+        self,
+        *,
+        actor_user_id: UUID | None = None,
+    ) -> Registry:
+        roots = list(
+            self.session.scalars(
+                select(Organization)
+                .where(
+                    Organization.parent_id.is_(None),
+                    Organization.archived_at.is_(None),
+                    Organization.is_active.is_(True),
+                )
+                .order_by(Organization.code, Organization.id)
+            ).all()
+        )
+        if len(roots) != 1:
+            raise RegistrySchemaError(
+                "Default registry repair requires exactly one active root organization."
+            )
+        root = roots[0]
+
+        active_defaults = list(
+            self.session.scalars(
+                select(Registry)
+                .where(
+                    Registry.is_default_for_owner_tree.is_(True),
+                    Registry.archived_at.is_(None),
+                    Registry.lifecycle_status != "archived",
+                )
+                .order_by(Registry.code, Registry.id)
+            ).all()
+        )
+        if len(active_defaults) == 1 and active_defaults[0].owner_organization_id == root.id:
+            return active_defaults[0]
+        if active_defaults:
+            raise RegistrySchemaError(
+                "Active default registry must be unique and owned by the single active root "
+                "organization."
+            )
+
+        active_registries = list(
+            self.session.scalars(
+                select(Registry)
+                .where(
+                    Registry.archived_at.is_(None),
+                    Registry.lifecycle_status != "archived",
+                )
+                .order_by(Registry.code, Registry.id)
+            ).all()
+        )
+        if not active_registries:
+            return self.ensure_default_registry_for_root_organization(
+                root_organization_id=root.id,
+                root_organization_code=root.code,
+                actor_user_id=actor_user_id,
+            )
+        if len(active_registries) > 1:
+            raise RegistrySchemaError(
+                "Cannot infer the default card registry because multiple active registries exist."
+            )
+
+        registry = active_registries[0]
+        old_data = {
+            "owner_organization_id": (
+                str(registry.owner_organization_id)
+                if registry.owner_organization_id is not None
+                else None
+            ),
+            "is_default_for_owner_tree": registry.is_default_for_owner_tree,
+        }
+        registry.owner_organization_id = root.id
+        registry.is_default_for_owner_tree = True
+        self.session.flush()
+        if actor_user_id is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="update",
+                object_type="registry",
+                object_id=registry.id,
+                old_data_json=old_data,
+                new_data_json={
+                    "owner_organization_id": str(root.id),
                     "is_default_for_owner_tree": True,
                 },
             )

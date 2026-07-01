@@ -21,6 +21,7 @@ from app.models import (
     FieldValueItem,
     FormBlock,
     FormField,
+    Organization,
     Permission,
     Registry,
     Role,
@@ -273,6 +274,89 @@ def test_main_root_organization_gets_one_default_registry(db_session: Session) -
     ).first()
 
 
+def test_backend_rejects_second_active_root_organization(db_session: Session) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase6f-single-root-system@example.test",
+        is_superuser=True,
+    )
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6f-root",
+        name="Phase 6F Root",
+    )
+
+    with pytest.raises(ValueError, match="one active root organization"):
+        organization_service.create_root_for_actor(
+            actor_user_id=system_admin.id,
+            code="phase6f-second-root",
+            name="Phase 6F Second Root",
+        )
+
+    roots = list(
+        db_session.scalars(
+            select(Organization).where(
+                Organization.parent_id.is_(None),
+                Organization.archived_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+        ).all()
+    )
+    assert [item.id for item in roots] == [root.id]
+
+
+def test_single_root_default_registry_repair_is_idempotent(db_session: Session) -> None:
+    root = OrganizationService(db_session).create_root(
+        code="phase6f-repair-root",
+        name="Phase 6F Repair Root",
+    )
+    legacy_registry = Registry(
+        code="phase6f-legacy-registry",
+        name="Phase 6F Legacy Registry",
+    )
+    db_session.add(legacy_registry)
+    db_session.flush()
+    schema_service = RegistrySchemaService(db_session)
+
+    repaired = schema_service.ensure_single_root_default_registry()
+    repaired_again = schema_service.ensure_single_root_default_registry()
+
+    assert repaired.id == legacy_registry.id
+    assert repaired_again.id == legacy_registry.id
+    assert repaired.owner_organization_id == root.id
+    assert repaired.is_default_for_owner_tree is True
+    default_count = db_session.scalar(
+        select(func.count())
+        .select_from(Registry)
+        .where(
+            Registry.is_default_for_owner_tree.is_(True),
+            Registry.archived_at.is_(None),
+            Registry.lifecycle_status != "archived",
+        )
+    )
+    assert default_count == 1
+
+
+def test_single_root_default_registry_repair_refuses_ambiguous_registries(
+    db_session: Session,
+) -> None:
+    OrganizationService(db_session).create_root(
+        code="phase6f-ambiguous-root",
+        name="Phase 6F Ambiguous Root",
+    )
+    db_session.add_all(
+        [
+            Registry(code="phase6f-ambiguous-a", name="Phase 6F Ambiguous A"),
+            Registry(code="phase6f-ambiguous-b", name="Phase 6F Ambiguous B"),
+        ]
+    )
+    db_session.flush()
+
+    with pytest.raises(RegistrySchemaError, match="multiple active registries"):
+        RegistrySchemaService(db_session).ensure_single_root_default_registry()
+
+
 def test_default_registry_resolves_for_descendant_and_archived_default_is_ignored(
     db_session: Session,
 ) -> None:
@@ -353,6 +437,50 @@ def test_organization_centered_card_create_uses_root_default_registry(
 
     assert card.registry_id == default_registry.id
     assert card.organization_id == child.id
+
+
+def test_organization_centered_card_list_uses_default_registry_not_arbitrary_first_registry(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase6f-list-system@example.test",
+        is_superuser=True,
+    )
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6f-list-root",
+        name="Phase 6F List Root",
+    )
+    default_registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        root.id
+    )
+    arbitrary_registry = RegistrySchemaService(db_session).create_registry_for_actor(
+        actor_user_id=system_admin.id,
+        code="phase6f-arbitrary-first",
+        name="Phase 6F Arbitrary First",
+    )
+    default_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=default_registry.id,
+        organization_id=root.id,
+        display_name="Default registry card",
+    )
+    arbitrary_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=arbitrary_registry.id,
+        organization_id=root.id,
+        display_name="Arbitrary registry card",
+    )
+
+    cards = CardService(db_session).list_visible_cards_for_organization_for_actor(
+        actor_user_id=system_admin.id,
+        resolver_organization_id=root.id,
+    )
+
+    assert {card.id for card in cards} == {default_card.id}
+    assert arbitrary_card.id not in {card.id for card in cards}
 
 
 def test_active_default_registry_with_cards_cannot_be_archived(

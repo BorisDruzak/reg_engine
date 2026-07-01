@@ -307,6 +307,28 @@ export async function listCards(token: string, registryId: string, options: Card
   );
 }
 
+export async function listOrganizationCards(
+  token: string,
+  organizationId: string,
+  options: CardListOptions = {},
+) {
+  const params = new URLSearchParams();
+  if (options.organizationId) {
+    params.set("organization_id", options.organizationId);
+  }
+  if (options.includeArchive) {
+    params.set("include_archive", "true");
+  }
+  if (options.q?.trim()) {
+    params.set("q", options.q.trim());
+  }
+  const query = params.toString();
+  return apiRequest<CardListRead>(
+    `/api/v1/organizations/${organizationId}/cards${query ? `?${query}` : ""}`,
+    { token },
+  );
+}
+
 export async function createCard(token: string, registryId: string, payload: CardCreatePayload) {
   return apiRequest<CardSummaryRead>(`/api/v1/registries/${registryId}/cards`, {
     method: "POST",
