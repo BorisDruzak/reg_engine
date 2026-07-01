@@ -18,9 +18,8 @@ not a hardcoded employee registry.
 - Live verification found focused blockers in `LC-010`, `LC-012`, and
   `LC-014`; all tracked fixes were rerun on the disposable livecheck
   environment.
-- Production PostgreSQL migration `0015_audit_created_at_default` is required
-  for the follow-up audit timestamp drift fix before organization/registry live
-  create checks can pass.
+- Production PostgreSQL migration `0015_audit_created_at_default` was applied
+  on 2026-07-01 for the follow-up audit timestamp drift fix.
 - Follow-up production UI bugfix on 2026-07-01: admin display-name data
   mojibake/question marks were repaired for the bootstrap production admin, and
   organization/registry duplicate-code conflicts now return specific safe API
@@ -566,7 +565,7 @@ Non-goals:
 
 ### Phase 5S.9: Audit Timestamp Default Drift Bugfix
 
-Status: in progress.
+Status: completed.
 
 Scope:
 
@@ -576,6 +575,29 @@ Scope:
   it to production.
 - Create a fresh production backup before applying the migration.
 - Re-run organization and registry create checks after production upgrade.
+
+Evidence:
+
+- Disposable DB `reg_engine_migration_test` upgraded from
+  `0014_report_pdf_output` with a deliberately removed
+  `audit_events.created_at` default to `0015_audit_created_at_default (head)`.
+- Disposable insert smoke returned `INSERT|true` for an audit row without an
+  explicit `created_at`.
+- Production backup was created before migration:
+  `/var/backups/reg_engine/reg_engine_before_0015_20260701T061045Z.dump`.
+- Production Alembic moved from `0014_report_pdf_output` to
+  `0015_audit_created_at_default (head)`.
+- Production `audit_events.created_at` default changed from `<null>` to
+  `now()`.
+- Production API create checks passed:
+  organization `code=1` returned `201`, duplicate returned
+  `Organization code already exists.`;
+  registry `code=1` returned `201`, duplicate returned
+  `Registry code already exists.`
+- Browser check against `http://192.168.100.12:8000/` confirmed:
+  page title `Реестровая система`, admin name `Системный администратор`, no
+  visible `????????`, registry row `Реестр карточек`, and Russian duplicate
+  message `Реестр с таким кодом уже существует.`
 
 Root cause:
 
