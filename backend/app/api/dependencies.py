@@ -163,6 +163,10 @@ def _request_source(raw_source: str | None) -> str:
 
 def _raise_integrity_http_error(exc: IntegrityError) -> NoReturn:
     message = str(getattr(exc, "orig", exc)).lower()
+    if "uq_organizations_code" in message:
+        raise HTTPException(status_code=409, detail="Organization code already exists.") from exc
+    if "uq_registries_code" in message:
+        raise HTTPException(status_code=409, detail="Registry code already exists.") from exc
     if "foreign key" in message or "check constraint" in message:
         raise HTTPException(status_code=422, detail="Integrity constraint violation.") from exc
     raise HTTPException(status_code=409, detail="Integrity constraint violation.") from exc

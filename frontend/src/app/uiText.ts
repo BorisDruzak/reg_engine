@@ -226,6 +226,8 @@ export const uiText = {
   bearerTokenUserInactive: "Пользователь отключен или недоступен.",
   actionDenied: "Действие недоступно.",
   integrityConstraintViolation: "Данные нарушают ограничения базы.",
+  organizationCodeAlreadyExists: "Организация с таким кодом уже существует.",
+  registryCodeAlreadyExists: "Реестр с таким кодом уже существует.",
   internalServiceError: "Внутренняя ошибка сервиса.",
   notFound: "Запись не найдена.",
   accessDenied: "Доступ ограничен",
@@ -567,6 +569,8 @@ export function apiErrorMessageLabel(message: string) {
     "Invalid bearer token.": uiText.bearerTokenInvalid,
     "Invalid email or password.": uiText.invalidEmailOrPassword,
     "Not Found": uiText.notFound,
+    "Organization code already exists.": uiText.organizationCodeAlreadyExists,
+    "Registry code already exists.": uiText.registryCodeAlreadyExists,
     "Temporary dev actor header is disabled. Use production auth when available.":
       uiText.bearerTokenRequired,
   };

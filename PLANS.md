@@ -21,6 +21,13 @@ not a hardcoded employee registry.
 - No production PostgreSQL migration is planned. Current production Alembic
   remains `0014_report_pdf_output (head)` unless a later bugfix phase changes
   schema under the standard migration rules.
+- Follow-up production UI bugfix on 2026-07-01: admin display-name data
+  mojibake/question marks were repaired for the bootstrap production admin, and
+  organization/registry duplicate-code conflicts now return specific safe API
+  details mapped to Russian UI messages. No schema migration was required.
+- Registry/organization architecture remains unchanged: registries are not
+  directly assigned to organizations; cards carry `organization_id`, and
+  visibility is enforced by organization scope.
 
 ## Phase 5S: Live Scenario Verification
 
@@ -530,6 +537,29 @@ Closed bugs:
   access-denied state instead of misleading empty tables.
 - `LC-014`: scoped card workflows can read reference-list items needed by
   select/multi-select fields without granting reference-list edit rights.
+
+### Phase 5S.8: Production UI Follow-Up Bugfix
+
+Status: completed.
+
+Scope:
+
+- Correct the already persisted production bootstrap admin display name from
+  question marks to `Системный администратор`.
+- Keep UTF-8 Russian seed/UI regression coverage so future seed and UI labels
+  do not regress into mojibake.
+- Return specific safe API details for `uq_organizations_code` and
+  `uq_registries_code` instead of a generic integrity message.
+- Map those details in the frontend to:
+  `Организация с таким кодом уже существует.` and
+  `Реестр с таким кодом уже существует.`
+
+Non-goals:
+
+- No schema migration.
+- No change to the Core Schema v1 registry/organization model.
+- No direct organization-to-registry binding; cards remain the organization
+  scoped records inside a registry.
 
 ## Browser And Live Testing Capability Assessment
 

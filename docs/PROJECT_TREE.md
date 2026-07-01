@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-01 05:07:11 +05:00
+- Generated: 2026-07-01 10:50:26 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -131,12 +131,14 @@
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`
+- `backend/tests/test_bootstrap_seed_unicode_regression.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
 - `backend/tests/test_document_generation_services.py`
 - `backend/tests/test_frontend_static.py`
 - `backend/tests/test_healthcheck.py`
+- `backend/tests/test_integrity_error_mapping.py`
 - `backend/tests/test_mcp_phase_5.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
@@ -189,6 +191,7 @@
 - `frontend/src/app/router.tsx`
 - `frontend/src/app/uiText.test.ts`
 - `frontend/src/app/uiText.ts`
+- `frontend/src/app/uiTextUnicode.test.ts`
 - `frontend/src/components/common/.gitkeep`
 - `frontend/src/components/common/AdminMutation.test.tsx`
 - `frontend/src/components/common/AdminMutation.tsx`
