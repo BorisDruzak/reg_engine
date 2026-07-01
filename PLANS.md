@@ -14,8 +14,10 @@ not a hardcoded employee registry.
   Cleanup**.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
-- This update is documentation-only. Do not change backend code, frontend code,
-  migrations, production data, or server runtime for this checkpoint.
+- Phase 6A is documentation/product decision work. Do not change backend code,
+  frontend code, migrations, production data, or server runtime for Phase 6A.
+- Phase 6B and later implementation phases may change code only after their
+  scope is explicitly approved.
 
 ## Accepted Product Decisions
 
@@ -34,16 +36,25 @@ not a hardcoded employee registry.
 7. The simple card workflow should hide `Подразделение карточки` until a
    specific workflow needs card-level org-unit filtering.
 8. Organizations must be shown hierarchically in the UI.
-9. Do not create a separate registry for every organization.
-10. Ordinary card creation must not require the user to manually choose a
+9. **Phase 6 v1 supports one main root organization.** A root organization is an
+   organization without a parent.
+10. The first organization created in an empty system becomes the main root
+    organization.
+11. After the main root organization exists, the ordinary create-organization UI
+    must no longer offer `Без родительской организации`. New organizations must
+    be created as descendants of the main root organization or its descendants.
+12. Creating additional root organizations is out of scope for Phase 6 v1. Any
+    future multi-root support requires a separate approved architecture phase.
+13. Do not create a separate registry for every organization.
+14. Ordinary card creation must not require the user to manually choose a
     registry.
-11. A main/root organization should get one default card registry. Descendant
+15. The main root organization should get one default card registry. Descendant
     organizations should use that same registry automatically.
-12. Registry/schema administration may remain visible to system or registry
+16. Registry/schema administration may remain visible to system or registry
     admins, but the ordinary card workflow should be organization-centered.
-13. A common registry schema should define blocks and fields for the whole
+17. A common registry schema should define blocks and fields for the whole
     organization tree.
-14. Subordinate organizations must be able to use their own organization-owned
+18. Subordinate organizations must be able to use their own organization-owned
     reference lists for fields whose values differ by organization.
 
 ## Current Technical Facts
@@ -85,59 +96,83 @@ Reasons:
 - It conflicts with the existing Core Schema v1 decision that one registry can
   contain cards from different organizations.
 
-### Weak Option: Keep Registries Global And Let UI Pick The First One
+### Rejected Option: Hidden Global Default Registry
 
-This avoids a migration, but it is too implicit.
+A hidden global default registry is rejected.
 
-Problems:
+Reasons:
 
-- The system cannot prove which registry belongs to which organization tree.
-- Multiple registries would make card creation ambiguous.
-- It relies on frontend convention instead of a backend-enforced rule.
+- It would make card creation ambiguous when more than one registry exists.
+- It would let API/MCP/import workflows accidentally create cards in the wrong
+  schema.
+- It would be a frontend convention instead of a backend-enforced business rule.
 
-### Recommended Option: Default Registry For Root Organization Tree
+### Accepted Option: Default Registry For The Main Root Organization Tree
 
-Use one default card registry for a root organization tree.
+Use one default card registry for the single main root organization tree in
+Phase 6 v1.
 
-Proposed behavior:
+Behavior:
 
-- When the first/main organization is created, the system creates or assigns
+- When the first/main root organization is created, the system creates or assigns
   one default registry named `Реестр карточек`.
 - Child organizations do not get their own registries by default.
-- When a user creates a card, the UI asks for the card organization.
-- The backend resolves the default registry from that organization or its root
-  ancestor.
+- When a user creates a card through the ordinary UI, the UI asks for the card
+  organization, not for a registry.
+- The backend resolves the default registry from the selected organization by
+  using the main root organization.
 - The card is saved with:
   - `cards.registry_id = resolved default registry`;
   - `cards.organization_id = selected organization`.
-- The existing registry/schema admin screen becomes an advanced settings area
-  for system/registry admins, not a required ordinary workflow.
+- The existing registry/schema admin screen becomes an advanced settings area for
+  system/registry admins, not a required ordinary workflow.
 
-Likely technical model for implementation:
+Technical model for Phase 6C:
 
-- Add registry ownership/default metadata, for example:
+- Add registry ownership/default metadata with an Alembic migration:
   - `registries.owner_organization_id`;
-  - `registries.is_default_for_owner_tree`;
-  - optionally `registries.available_to_descendants`.
-- Enforce at most one active default registry per owner organization.
-- Add a backend resolver that finds the default registry for an organization by
-  walking its ancestors through `organization_closure`.
+  - `registries.is_default_for_owner_tree`.
+- Do **not** add `registries.available_to_descendants` in Phase 6C. In v1 the
+  default registry for the main root organization is available to descendants by
+  definition.
+- `owner_organization_id` is required when `is_default_for_owner_tree=true`.
+- `is_default_for_owner_tree=true` means the registry is the default card schema
+  for the owner organization and its descendants.
+- Enforce at most one active default registry for the owner organization with a
+  PostgreSQL partial unique index.
+- Add a backend resolver that finds the active default registry for the selected
+  organization by walking ancestors through `organization_closure`. In Phase 6
+  v1 this should resolve to the main root organization's default registry.
+- If no default registry is found, organization-centered card creation returns a
+  controlled setup-required error with a UI call-to-action to configure the card
+  registry.
 - Keep existing `/registries/{registry_id}/cards` endpoints for compatibility.
-- Add or expose a simplified organization-centered card-create path that does
-  not require the frontend to pass a registry id manually.
+- Add or expose a simplified organization-centered card-create path that takes
+  `organization_id` and resolves `registry_id` server-side.
+- MCP card creation must use either an explicit `registry_id` path or the new
+  explicit `organization_id` path. No hidden global default is allowed.
 
-Open decision before implementation:
+Default registry archive rule:
 
-- Whether the first root organization always gets the default registry
-  automatically, or whether system admin explicitly marks one root organization
-  as the registry owner during setup. The product preference is automatic
-  creation for the first/main organization.
+- Use option A for Phase 6C: **forbid archiving an active default registry while
+  it has active or draft cards**.
+- Replacement default registry support is deferred.
+- Archiving an unused default registry may be allowed only if the organization
+  tree is left in a controlled setup-required state.
+
+Transfer rule:
+
+- Phase 6 v1 supports one main root organization, so cross-root transfer is out
+  of scope.
+- Transfer inside the main organization tree keeps the same resolved default
+  registry and still stores the selected target `organization_id`.
+- Future multi-root transfer behavior requires a separate approved phase.
 
 ## Reference List And Card Schema Analysis
 
 ### Recommended Schema Rule
 
-Keep one common card schema for the root organization tree:
+Keep one common card schema for the main root organization tree:
 
 - one default registry;
 - one set of form blocks;
@@ -208,6 +243,8 @@ Scope:
 - Record accepted decision for hierarchical organization display.
 - Analyze default registry behavior.
 - Analyze organization-owned reference list behavior.
+- Record the Phase 6 v1 decision that only one main root organization is
+  supported.
 - Do not change backend/frontend code.
 
 Checks:
@@ -232,57 +269,89 @@ Required work:
    requires the field.
 3. Replace or supplement the flat organization table with a hierarchical tree.
 4. Use `GET /api/v1/organizations/tree` for tree data.
-5. Keep edit/archive/create-child actions available from tree rows.
-6. Hide `Подразделение карточки` in the simple card create/edit flow unless an
+5. Support the Phase 6 v1 one-root rule in the UI:
+   - if no root organization exists, the create form may create the main root;
+   - after the root organization exists, remove `Без родительской организации`
+     from the parent-organization selector;
+   - after the root organization exists, new organizations must be created as
+     children of the root organization or an existing descendant.
+6. Keep edit/archive/create-child actions available from tree rows.
+7. Hide `Подразделение карточки` in the simple card create/edit flow unless an
    explicit org-unit workflow is enabled later.
-7. Keep `org_units` API/model intact.
+8. Keep `org_units` API/model intact.
+9. Do not physically remove `organizations.type` or `org_units`.
 
 Required tests:
 
 - Organization create form does not show type choices.
 - Created organization is still sent with the safe internal default type.
+- When no root organization exists, a root organization can be created.
+- After a root organization exists, `Без родительской организации` is no longer
+  offered in the ordinary create-organization UI.
+- After a root organization exists, a newly created organization preserves a
+  parent relationship.
 - Organization tree renders parent/child nesting.
-- Child organization creation preserves parent relationship.
 - Card form can create/edit cards without selecting `org_unit_id`.
 - Backend RBAC behavior is unchanged.
 
 Acceptance criteria:
 
 - Users no longer see organization type choices.
+- The organization screen clearly supports one main root organization in Phase 6
+  v1.
 - Lower entities are represented as normal child organizations.
 - Organization screen is visually hierarchical.
 - No database column is physically removed.
 - No hardcoded employee-specific fields are added.
 
-## Phase 6C: Default Card Registry For Organization Tree
+## Phase 6C: Default Card Registry For Main Organization Tree
 
-Status: planned after Phase 6B; final technical model pending approval.
+Status: planned after Phase 6B; technical model approved for Phase 6 v1.
 
 Purpose:
 
 Remove manual registry selection from ordinary card creation while keeping one
 common schema-driven registry for the main organization tree.
 
-Recommended work:
+Required work:
 
-1. Add registry owner/default metadata with an Alembic migration if approved.
-2. Create a resolver for the default registry of an organization.
-3. Automatically create or assign `Реестр карточек` for the first/main root
+1. Add `registries.owner_organization_id` and
+   `registries.is_default_for_owner_tree` with an Alembic migration.
+2. Do not add `available_to_descendants` in Phase 6C.
+3. Enforce that `owner_organization_id` is present when
+   `is_default_for_owner_tree=true`.
+4. Enforce at most one active default registry for the main root organization.
+5. Create a resolver for the default registry of an organization using
+   `organization_closure`.
+6. Automatically create or assign `Реестр карточек` for the first/main root
    organization.
-4. Make descendant organizations inherit the root default registry.
-5. Add an organization-centered card create flow that resolves registry
-   automatically.
-6. Keep advanced registry/schema administration available only where useful.
-7. Keep existing registry-based APIs for compatibility.
+7. Make descendant organizations inherit the root default registry.
+8. Add an organization-centered card create flow that takes `organization_id` and
+   resolves `registry_id` automatically.
+9. Keep advanced registry/schema administration available only where useful.
+10. Keep existing registry-based APIs for compatibility.
+11. Forbid archiving an active default registry while it has active or draft
+    cards.
+12. Keep transfer inside the single main organization tree on the same default
+    registry. Multi-root transfer is out of scope.
+13. Ensure MCP card creation uses either explicit `registry_id` or explicit
+    `organization_id`; no hidden global default.
 
 Required tests:
 
 - First/main root organization gets one default registry.
+- A second active default registry for the same owner organization is rejected.
 - Descendant organization does not get a duplicate registry.
-- Creating a card for a descendant uses the root default registry.
+- Creating a card for a descendant through the organization-centered path uses
+  the root default registry.
 - Card still stores the selected descendant `organization_id`.
-- Sibling/root visibility rules remain organization-scoped.
+- Sibling visibility rules remain organization-scoped.
 - No ordinary card workflow requires manual registry selection.
+- No-default-registry state returns a controlled setup-required error.
+- Archived default registry is ignored by resolver.
+- Active default registry with active/draft cards cannot be archived.
+- Existing registry-based card create API still works.
+- Transfer inside the main organization tree keeps the same registry.
 
 Acceptance criteria:
 
@@ -290,6 +359,7 @@ Acceptance criteria:
 - UI remains organization-centered and clean.
 - No separate registry is created for every organization.
 - Existing schema-driven card architecture remains intact.
+- Default registry behavior is backend-enforced, not frontend-only guessing.
 
 ## Phase 6D: Common Schema With Organization-Owned References
 
@@ -341,8 +411,15 @@ Status: planned.
 Scope:
 
 - Verify organization tree UI.
+- Verify the one-root organization UX:
+  - first organization can be created as root;
+  - after root exists, `Без родительской организации` is absent from ordinary
+    creation flow;
+  - new organizations are created as descendants.
 - Verify clean card creation without manual registry selection.
 - Verify default registry resolution for root and descendant organizations.
+- Verify default registry archive guard when active/draft cards exist.
+- Verify existing registry-based API compatibility.
 - Verify local organization reference lists in card editing and public-link
   editing if public fields use those lists.
 - Verify audit events for create/update/archive actions changed by this phase.
@@ -362,6 +439,7 @@ destructive scenario data against production personal data.
 - Do not create a hardcoded employee table.
 - Do not add HR-specific fixed backend columns.
 - Do not create one registry per organization.
+- Do not support multiple root organizations in Phase 6 v1.
 - Do not physically delete `organizations.type` or `org_units` in the UI
   cleanup slice.
 - Do not bypass backend RBAC with frontend-only filtering.
