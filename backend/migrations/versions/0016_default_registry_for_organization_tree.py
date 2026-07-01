@@ -47,7 +47,7 @@ def upgrade() -> None:
         referent_schema="public",
     )
     op.create_check_constraint(
-        "ck_registries_default_owner_requires_owner",
+        op.f("ck_registries_default_owner_requires_owner"),
         "registries",
         "is_default_for_owner_tree = false or owner_organization_id is not null",
         schema="public",
@@ -81,7 +81,7 @@ def downgrade() -> None:
         schema="public",
     )
     op.drop_constraint(
-        "ck_registries_default_owner_requires_owner",
+        op.f("ck_registries_default_owner_requires_owner"),
         "registries",
         schema="public",
         type_="check",
