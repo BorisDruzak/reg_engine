@@ -471,6 +471,31 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       });
       return;
     }
+    if (url.pathname === "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards") {
+      const body = request.postDataJSON() as {
+        display_name: string;
+        public_view_enabled?: boolean;
+        public_edit_enabled?: boolean;
+      };
+      createdCard = {
+        id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        organization_id: "22222222-2222-4222-8222-222222222222",
+        org_unit_id: null,
+        display_name: body.display_name,
+        lifecycle_status: "draft",
+        public_view_enabled: Boolean(body.public_view_enabled),
+        public_edit_enabled: Boolean(body.public_edit_enabled),
+      };
+      cardItems = [...cardItems, createdCard];
+      appendAuditEvent("create", "card", createdCard.id);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(createdCard),
+      });
+      return;
+    }
     if (url.pathname === "/api/v1/registries/77777777-7777-4777-8777-777777777777/cards") {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
@@ -995,9 +1020,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page
     .getByLabel("Организация карточки")
     .selectOption("22222222-2222-4222-8222-222222222222");
-  await page
-    .getByLabel("Подразделение карточки")
-    .selectOption("2f2f2f2f-2f2f-42f2-82f2-2f2f2f2f2f2f");
+  await expect(page.getByLabel("Подразделение карточки")).toHaveCount(0);
   await page.getByLabel("Публичный просмотр карточки").check();
   await page.getByLabel("Публичное редактирование карточки").check();
   await page.getByRole("button", { name: "Создать", exact: true }).click();
@@ -1098,6 +1121,9 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     name: string;
     type: string;
     is_active: boolean;
+  };
+  type SetupOrganizationTreeNode = SetupOrganization & {
+    children: SetupOrganizationTreeNode[];
   };
   type SetupUser = {
     id: string;
@@ -1298,6 +1324,17 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       ...auditItems,
     ];
   };
+  const organizationTreePayload = (): { items: SetupOrganizationTreeNode[] } => {
+    const build = (parentId: string | null): SetupOrganizationTreeNode[] =>
+      organizations
+        .filter((organization) => organization.parent_id === parentId)
+        .map((organization) => ({
+          ...organization,
+          children: build(organization.id),
+        }));
+
+    return { items: build(null) };
+  };
 
   const cardReadPayload = (cardId: string) => {
     const card = cards.find((item) => item.id === cardId);
@@ -1372,6 +1409,14 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(apiPayloads.login.user),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/organizations/tree") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(organizationTreePayload()),
       });
       return;
     }
@@ -1680,6 +1725,31 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       });
       return;
     }
+    if (url.pathname === `/api/v1/organizations/${ids.organization}/cards`) {
+      const body = request.postDataJSON() as {
+        display_name: string;
+        public_view_enabled?: boolean;
+        public_edit_enabled?: boolean;
+      };
+      const created = {
+        id: ids.card,
+        registry_id: ids.registry,
+        organization_id: ids.organization,
+        org_unit_id: null,
+        display_name: body.display_name,
+        lifecycle_status: "draft",
+        public_view_enabled: Boolean(body.public_view_enabled),
+        public_edit_enabled: Boolean(body.public_edit_enabled),
+      };
+      cards = [...cards, created];
+      appendAuditEvent("create", "card", created.id);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(created),
+      });
+      return;
+    }
     if (url.pathname === `/api/v1/registries/${ids.registry}/cards`) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
@@ -1743,6 +1813,14 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
             value: item.value,
           })),
         }),
+      });
+      return;
+    }
+    if (url.pathname === `/api/v1/cards/${ids.card}/fields/${ids.field}/reference-items`) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: referenceItems }),
       });
       return;
     }
@@ -1966,7 +2044,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     .selectOption("22222222-2222-4222-8222-222222222222");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Организация создана")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Отдел контроля", exact: true })).toBeVisible();
+  await expect(page.getByRole("treeitem", { name: "Отдел контроля" })).toBeVisible();
 
   await page.getByRole("button", { name: "Пользователи", exact: true }).click();
   await page.getByRole("button", { name: "Создать пользователя" }).click();
@@ -2247,6 +2325,14 @@ function responsePayload(
   }
   if (pathname === "/api/v1/auth/me") {
     return apiPayloads.login.user;
+  }
+  if (pathname === "/api/v1/organizations/tree") {
+    return {
+      items: apiPayloads.organizations.items.map((organization) => ({
+        ...organization,
+        children: [],
+      })),
+    };
   }
   if (pathname === "/api/v1/organizations") {
     return apiPayloads.organizations;

@@ -11,14 +11,17 @@ not a hardcoded employee registry.
   import/export, reports, MCP phases through Phase 5R, live verification, and
   production follow-up fixes are implemented on `main`.
 - Current active checkpoint: **Phase 6: Organization-Centered Card Workflow
-  Cleanup**.
-- Phase 6B UI simplification/tree work is implemented locally and covered by
-  targeted frontend tests.
-- Phase 6C and Phase 6D code paths are implemented locally, including migration
+  Cleanup** is implemented and verified.
+- Phase 6B UI simplification/tree work is completed and browser-verified.
+- Phase 6C and Phase 6D are completed, including migration
   `0016_default_registry_tree`, organization-centered card creation, and
   organization-effective reference options.
-- Phase 6E live/browser verification and disposable PostgreSQL migration/service
-  verification are still pending before production rollout.
+- Phase 6E disposable PostgreSQL, production migration, frontend deployment,
+  API live checks, and browser live checks are completed.
+- Production migration `0016_default_registry_tree` was applied on 2026-07-01
+  after disposable PostgreSQL verification, a fresh server-side backup stored
+  outside Git, preflight checks, and post-migration schema checks.
+- Next implementation checkpoint is not selected yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -263,7 +266,7 @@ powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1
 
 ## Phase 6B: Organization UI Simplification And Tree
 
-Status: implemented locally; pending Phase 6E live verification.
+Status: completed.
 
 Purpose:
 
@@ -313,8 +316,7 @@ Acceptance criteria:
 
 ## Phase 6C: Default Card Registry For Main Organization Tree
 
-Status: implemented locally; pending disposable PostgreSQL verification, live
-verification, and production migration flow if deployed.
+Status: completed.
 
 Purpose:
 
@@ -378,12 +380,16 @@ Implementation notes:
 - Added `POST /api/v1/organizations/{organization_id}/cards` for
   organization-centered card creation.
 - Frontend ordinary card creation no longer asks for a registry.
-- Production migration is not applied in this local implementation checkpoint.
+- Disposable PostgreSQL verification applied Alembic head and confirmed
+  `ck_registries_default_owner_requires_owner`,
+  `ix_registries_owner_organization_id`, and
+  `uq_registries_default_owner_tree_active`.
+- Production migration was applied after backup/preflight/post-checks. Production
+  Alembic version is `0016_default_registry_tree`.
 
 ## Phase 6D: Common Schema With Organization-Owned References
 
-Status: implemented locally; pending disposable PostgreSQL verification and
-Phase 6E live/browser verification.
+Status: completed.
 
 Purpose:
 
@@ -437,12 +443,14 @@ Implementation notes:
   `GET /api/v1/cards/{card_id}/fields/{field_id}/reference-items`.
 - Public-link preview/edit uses the same effective-list resolver for the target
   card organization.
-- PostgreSQL-backed service tests are present but require `TEST_DATABASE_URL`
-  pointing to a disposable `_test` database.
+- PostgreSQL-backed service tests passed against a disposable `_test` database.
+- Live API checks confirmed child organization local reference options, sibling
+  fallback to root inherited options, wrong-scope reference rejection, and
+  public-link preview/edit effective options.
 
 ## Phase 6E: Browser And Live Verification
 
-Status: planned next.
+Status: completed.
 
 Scope:
 
@@ -469,6 +477,47 @@ pnpm -C frontend e2e
 
 Use a disposable/staging database for live workflow checks. Do not run
 destructive scenario data against production personal data.
+
+Verification completed:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed locally: backend ruff, backend format check, backend mypy, backend
+  pytest, frontend lint, frontend typecheck, frontend tests, frontend build, and
+  project-map check.
+- `pnpm -C frontend e2e` passed after updating the smoke mocks for the Phase 6
+  organization tree endpoint, organization-centered card creation endpoint, and
+  card-field effective reference item endpoint.
+- Disposable PostgreSQL verification passed on a database whose name ended with
+  `_test`: Alembic upgraded to `0016_default_registry_tree`, metadata matched
+  migrations, and PostgreSQL-backed Phase 6 service tests passed.
+- Production migration used the approved planned-migration flow: server checkout
+  synchronized to `origin/main`, production was preflighted at
+  `0015_audit_created_at_default`, a fresh backup was created outside Git,
+  `alembic upgrade head` moved production to `0016_default_registry_tree`, and
+  post-checks verified new columns, constraint, and indexes.
+- Frontend deployment rebuilt and uploaded `frontend/dist`, restarted the API
+  service, and passed same-origin frontend/API smoke checks.
+- Live API checks used a temporary staging database and verified root default
+  registry creation, descendant registry inheritance, organization-centered card
+  creation, existing registry-based card create compatibility, default-registry
+  archive guard, organization-owned reference list resolution, wrong-scope
+  reference rejection, and public-link effective reference options.
+- Browser checks on the temporary staging runtime verified Russian UI chrome,
+  hierarchical organization display, absence of organization type selection,
+  absence of `Без родительской организации` after root exists, clean card create
+  without manual registry or card org-unit selection, successful card creation,
+  effective local reference options in the card editor, and no browser console
+  errors.
+- Temporary staging service, staging database, and temporary storage directory
+  were removed after live verification.
+
+Live notes:
+
+- A staging-only user display name created through the shell bootstrap path was
+  mojibaked by shell Unicode handling. Production data was checked separately
+  and stores `Системный администратор` correctly, so this is not a Phase 6
+  application blocker. Future ad hoc live seed scripts should avoid passing
+  Cyrillic display names through shell paths that do not preserve UTF-8.
 
 ## Non-Goals For Phase 6
 
