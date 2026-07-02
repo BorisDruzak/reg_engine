@@ -67,8 +67,8 @@ not a hardcoded employee registry.
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
 - Current active checkpoint: **Phase 7G: Visual Schema Polish And Card List
-  Display Fields** is implemented and locally verified; push, deploy, and live
-  smoke are next.
+  Display Fields** is implemented, pushed to `main`, deployed to the server,
+  and live-smoke verified.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1294,8 +1294,7 @@ Verification completed so far:
   visible `Создать элемент справочника`, and no browser console warnings/errors.
 ## Phase 7G: Visual Schema Polish And Card List Display Fields
 
-Status: implemented and locally verified; push, deploy, and live smoke are
-next.
+Status: completed, pushed to `main`, deployed, and live-smoke verified.
 
 Purpose:
 
@@ -1346,3 +1345,15 @@ Verification completed so far:
 - `pnpm -C frontend e2e`: passed, 3 passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
+  "Polish visual schema editor fields"`: passed; code commit `66c10cc4` was
+  pushed to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
+  server checkout fast-forwarded to `66c10cc4` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed; frontend artifact deployed and same-origin smoke check passed.
+- Live Playwright smoke on `http://192.168.100.12:8000/`: passed. Verified
+  login, schema editor tab, field create form inside the selected block, inline
+  checkbox layout, visible field order controls, `Имя` marked as
+  `is_list_display`, ordinary card list showing `Имя: Игорь`, and no browser
+  console warnings/errors.
