@@ -81,7 +81,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint("position >= 0", name="ck_card_templates_position_non_negative"),
+        sa.CheckConstraint("position >= 0", name="position_non_negative"),
         sa.PrimaryKeyConstraint("id", name="pk_card_templates"),
         sa.UniqueConstraint(
             "registry_id",
