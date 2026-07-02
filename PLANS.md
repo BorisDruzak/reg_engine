@@ -1475,8 +1475,8 @@ Remaining risks:
 
 ## Phase 7H.1: Reference List Inline Metadata And Item Ordering Polish
 
-Status: completed locally; planned for the current `main` GitHub/server sync.
-No database migration is required.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-smoke verified. No database migration is required.
 
 Purpose:
 
@@ -1531,3 +1531,18 @@ Verification completed:
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
   test/build, and project-map check.
+- `git push origin main`: passed for commit `002b1978` with a one-command
+  temporary SSH DNS override after local DNS `10.10.10.1` timed out resolving
+  `github.com`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
+  server checkout fast-forwarded to `002b1978`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed, including frontend build, service restart, healthcheck, and
+  same-origin frontend smoke.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- In-app Browser live smoke on `http://192.168.100.12:8000/`: passed. Verified
+  the reference-list workspace has inline owner/status/inheritance controls, no
+  separate reference-list header edit/archive buttons, a bottom add-item slot,
+  no manual item code/description/position fields in the create form, item drag
+  handles, and zero browser console errors. Screenshot stored outside Git at
+  `C:\Temp\reg-engine-live-reference-inline-7h1.png`.
