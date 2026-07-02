@@ -98,13 +98,12 @@ not a hardcoded employee registry.
   selecting a template opens the visual block/field editor, and the separate
   checkbox/default-value template editor is removed from the ordinary UI. No
   database migration or backend API change is required.
-- Phase 7J schema layout/static-text variant B is implemented locally and
-  pending full verification/deployment: blocks get a 1-3 column layout,
-  fields get visual placement/display settings, `static_text` fields render as
-  non-editable template text, schema editing opens by clicking blocks/fields,
-  and the admin navigation can be collapsed. Migration
-  `0020_schema_layout_static_text` is planned but production has not been
-  migrated yet.
+- Phase 7J schema layout/static-text variant B is implemented, deployed, and
+  browser-verified: blocks get a 1-3 column layout, fields get visual
+  placement/display settings, `static_text` fields render as non-editable
+  template text, schema editing opens by clicking templates/blocks/fields, and
+  the admin navigation can be collapsed. Production migration
+  `0020_schema_layout_static_text` is applied.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1924,8 +1923,7 @@ Deployment and live evidence:
 
 ## Phase 7J: Schema Layout Static Text And Collapsible Navigation
 
-Status: implemented and locally verified, pending migration deployment and
-browser live check.
+Status: completed, deployed, and browser-verified.
 
 Purpose:
 
@@ -1976,8 +1974,8 @@ Non-goals:
 - No one-registry-per-organization behavior.
 - No import/export, reports, generated-document, attachment, MCP, auth-flow,
   or public attachment workflow changes.
-- No production migration until disposable PostgreSQL verification, backup,
-  preflight, migration, and post-check are completed under the standing
+- Production migration was applied only after disposable PostgreSQL
+  verification, backup, preflight, migration, and post-check under the standing
   migration rules.
 
 Verification completed locally so far:
@@ -1997,8 +1995,38 @@ Verification completed locally so far:
   unit tests/build, and project-map check.
 - `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
 
+Migration, deployment, and live evidence:
+
+- Commit `e05e975a` was pushed to `origin/main` and the server checkout was
+  synchronized before the production migration.
+- Disposable PostgreSQL verification on `reg_engine_0020_test` passed:
+  `tests/test_database_smoke.py tests/test_registry_card_services.py
+  tests/test_public_link_transfer_audit_services.py -q` returned 35 passed.
+- Production preflight before migration confirmed Alembic
+  `0019_base_card_templates`, no existing `form_blocks.layout_columns`, no
+  existing `form_fields.display_config_json`, and zero existing `static_text`
+  fields.
+- Fresh production backup was created outside Git:
+  `/var/backups/reg_engine/reg_engine_before_0020_20260702_184937.dump`.
+- Production `alembic upgrade head` applied
+  `0020_schema_layout_static_text`.
+- Post-check confirmed Alembic `0020_schema_layout_static_text`,
+  `form_blocks.layout_columns`, `form_fields.display_config_json`,
+  `ck_form_blocks_layout_columns`, and `ck_form_fields_field_type`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  frontend build/upload, service restart, API healthcheck, and same-origin
+  frontend smoke passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- In-app Browser live smoke against `http://192.168.100.12:8000/` passed:
+  the admin navigation collapses and restores, `Схема карточки` shows
+  `Шаблоны карточек`, the separate `Открыть` template button is absent,
+  `Базовый шаблон` opens by clicking the template card, and browser console
+  errors are empty.
+
 Known limitations / next work:
 
-- Disposable PostgreSQL verification for migration `0020_schema_layout_static_text`
-  is still required before any production migration.
-- Server deployment and browser live check are still pending.
+- Current layout support stores block column count plus per-field column span,
+  label position, separator style, and static text content. Richer visual grid
+  placement can be planned separately if needed.
+- No per-template physical schema separation was introduced; current Core
+  Schema fields remain registry-scoped in this slice.
