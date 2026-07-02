@@ -79,13 +79,13 @@ not a hardcoded employee registry.
 - Phase 7H.2 card tag search/reference-filter and organization-parent bugfix
   is completed on `main`, pushed to GitHub, deployed to the server frontend,
   and browser live-verified. No database migration is required.
-- Current active checkpoint: **Phase 7I: Card Templates And Inline Search
-  Completion** is implemented locally and awaiting synchronization. It adds
-  card templates, migration `0018_card_templates`, template-based card
+- Phase 7I: Card Templates And Inline Search Completion is implemented on
+  `main`, pushed to GitHub, deployed to the server, migrated to Alembic head
+  `0018_card_templates`, and live-smoke verified against
+  `http://192.168.100.12:8000/`. It adds card templates, template-based card
   creation, template search tags, inline typed tag choices for select,
   multi-select, bool, date, number, and text fields, readable public-link URLs,
-  and mouse drag/drop field ordering in the visual schema editor. Production
-  deployment requires the standard migration flow for `0018_card_templates`.
+  and mouse drag/drop field ordering in the visual schema editor.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1627,8 +1627,9 @@ Synchronization and live verification:
 
 ## Phase 7I: Card Templates And Inline Search Completion
 
-Status: implemented locally; pending GitHub/server synchronization and
-production migration flow for `0018_card_templates`.
+Status: completed on `main`, synchronized to GitHub and the server, production
+migration `0018_card_templates` applied after disposable PostgreSQL
+verification and backup.
 
 Purpose:
 
@@ -1674,7 +1675,6 @@ Non-goals:
 - No public API removal; existing registry-based card APIs remain compatible.
 - No import/export, reports, generated documents, attachments, MCP, auth-flow,
   or public attachment workflow changes.
-- No production migration has been run yet in this checkpoint.
 
 Verification completed locally:
 
@@ -1689,14 +1689,35 @@ Verification completed locally:
 - `pnpm -C frontend test:run`: passed, 73 tests.
 - `pnpm -C frontend build`: passed.
 - `pnpm -C frontend e2e`: passed, 3 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed.
 
 Migration and deployment notes:
 
-- `TEST_DATABASE_URL` was not set in the local shell during implementation, so
-  disposable PostgreSQL verification for `0018_card_templates` was not run
-  locally.
-- Before deploying backend code that expects `card_templates` and
-  `cards.card_template_id`, run the standard migration flow: disposable
-  PostgreSQL verification against a database ending with `_test`, production
-  backup outside Git, preflight, `alembic upgrade head`, post-check, then
-  frontend/server smoke verification.
+- Local `TEST_DATABASE_URL` was not set, so disposable PostgreSQL verification
+  was run on the configured server against `reg_engine_0018_test`.
+- Server disposable PostgreSQL verification command passed:
+  `sudo -u postgres env TEST_DATABASE_URL=postgresql+psycopg:///reg_engine_0018_test .venv/bin/python -m pytest tests/test_database_smoke.py tests/test_registry_card_services.py -q`
+  returned 25 passed.
+- Production preflight before migration:
+  `alembic_version=0017_registry_card_title_label`,
+  `active_root_organizations=1`, `active_default_registries=1`,
+  `card_templates_exists=f`, and `cards_has_card_template_id=f`.
+- Fresh production backup was created outside Git:
+  `/var/backups/reg_engine/reg_engine_before_0018_20260702_144556.dump`.
+- Production migration command passed:
+  `sudo -u postgres env DATABASE_URL=postgresql+psycopg:///reg_engine .venv/bin/python -m alembic upgrade head`.
+- Post-check passed:
+  `alembic_version=0018_card_templates`, `card_templates_exists=t`,
+  `cards_has_card_template_id=t`, constraint
+  `ck_card_templates_position_non_negative`, and indexes
+  `ix_card_templates_active_order`, `ix_card_templates_registry_id`,
+  `uq_card_templates_registry_id_code`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  frontend build/upload, service restart, healthcheck, and frontend smoke
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- Browser live smoke against `http://192.168.100.12:8000/` verified:
+  Russian UI title, `Схема карточки` shows `Шаблоны карточек`, create-card
+  form uses `Шаблон карточки` and no longer shows manual `Название карточки`,
+  field drag handles are visible, and the public-links tab remains available.
