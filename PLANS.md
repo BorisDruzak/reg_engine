@@ -77,8 +77,8 @@ not a hardcoded employee registry.
   description/position inputs are removed from the ordinary UI, and item order
   is changed by mouse drag/drop. No database migration is required.
 - Phase 7H.2 card tag search/reference-filter and organization-parent bugfix
-  is implemented locally and verified with local checks. GitHub/server sync and
-  browser live verification are pending.
+  is completed on `main`, pushed to GitHub, deployed to the server frontend,
+  and browser live-verified. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1552,8 +1552,8 @@ Verification completed:
 
 ## Phase 7H.2: Card Tag Search Reference Filters And Organization Parent Bugfix
 
-Status: implemented locally on `main`; GitHub/server sync and browser live
-verification are pending. No database migration is required.
+Status: completed on `main`, pushed to GitHub, deployed to the server
+frontend, and browser live-verified. No database migration is required.
 
 Purpose:
 
@@ -1598,3 +1598,22 @@ Verification completed locally:
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
   test/build, and project-map check.
+
+Synchronization and live verification:
+
+- `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -SkipCheck
+  -Message "Fix card search reference filters"`: passed, creating commit
+  `bf8d41a9` on `main` and pushing it to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
+  server checkout fast-forwarded to `bf8d41a9`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed, including frontend build, service restart, API healthcheck, and
+  same-origin frontend smoke.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- In-app Browser live smoke on `http://192.168.100.12:8000/`: passed. Verified
+  the card search menu opens reference-list choices for multi-select field
+  `tst`, selected values render as readable chips such as `tst: 123` and
+  `tst: Школа` without UUIDs, the popover is not clipped by the card list
+  panel, and the create-organization form initializes its only available parent
+  organization as the selected value without showing the parent-required error.
+  No browser console errors were present.
