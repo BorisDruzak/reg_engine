@@ -46,7 +46,8 @@ not a hardcoded employee registry.
   GitHub, deployed to the server, and live-smoke verified: the search input is
   now the primary long control, focusing it opens the available tag list, and
   the organization selector is launched from the same tag workflow.
-- Phase 7E.2 card tag search inline-entry polish is implemented locally:
+- Phase 7E.2 card tag search inline-entry polish is implemented on `main`,
+  pushed to GitHub, deployed to the server, and live-smoke verified:
   organization filtering is no longer rendered as a separate duplicate
   control, selected filters are chips inside the same search box, and field
   values are entered inline as `Поле: значение` before Enter creates the tag.
@@ -1117,6 +1118,17 @@ Verification completed so far:
   UI polish.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.2 UI polish.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
+  checkout fast-forwarded to `e9632be` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  rebuilt and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed same-origin frontend/API smoke.
+- Live Playwright smoke on `http://192.168.100.12:8000/` verified no separate
+  `.card-tag-organization-filter`, a 1266px highlighted search row with a
+  1242px input area, a tag menu attached 6px below the search box, inline
+  `Фамилия: Светлана` tag creation by Enter, no separate field-value form, and
+  no browser console errors. The in-app browser runtime timed out during this
+  check, so the deployed UI was verified with the project's Playwright runtime.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.1 UI polish.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
