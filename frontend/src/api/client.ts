@@ -336,7 +336,17 @@ function cardListSearchParams(options: CardListOptions) {
     params.set("q", options.q.trim());
   }
   if (options.fieldFilters?.length) {
-    params.set("filters", JSON.stringify(options.fieldFilters));
+    params.set(
+      "filters",
+      JSON.stringify(
+        options.fieldFilters.map(({ field_id, field_type, operator, value }) => ({
+          field_id,
+          field_type,
+          operator,
+          value,
+        })),
+      ),
+    );
   }
   return params;
 }

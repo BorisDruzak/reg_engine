@@ -3281,6 +3281,85 @@ test("adds dynamic field filters from the unified card search bar", async () => 
   });
 });
 
+test("adds reference field filters with readable chips from the card search bar", async () => {
+  referenceItemItems = [
+    ...referenceItemItems,
+    {
+      id: "dcdcdcdc-dcdc-4dcd-8dcd-dcdcdcdcdcdc",
+      list_id: "abababab-abab-4aba-8aba-abababababab",
+      parent_id: null,
+      code: "paused",
+      label: "Приостановлен",
+      description: null,
+      position: 1,
+      is_active: true,
+    },
+  ];
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.id === "99999999-9999-4999-8999-999999999999"
+      ? {
+          ...field,
+          label: "tst",
+          field_type: "multi_select",
+          options_source_type: "reference_list",
+          options_source_id: "abababab-abab-4aba-8aba-abababababab",
+        }
+      : field,
+  );
+  cardValueStateById["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"].status =
+    "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc dcdcdcdc-dcdc-4dcd-8dcd-dcdcdcdcdcdc";
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
+  await user.click(within(tagMenu).getByRole("button", { name: "tst" }));
+  await user.click(await within(tagMenu).findByRole("button", { name: "Активен" }));
+  await user.click(within(tagMenu).getByRole("button", { name: "Приостановлен" }));
+
+  expect(within(searchBar).getByText("tst: Активен")).toBeInTheDocument();
+  expect(within(searchBar).getByText("tst: Приостановлен")).toBeInTheDocument();
+  expect(screen.queryByText(/bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc/)).not.toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.includes("/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards?") ||
+          init?.method !== "GET"
+        ) {
+          return false;
+        }
+        const requestUrl = new URL(url, "http://localhost");
+        const filters = cardFieldFilters(requestUrl);
+        return (
+          filters.some(
+            (filter) =>
+              filter.field_id === "99999999-9999-4999-8999-999999999999" &&
+              filter.field_type === "multi_select" &&
+              filter.operator === "contains" &&
+              filter.value === "bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc",
+          ) &&
+          filters.some(
+            (filter) =>
+              filter.field_id === "99999999-9999-4999-8999-999999999999" &&
+              filter.field_type === "multi_select" &&
+              filter.operator === "contains" &&
+              filter.value === "dcdcdcdc-dcdc-4dcd-8dcd-dcdcdcdcdcdc",
+          )
+        );
+      }),
+    ).toBe(true);
+  });
+});
+
 test("creates archives cards and manages repeatable blocks with bulk save", async () => {
   enableRepeatableDetailsSchema();
   const user = userEvent.setup();
@@ -3541,13 +3620,10 @@ test("renders organization hierarchy and hides organization type choices", async
     screen.queryByRole("option", { name: "Без родительской организации" }),
   ).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название организации"), "Дочерняя организация");
-  const postCountBeforeParentValidation = vi
-    .mocked(fetch)
-    .mock.calls.filter(
-      ([input, init]) => String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
-    ).length;
+  expect(screen.getByLabelText("Родительская организация")).toHaveValue(
+    "22222222-2222-4222-8222-222222222222",
+  );
   await user.click(screen.getByRole("button", { name: "Создать" }));
-  expect(await screen.findByText("Выберите родительскую организацию")).toBeInTheDocument();
   expect(
     vi
       .mocked(fetch)
@@ -3555,11 +3631,7 @@ test("renders organization hierarchy and hides organization type choices", async
         ([input, init]) =>
           String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
       ).length,
-  ).toBe(postCountBeforeParentValidation);
-  await user.selectOptions(screen.getByLabelText("Родительская организация"), [
-    "22222222-2222-4222-8222-222222222222",
-  ]);
-  await user.click(screen.getByRole("button", { name: "Создать" }));
+  ).toBeGreaterThan(0);
 
   expect(await screen.findByText("Организация создана")).toBeInTheDocument();
   await waitFor(() => {

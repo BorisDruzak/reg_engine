@@ -278,6 +278,7 @@ export type CardFieldFilterPayload = {
   field_type: string;
   operator: string;
   value: unknown;
+  value_label?: string;
 };
 
 export type CardCreatePayload = {

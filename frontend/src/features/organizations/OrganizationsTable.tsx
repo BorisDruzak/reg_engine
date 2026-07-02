@@ -90,7 +90,7 @@ export function OrganizationsTable({
       organizationId: null,
       code: "",
       name: "",
-      parentId: "",
+      parentId: defaultCreateParentId(organizations, rootOrganizationExists),
     });
   }
 
@@ -328,4 +328,11 @@ async function invalidateOrganizationData(queryClient: QueryClient, token: strin
   await queryClient.invalidateQueries({ queryKey: ["organizations", token] });
   await queryClient.invalidateQueries({ queryKey: ["organizations-tree", token] });
   await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+}
+
+function defaultCreateParentId(organizations: OrganizationRead[], rootOrganizationExists: boolean) {
+  if (!rootOrganizationExists) {
+    return "";
+  }
+  return organizations.find((organization) => organization.is_active)?.id ?? "";
 }

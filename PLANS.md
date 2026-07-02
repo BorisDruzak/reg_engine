@@ -76,6 +76,9 @@ not a hardcoded employee registry.
   is edited in place, item creation opens from the bottom add slot, manual item
   description/position inputs are removed from the ordinary UI, and item order
   is changed by mouse drag/drop. No database migration is required.
+- Phase 7H.2 card tag search/reference-filter and organization-parent bugfix
+  is implemented locally and verified with local checks. GitHub/server sync and
+  browser live verification are pending.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1546,3 +1549,52 @@ Verification completed:
   no manual item code/description/position fields in the create form, item drag
   handles, and zero browser console errors. Screenshot stored outside Git at
   `C:\Temp\reg-engine-live-reference-inline-7h1.png`.
+
+## Phase 7H.2: Card Tag Search Reference Filters And Organization Parent Bugfix
+
+Status: implemented locally on `main`; GitHub/server sync and browser live
+verification are pending. No database migration is required.
+
+Purpose:
+
+Close the live UI comments for the ordinary card search and organization create
+form without adding a new product feature or changing backend business logic.
+
+Implemented scope:
+
+1. Card tag search:
+   - select and multi-select schema fields now open reference-list choices
+     directly inside the search-tag popover instead of showing raw UUID values;
+   - multi-select filters can add multiple selected reference items as separate
+     readable chips for the same field;
+   - filter chips store a UI-only `value_label`, while list API requests still
+     send only `field_id`, `field_type`, `operator`, and `value`;
+   - the tag popover is no longer clipped by the card list panel and has a
+     higher stacking layer.
+2. Organization create form:
+   - when the main root organization already exists, the create form initializes
+     `parentId` to the first active parent option instead of visually selecting
+     it while keeping an empty state value;
+   - the ordinary create flow no longer shows the parent-required validation
+     error when the only valid parent is already displayed in the selector.
+
+Non-goals:
+
+- No backend filter API change.
+- No database migration.
+- No registry schema change.
+- No new card field types.
+- No import/export, reports, generated documents, attachments, MCP, auth, or
+  public-link workflow changes.
+
+Verification completed locally:
+
+- `pnpm -C frontend test:run src/App.test.tsx -t "reference field filters|organization hierarchy"`:
+  passed, 2 targeted tests.
+- `pnpm -C frontend test:run`: passed, 71 tests.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check.

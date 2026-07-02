@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { listReferenceItems } from "@/api/client";
-import type { CardFieldFilterPayload, FormFieldRead, OrganizationRead } from "@/api/types";
+import type {
+  CardFieldFilterPayload,
+  FormFieldRead,
+  OrganizationRead,
+  ReferenceItemRead,
+} from "@/api/types";
 import { fieldTypeLabel, uiText } from "@/app/uiText";
 
 const supportedFieldTypes = new Set([
@@ -136,7 +141,8 @@ export function CardTagSearchBar({
   }
 
   function startFieldFilter(field: FormFieldRead) {
-    setIsTagMenuOpen(false);
+    setIsTagMenuOpen(isReferenceFieldType(field.field_type));
+    setIsOrganizationFilterOpen(false);
     setSearchInput("");
     setDraftFilter({
       field,
@@ -160,6 +166,35 @@ export function CardTagSearchBar({
     onFieldFiltersChange([...fieldFilters, payload]);
     setDraftFilter(null);
     setSearchInput("");
+  }
+
+  function addReferenceFilter(referenceItem: ReferenceItemRead) {
+    if (!draftFilter || !isReferenceFieldType(draftFilter.field.field_type)) {
+      return;
+    }
+
+    const payload = buildReferenceFieldFilterPayload(draftFilter.field, referenceItem);
+    if (draftFilter.field.field_type === "multi_select") {
+      const existingFilterIndex = fieldFilters.findIndex((filter) =>
+        matchesReferenceFilter(filter, draftFilter.field, referenceItem.id),
+      );
+      if (existingFilterIndex >= 0) {
+        onFieldFiltersChange(
+          fieldFilters.filter((_, filterIndex) => filterIndex !== existingFilterIndex),
+        );
+        return;
+      }
+      onFieldFiltersChange([...fieldFilters, payload]);
+      return;
+    }
+
+    onFieldFiltersChange([
+      ...fieldFilters.filter((filter) => filter.field_id !== draftFilter.field.id),
+      payload,
+    ]);
+    setDraftFilter(null);
+    setSearchInput("");
+    setIsTagMenuOpen(false);
   }
 
   function removeFieldFilter(index: number) {
@@ -268,28 +303,27 @@ export function CardTagSearchBar({
                 <option value="true">{uiText.yes}</option>
                 <option value="false">{uiText.no}</option>
               </select>
-            ) : draftFilter?.field.field_type === "select" ||
-              draftFilter?.field.field_type === "multi_select" ? (
-              <select
-                aria-label={`${uiText.filterValue} ${draftFilter.field.label}`}
-                value={draftFilter.value}
-                onChange={(event) => {
-                  const nextDraft = { ...draftFilter, value: event.currentTarget.value };
-                  setDraftFilter(nextDraft);
-                  const payload = buildFieldFilterPayload(nextDraft);
-                  if (payload) {
-                    onFieldFiltersChange([...fieldFilters, payload]);
+            ) : draftFilter && isReferenceFieldType(draftFilter.field.field_type) ? (
+              <input
+                aria-label={uiText.cardSearch}
+                placeholder={`${draftFilter.field.label}: ${uiText.filterValue.toLowerCase()}`}
+                readOnly
+                value=""
+                onFocus={() => {
+                  setIsTagMenuOpen(true);
+                  setIsOrganizationFilterOpen(false);
+                }}
+                onClick={() => {
+                  setIsTagMenuOpen(true);
+                  setIsOrganizationFilterOpen(false);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setIsTagMenuOpen(false);
                     setDraftFilter(null);
                   }
                 }}
-              >
-                <option value="">{uiText.noData}</option>
-                {(referenceItemsQuery.data?.items ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              />
             ) : (
               <input
                 aria-label={uiText.cardSearch}
@@ -350,6 +384,47 @@ export function CardTagSearchBar({
               <span>{uiText.showArchivedCards}</span>
             </button>
           </div>
+          {draftFilter && isReferenceFieldType(draftFilter.field.field_type) && (
+            <div className="search-tag-section search-reference-section">
+              <p>{draftFilter.field.label}</p>
+              {referenceItemsQuery.isLoading ? (
+                <p className="data-empty">{uiText.loadingCard}</p>
+              ) : (referenceItemsQuery.data?.items ?? []).length === 0 ? (
+                <p className="data-empty">{uiText.noData}</p>
+              ) : (
+                <div className="search-reference-options">
+                  {(referenceItemsQuery.data?.items ?? []).map((item) => {
+                    const isSelected = fieldFilters.some((filter) =>
+                      matchesReferenceFilter(filter, draftFilter.field, item.id),
+                    );
+                    return (
+                      <button
+                        type="button"
+                        className={[
+                          "search-tag-option",
+                          "search-reference-option",
+                          isSelected ? "is-selected" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        key={item.id}
+                        aria-label={item.label}
+                        aria-pressed={
+                          draftFilter.field.field_type === "multi_select" ? isSelected : undefined
+                        }
+                        onClick={() => addReferenceFilter(item)}
+                      >
+                        <span>{item.label}</span>
+                        {draftFilter.field.field_type === "multi_select" && (
+                          <small>{isSelected ? uiText.selectedCount : item.code}</small>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="search-tag-section">
             <p>{uiText.cardFields}</p>
             {searchableFields.length === 0 ? (
@@ -468,9 +543,48 @@ function buildFieldFilterPayload(draftFilter: DraftFilter): CardFieldFilterPaylo
   };
 }
 
+function buildReferenceFieldFilterPayload(
+  field: FormFieldRead,
+  referenceItem: ReferenceItemRead,
+): CardFieldFilterPayload {
+  return {
+    field_id: field.id,
+    field_type: field.field_type,
+    operator: field.field_type === "multi_select" ? "contains" : "is",
+    value: referenceItem.id,
+    value_label: referenceItem.label,
+  };
+}
+
+function matchesReferenceFilter(
+  filter: CardFieldFilterPayload,
+  field: FormFieldRead,
+  referenceItemId: string,
+) {
+  return filter.field_id === field.id && filter.value === referenceItemId;
+}
+
 function fieldFilterLabel(filter: CardFieldFilterPayload, fieldById: Map<string, FormFieldRead>) {
-  const label = fieldById.get(filter.field_id)?.label ?? filter.field_id;
-  return `${label}: ${String(filter.value)}`;
+  const field = fieldById.get(filter.field_id);
+  const label = field?.label ?? filter.field_id;
+  return `${label}: ${formatFieldFilterValue(filter, field)}`;
+}
+
+function formatFieldFilterValue(filter: CardFieldFilterPayload, field: FormFieldRead | undefined) {
+  if (typeof filter.value_label === "string" && filter.value_label.trim()) {
+    return filter.value_label;
+  }
+  if (field && isReferenceFieldType(field.field_type) && typeof filter.value === "string") {
+    return "выбранное значение";
+  }
+  if (field?.field_type === "bool") {
+    return filter.value ? uiText.yes : uiText.no;
+  }
+  return String(filter.value);
+}
+
+function isReferenceFieldType(fieldType: string) {
+  return fieldType === "select" || fieldType === "multi_select";
 }
 
 function organizationFilterLabel({
