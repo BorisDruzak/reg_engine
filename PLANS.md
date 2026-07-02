@@ -51,7 +51,8 @@ not a hardcoded employee registry.
   organization filtering is no longer rendered as a separate duplicate
   control, selected filters are chips inside the same search box, and field
   values are entered inline as `Поле: значение` before Enter creates the tag.
-- Phase 7E.3 card editor action-panel hardening is implemented locally:
+- Phase 7E.3 card editor action-panel hardening is implemented on `main`,
+  pushed to GitHub, deployed to the server, and live-smoke verified:
   the tag-search menu closes on outside click/Escape, opened card tabs have a
   close button with an unsaved-changes warning, and save/activate/archive card
   actions live in one sticky `Панель действий карточки` instead of being split
@@ -1137,6 +1138,19 @@ Verification completed so far:
   UI hardening.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.3 UI hardening.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
+  "Harden card editor actions"`: committed and pushed `765c6b28` to
+  `origin/main` after the full local check passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
+  checkout fast-forwarded to `765c6b2` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  rebuilt and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed same-origin frontend/API smoke.
+- In-app browser live smoke on `http://192.168.100.12:8000/` verified the page
+  title `Реестровая система`, zero browser warning/error logs, the card search
+  tag menu closing on outside click, visible close buttons for open card tabs,
+  no old `Редактировать карточку` button, and the sticky
+  `Панель действий карточки` with save, activate, and archive actions.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
   checkout fast-forwarded to `e9632be` and server checks passed.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
