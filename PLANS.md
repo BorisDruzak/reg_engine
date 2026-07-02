@@ -42,9 +42,10 @@ not a hardcoded employee registry.
   uses one Russian-first search bar for free-text, organization, and
   schema-field tags; backend list APIs accept typed field filters without
   bypassing RBAC.
-- Phase 7E.1 card tag search UX polish is implemented locally: the search
-  input is now the primary long control, focusing it opens the available tag
-  list, and the organization selector is launched from the same tag workflow.
+- Phase 7E.1 card tag search UX polish is implemented on `main`, pushed to
+  GitHub, deployed to the server, and live-smoke verified: the search input is
+  now the primary long control, focusing it opens the available tag list, and
+  the organization selector is launched from the same tag workflow.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -1095,6 +1096,19 @@ Verification completed so far:
 - `pnpm -C frontend build`: passed for the Phase 7E.1 UI polish.
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.1
   UI polish.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed for the Phase 7E.1 UI polish.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
+  checkout fast-forwarded to `ff71053` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  rebuilt and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed same-origin frontend/API smoke.
+- Live Playwright smoke on `http://192.168.100.12:8000/` verified a 1266px
+  search row, a 1010px search input, one available-tags menu with
+  `Организации` plus the current schema field, field-filter draft opening after
+  field selection, and no browser console errors. The in-app browser runtime
+  timed out during this check, so the deployed UI was verified with the
+  project's Playwright runtime.
 - `backend\.venv\Scripts\ruff.exe check
   backend\app\api\v1\endpoints\cards.py backend\app\services\cards.py
   backend\tests\test_api_phase_1g.py`: passed.
