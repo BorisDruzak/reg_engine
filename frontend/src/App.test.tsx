@@ -2555,8 +2555,8 @@ test("filters cards by search organization and archive visibility", async () => 
   const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
   expect(within(searchBar).getByLabelText("Поиск карточек")).toBeInTheDocument();
   expect(
-    within(searchBar).getByRole("button", { name: "Организации: все доступные" }),
-  ).toBeInTheDocument();
+    within(searchBar).queryByRole("button", { name: "Организации: все доступные" }),
+  ).not.toBeInTheDocument();
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
   expect(within(tagMenu).getByRole("button", { name: /^Организации/ })).toBeInTheDocument();
@@ -2570,13 +2570,17 @@ test("filters cards by search organization and archive visibility", async () => 
 
   await user.click(screen.getByLabelText("Показывать архивные и замененные карточки"));
   expect(await screen.findByText("Архивная карточка")).toBeInTheDocument();
-  await user.click(within(searchBar).getByRole("button", { name: "Организации: все доступные" }));
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  await user.click(
+    within(await screen.findByRole("listbox", { name: "Доступные теги поиска" })).getByRole(
+      "button",
+      { name: /^Организации/ },
+    ),
+  );
   expect(screen.getByRole("checkbox", { name: "Включать подведомственные" })).toBeChecked();
   await user.click(screen.getByRole("checkbox", { name: "Главная организация" }));
   expect(
-    within(searchBar).getByRole("button", {
-      name: "Организации: Главная организация + подведомственные",
-    }),
+    within(searchBar).getByText("Организации: Главная организация + подведомственные"),
   ).toBeInTheDocument();
 
   await waitFor(() => {
@@ -2642,8 +2646,7 @@ test("adds dynamic field filters from the unified card search bar", async () => 
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
   await user.click(within(tagMenu).getByRole("button", { name: "Статус" }));
-  await user.type(screen.getByLabelText("Значение фильтра Статус"), "drafted");
-  await user.click(screen.getByRole("button", { name: "Добавить" }));
+  await user.type(within(searchBar).getByLabelText("Поиск карточек"), "drafted{enter}");
 
   expect(within(searchBar).getByText("Статус: drafted")).toBeInTheDocument();
   await waitFor(() => {

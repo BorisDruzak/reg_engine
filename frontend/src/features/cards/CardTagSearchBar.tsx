@@ -5,8 +5,6 @@ import { listReferenceItems } from "@/api/client";
 import type { CardFieldFilterPayload, FormFieldRead, OrganizationRead } from "@/api/types";
 import { fieldTypeLabel, uiText } from "@/app/uiText";
 
-import { CardOrganizationFilter } from "./CardOrganizationFilter";
-
 const supportedFieldTypes = new Set([
   "text",
   "number",
@@ -20,6 +18,10 @@ const supportedFieldTypes = new Set([
 type DraftFilter = {
   field: FormFieldRead;
   value: string;
+};
+
+type OrganizationTreeNode = OrganizationRead & {
+  children: OrganizationTreeNode[];
 };
 
 export function CardTagSearchBar({
@@ -80,8 +82,12 @@ export function CardTagSearchBar({
     enabled: Boolean(token && draftReferenceListId),
   });
 
-  function submitTextSearch(event: FormEvent<HTMLFormElement>) {
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (draftFilter) {
+      submitDraftFieldFilter();
+      return;
+    }
     const nextQuery = searchInput.trim();
     if (!nextQuery) {
       return;
@@ -93,6 +99,7 @@ export function CardTagSearchBar({
 
   function startFieldFilter(field: FormFieldRead) {
     setIsTagMenuOpen(false);
+    setSearchInput("");
     setDraftFilter({
       field,
       value: field.field_type === "bool" ? "true" : "",
@@ -104,8 +111,7 @@ export function CardTagSearchBar({
     setIsOrganizationFilterOpen(true);
   }
 
-  function submitFieldFilter(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function submitDraftFieldFilter() {
     if (!draftFilter) {
       return;
     }
@@ -115,15 +121,37 @@ export function CardTagSearchBar({
     }
     onFieldFiltersChange([...fieldFilters, payload]);
     setDraftFilter(null);
+    setSearchInput("");
   }
 
   function removeFieldFilter(index: number) {
     onFieldFiltersChange(fieldFilters.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function toggleOrganization(organizationId: string) {
+    if (selectedOrganizationIds.includes(organizationId)) {
+      onSelectedOrganizationIdsChange(
+        selectedOrganizationIds.filter((selectedId) => selectedId !== organizationId),
+      );
+      return;
+    }
+    onSelectedOrganizationIdsChange([...selectedOrganizationIds, organizationId]);
+  }
+
+  function clearOrganizationFilter() {
+    onSelectedOrganizationIdsChange([]);
+  }
+
   return (
     <div className="card-tag-search" role="group" aria-label={uiText.cardTagSearch}>
-      <div className="card-tag-row">
+      <div
+        className={[
+          "card-tag-row",
+          isTagMenuOpen || isOrganizationFilterOpen || draftFilter ? "is-focused" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {textQuery && (
           <span className="search-chip">
             <span>
@@ -138,21 +166,20 @@ export function CardTagSearchBar({
             </button>
           </span>
         )}
-        <CardOrganizationFilter
-          className="card-tag-organization-filter"
-          organizations={organizations}
-          selectedOrganizationIds={selectedOrganizationIds}
-          includeDescendants={includeDescendantOrganizations}
-          isOpen={isOrganizationFilterOpen}
-          onOpenChange={(nextIsOpen) => {
-            setIsOrganizationFilterOpen(nextIsOpen);
-            if (nextIsOpen) {
-              setIsTagMenuOpen(false);
-            }
-          }}
-          onSelectedOrganizationIdsChange={onSelectedOrganizationIdsChange}
-          onIncludeDescendantsChange={onIncludeDescendantOrganizationsChange}
-        />
+        {selectedOrganizationIds.length > 0 && (
+          <span className="search-chip search-chip-filter">
+            <button type="button" onClick={openOrganizationFilter}>
+              {organizationFilterSummary}
+            </button>
+            <button
+              type="button"
+              aria-label={`${uiText.removeFilter} ${organizationFilterSummary}`}
+              onClick={clearOrganizationFilter}
+            >
+              x
+            </button>
+          </span>
+        )}
         {fieldFilters.map((filter, index) => (
           <span className="search-chip" key={`${filter.field_id}-${index}`}>
             <span>{fieldFilterLabel(filter, fieldById)}</span>
@@ -165,20 +192,80 @@ export function CardTagSearchBar({
             </button>
           </span>
         ))}
-        <form className="card-tag-input-form" onSubmit={submitTextSearch}>
+        <form className="card-tag-input-form" onSubmit={submitSearch}>
           <label>
             <span>{uiText.cardSearch}</span>
-            <input
-              placeholder={uiText.cardSearchPlaceholder}
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.currentTarget.value)}
-              onFocus={() => setIsTagMenuOpen(true)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setIsTagMenuOpen(false);
+            {draftFilter && <span className="search-draft-prefix">{draftFilter.field.label}:</span>}
+            {draftFilter?.field.field_type === "bool" ? (
+              <select
+                aria-label={`${uiText.filterValue} ${draftFilter.field.label}`}
+                value={draftFilter.value}
+                onChange={(event) => {
+                  const nextDraft = { ...draftFilter, value: event.currentTarget.value };
+                  setDraftFilter(nextDraft);
+                  const payload = buildFieldFilterPayload(nextDraft);
+                  if (payload) {
+                    onFieldFiltersChange([...fieldFilters, payload]);
+                    setDraftFilter(null);
+                  }
+                }}
+              >
+                <option value="true">{uiText.yes}</option>
+                <option value="false">{uiText.no}</option>
+              </select>
+            ) : draftFilter?.field.field_type === "select" ||
+              draftFilter?.field.field_type === "multi_select" ? (
+              <select
+                aria-label={`${uiText.filterValue} ${draftFilter.field.label}`}
+                value={draftFilter.value}
+                onChange={(event) => {
+                  const nextDraft = { ...draftFilter, value: event.currentTarget.value };
+                  setDraftFilter(nextDraft);
+                  const payload = buildFieldFilterPayload(nextDraft);
+                  if (payload) {
+                    onFieldFiltersChange([...fieldFilters, payload]);
+                    setDraftFilter(null);
+                  }
+                }}
+              >
+                <option value="">{uiText.noData}</option>
+                {(referenceItemsQuery.data?.items ?? []).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                aria-label={uiText.cardSearch}
+                placeholder={
+                  draftFilter
+                    ? `${draftFilter.field.label}: ${uiText.filterValue.toLowerCase()}`
+                    : uiText.cardSearchPlaceholder
                 }
-              }}
-            />
+                value={draftFilter ? draftFilter.value : searchInput}
+                onChange={(event) => {
+                  if (draftFilter) {
+                    setDraftFilter({ ...draftFilter, value: event.currentTarget.value });
+                    return;
+                  }
+                  setSearchInput(event.currentTarget.value);
+                }}
+                onFocus={() => {
+                  if (!draftFilter) {
+                    setIsTagMenuOpen(true);
+                    setIsOrganizationFilterOpen(false);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setIsTagMenuOpen(false);
+                    setIsOrganizationFilterOpen(false);
+                    setDraftFilter(null);
+                  }
+                }}
+              />
+            )}
           </label>
         </form>
       </div>
@@ -214,54 +301,73 @@ export function CardTagSearchBar({
           </div>
         </div>
       )}
-      {draftFilter && (
-        <form className="search-filter-draft" onSubmit={submitFieldFilter}>
-          <label>
-            <span>
-              {uiText.filterValue} {draftFilter.field.label}
-            </span>
-            {draftFilter.field.field_type === "bool" ? (
-              <select
-                value={draftFilter.value}
-                onChange={(event) =>
-                  setDraftFilter({ ...draftFilter, value: event.currentTarget.value })
-                }
-              >
-                <option value="true">{uiText.yes}</option>
-                <option value="false">{uiText.no}</option>
-              </select>
-            ) : draftFilter.field.field_type === "select" ||
-              draftFilter.field.field_type === "multi_select" ? (
-              <select
-                value={draftFilter.value}
-                onChange={(event) =>
-                  setDraftFilter({ ...draftFilter, value: event.currentTarget.value })
-                }
-              >
-                <option value="">{uiText.noData}</option>
-                {(referenceItemsQuery.data?.items ?? []).map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={draftFilter.value}
-                onChange={(event) =>
-                  setDraftFilter({ ...draftFilter, value: event.currentTarget.value })
-                }
-              />
-            )}
+      {isOrganizationFilterOpen && (
+        <div className="organization-search-popover">
+          <div className="tag-filter-actions">
+            <button type="button" className="ghost-button" onClick={clearOrganizationFilter}>
+              {uiText.allAccessibleOrganizationsAction}
+            </button>
+          </div>
+          <label className="checkbox-control">
+            <input
+              type="checkbox"
+              checked={includeDescendantOrganizations}
+              onChange={(event) =>
+                onIncludeDescendantOrganizationsChange(event.currentTarget.checked)
+              }
+            />
+            <span>{uiText.includeDescendantOrganizations}</span>
           </label>
-          <button type="submit" className="primary-button">
-            {uiText.add}
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setDraftFilter(null)}>
-            {uiText.cancel}
-          </button>
-        </form>
+          <div className="organization-filter-tree">
+            {buildOrganizationTree(organizations).map((organization) => (
+              <OrganizationFilterNode
+                key={organization.id}
+                organization={organization}
+                depth={0}
+                selectedIds={new Set(selectedOrganizationIds)}
+                onToggle={toggleOrganization}
+              />
+            ))}
+          </div>
+        </div>
       )}
+    </div>
+  );
+}
+
+function OrganizationFilterNode({
+  organization,
+  depth,
+  selectedIds,
+  onToggle,
+}: {
+  organization: OrganizationTreeNode;
+  depth: number;
+  selectedIds: Set<string>;
+  onToggle: (organizationId: string) => void;
+}) {
+  return (
+    <div>
+      <label
+        className="checkbox-control organization-filter-option"
+        style={{ paddingLeft: `${depth * 16}px` }}
+      >
+        <input
+          type="checkbox"
+          checked={selectedIds.has(organization.id)}
+          onChange={() => onToggle(organization.id)}
+        />
+        <span>{organization.name}</span>
+      </label>
+      {organization.children.map((child) => (
+        <OrganizationFilterNode
+          key={child.id}
+          organization={child}
+          depth={depth + 1}
+          selectedIds={selectedIds}
+          onToggle={onToggle}
+        />
+      ))}
     </div>
   );
 }
@@ -315,4 +421,27 @@ function organizationFilterLabel({
     return `${uiText.organizations}: ${organizationName}${suffix}`;
   }
   return `${uiText.organizations}: ${selectedOrganizationIds.length} ${uiText.selectedCount}${suffix}`;
+}
+
+function buildOrganizationTree(organizations: OrganizationRead[]) {
+  const visibleIds = new Set(organizations.map((organization) => organization.id));
+  const byParent = new Map<string | null, OrganizationRead[]>();
+  for (const organization of organizations) {
+    const parentId =
+      organization.parent_id && visibleIds.has(organization.parent_id)
+        ? organization.parent_id
+        : null;
+    byParent.set(parentId, [...(byParent.get(parentId) ?? []), organization]);
+  }
+
+  function build(parentId: string | null): OrganizationTreeNode[] {
+    return [...(byParent.get(parentId) ?? [])]
+      .sort((left, right) => left.code.localeCompare(right.code) || left.id.localeCompare(right.id))
+      .map((organization) => ({
+        ...organization,
+        children: build(organization.id),
+      }));
+  }
+
+  return build(null);
 }

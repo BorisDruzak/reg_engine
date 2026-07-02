@@ -46,6 +46,10 @@ not a hardcoded employee registry.
   GitHub, deployed to the server, and live-smoke verified: the search input is
   now the primary long control, focusing it opens the available tag list, and
   the organization selector is launched from the same tag workflow.
+- Phase 7E.2 card tag search inline-entry polish is implemented locally:
+  organization filtering is no longer rendered as a separate duplicate
+  control, selected filters are chips inside the same search box, and field
+  values are entered inline as `Поле: значение` before Enter creates the tag.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -1043,6 +1047,10 @@ Implemented scope:
      fit inside the search row;
    - focusing the search input opens one available-tags menu with
      `Организации` and active schema fields;
+   - removed the separate organization-filter button from the search row;
+   - selected organization filters render as chips inside the same search box;
+   - selecting a text-like schema field switches the same search input into
+     inline `Поле: значение` entry, and Enter creates the field tag;
    - free text becomes a visible `Текст: ...` tag after Enter;
    - the current organization tag selector is rendered inside the same search
      row and still supports multiple RBAC-visible organizations plus the
@@ -1096,6 +1104,19 @@ Verification completed so far:
 - `pnpm -C frontend build`: passed for the Phase 7E.1 UI polish.
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.1
   UI polish.
+- `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
+  organization|dynamic field filters"`: passed for the Phase 7E.2 inline-entry
+  regression.
+- `pnpm -C frontend lint`: passed for the Phase 7E.2 UI polish.
+- `pnpm -C frontend format:check`: passed for the Phase 7E.2 UI polish.
+- `pnpm -C frontend typecheck`: passed for the Phase 7E.2 UI polish.
+- `pnpm -C frontend test:run`: 6 files passed, 57 tests passed for the Phase
+  7E.2 UI polish.
+- `pnpm -C frontend build`: passed for the Phase 7E.2 UI polish.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.2
+  UI polish.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed for the Phase 7E.2 UI polish.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.1 UI polish.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
