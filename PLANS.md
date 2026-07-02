@@ -37,15 +37,16 @@ not a hardcoded employee registry.
   can filter cards by one or many RBAC-visible organizations, selected parent
   organizations include descendants by default, and the descendants mode is
   controlled by a visible tag toggle.
-- Phase 7E unified card tag search is implemented locally: the ordinary card
-  list now uses one Russian-first search bar for free-text, organization, and
+- Phase 7E unified card tag search is implemented on `main`, pushed to GitHub,
+  deployed to the server, and live-smoke verified: the ordinary card list now
+  uses one Russian-first search bar for free-text, organization, and
   schema-field tags; backend list APIs accept typed field filters without
   bypassing RBAC.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next checkpoint after Phase 7E is browser/server verification and then deeper
-  field-picker polish if live use shows a missing typed control.
+- Next checkpoint after Phase 7E is deeper field-picker polish only if live use
+  shows a missing typed control.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1007,8 +1008,7 @@ Known limitations:
 
 ## Phase 7E: Unified Card Tag Search Bar
 
-Status: implemented locally and fully local-verified; GitHub/server
-synchronization in progress.
+Status: completed, pushed to `main`, deployed, and live-smoke verified.
 
 Purpose:
 
@@ -1095,6 +1095,19 @@ Verification completed so far:
   transient `frontend/test-results` directory race after parallel e2e.
 - `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
   and checked `docs/PROJECT_TREE.md`.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
+  "Implement unified card tag search" -SkipCheck`: committed and pushed
+  implementation commit `455a310` to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
+  fast-forwarded to `455a310` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`: built
+  and uploaded `frontend/dist`, restarted `reg-engine.service`, and passed
+  same-origin frontend/API smoke.
+- Live Playwright smoke on `http://192.168.100.12:8000/` verified the deployed
+  `Поисковая строка карточек`, organization tag control inside the unified
+  search row, `Добавить фильтр`, text tag creation, and no browser console
+  errors. The in-app browser control was unavailable during this check, so the
+  deployed UI was verified with the project's Playwright runtime.
 
 Known limitations:
 
