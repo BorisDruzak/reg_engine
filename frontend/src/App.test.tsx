@@ -2510,6 +2510,9 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
 
   await user.dblClick(screen.getByRole("button", { name: /Карточка актива/ }));
   expect(await screen.findByRole("tablist", { name: "Разделы карточки" })).toBeInTheDocument();
+  expect(screen.queryByText("Название карточки")).not.toBeInTheDocument();
+  expect(screen.getByText("Шаблон карточки")).toBeInTheDocument();
+  expect(screen.getAllByText("Муниципальная карточка").length).toBeGreaterThan(0);
   expect(screen.getByRole("tab", { name: "Поля" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tab", { name: "Вложения" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();

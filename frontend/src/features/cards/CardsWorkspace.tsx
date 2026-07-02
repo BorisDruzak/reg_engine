@@ -491,8 +491,8 @@ export function CardsWorkspace({
               <div className="card-metadata-panel">
                 <dl className="metadata-list">
                   <div>
-                    <dt>{uiText.cardDisplayName}</dt>
-                    <dd>{card.display_name}</dd>
+                    <dt>{uiText.cardTemplate}</dt>
+                    <dd>{card.card_template_name ?? card.display_name}</dd>
                   </div>
                   <div>
                     <dt>{uiText.organization}</dt>

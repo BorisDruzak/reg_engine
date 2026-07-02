@@ -86,11 +86,13 @@ not a hardcoded employee registry.
   creation, template search tags, inline typed tag choices for select,
   multi-select, bool, date, number, and text fields, readable public-link URLs,
   and mouse drag/drop field ordering in the visual schema editor.
-- Phase 7I.1 base/default template enforcement is implemented locally and
-  ready for GitHub/server synchronization: free-schema card creation is removed
-  from the UI, backend card creation resolves a base template when old callers
-  omit `card_template_id`, and migration `0019_base_card_templates` enforces
-  non-null `cards.card_template_id` after backfilling existing cards.
+- Phase 7I.1 base/default template enforcement is implemented on `main`,
+  pushed to GitHub, deployed to the server, migrated to Alembic head
+  `0019_base_card_templates`, and server-verified. Free-schema card creation is
+  removed from the UI, backend card creation resolves a base template when old
+  callers omit `card_template_id`, cards require `card_template_id`, and the
+  card UI now shows `Шаблон карточки` instead of a separate user-facing
+  `Название карточки`.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1729,9 +1731,8 @@ Migration and deployment notes:
 
 ## Phase 7I.1: Base Template Enforcement And No Free Card Schema
 
-Status: implemented locally; pending GitHub push, server synchronization,
-disposable PostgreSQL verification, production migration `0019_base_card_templates`,
-frontend deployment, and live smoke.
+Status: completed on `main`, pushed to GitHub, deployed to the server, migrated
+to Alembic head `0019_base_card_templates`, and server/browser-smoke verified.
 
 Purpose:
 
@@ -1762,6 +1763,10 @@ Implemented scope:
    - removed the old schema editor `Название карточки` inline form;
    - create-card form defaults to the first active template and no longer has a
      free blank template path when templates exist;
+   - card metadata now shows `Шаблон карточки` and the resolved template name
+     instead of a separate user-facing `Название карточки`;
+   - card search placeholder no longer asks for a card title and instead says
+     `Текст карточки или поля`;
    - frontend API types now model returned `card_template_id` as required.
 4. Tests:
    - model metadata asserts `cards.card_template_id` is non-nullable;
@@ -1770,7 +1775,9 @@ Implemented scope:
    - card service regression tests cover implicit base-template card creation
      and base-template archive protection;
    - frontend tests cover the removed free title editor and template-backed
-     card creation.
+     card creation;
+   - frontend card-workspace regression test asserts the old card-title label is
+     not visible and template metadata is visible in the card editor.
 
 Acceptance criteria:
 
@@ -1782,7 +1789,7 @@ Acceptance criteria:
 - Production migration is applied only after disposable PostgreSQL verification,
   backup, preflight, and post-check under the standing migration rules.
 
-Local verification completed:
+Verification completed:
 
 - `backend\.venv\Scripts\python.exe -m pytest`: passed, 132 passed, 167
   skipped, 1 warning.
@@ -1797,10 +1804,42 @@ Local verification completed:
 - `npm --prefix frontend run e2e`: passed, 3 tests.
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed.
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "refactored card workspace|template-backed card"`:
+  passed, 1 targeted test and 60 skipped.
+- `npm --prefix frontend test -- --run`: passed, 6 files and 73 tests.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run format:check`: passed.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 tests.
+
+Migration and deployment evidence:
+
+- Server checkout was synchronized to commit `41737f9e` before applying the
+  production migration.
+- Disposable PostgreSQL verification on `reg_engine_0019_test` passed:
+  `tests/test_database_smoke.py tests/test_registry_card_services.py -q`
+  returned 27 passed.
+- Production preflight before migration confirmed Alembic
+  `0018_card_templates`, one active root organization, one active default
+  registry, four cards without template, and zero existing active base
+  templates.
+- Fresh production backup was created outside Git:
+  `/var/backups/reg_engine/reg_engine_before_0019_20260702_152846.dump`.
+- Production `alembic upgrade head` applied
+  `0019_base_card_templates`.
+- Post-check confirmed Alembic `0019_base_card_templates`,
+  `cards_without_template=0`, `active_base_templates=1`, and
+  `cards.card_template_id` is `NOT NULL`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  frontend build/upload, service restart, API healthcheck, and same-origin
+  frontend smoke passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
 
 Known limitations / next work:
 
-- Production database remains at Alembic head `0018_card_templates` until the
-  server migration flow applies `0019_base_card_templates`.
-- Browser live smoke is pending until the server checkout and frontend are
-  updated.
+- `display_name` remains in the API and export/document compatibility surface
+  for older integrations, but the ordinary Russian UI no longer exposes it as a
+  separate card-title field.
+- A final live browser smoke after the latest UI label polish must confirm the
+  server bundle no longer shows `Название карточки` in the card workspace.
