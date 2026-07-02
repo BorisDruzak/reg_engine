@@ -67,10 +67,10 @@ not a hardcoded employee registry.
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
 - Current active checkpoint: **Phase 7H: Inline Visual Editor Polish And
-  Reference List Workspace** is implemented locally and pending GitHub/server
-  synchronization. It adds migration `0017_registry_card_title_label`; production
-  migration must use the approved backup, preflight, disposable DB, upgrade, and
-  post-check flow before the deployed backend uses this revision.
+  Reference List Workspace** is implemented on `main`, pushed to GitHub,
+  deployed to the server, migrated to Alembic head
+  `0017_registry_card_title_label`, and live-verified against
+  `http://192.168.100.12:8000/`.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1362,8 +1362,8 @@ Verification completed so far:
 
 ## Phase 7H: Inline Visual Editor Polish And Reference List Workspace
 
-Status: implemented locally, pending GitHub push, server sync, production
-migration, frontend deploy, and live browser verification.
+Status: completed, pushed to GitHub, deployed to the server, production
+migration applied, and live-smoke verified.
 
 Purpose:
 
@@ -1405,7 +1405,7 @@ Non-goals:
 - No new card CRUD behavior beyond UI placement.
 - No import/export, reports, generated documents, attachments, MCP, auth, or
   public-link workflow changes.
-- No production migration until the standard approved migration flow is run.
+- No additional production migration beyond `0017_registry_card_title_label`.
 
 Verification completed so far:
 
@@ -1431,10 +1431,39 @@ Verification completed so far:
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
   test/build, and project-map check.
+- `backend\tests\test_database_smoke.py` migration-head expectation was updated
+  to `0017_registry_card_title_label`.
+- Server checkout was updated to commit `fc30e44` on `main`.
+- Disposable PostgreSQL database `reg_engine_0017_test` passed
+  `tests/test_database_smoke.py`: 3 passed, Alembic version
+  `0017_registry_card_title_label`.
+- Production preflight on `reg_engine` before migration:
+  `0016_default_registry_tree`, one active root organization, one active
+  default registry, default owner equals root, and no existing
+  `registries.card_title_label` column.
+- Fresh production backup was created outside Git under
+  `/var/backups/reg_engine/` before applying migration `0017`.
+- Production `alembic upgrade head` moved `reg_engine` to
+  `0017_registry_card_title_label (head)`; post-check confirmed one
+  `registries.card_title_label` column, zero null title labels, and one
+  registry row.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed, including frontend build, service restart, API healthcheck, and
+  same-origin frontend smoke.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- Live UI Playwright check against `http://192.168.100.12:8000/`: passed.
+  Verified page title, authenticated admin shell, editable card title label,
+  inline field create/edit forms, bottom block-create form, one expandable
+  reference-list workspace with item table, archive/superseded card search tag,
+  no console issues, and no HTTP 500 responses. Screenshots were stored outside
+  Git in `C:\Temp\reg-engine-live-schema.png`,
+  `C:\Temp\reg-engine-live-references.png`, and
+  `C:\Temp\reg-engine-live-cards-search.png`.
 
-Remaining work:
+Remaining risks:
 
-- Verify migration `0017_registry_card_title_label` against a disposable
-  PostgreSQL `_test` database before production.
-- Commit, push `main`, update the server checkout, run production migration
-  flow, deploy frontend, and live-smoke verify the UI.
+- In-app Browser plugin timed out on basic URL/title reads during verification,
+  so final live verification used project Playwright instead.
+- The current server environment does not set `AUTH_TOKEN_SECRET`; this remains
+  acceptable only for MVP/internal development and must be fixed before any
+  production-like hosting.
