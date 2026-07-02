@@ -260,16 +260,16 @@ class PublicLinkService:
             raise PermissionDeniedError("Public link cannot edit fields from another registry.")
         if not public_link.can_edit or not card.public_edit_enabled:
             raise PermissionDeniedError("Public editing is disabled for this card.")
+        if field.field_type == "file_ref":
+            raise PermissionDeniedError("Public links cannot edit file reference fields.")
+        if field.field_type == "static_text":
+            raise PermissionDeniedError("Public links cannot edit static text fields.")
         if not block.public_editable or not field.public_editable:
             raise PermissionDeniedError("Field is not public editable.")
         if not self._public_link_allows(public_link.allowed_blocks_json, block.id):
             raise PermissionDeniedError("Public link cannot edit this block.")
         if not self._public_link_allows(public_link.allowed_fields_json, field.id):
             raise PermissionDeniedError("Public link cannot edit this field.")
-        if field.field_type == "file_ref":
-            raise PermissionDeniedError("Public links cannot edit file reference fields.")
-        if field.field_type == "static_text":
-            raise PermissionDeniedError("Public links cannot edit static text fields.")
 
         field_value = CardService(self.session).set_field_value_from_public_link(
             actor_public_link_id=public_link.id,

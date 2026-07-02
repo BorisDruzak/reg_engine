@@ -47,7 +47,7 @@ def upgrade() -> None:
         schema="public",
     )
     op.create_check_constraint(
-        "ck_form_blocks_layout_columns",
+        op.f("ck_form_blocks_layout_columns"),
         "form_blocks",
         "layout_columns >= 1 and layout_columns <= 3",
         schema="public",
@@ -63,7 +63,7 @@ def upgrade() -> None:
     )
     op.execute("ALTER TABLE public.form_fields DROP CONSTRAINT IF EXISTS ck_form_fields_field_type")
     op.create_check_constraint(
-        "ck_form_fields_field_type",
+        op.f("ck_form_fields_field_type"),
         "form_fields",
         f"field_type in ({_quoted(_FIELD_TYPES)})",
         schema="public",
@@ -86,14 +86,14 @@ def downgrade() -> None:
     )
     op.execute("ALTER TABLE public.form_fields DROP CONSTRAINT IF EXISTS ck_form_fields_field_type")
     op.create_check_constraint(
-        "ck_form_fields_field_type",
+        op.f("ck_form_fields_field_type"),
         "form_fields",
         f"field_type in ({_quoted(_PREVIOUS_FIELD_TYPES)})",
         schema="public",
     )
     op.drop_column("form_fields", "display_config_json", schema="public")
     op.drop_constraint(
-        "ck_form_blocks_layout_columns",
+        op.f("ck_form_blocks_layout_columns"),
         "form_blocks",
         schema="public",
         type_="check",
