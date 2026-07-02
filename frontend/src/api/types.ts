@@ -254,6 +254,13 @@ export type CardListRead = {
   items: CardSummaryRead[];
 };
 
+export type CardFieldFilterPayload = {
+  field_id: string;
+  field_type: string;
+  operator: string;
+  value: unknown;
+};
+
 export type CardCreatePayload = {
   organization_id: string;
   display_name: string;

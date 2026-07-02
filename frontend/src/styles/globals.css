@@ -566,6 +566,120 @@ tr:last-child td {
   justify-content: flex-start;
 }
 
+.card-tag-search {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.card-tag-row {
+  display: flex;
+  min-height: 44px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.card-tag-row .tag-filter {
+  align-self: center;
+}
+
+.card-tag-row .tag-filter-button {
+  width: auto;
+  min-height: 34px;
+}
+
+.search-chip {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #b9c7d9;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #17324d;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.search-chip button {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #52677f;
+  cursor: pointer;
+  font: inherit;
+}
+
+.search-chip button:hover {
+  background: #e9eef5;
+  color: #17324d;
+}
+
+.card-tag-input-form {
+  min-width: min(280px, 100%);
+  flex: 1 1 280px;
+}
+
+.card-tag-input-form label {
+  margin: 0;
+}
+
+.card-tag-input-form label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.card-tag-input-form input {
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+}
+
+.card-tag-input-form input:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.search-field-menu {
+  display: grid;
+  gap: 6px;
+}
+
+.search-field-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-field-menu span {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.search-filter-draft {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
+}
+
 .organization-filter-tree {
   display: grid;
   gap: 2px;

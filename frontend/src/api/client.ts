@@ -7,6 +7,7 @@ import type {
   AttachmentRead,
   CardBlockInstanceSummaryRead,
   CardCreatePayload,
+  CardFieldFilterPayload,
   CardImportCommitPayload,
   CardImportCommitRead,
   CardImportPreviewPayload,
@@ -289,28 +290,11 @@ export type CardListOptions = {
   includeDescendantOrganizations?: boolean;
   includeArchive?: boolean;
   q?: string;
+  fieldFilters?: CardFieldFilterPayload[];
 };
 
 export async function listCards(token: string, registryId: string, options: CardListOptions = {}) {
-  const params = new URLSearchParams();
-  if (options.organizationId) {
-    params.set("organization_id", options.organizationId);
-  }
-  for (const organizationId of options.organizationIds ?? []) {
-    params.append("organization_ids", organizationId);
-  }
-  if (options.includeDescendantOrganizations !== undefined) {
-    params.set(
-      "include_descendant_organizations",
-      options.includeDescendantOrganizations ? "true" : "false",
-    );
-  }
-  if (options.includeArchive) {
-    params.set("include_archive", "true");
-  }
-  if (options.q?.trim()) {
-    params.set("q", options.q.trim());
-  }
+  const params = cardListSearchParams(options);
   const query = params.toString();
   return apiRequest<CardListRead>(
     `/api/v1/registries/${registryId}/cards${query ? `?${query}` : ""}`,
@@ -323,6 +307,15 @@ export async function listOrganizationCards(
   organizationId: string,
   options: CardListOptions = {},
 ) {
+  const params = cardListSearchParams(options);
+  const query = params.toString();
+  return apiRequest<CardListRead>(
+    `/api/v1/organizations/${organizationId}/cards${query ? `?${query}` : ""}`,
+    { token },
+  );
+}
+
+function cardListSearchParams(options: CardListOptions) {
   const params = new URLSearchParams();
   if (options.organizationId) {
     params.set("organization_id", options.organizationId);
@@ -342,11 +335,10 @@ export async function listOrganizationCards(
   if (options.q?.trim()) {
     params.set("q", options.q.trim());
   }
-  const query = params.toString();
-  return apiRequest<CardListRead>(
-    `/api/v1/organizations/${organizationId}/cards${query ? `?${query}` : ""}`,
-    { token },
-  );
+  if (options.fieldFilters?.length) {
+    params.set("filters", JSON.stringify(options.fieldFilters));
+  }
+  return params;
 }
 
 export async function createCard(token: string, registryId: string, payload: CardCreatePayload) {

@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 from uuid import UUID
 
@@ -25,7 +26,13 @@ from app.schemas.cards import (
     OrganizationCardCreate,
 )
 from app.schemas.registries import ReferenceItemListRead, ReferenceItemRead
-from app.services.cards import BulkFieldValueInput, CardService, FileRefValueRead
+from app.services.cards import (
+    BulkFieldValueInput,
+    CardFieldFilterInput,
+    CardService,
+    CardServiceError,
+    FileRefValueRead,
+)
 from app.services.cards import CardFieldRead as ServiceCardFieldRead
 from app.services.cards import CardRead as ServiceCardRead
 
@@ -92,8 +99,10 @@ def list_cards(
     include_descendant_organizations: Annotated[bool, Query()] = True,
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
+    filters: Annotated[str | None, Query()] = None,
 ) -> CardListRead:
     try:
+        field_filters = _parse_card_field_filters(filters)
         cards = CardService(session).list_visible_cards(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
@@ -102,6 +111,7 @@ def list_cards(
             include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=q,
+            field_filters=field_filters,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -118,8 +128,10 @@ def list_organization_cards(
     include_descendant_organizations: Annotated[bool, Query()] = True,
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
+    filters: Annotated[str | None, Query()] = None,
 ) -> CardListRead:
     try:
+        field_filters = _parse_card_field_filters(filters)
         cards = CardService(session).list_visible_cards_for_organization_for_actor(
             actor_user_id=actor_user_id,
             resolver_organization_id=organization_id,
@@ -128,6 +140,7 @@ def list_organization_cards(
             include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=q,
+            field_filters=field_filters,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -171,6 +184,45 @@ def list_card_field_reference_items(
     except Exception as exc:
         raise_service_http_error(exc)
     return ReferenceItemListRead(items=[ReferenceItemRead.model_validate(item) for item in items])
+
+
+def _parse_card_field_filters(raw_filters: str | None) -> list[CardFieldFilterInput]:
+    if not raw_filters:
+        return []
+    try:
+        parsed = json.loads(raw_filters)
+    except json.JSONDecodeError as exc:
+        raise CardServiceError("Card field filters must be valid JSON.") from exc
+    if not isinstance(parsed, list):
+        raise CardServiceError("Card field filters must be a JSON array.")
+    if len(parsed) > 20:
+        raise CardServiceError("Card field filters cannot contain more than 20 items.")
+
+    filters: list[CardFieldFilterInput] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            raise CardServiceError("Each card field filter must be an object.")
+        try:
+            field_id = UUID(str(item["field_id"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CardServiceError("Card field filters require field_id.") from exc
+        field_type = item.get("field_type")
+        operator = item.get("operator")
+        if not isinstance(field_type, str) or not field_type.strip():
+            raise CardServiceError("Card field filters require field_type.")
+        if not isinstance(operator, str) or not operator.strip():
+            raise CardServiceError("Card field filters require operator.")
+        if "value" not in item:
+            raise CardServiceError("Card field filters require value.")
+        filters.append(
+            CardFieldFilterInput(
+                field_id=field_id,
+                field_type=field_type,
+                operator=operator,
+                value=item["value"],
+            )
+        )
+    return filters
 
 
 @router.patch("/cards/{card_id}/fields/{field_id}", response_model=FieldValueRead)

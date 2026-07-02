@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Iterator
 from ipaddress import ip_address
@@ -738,6 +739,134 @@ def test_organization_card_list_supports_tagged_organization_filters(
     )
     assert inaccessible_only_response.status_code == 200, inaccessible_only_response.text
     assert inaccessible_only_response.json()["items"] == []
+
+
+def test_organization_card_list_supports_text_and_field_filter_tags(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase7e-field-filter-system@example.test",
+        is_superuser=True,
+    )
+    root = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase7e-root", "name": "Phase 7E Root"},
+        actor_id=system_admin.id,
+    )
+    matching_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{root['id']}/cards",
+        {"display_name": "Phase 7E First Card"},
+        actor_id=system_admin.id,
+    )
+    other_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{root['id']}/cards",
+        {"display_name": "Phase 7E Second Card"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{matching_card['registry_id']}/blocks",
+        {"code": "search", "title": "Search"},
+        actor_id=system_admin.id,
+    )
+    text_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "person", "label": "Person", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    reference_list = _post_json(
+        api_client,
+        f"/api/v1/registries/{matching_card['registry_id']}/reference-lists",
+        {"code": "states", "name": "States", "owner_organization_id": root["id"]},
+        actor_id=system_admin.id,
+    )
+    ready_item = _post_json(
+        api_client,
+        f"/api/v1/reference-lists/{reference_list['id']}/items",
+        {"code": "ready", "label": "Ready"},
+        actor_id=system_admin.id,
+    )
+    blocked_item = _post_json(
+        api_client,
+        f"/api/v1/reference-lists/{reference_list['id']}/items",
+        {"code": "blocked", "label": "Blocked"},
+        actor_id=system_admin.id,
+    )
+    select_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {
+            "code": "state",
+            "label": "State",
+            "field_type": "select",
+            "options_source_type": "reference_list",
+            "options_source_id": reference_list["id"],
+        },
+        actor_id=system_admin.id,
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{matching_card['id']}/values",
+        actor_id=system_admin.id,
+        payload={
+            "values": [
+                {"field_id": text_field["id"], "value": "Иванов Иван"},
+                {"field_id": select_field["id"], "value": ready_item["id"]},
+            ],
+        },
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{other_card['id']}/values",
+        actor_id=system_admin.id,
+        payload={
+            "values": [
+                {"field_id": text_field["id"], "value": "Петров Петр"},
+                {"field_id": select_field["id"], "value": blocked_item["id"]},
+            ],
+        },
+    )
+
+    text_query_response = api_client.get(
+        f"/api/v1/organizations/{root['id']}/cards",
+        params={"q": "Иванов"},
+        headers=_actor_headers(system_admin.id),
+    )
+    assert text_query_response.status_code == 200, text_query_response.text
+    assert {item["id"] for item in text_query_response.json()["items"]} == {matching_card["id"]}
+
+    field_filters = json.dumps(
+        [
+            {
+                "field_id": text_field["id"],
+                "field_type": "text",
+                "operator": "contains",
+                "value": "Иванов",
+            },
+            {
+                "field_id": select_field["id"],
+                "field_type": "select",
+                "operator": "is",
+                "value": ready_item["id"],
+            },
+        ],
+        ensure_ascii=False,
+    )
+    field_filter_response = api_client.get(
+        f"/api/v1/organizations/{root['id']}/cards",
+        params={"filters": field_filters},
+        headers=_actor_headers(system_admin.id),
+    )
+    assert field_filter_response.status_code == 200, field_filter_response.text
+    assert {item["id"] for item in field_filter_response.json()["items"]} == {matching_card["id"]}
 
 
 def test_phase_1g_denied_paths_enforce_service_permissions(

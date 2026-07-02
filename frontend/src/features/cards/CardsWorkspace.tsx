@@ -16,6 +16,7 @@ import {
   updateCardFieldValues,
 } from "@/api/client";
 import type {
+  CardFieldFilterPayload,
   CardRead,
   CardSummaryRead,
   FormBlockRead,
@@ -45,8 +46,8 @@ import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSu
 import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
 
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
-import { CardOrganizationFilter } from "./CardOrganizationFilter";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
+import { CardTagSearchBar } from "./CardTagSearchBar";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
   type FieldEditorState,
@@ -81,11 +82,13 @@ export function CardsWorkspace({
   cardSearch,
   cardOrganizationIds,
   cardIncludeDescendantOrganizations,
+  cardFieldFilters,
   includeArchivedCards,
   onSelectCard,
   onCardSearchChange,
   onCardOrganizationIdsChange,
   onCardIncludeDescendantOrganizationsChange,
+  onCardFieldFiltersChange,
   onIncludeArchivedCardsChange,
 }: {
   cards: CardSummaryRead[];
@@ -98,11 +101,13 @@ export function CardsWorkspace({
   cardSearch: string;
   cardOrganizationIds: string[];
   cardIncludeDescendantOrganizations: boolean;
+  cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
   onSelectCard: (cardId: string) => void;
   onCardSearchChange: (value: string) => void;
   onCardOrganizationIdsChange: (value: string[]) => void;
   onCardIncludeDescendantOrganizationsChange: (value: boolean) => void;
+  onCardFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onIncludeArchivedCardsChange: (value: boolean) => void;
 }) {
   const queryClient = useQueryClient();
@@ -355,10 +360,14 @@ export function CardsWorkspace({
             organizationIds={cardOrganizationIds}
             includeDescendantOrganizations={cardIncludeDescendantOrganizations}
             includeArchive={includeArchivedCards}
+            fieldFilters={cardFieldFilters}
+            fields={schema?.fields ?? []}
+            token={token}
             organizations={organizations}
             onSearchChange={onCardSearchChange}
             onOrganizationIdsChange={onCardOrganizationIdsChange}
             onIncludeDescendantOrganizationsChange={onCardIncludeDescendantOrganizationsChange}
+            onFieldFiltersChange={onCardFieldFiltersChange}
             onIncludeArchiveChange={onIncludeArchivedCardsChange}
           />
           <SelectableList
@@ -564,38 +573,44 @@ function CardListFilters({
   organizationIds,
   includeDescendantOrganizations,
   includeArchive,
+  fieldFilters,
+  fields,
+  token,
   organizations,
   onSearchChange,
   onOrganizationIdsChange,
   onIncludeDescendantOrganizationsChange,
+  onFieldFiltersChange,
   onIncludeArchiveChange,
 }: {
   cardSearch: string;
   organizationIds: string[];
   includeDescendantOrganizations: boolean;
   includeArchive: boolean;
+  fieldFilters: CardFieldFilterPayload[];
+  fields: FormFieldRead[];
+  token: string;
   organizations: OrganizationRead[];
   onSearchChange: (value: string) => void;
   onOrganizationIdsChange: (value: string[]) => void;
   onIncludeDescendantOrganizationsChange: (value: boolean) => void;
+  onFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onIncludeArchiveChange: (value: boolean) => void;
 }) {
   return (
     <div className="filter-grid">
-      <label>
-        <span>{uiText.cardSearch}</span>
-        <input
-          placeholder={uiText.cardSearchPlaceholder}
-          value={cardSearch}
-          onChange={(event) => onSearchChange(event.currentTarget.value)}
-        />
-      </label>
-      <CardOrganizationFilter
+      <CardTagSearchBar
+        token={token}
+        textQuery={cardSearch}
+        fieldFilters={fieldFilters}
+        fields={fields}
         organizations={organizations}
         selectedOrganizationIds={organizationIds}
-        includeDescendants={includeDescendantOrganizations}
+        includeDescendantOrganizations={includeDescendantOrganizations}
+        onTextQueryChange={onSearchChange}
+        onFieldFiltersChange={onFieldFiltersChange}
         onSelectedOrganizationIdsChange={onOrganizationIdsChange}
-        onIncludeDescendantsChange={onIncludeDescendantOrganizationsChange}
+        onIncludeDescendantOrganizationsChange={onIncludeDescendantOrganizationsChange}
       />
       <label className="checkbox-control">
         <input

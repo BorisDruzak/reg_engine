@@ -669,21 +669,7 @@ beforeEach(() => {
           };
           return jsonResponse(created, { status: 201 });
         }
-        const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
-        const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
-        const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
-        const filteredCards = cardItems.filter((item) => {
-          if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
-            return false;
-          }
-          if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
-            return false;
-          }
-          if (query && !item.display_name.toLowerCase().includes(query)) {
-            return false;
-          }
-          return true;
-        });
+        const filteredCards = cardItems.filter((item) => cardMatchesListFilters(item, requestUrl));
         return jsonResponse({ items: filteredCards });
       }
       if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
@@ -1491,21 +1477,7 @@ beforeEach(() => {
           };
           return jsonResponse(created, { status: 201 });
         }
-        const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
-        const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
-        const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
-        const filteredCards = cardItems.filter((item) => {
-          if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
-            return false;
-          }
-          if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
-            return false;
-          }
-          if (query && !item.display_name.toLowerCase().includes(query)) {
-            return false;
-          }
-          return true;
-        });
+        const filteredCards = cardItems.filter((item) => cardMatchesListFilters(item, requestUrl));
         return jsonResponse({ items: filteredCards });
       }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links")) {
@@ -2126,6 +2098,66 @@ function cardOrganizationFilterIds(requestUrl: URL) {
   return expandedIds;
 }
 
+type TestCardFieldFilter = {
+  field_id: string;
+  field_type?: string;
+  operator?: string;
+  value: unknown;
+};
+
+function cardFieldFilters(requestUrl: URL) {
+  const rawFilters = requestUrl.searchParams.get("filters");
+  if (!rawFilters) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(rawFilters) as TestCardFieldFilter[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function cardMatchesListFilters(item: CardSummaryRead, requestUrl: URL) {
+  const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
+  const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
+  const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
+  const filters = cardFieldFilters(requestUrl);
+
+  if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
+    return false;
+  }
+  if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
+    return false;
+  }
+  if (query && !cardMatchesFreeText(item, query)) {
+    return false;
+  }
+  return filters.every((filter) => cardMatchesFieldFilter(item, filter));
+}
+
+function cardMatchesFreeText(item: CardSummaryRead, query: string) {
+  const state = cardValueStateById[item.id];
+  return (
+    item.display_name.toLowerCase().includes(query) ||
+    state?.status.toLowerCase().includes(query) === true
+  );
+}
+
+function cardMatchesFieldFilter(item: CardSummaryRead, filter: TestCardFieldFilter) {
+  const state = cardValueStateById[item.id];
+  if (!state) {
+    return false;
+  }
+  if (filter.field_id === "99999999-9999-4999-8999-999999999999") {
+    return state.status.toLowerCase().includes(String(filter.value ?? "").toLowerCase());
+  }
+  if (filter.field_id === "99999999-9999-4999-8999-999999999998") {
+    return state.approved === Boolean(filter.value);
+  }
+  return true;
+}
+
 function addOrganizationAndDescendants(target: Set<string>, organizationId: string) {
   target.add(organizationId);
   for (const organization of organizationItems) {
@@ -2520,21 +2552,27 @@ test("filters cards by search organization and archive visibility", async () => 
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
 
-  expect(screen.getByLabelText("Поиск карточек")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Организации: все доступные" })).toBeInTheDocument();
+  const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
+  expect(within(searchBar).getByLabelText("Поиск карточек")).toBeInTheDocument();
+  expect(
+    within(searchBar).getByRole("button", { name: "Организации: все доступные" }),
+  ).toBeInTheDocument();
   expect(screen.getByLabelText("Показывать архивные и замененные карточки")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
-  await user.type(screen.getByLabelText("Поиск карточек"), "Архивная");
+  await user.type(within(searchBar).getByLabelText("Поиск карточек"), "Архивная{enter}");
+  expect(within(searchBar).getByText("Текст: Архивная")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
   await user.click(screen.getByLabelText("Показывать архивные и замененные карточки"));
   expect(await screen.findByText("Архивная карточка")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Организации: все доступные" }));
+  await user.click(within(searchBar).getByRole("button", { name: "Организации: все доступные" }));
   expect(screen.getByRole("checkbox", { name: "Включать подведомственные" })).toBeChecked();
   await user.click(screen.getByRole("checkbox", { name: "Главная организация" }));
   expect(
-    screen.getByRole("button", { name: "Организации: Главная организация + подведомственные" }),
+    within(searchBar).getByRole("button", {
+      name: "Организации: Главная организация + подведомственные",
+    }),
   ).toBeInTheDocument();
 
   await waitFor(() => {
@@ -2562,6 +2600,73 @@ test("filters cards by search organization and archive visibility", async () => 
         );
       }),
     ).toBe(false);
+  });
+});
+
+test("adds dynamic field filters from the unified card search bar", async () => {
+  cardItems = [
+    ...apiPayloads.cards.items,
+    {
+      id: "acacacac-acac-4cac-8cac-acacacacacac",
+      registry_id: "77777777-7777-4777-8777-777777777777",
+      organization_id: "22222222-2222-4222-8222-222222222222",
+      org_unit_id: null,
+      display_name: "Карточка без статуса",
+      lifecycle_status: "draft",
+      public_view_enabled: false,
+      public_edit_enabled: false,
+    },
+  ];
+  cardValueStateById["acacacac-acac-4cac-8cac-acacacacacac"] = {
+    status: "blocked",
+    approved: false,
+    repeatableNotes: [],
+    fileRef: null,
+  };
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
+  expect(await screen.findByText("Карточка актива")).toBeInTheDocument();
+  expect(screen.getByText("Карточка без статуса")).toBeInTheDocument();
+
+  await user.click(within(searchBar).getByRole("button", { name: "Добавить фильтр" }));
+  await user.click(screen.getByRole("button", { name: "Статус" }));
+  await user.type(screen.getByLabelText("Значение фильтра Статус"), "drafted");
+  await user.click(screen.getByRole("button", { name: "Добавить" }));
+
+  expect(within(searchBar).getByText("Статус: drafted")).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByText("Карточка актива")).toBeInTheDocument();
+    expect(screen.queryByText("Карточка без статуса")).not.toBeInTheDocument();
+  });
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.includes("/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards?") ||
+          init?.method !== "GET"
+        ) {
+          return false;
+        }
+        const requestUrl = new URL(url, "http://localhost");
+        const filters = cardFieldFilters(requestUrl);
+        return filters.some(
+          (filter) =>
+            filter.field_id === "99999999-9999-4999-8999-999999999999" &&
+            filter.field_type === "text" &&
+            filter.operator === "contains" &&
+            filter.value === "drafted",
+        );
+      }),
+    ).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-02 07:10:32 +05:00
+- Generated: 2026-07-02 10:07:20 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -181,6 +181,7 @@
 - `docs/PROJECT_TREE.md`
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`
 - `docs/superpowers/plans/2026-07-02-card-organization-tag-search.md`
+- `docs/superpowers/plans/2026-07-02-card-unified-tag-search.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
@@ -215,6 +216,7 @@
 - `frontend/src/features/cards/CardAttachmentsPanel.tsx`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
+- `frontend/src/features/cards/CardTagSearchBar.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.ts`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`

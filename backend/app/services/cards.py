@@ -5,8 +5,9 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import (
     Card,
@@ -119,6 +120,14 @@ class BulkFieldValueInput:
     block_instance_id: UUID | None = None
 
 
+@dataclass(frozen=True)
+class CardFieldFilterInput:
+    field_id: UUID
+    field_type: str
+    operator: str
+    value: object
+
+
 class CardService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -214,6 +223,7 @@ class CardService:
         include_descendant_organizations: bool = True,
         include_archive: bool = False,
         query: str | None = None,
+        field_filters: Sequence[CardFieldFilterInput] | None = None,
     ) -> list[Card]:
         scope_ids = PermissionService(self.session).get_organization_scope_ids(
             actor_user_id,
@@ -239,7 +249,9 @@ class CardService:
             criteria.append(Card.lifecycle_status != "archived")
             criteria.append(Card.archived_at.is_(None))
         if query:
-            criteria.append(Card.display_name.ilike(f"%{query}%"))
+            criteria.append(self._card_text_search_criterion(query))
+        for field_filter in field_filters or ():
+            criteria.append(self._field_filter_criterion(field_filter, registry_id=registry_id))
 
         return list(
             self.session.scalars(
@@ -257,6 +269,7 @@ class CardService:
         include_descendant_organizations: bool = True,
         include_archive: bool = False,
         query: str | None = None,
+        field_filters: Sequence[CardFieldFilterInput] | None = None,
     ) -> list[Card]:
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             resolver_organization_id
@@ -276,6 +289,7 @@ class CardService:
             include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=query,
+            field_filters=field_filters,
         )
 
     def _filtered_organization_scope(
@@ -308,6 +322,168 @@ class CardService:
                 )
             )
         return expanded_ids & scope_ids
+
+    def _card_text_search_criterion(self, query: str) -> ColumnElement[bool]:
+        pattern = f"%{query}%"
+        text_value_exists = (
+            select(FieldValue.id)
+            .where(
+                FieldValue.card_id == Card.id,
+                FieldValue.value_text.ilike(pattern),
+            )
+            .exists()
+        )
+        return or_(Card.display_name.ilike(pattern), text_value_exists)
+
+    def _field_filter_criterion(
+        self,
+        field_filter: CardFieldFilterInput,
+        *,
+        registry_id: UUID,
+    ) -> ColumnElement[bool]:
+        field_model = self._get_active_field(field_filter.field_id)
+        if field_model.field_type != field_filter.field_type:
+            raise CardServiceError("Card field filter type does not match the schema field.")
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != registry_id:
+            raise CardServiceError("Card field filter does not belong to the card registry.")
+
+        base_criteria = [
+            FieldValue.card_id == Card.id,
+            FieldValue.field_id == field_model.id,
+        ]
+        operator = field_filter.operator
+        value = field_filter.value
+
+        if field_model.field_type == "text":
+            if operator != "contains" or not isinstance(value, str):
+                raise CardServiceError("Text field filters require contains and a string value.")
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, FieldValue.value_text.ilike(f"%{value}%"))
+                .exists()
+            )
+
+        if field_model.field_type == "number":
+            if operator != "is":
+                raise CardServiceError("Number field filters require the is operator.")
+            try:
+                number_value = Decimal(str(value))
+            except Exception as exc:
+                raise CardServiceError("Number field filters require a decimal value.") from exc
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, FieldValue.value_number == number_value)
+                .exists()
+            )
+
+        if field_model.field_type == "date":
+            if operator != "is":
+                raise CardServiceError("Date field filters require the is operator.")
+            date_value = self._coerce_filter_date(value)
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, FieldValue.value_date == date_value)
+                .exists()
+            )
+
+        if field_model.field_type == "datetime":
+            if operator != "is":
+                raise CardServiceError("Datetime field filters require the is operator.")
+            datetime_value = self._coerce_filter_datetime(value)
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, FieldValue.value_datetime == datetime_value)
+                .exists()
+            )
+
+        if field_model.field_type == "bool":
+            if operator != "is" or not isinstance(value, bool):
+                raise CardServiceError("Bool field filters require is and a boolean value.")
+            return (
+                select(FieldValue.id).where(*base_criteria, FieldValue.value_bool == value).exists()
+            )
+
+        if field_model.field_type == "select":
+            if operator != "is":
+                raise CardServiceError("Select field filters require the is operator.")
+            item_id = self._coerce_filter_uuid(
+                value,
+                "Select field filters require a reference item id.",
+            )
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, FieldValue.value_reference_item_id == item_id)
+                .exists()
+            )
+
+        if field_model.field_type == "multi_select":
+            if operator != "contains":
+                raise CardServiceError("Multi-select field filters require the contains operator.")
+            item_id = self._coerce_filter_uuid(
+                value,
+                "Multi-select field filters require a reference item id.",
+            )
+            return (
+                select(FieldValueItem.id)
+                .join(FieldValue, FieldValueItem.field_value_id == FieldValue.id)
+                .where(
+                    *base_criteria,
+                    FieldValueItem.reference_item_id == item_id,
+                )
+                .exists()
+            )
+
+        reference_columns = {
+            "organization_ref": FieldValue.value_organization_id,
+            "org_unit_ref": FieldValue.value_org_unit_id,
+            "user_ref": FieldValue.value_user_id,
+            "card_ref": FieldValue.value_card_id,
+            "registry_ref": FieldValue.value_registry_id,
+            "file_ref": FieldValue.value_attachment_id,
+        }
+        if field_model.field_type in reference_columns:
+            if operator != "is":
+                raise CardServiceError("Reference field filters require the is operator.")
+            object_id = self._coerce_filter_uuid(
+                value,
+                "Reference field filters require an object id.",
+            )
+            return (
+                select(FieldValue.id)
+                .where(*base_criteria, reference_columns[field_model.field_type] == object_id)
+                .exists()
+            )
+
+        raise CardServiceError(f"Unsupported card field filter type: {field_model.field_type}.")
+
+    def _coerce_filter_uuid(self, value: object, message: str) -> UUID:
+        try:
+            return value if isinstance(value, UUID) else UUID(str(value))
+        except (TypeError, ValueError) as exc:
+            raise CardServiceError(message) from exc
+
+    def _coerce_filter_date(self, value: object) -> date:
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError as exc:
+                raise CardServiceError("Date field filters require ISO date values.") from exc
+        raise CardServiceError("Date field filters require ISO date values.")
+
+    def _coerce_filter_datetime(self, value: object) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise CardServiceError(
+                    "Datetime field filters require ISO datetime values."
+                ) from exc
+        raise CardServiceError("Datetime field filters require ISO datetime values.")
 
     def set_field_value_for_actor(
         self,

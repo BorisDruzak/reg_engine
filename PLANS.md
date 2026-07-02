@@ -37,11 +37,15 @@ not a hardcoded employee registry.
   can filter cards by one or many RBAC-visible organizations, selected parent
   organizations include descendants by default, and the descendants mode is
   controlled by a visible tag toggle.
+- Phase 7E unified card tag search is implemented locally: the ordinary card
+  list now uses one Russian-first search bar for free-text, organization, and
+  schema-field tags; backend list APIs accept typed field filters without
+  bypassing RBAC.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint after Phase 7D is typed dynamic field tag
-  search.
+- Next checkpoint after Phase 7E is browser/server verification and then deeper
+  field-picker polish if live use shows a missing typed control.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -996,10 +1000,105 @@ Verification completed:
 
 Known limitations:
 
-- Text search still uses the existing `q` behavior and does not yet search
-  dynamic field values.
-- Dynamic field tags for text/select/multi_select/date/number values are
-  deferred to the next planned slice.
+- Dynamic field tags were deferred from Phase 7D and implemented in Phase 7E.
 - `TEST_DATABASE_URL` was not set in the local PowerShell environment, so the
   new PostgreSQL-backed API regression test is present but skipped in the local
   aggregate pytest run until a disposable `_test` database is configured.
+
+## Phase 7E: Unified Card Tag Search Bar
+
+Status: implemented locally and fully local-verified; GitHub/server
+synchronization in progress.
+
+Purpose:
+
+Unify ordinary card search into one Russian-first search bar so users can work
+with free-text, organization, and schema-field filters as visible tags instead
+of separate disconnected controls. Backend list APIs remain the filtering and
+RBAC boundary.
+
+Implemented scope:
+
+1. Backend card list filtering:
+   - `GET /api/v1/organizations/{organization_id}/cards` accepts optional
+     `filters` as a JSON array of typed dynamic field filters;
+   - `GET /api/v1/registries/{registry_id}/cards` accepts the same `filters`
+     parameter for compatibility;
+   - existing `q`, `organization_ids`, `include_descendant_organizations`, and
+     `include_archive` parameters remain compatible;
+   - `q` now matches both `cards.display_name` and text dynamic values in
+     `field_values.value_text`;
+   - field tags are enforced through backend SQL predicates over typed
+     `field_values` columns and `field_value_items` for multi-select;
+   - field filters are validated against active schema fields belonging to the
+     filtered registry.
+2. Frontend card list:
+   - replaced the separate search input plus standalone organization tag with
+     one `Поисковая строка карточек` control;
+   - free text becomes a visible `Текст: ...` tag after Enter;
+   - the current organization tag selector is rendered inside the same search
+     row and still supports multiple RBAC-visible organizations plus the
+     descendants toggle;
+   - active schema fields can be added as field tags from `Добавить фильтр`;
+   - field tag state is persisted in the existing workspace UI localStorage;
+   - the ordinary card list continues to call the organization-centered list
+     endpoint and does not perform frontend-only access filtering.
+
+Supported field tag behavior in the first UI slice:
+
+- `text`: contains search;
+- `bool`: exact true/false search;
+- `select`: exact reference item search when the field has a reference list;
+- `multi_select`: contains reference item search when the field has a reference
+  list;
+- `number`, `date`, and `datetime`: backend contract exists, with simple text
+  entry in the first UI slice.
+
+Non-goals:
+
+- No saved filter presets.
+- No advanced OR/NOT query language.
+- No separate report-builder search UI.
+- No hardcoded employee or HR-specific search fields.
+- No frontend-only RBAC filtering.
+- No database migration.
+- No import/export, documents, attachments, MCP, auth, or public-link changes.
+
+Verification completed so far:
+
+- Added backend PostgreSQL-backed regression coverage for dynamic text search
+  and field-filter JSON parameters.
+- Added frontend regression coverage for the unified search bar, text tags,
+  organization tags, and dynamic field tags.
+- `pnpm -C frontend test:run src/App.test.tsx -t "dynamic field filters"`:
+  passed.
+- `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
+  organization"`: passed.
+- `pnpm -C frontend test:run`: 6 files passed, 57 tests passed.
+- `pnpm -C frontend typecheck`: passed.
+- `backend\.venv\Scripts\ruff.exe check
+  backend\app\api\v1\endpoints\cards.py backend\app\services\cards.py
+  backend\tests\test_api_phase_1g.py`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app\api\v1\endpoints\cards.py
+  backend\app\services\cards.py`: passed.
+- `backend\.venv\Scripts\python.exe -m pytest`: 128 passed, 162 skipped.
+- `backend\.venv\Scripts\ruff.exe check backend`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check backend`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed after a separate rerun. The first run was interrupted by the known
+  transient `frontend/test-results` directory race after parallel e2e.
+- `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
+  and checked `docs/PROJECT_TREE.md`.
+
+Known limitations:
+
+- Local aggregate backend pytest still skips disposable PostgreSQL tests when
+  `TEST_DATABASE_URL` is not configured.
+- The first UI slice intentionally keeps field tags simple. Advanced operators,
+  grouped OR semantics, and saved searches require a later approved phase.
