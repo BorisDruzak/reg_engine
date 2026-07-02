@@ -88,11 +88,11 @@ not a hardcoded employee registry.
   and mouse drag/drop field ordering in the visual schema editor.
 - Phase 7I.1 base/default template enforcement is implemented on `main`,
   pushed to GitHub, deployed to the server, migrated to Alembic head
-  `0019_base_card_templates`, and server-verified. Free-schema card creation is
-  removed from the UI, backend card creation resolves a base template when old
-  callers omit `card_template_id`, cards require `card_template_id`, and the
-  card UI now shows `Шаблон карточки` instead of a separate user-facing
-  `Название карточки`.
+  `0019_base_card_templates`, and server/browser-smoke verified. Free-schema
+  card creation is removed from the UI, backend card creation resolves a base
+  template when old callers omit `card_template_id`, cards require
+  `card_template_id`, and the card UI now shows `Шаблон карточки` instead of a
+  separate user-facing `Название карточки`.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1835,11 +1835,13 @@ Migration and deployment evidence:
   frontend build/upload, service restart, API healthcheck, and same-origin
   frontend smoke passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- In-app Browser live smoke against `http://192.168.100.12:8000/` passed after
+  the final frontend deployment: page title is `Реестровая система`, the card
+  workspace no longer renders `Название карточки`, `Шаблон карточки` and
+  `Базовый шаблон` are visible, and browser console warnings/errors are empty.
 
 Known limitations / next work:
 
 - `display_name` remains in the API and export/document compatibility surface
   for older integrations, but the ordinary Russian UI no longer exposes it as a
   separate card-title field.
-- A final live browser smoke after the latest UI label polish must confirm the
-  server bundle no longer shows `Название карточки` in the card workspace.
