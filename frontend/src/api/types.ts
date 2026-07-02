@@ -208,6 +208,10 @@ export type ReferenceListCreatePayload = {
 export type ReferenceListUpdatePayload = {
   name?: string | null;
   description?: string | null;
+  owner_organization_id?: string | null;
+  inherit_to_descendants?: boolean | null;
+  locked_for_descendants?: boolean | null;
+  managed_by_system_only?: boolean | null;
 };
 
 export type ReferenceItemRead = {

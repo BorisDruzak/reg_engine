@@ -711,6 +711,96 @@ def test_reference_list_inheritance_allows_use_but_blocks_locked_descendant_edit
         )
 
 
+def test_reference_list_update_metadata_fields_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = UUID("11111111-1111-4111-8111-111111111111")
+    list_id = UUID("22222222-2222-4222-8222-222222222222")
+    root_id = UUID("33333333-3333-4333-8333-333333333333")
+    reference_list = SimpleNamespace(
+        id=list_id,
+        registry_id=UUID("44444444-4444-4444-8444-444444444444"),
+        name="Metadata",
+        description=None,
+        owner_organization_id=root_id,
+        inherit_to_descendants=True,
+        locked_for_descendants=True,
+        managed_by_system_only=False,
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.flushed = False
+
+        def flush(self) -> None:
+            self.flushed = True
+
+    class FakeAuditService:
+        def __init__(self, session: FakeSession) -> None:
+            self.session = session
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            return None
+
+    fake_session = FakeSession()
+    service = ReferenceListService(fake_session)  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: reference_list)
+    monkeypatch.setattr(
+        service,
+        "_require_reference_edit_permission",
+        lambda _actor_user_id, _reference_list: None,
+    )
+    monkeypatch.setattr(
+        service,
+        "_require_reference_create_permission",
+        lambda _actor_user_id, *, registry_id, owner_organization_id: None,
+    )
+    monkeypatch.setattr("app.services.references.AuditService", FakeAuditService)
+
+    updated = service.update_reference_list_for_actor(
+        actor_user_id=actor_user_id,
+        list_id=list_id,
+        owner_organization_id=None,
+        inherit_to_descendants=False,
+        locked_for_descendants=False,
+        managed_by_system_only=True,
+    )
+
+    assert updated.owner_organization_id is None
+    assert updated.inherit_to_descendants is False
+    assert updated.locked_for_descendants is False
+    assert updated.managed_by_system_only is True
+    assert fake_session.flushed is True
+
+
+def test_reference_list_update_can_change_existing_metadata_fields(db_session: Session) -> None:
+    context = _hardening_context(db_session)
+    reference_service = ReferenceListService(db_session)
+    reference_list = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        owner_organization_id=context["root"].id,
+        code="metadata",
+        name="Metadata",
+        inherit_to_descendants=True,
+        locked_for_descendants=True,
+    )
+
+    updated = reference_service.update_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        list_id=reference_list.id,
+        owner_organization_id=context["child"].id,
+        inherit_to_descendants=False,
+        locked_for_descendants=False,
+        managed_by_system_only=True,
+    )
+
+    assert updated.owner_organization_id == context["child"].id
+    assert updated.inherit_to_descendants is False
+    assert updated.locked_for_descendants is False
+    assert updated.managed_by_system_only is True
+
+
 def test_reference_list_read_allows_registry_card_actor_without_edit_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

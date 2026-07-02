@@ -13,6 +13,9 @@ class ReferenceListError(ValueError):
     """Raised when reference list operations reference invalid list state."""
 
 
+UNSET_OWNER_ORGANIZATION = object()
+
+
 class ReferenceListService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -65,14 +68,45 @@ class ReferenceListService:
         list_id: UUID,
         name: str | None = None,
         description: str | None = None,
+        owner_organization_id: UUID | None | object = UNSET_OWNER_ORGANIZATION,
+        inherit_to_descendants: bool | None = None,
+        locked_for_descendants: bool | None = None,
+        managed_by_system_only: bool | None = None,
     ) -> ReferenceList:
         reference_list = self._get_active_reference_list(list_id)
         self._require_reference_edit_permission(actor_user_id, reference_list)
-        old_data = {"name": reference_list.name, "description": reference_list.description}
+        old_data = {
+            "name": reference_list.name,
+            "description": reference_list.description,
+            "owner_organization_id": (
+                str(reference_list.owner_organization_id)
+                if reference_list.owner_organization_id is not None
+                else None
+            ),
+            "inherit_to_descendants": reference_list.inherit_to_descendants,
+            "locked_for_descendants": reference_list.locked_for_descendants,
+            "managed_by_system_only": reference_list.managed_by_system_only,
+        }
         if name is not None:
             reference_list.name = name
         if description is not None:
             reference_list.description = description
+        if owner_organization_id is not UNSET_OWNER_ORGANIZATION:
+            new_owner_id = (
+                owner_organization_id if isinstance(owner_organization_id, UUID) else None
+            )
+            self._require_reference_create_permission(
+                actor_user_id,
+                registry_id=reference_list.registry_id,
+                owner_organization_id=new_owner_id,
+            )
+            reference_list.owner_organization_id = new_owner_id
+        if inherit_to_descendants is not None:
+            reference_list.inherit_to_descendants = inherit_to_descendants
+        if locked_for_descendants is not None:
+            reference_list.locked_for_descendants = locked_for_descendants
+        if managed_by_system_only is not None:
+            reference_list.managed_by_system_only = managed_by_system_only
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -83,6 +117,14 @@ class ReferenceListService:
             new_data_json={
                 "name": reference_list.name,
                 "description": reference_list.description,
+                "owner_organization_id": (
+                    str(reference_list.owner_organization_id)
+                    if reference_list.owner_organization_id is not None
+                    else None
+                ),
+                "inherit_to_descendants": reference_list.inherit_to_descendants,
+                "locked_for_descendants": reference_list.locked_for_descendants,
+                "managed_by_system_only": reference_list.managed_by_system_only,
             },
         )
         return reference_list

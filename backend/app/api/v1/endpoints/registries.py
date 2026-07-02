@@ -26,7 +26,7 @@ from app.schemas.registries import (
     RegistrySchemaRead,
     RegistryUpdate,
 )
-from app.services.references import ReferenceListService
+from app.services.references import UNSET_OWNER_ORGANIZATION, ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
 
 router = APIRouter(tags=["registries"])
@@ -357,11 +357,20 @@ def update_reference_list(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> ReferenceListRead:
     try:
+        fields_set = payload.model_fields_set
         reference_list = ReferenceListService(session).update_reference_list_for_actor(
             actor_user_id=actor_user_id,
             list_id=list_id,
             name=payload.name,
             description=payload.description,
+            owner_organization_id=(
+                payload.owner_organization_id
+                if "owner_organization_id" in fields_set
+                else UNSET_OWNER_ORGANIZATION
+            ),
+            inherit_to_descendants=payload.inherit_to_descendants,
+            locked_for_descendants=payload.locked_for_descendants,
+            managed_by_system_only=payload.managed_by_system_only,
         )
     except Exception as exc:
         raise_service_http_error(exc)

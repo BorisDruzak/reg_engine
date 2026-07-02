@@ -506,9 +506,19 @@ def test_phase_1g_rest_workflow_completion(
         "PATCH",
         f"/api/v1/reference-lists/{reference_list['id']}",
         actor_id=system_admin.id,
-        payload={"name": "States Updated"},
+        payload={
+            "name": "States Updated",
+            "owner_organization_id": None,
+            "inherit_to_descendants": False,
+            "locked_for_descendants": False,
+            "managed_by_system_only": True,
+        },
     )
     assert updated_reference_list["name"] == "States Updated"
+    assert updated_reference_list["owner_organization_id"] is None
+    assert updated_reference_list["inherit_to_descendants"] is False
+    assert updated_reference_list["locked_for_descendants"] is False
+    assert updated_reference_list["managed_by_system_only"] is True
     archived_reference_list = _request_json(
         api_client,
         "DELETE",

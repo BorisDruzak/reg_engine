@@ -26,13 +26,13 @@ import type {
   OrganizationRead,
   ReferenceItemRead,
   ReferenceListRead,
+  ReferenceListUpdatePayload,
   RegistryRead,
   RegistrySchemaRead,
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
 import {
   activityLabel,
-  booleanLabel,
   fieldTypeLabel,
   lifecycleStatusLabel,
   requiredModeLabel,
@@ -1366,11 +1366,8 @@ function ReferenceListsPanel({
     },
   });
   const updateListMutation = useMutation({
-    mutationFn: (payload: { listId: string; name: string; description: string | null }) =>
-      updateReferenceList(token, payload.listId, {
-        name: payload.name,
-        description: payload.description,
-      }),
+    mutationFn: (payload: { listId: string; body: ReferenceListUpdatePayload }) =>
+      updateReferenceList(token, payload.listId, payload.body),
     onSuccess: async (_updated, payload) => {
       setListFormState(null);
       setSuccessMessage(uiText.referenceListUpdated);
@@ -1424,10 +1421,12 @@ function ReferenceListsPanel({
         description: payload.description,
         position: payload.position,
       }),
-    onSuccess: async () => {
+    onSuccess: async (_updated, payload) => {
       setItemFormState(null);
       setSuccessMessage(uiText.referenceItemUpdated);
-      await invalidateReferenceData(queryClient, token, selectedRegistryId, activeReferenceListId);
+      const listId =
+        referenceItems.find((item) => item.id === payload.itemId)?.list_id ?? activeReferenceListId;
+      await invalidateReferenceData(queryClient, token, selectedRegistryId, listId);
     },
   });
   const archiveItemMutation = useMutation({
@@ -1469,24 +1468,6 @@ function ReferenceListsPanel({
       inheritToDescendants: false,
       lockedForDescendants: false,
       managedBySystemOnly: false,
-    });
-  }
-
-  function openEditListForm(referenceList: ReferenceListRead) {
-    setLocalError(null);
-    setSuccessMessage(null);
-    setSelectedReferenceListId(referenceList.id);
-    setItemFormState(null);
-    setListFormState({
-      mode: "edit",
-      listId: referenceList.id,
-      code: referenceList.code,
-      name: referenceList.name,
-      description: referenceList.description ?? "",
-      ownerOrganizationId: referenceList.owner_organization_id ?? "",
-      inheritToDescendants: referenceList.inherit_to_descendants,
-      lockedForDescendants: referenceList.locked_for_descendants,
-      managedBySystemOnly: referenceList.managed_by_system_only,
     });
   }
 
@@ -1565,8 +1546,10 @@ function ReferenceListsPanel({
     if (listFormState.listId) {
       updateListMutation.mutate({
         listId: listFormState.listId,
-        name,
-        description: description || null,
+        body: {
+          name,
+          description: description || null,
+        },
       });
     }
   }
@@ -1578,7 +1561,6 @@ function ReferenceListsPanel({
     }
 
     const label = itemFormState.label.trim();
-    const description = itemFormState.description.trim();
     if (!label) {
       setLocalError(uiText.requiredFields);
       return;
@@ -1596,8 +1578,8 @@ function ReferenceListsPanel({
         ),
         label,
         parent_id: itemFormState.parentId || null,
-        description: description || null,
-        position: positionNumber(itemFormState.position),
+        description: null,
+        position: nextPosition(referenceItemsQuery.data?.items ?? []),
       });
       return;
     }
@@ -1606,10 +1588,105 @@ function ReferenceListsPanel({
       updateItemMutation.mutate({
         itemId: itemFormState.itemId,
         label,
-        description: description || null,
+        description: itemFormState.description.trim() || null,
         position: positionNumber(itemFormState.position),
       });
     }
+  }
+
+  function updateReferenceListInline(
+    referenceList: ReferenceListRead,
+    body: ReferenceListUpdatePayload,
+  ) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setListFormState(null);
+    setItemFormState(null);
+    updateListMutation.mutate({ listId: referenceList.id, body });
+  }
+
+  function handleReferenceItemReorder(reorderedItems: ReferenceItemRead[]) {
+    reorderedItems.forEach((item, index) => {
+      if (item.position !== index) {
+        updateItemMutation.mutate({
+          itemId: item.id,
+          label: item.label,
+          description: item.description,
+          position: index,
+        });
+      }
+    });
+  }
+
+  function renderReferenceListMetadata(referenceList: ReferenceListRead) {
+    const isMutating = updateListMutation.isPending || archiveListMutation.isPending;
+
+    return (
+      <div className="reference-meta-grid">
+        <label className="reference-meta-control">
+          <span>{uiText.referenceListOwnerOrganization}</span>
+          <select
+            value={referenceList.owner_organization_id ?? ""}
+            disabled={isMutating}
+            onChange={(event) =>
+              updateReferenceListInline(referenceList, {
+                owner_organization_id: event.currentTarget.value || null,
+              })
+            }
+          >
+            <option value="">{uiText.noOwnerOrganization}</option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="reference-meta-control reference-meta-checkbox">
+          <input
+            type="checkbox"
+            checked={referenceList.inherit_to_descendants}
+            disabled={isMutating}
+            onChange={(event) =>
+              updateReferenceListInline(referenceList, {
+                inherit_to_descendants: event.currentTarget.checked,
+              })
+            }
+          />
+          <span>{uiText.inheritReferenceListToDescendants}</span>
+        </label>
+        <label className="reference-meta-control reference-meta-checkbox">
+          <input
+            type="checkbox"
+            checked={referenceList.locked_for_descendants}
+            disabled={isMutating}
+            onChange={(event) =>
+              updateReferenceListInline(referenceList, {
+                locked_for_descendants: event.currentTarget.checked,
+              })
+            }
+          />
+          <span>{uiText.lockedForDescendants}</span>
+        </label>
+        <label className="reference-meta-control">
+          <span>{uiText.referenceListStatus}</span>
+          <select
+            value={referenceList.is_active ? "active" : "inactive"}
+            disabled={isMutating}
+            onChange={(event) => {
+              if (event.currentTarget.value === "inactive") {
+                setLocalError(null);
+                setSuccessMessage(null);
+                setListArchiveTarget(referenceList);
+              }
+            }}
+          >
+            <option value="active">{activityLabel(true)}</option>
+            <option value="inactive">{activityLabel(false)}</option>
+          </select>
+        </label>
+      </div>
+    );
   }
 
   function renderReferenceListForm() {
@@ -1742,18 +1819,6 @@ function ReferenceListsPanel({
             }
           />
         </label>
-        <label>
-          {uiText.referenceItemDescription}
-          <textarea
-            value={itemFormState.description}
-            onChange={(event) =>
-              setItemFormState({
-                ...itemFormState,
-                description: event.currentTarget.value,
-              })
-            }
-          />
-        </label>
         {itemFormState.mode === "create" && (
           <label>
             {uiText.parentReferenceItem}
@@ -1775,16 +1840,6 @@ function ReferenceListsPanel({
             </select>
           </label>
         )}
-        <label>
-          {uiText.referenceItemPosition}
-          <input
-            type="number"
-            value={itemFormState.position}
-            onChange={(event) =>
-              setItemFormState({ ...itemFormState, position: event.currentTarget.value })
-            }
-          />
-        </label>
       </AdminMutationForm>
     );
   }
@@ -1819,8 +1874,6 @@ function ReferenceListsPanel({
         {referenceLists.length === 0 && <p className="data-empty">{uiText.noData}</p>}
         {referenceLists.map((referenceList) => {
           const isExpanded = referenceList.id === activeReferenceListId;
-          const isEditingList =
-            listFormState?.mode === "edit" && listFormState.listId === referenceList.id;
           return (
             <article
               key={referenceList.id}
@@ -1847,76 +1900,41 @@ function ReferenceListsPanel({
                     {referenceList.code} / {organizationLabel(referenceList.owner_organization_id)}
                   </span>
                 </button>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.editReferenceList} ${referenceList.name}`}
-                    onClick={() => openEditListForm(referenceList)}
-                  >
-                    {uiText.edit}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.archiveReferenceList} ${referenceList.name}`}
-                    onClick={() => {
-                      setLocalError(null);
-                      setSuccessMessage(null);
-                      setListArchiveTarget(referenceList);
-                    }}
-                  >
-                    {uiText.moveToArchive}
-                  </button>
-                </div>
               </header>
               {isExpanded && (
                 <div className="reference-list-card-body">
-                  {isEditingList ? (
-                    <div className="panel-form">{renderReferenceListForm()}</div>
+                  {renderReferenceListMetadata(referenceList)}
+                  <div className="reference-items-toolbar">
+                    <h3>{uiText.referenceItems}</h3>
+                  </div>
+                  <ReferenceItemsTable
+                    referenceItems={referenceItems}
+                    onArchiveReferenceItem={(item) => {
+                      setLocalError(null);
+                      setSuccessMessage(null);
+                      setItemArchiveTarget(item);
+                    }}
+                    onEditReferenceItem={openEditItemForm}
+                    onReorderReferenceItems={handleReferenceItemReorder}
+                  />
+                  {itemFormState?.mode === "create" ? (
+                    <div className="panel-form reference-item-add-slot">
+                      {renderReferenceItemForm()}
+                    </div>
                   ) : (
-                    <>
-                      <dl className="reference-meta-grid">
-                        <div>
-                          <dt>{uiText.referenceListOwnerOrganization}</dt>
-                          <dd>{organizationLabel(referenceList.owner_organization_id)}</dd>
-                        </div>
-                        <div>
-                          <dt>{uiText.inheritReferenceListToDescendants}</dt>
-                          <dd>{booleanLabel(referenceList.inherit_to_descendants)}</dd>
-                        </div>
-                        <div>
-                          <dt>{uiText.lockedForDescendants}</dt>
-                          <dd>{booleanLabel(referenceList.locked_for_descendants)}</dd>
-                        </div>
-                        <div>
-                          <dt>{uiText.status}</dt>
-                          <dd>{activityLabel(referenceList.is_active)}</dd>
-                        </div>
-                      </dl>
-                      <div className="reference-items-toolbar">
-                        <h3>{uiText.referenceItems}</h3>
-                        <button
-                          type="button"
-                          className="primary-button"
-                          onClick={openCreateItemForm}
-                        >
-                          {uiText.createReferenceItem}
-                        </button>
-                      </div>
-                      {itemFormState && (
-                        <div className="panel-form">{renderReferenceItemForm()}</div>
-                      )}
-                      <ReferenceItemsTable
-                        referenceItems={referenceItems}
-                        onArchiveReferenceItem={(item) => {
-                          setLocalError(null);
-                          setSuccessMessage(null);
-                          setItemArchiveTarget(item);
-                        }}
-                        onEditReferenceItem={openEditItemForm}
-                      />
-                    </>
+                    <button
+                      type="button"
+                      className="ghost-button reference-item-add-button"
+                      aria-label={uiText.addReferenceItem}
+                      onClick={openCreateItemForm}
+                    >
+                      + {uiText.addReferenceItem}
+                    </button>
+                  )}
+                  {itemFormState?.mode === "edit" && (
+                    <div className="panel-form reference-item-add-slot">
+                      {renderReferenceItemForm()}
+                    </div>
                   )}
                 </div>
               )}
@@ -1954,13 +1972,41 @@ function ReferenceItemsTable({
   referenceItems,
   onEditReferenceItem,
   onArchiveReferenceItem,
+  onReorderReferenceItems,
 }: {
   referenceItems: ReferenceItemRead[];
   onEditReferenceItem: (item: ReferenceItemRead) => void;
   onArchiveReferenceItem: (item: ReferenceItemRead) => void;
+  onReorderReferenceItems: (items: ReferenceItemRead[]) => void;
 }) {
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const sortedItems = useMemo(
+    () => [...referenceItems].sort((left, right) => left.position - right.position),
+    [referenceItems],
+  );
+
   if (referenceItems.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;
+  }
+
+  function handleDrop(targetItem: ReferenceItemRead) {
+    if (!draggedItemId || draggedItemId === targetItem.id) {
+      setDraggedItemId(null);
+      return;
+    }
+
+    const draggedItem = sortedItems.find((item) => item.id === draggedItemId);
+    if (!draggedItem) {
+      setDraggedItemId(null);
+      return;
+    }
+
+    const withoutDragged = sortedItems.filter((item) => item.id !== draggedItemId);
+    const targetIndex = withoutDragged.findIndex((item) => item.id === targetItem.id);
+    const nextItems = [...withoutDragged];
+    nextItems.splice(Math.max(targetIndex, 0), 0, draggedItem);
+    onReorderReferenceItems(nextItems);
+    setDraggedItemId(null);
   }
 
   return (
@@ -1968,21 +2014,37 @@ function ReferenceItemsTable({
       <table>
         <thead>
           <tr>
+            <th aria-label={uiText.dragReferenceItem}></th>
             <th>{uiText.referenceItemLabel}</th>
             <th>{uiText.code}</th>
             <th>{uiText.parentReferenceItem}</th>
-            <th>{uiText.referenceItemPosition}</th>
             <th>{uiText.status}</th>
             <th>{uiText.action}</th>
           </tr>
         </thead>
         <tbody>
-          {referenceItems.map((item) => (
-            <tr key={item.id}>
+          {sortedItems.map((item) => (
+            <tr
+              key={item.id}
+              draggable
+              onDragStart={() => setDraggedItemId(item.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(item)}
+            >
+              <td>
+                <button
+                  type="button"
+                  className="drag-handle"
+                  aria-label={`${uiText.dragReferenceItem} ${item.label}`}
+                  draggable
+                  onDragStart={() => setDraggedItemId(item.id)}
+                >
+                  ↕
+                </button>
+              </td>
               <td>{item.label}</td>
               <td>{item.code}</td>
               <td>{item.parent_id ? shortId(item.parent_id) : uiText.none}</td>
-              <td>{item.position}</td>
               <td>{activityLabel(item.is_active)}</td>
               <td>
                 <div className="row-actions">

@@ -2131,7 +2131,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Справочник создан")).toBeVisible();
 
-  await page.getByRole("button", { name: "Создать элемент справочника" }).click();
+  await page.getByRole("button", { name: "Добавить элемент справочника" }).click();
   await expect(page.getByLabel("Код элемента справочника")).toHaveCount(0);
   await page.getByLabel("Название элемента справочника").fill("Принято");
   await page.getByRole("button", { name: "Создать", exact: true }).click();

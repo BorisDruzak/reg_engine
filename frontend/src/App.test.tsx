@@ -916,11 +916,25 @@ beforeEach(() => {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             name?: string | null;
             description?: string | null;
+            owner_organization_id?: string | null;
+            inherit_to_descendants?: boolean | null;
+            locked_for_descendants?: boolean | null;
+            managed_by_system_only?: boolean | null;
           };
           const updated: ReferenceListRead = {
             ...current,
             name: payload.name ?? current.name,
             description: payload.description ?? current.description,
+            owner_organization_id:
+              "owner_organization_id" in payload
+                ? (payload.owner_organization_id ?? null)
+                : current.owner_organization_id,
+            inherit_to_descendants:
+              payload.inherit_to_descendants ?? current.inherit_to_descendants,
+            locked_for_descendants:
+              payload.locked_for_descendants ?? current.locked_for_descendants,
+            managed_by_system_only:
+              payload.managed_by_system_only ?? current.managed_by_system_only,
           };
           referenceListItems = referenceListItems.map((item) =>
             item.id === listId ? updated : item,
@@ -2890,23 +2904,152 @@ test("renders reference lists as one expandable editor list", async () => {
   expect(within(referenceCard as HTMLElement).getByText("Активен")).toBeInTheDocument();
   expect(
     within(referenceCard as HTMLElement).getByRole("button", {
-      name: "Создать элемент справочника",
+      name: "Добавить элемент справочника",
     }),
   ).toBeInTheDocument();
   expect(
-    within(referenceCard as HTMLElement).getByRole("button", {
+    within(referenceCard as HTMLElement).queryByRole("button", {
       name: "Редактировать справочник Статусы актива",
     }),
-  ).toBeInTheDocument();
-
-  await user.click(
-    within(referenceCard as HTMLElement).getByRole("button", {
-      name: "Редактировать справочник Статусы актива",
-    }),
+  ).not.toBeInTheDocument();
+  expect(within(referenceCard as HTMLElement).getByLabelText("Организация-владелец")).toHaveValue(
+    "22222222-2222-4222-8222-222222222222",
   );
   expect(
-    within(referenceCard as HTMLElement).getByRole("form", { name: "Редактировать справочник" }),
+    within(referenceCard as HTMLElement).getByLabelText("Наследовать дочерним организациям"),
+  ).toBeChecked();
+  expect(within(referenceCard as HTMLElement).getByLabelText("Статус справочника")).toHaveValue(
+    "active",
+  );
+});
+
+test("edits reference metadata inline and creates items from the bottom add slot", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+
+  const referenceWorkspace = await screen.findByRole("region", {
+    name: "Список справочников",
+  });
+  const referenceCard = within(referenceWorkspace)
+    .getByRole("button", { name: "Статусы актива" })
+    .closest(".reference-list-card") as HTMLElement;
+
+  await user.selectOptions(within(referenceCard).getByLabelText("Организация-владелец"), [""]);
+  await user.click(within(referenceCard).getByLabelText("Наследовать дочерним организациям"));
+  await user.click(within(referenceCard).getByLabelText("Заблокирован для дочерних организаций"));
+
+  await waitFor(() => {
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/reference-lists/abababab-abab-4aba-8aba-abababababab") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return (
+          body.owner_organization_id === null ||
+          body.inherit_to_descendants === false ||
+          body.locked_for_descendants === false
+        );
+      }),
+    ).toBe(true);
+  });
+
+  expect(
+    within(referenceCard).queryByRole("button", { name: "Создать элемент справочника" }),
+  ).not.toBeInTheDocument();
+
+  await user.click(
+    within(referenceCard).getByRole("button", { name: "Добавить элемент справочника" }),
+  );
+  expect(
+    await within(referenceCard).findByRole("form", { name: "Создать элемент справочника" }),
   ).toBeInTheDocument();
+  expect(
+    within(referenceCard).queryByLabelText("Описание элемента справочника"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(referenceCard).queryByLabelText("Позиция элемента справочника"),
+  ).not.toBeInTheDocument();
+
+  fireEvent.change(within(referenceCard).getByLabelText("Название элемента справочника"), {
+    target: { value: "Новый элемент" },
+  });
+  await user.click(within(referenceCard).getByRole("button", { name: "Создать" }));
+
+  await waitFor(() => {
+    const createItemCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/reference-lists/abababab-abab-4aba-8aba-abababababab/items",
+          ) && init?.method === "POST",
+      );
+    expect(createItemCall).toBeTruthy();
+    const body = JSON.parse(String(createItemCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      code: "novyy_element",
+      label: "Новый элемент",
+      description: null,
+      parent_id: null,
+      position: 1,
+    });
+  });
+});
+
+test("reorders reference items by mouse drag", async () => {
+  referenceItemItems = [
+    ...referenceItemItems,
+    {
+      id: "edededed-eded-4ede-8ede-edededededed",
+      list_id: "abababab-abab-4aba-8aba-abababababab",
+      parent_id: null,
+      code: "inactive",
+      label: "Неактивен",
+      description: null,
+      position: 1,
+      is_active: true,
+    },
+  ];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+
+  const activeRow = await screen.findByRole("row", { name: /Активен/ });
+  const inactiveRow = await screen.findByRole("row", { name: /Неактивен/ });
+
+  fireEvent.dragStart(inactiveRow);
+  fireEvent.dragOver(activeRow);
+  fireEvent.drop(activeRow);
+
+  await waitFor(() => {
+    expect(
+      vi.mocked(fetch).mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/reference-items/edededed-eded-4ede-8ede-edededededed") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return body.position === 0;
+      }),
+    ).toBe(true);
+  });
 });
 
 test("uses compact visible row actions with full accessible labels", async () => {
@@ -4322,39 +4465,38 @@ test("creates edits and archives reference lists and items in Russian UI", async
       ).length;
 
   await user.click(screen.getByRole("button", { name: "Создать справочник" }));
+  const createListForm = screen.getByRole("form", { name: "Создать справочник" });
   const postCountBeforeValidation = referenceListPostCount();
-  await user.click(screen.getByRole("button", { name: "Создать" }));
+  await user.click(within(createListForm).getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(referenceListPostCount()).toBe(postCountBeforeValidation);
 
   expect(screen.queryByLabelText("Код справочника")).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Название справочника"), {
+  fireEvent.change(within(createListForm).getByLabelText("Название справочника"), {
     target: { value: "Приоритеты" },
   });
-  fireEvent.change(screen.getByLabelText("Описание справочника"), {
+  fireEvent.change(within(createListForm).getByLabelText("Описание справочника"), {
     target: { value: "Уровни приоритета карточки" },
   });
-  await user.selectOptions(screen.getByLabelText("Организация-владелец"), [
+  await user.selectOptions(within(createListForm).getByLabelText("Организация-владелец"), [
     "22222222-2222-4222-8222-222222222222",
   ]);
-  await user.click(screen.getByLabelText("Наследовать дочерним организациям"));
-  await user.click(screen.getByLabelText("Заблокировать для дочерних организаций"));
-  await user.click(screen.getByRole("button", { name: "Создать" }));
+  await user.click(within(createListForm).getByLabelText("Наследовать дочерним организациям"));
+  await user.click(within(createListForm).getByLabelText("Заблокировать для дочерних организаций"));
+  await user.click(within(createListForm).getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Справочник создан")).toBeInTheDocument();
   expect(screen.getAllByText("Приоритеты").length).toBeGreaterThan(0);
 
-  await user.click(screen.getByRole("button", { name: "Редактировать справочник Приоритеты" }));
-  const listNameInput = await screen.findByLabelText("Название справочника");
-  fireEvent.change(listNameInput, { target: { value: "Приоритеты карточки" } });
-  fireEvent.change(screen.getByLabelText("Описание справочника"), {
-    target: { value: "Обновленные уровни приоритета" },
-  });
-  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  const priorityCard = screen
+    .getByRole("button", { name: "Приоритеты" })
+    .closest(".reference-list-card") as HTMLElement;
+  await user.selectOptions(within(priorityCard).getByLabelText("Организация-владелец"), [""]);
+  await user.click(within(priorityCard).getByLabelText("Наследовать дочерним организациям"));
 
   expect(await screen.findByText("Справочник обновлен")).toBeInTheDocument();
-  expect(screen.getAllByText("Приоритеты карточки").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Приоритеты").length).toBeGreaterThan(0);
 
   const referenceItemPostCount = () =>
     vi
@@ -4366,7 +4508,9 @@ test("creates edits and archives reference lists and items in Russian UI", async
           ) && init?.method === "POST",
       ).length;
 
-  await user.click(screen.getByRole("button", { name: "Создать элемент справочника" }));
+  await user.click(
+    within(priorityCard).getByRole("button", { name: "Добавить элемент справочника" }),
+  );
   const itemPostCountBeforeValidation = referenceItemPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -4374,14 +4518,10 @@ test("creates edits and archives reference lists and items in Russian UI", async
   expect(referenceItemPostCount()).toBe(itemPostCountBeforeValidation);
 
   expect(screen.queryByLabelText("Код элемента справочника")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Описание элемента справочника")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция элемента справочника")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название элемента справочника"), {
     target: { value: "Высокий" },
-  });
-  fireEvent.change(screen.getByLabelText("Описание элемента справочника"), {
-    target: { value: "Высокий приоритет" },
-  });
-  fireEvent.change(screen.getByLabelText("Позиция элемента справочника"), {
-    target: { value: "5" },
   });
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -4393,12 +4533,6 @@ test("creates edits and archives reference lists and items in Russian UI", async
   );
   const itemLabelInput = await screen.findByLabelText("Название элемента справочника");
   fireEvent.change(itemLabelInput, { target: { value: "Высокий приоритет" } });
-  fireEvent.change(screen.getByLabelText("Описание элемента справочника"), {
-    target: { value: "Обновленное значение" },
-  });
-  fireEvent.change(screen.getByLabelText("Позиция элемента справочника"), {
-    target: { value: "6" },
-  });
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(await screen.findByText("Элемент справочника обновлен")).toBeInTheDocument();
@@ -4417,16 +4551,14 @@ test("creates edits and archives reference lists and items in Russian UI", async
   expect(await screen.findByText("Элемент справочника архивирован")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("Высокий приоритет")).not.toBeInTheDocument());
 
-  await user.click(
-    screen.getByRole("button", { name: "Архивировать справочник Приоритеты карточки" }),
-  );
+  await user.selectOptions(within(priorityCard).getByLabelText("Статус справочника"), ["inactive"]);
   expect(
     await screen.findByRole("dialog", { name: "Архивировать справочник" }),
   ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Архивировать" }));
 
   expect(await screen.findByText("Справочник архивирован")).toBeInTheDocument();
-  await waitFor(() => expect(screen.queryByText("Приоритеты карточки")).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText("Приоритеты")).not.toBeInTheDocument());
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -4466,8 +4598,8 @@ test("creates edits and archives reference lists and items in Russian UI", async
       code: "vysokiy",
       label: "Высокий",
       parent_id: null,
-      description: "Высокий приоритет",
-      position: 5,
+      description: null,
+      position: 0,
     });
 
     for (const body of [createListBody, createItemBody]) {
@@ -4493,10 +4625,19 @@ test("creates edits and archives reference lists and items in Russian UI", async
           return false;
         }
         const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
-        return (
-          body.name === "Приоритеты карточки" &&
-          body.description === "Обновленные уровни приоритета"
-        );
+        return body.owner_organization_id === null;
+      }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        if (
+          !String(input).endsWith("/api/v1/reference-lists/dededede-dede-4ede-8ede-dededededede") ||
+          init?.method !== "PATCH"
+        ) {
+          return false;
+        }
+        const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+        return body.inherit_to_descendants === false;
       }),
     ).toBe(true);
     expect(
@@ -4509,9 +4650,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
         }
         const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
         return (
-          body.label === "Высокий приоритет" &&
-          body.description === "Обновленное значение" &&
-          body.position === 6
+          body.label === "Высокий приоритет" && body.description === null && body.position === 0
         );
       }),
     ).toBe(true);
@@ -4597,11 +4736,11 @@ test("shows localized locked reference list denial text", async () => {
   expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
   expect(screen.getByText("Заблокирован для дочерних организаций")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Редактировать справочник Статусы актива" }));
-  const listNameInput = await screen.findByLabelText("Название справочника");
-  fireEvent.change(listNameInput, { target: { value: "Недоступный справочник" } });
+  const referenceCard = screen
+    .getByRole("button", { name: "Статусы актива" })
+    .closest(".reference-list-card") as HTMLElement;
   denyNextReferenceListUpdate = true;
-  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  await user.click(within(referenceCard).getByLabelText("Наследовать дочерним организациям"));
 
   expect(await screen.findByText("Действие недоступно.")).toBeInTheDocument();
   expect(screen.queryByText("Forbidden")).not.toBeInTheDocument();

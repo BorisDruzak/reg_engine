@@ -71,6 +71,11 @@ not a hardcoded employee registry.
   deployed to the server, migrated to Alembic head
   `0017_registry_card_title_label`, and live-verified against
   `http://192.168.100.12:8000/`.
+- Phase 7H.1 reference-list inline metadata and item-ordering polish is
+  completed: reference-list edit/archive header buttons are removed, metadata
+  is edited in place, item creation opens from the bottom add slot, manual item
+  description/position inputs are removed from the ordinary UI, and item order
+  is changed by mouse drag/drop. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1467,3 +1472,62 @@ Remaining risks:
 - The current server environment does not set `AUTH_TOKEN_SECRET`; this remains
   acceptable only for MVP/internal development and must be fixed before any
   production-like hosting.
+
+## Phase 7H.1: Reference List Inline Metadata And Item Ordering Polish
+
+Status: completed locally; planned for the current `main` GitHub/server sync.
+No database migration is required.
+
+Purpose:
+
+Close the live UI comments for `Registries -> Reference lists` without adding a
+new product module or business-specific schema.
+
+Implemented scope:
+
+1. Reference-list workspace:
+   - removed the separate `Edit` and `Archive` header buttons from expanded
+     reference-list cards;
+   - made owner organization, descendant inheritance, descendant lock, and
+     active/inactive status editable directly in the expanded reference-list
+     metadata area;
+   - changing status to inactive uses the existing archive confirmation flow.
+2. Reference item workflow:
+   - removed description and manual position from the ordinary item create/edit
+     form;
+   - moved item creation to a bottom `+ Add reference item` slot;
+   - added mouse drag/drop ordering for existing reference-list items;
+   - kept existing item update/archive API compatibility.
+3. Backend/API support:
+   - extended reference-list update payloads to support inline metadata edits;
+   - preserved omitted `owner_organization_id` versus explicit `null`
+     semantics, so PATCH can either keep, set, or clear the owner organization;
+   - added service tests for metadata update behavior.
+
+Non-goals:
+
+- No new reference-list table or migration.
+- No hardcoded employee or HR-specific fields.
+- No import/export, reports, generated documents, attachments, MCP, auth, or
+  public-link workflow changes.
+- No public API removal; existing registry/reference APIs remain compatible.
+- Reactivation of archived reference lists remains out of scope for this slice.
+
+Verification completed:
+
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 131 passed, 163
+  skipped, 1 warning.
+- `backend\.venv\Scripts\ruff.exe check backend`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check backend`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `pnpm -C frontend test:run`: passed, 70 tests.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: passed, 3 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\project-map.ps1 -Check`:
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check.

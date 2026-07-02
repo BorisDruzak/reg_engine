@@ -145,6 +145,10 @@ class ReferenceListRead(BaseModel):
 class ReferenceListUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    owner_organization_id: UUID | None = None
+    inherit_to_descendants: bool | None = None
+    locked_for_descendants: bool | None = None
+    managed_by_system_only: bool | None = None
 
 
 class ReferenceListListRead(BaseModel):
