@@ -11,16 +11,23 @@ export function CardOrganizationFilter({
   organizations,
   selectedOrganizationIds,
   includeDescendants,
+  isOpen: controlledIsOpen,
+  className,
+  onOpenChange,
   onSelectedOrganizationIdsChange,
   onIncludeDescendantsChange,
 }: {
   organizations: OrganizationRead[];
   selectedOrganizationIds: string[];
   includeDescendants: boolean;
+  isOpen?: boolean;
+  className?: string;
+  onOpenChange?: (value: boolean) => void;
   onSelectedOrganizationIdsChange: (value: string[]) => void;
   onIncludeDescendantsChange: (value: boolean) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = controlledIsOpen ?? internalIsOpen;
   const selectedIds = useMemo(() => new Set(selectedOrganizationIds), [selectedOrganizationIds]);
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
@@ -33,6 +40,14 @@ export function CardOrganizationFilter({
     includeDescendants,
   });
 
+  function setIsOpen(value: boolean) {
+    if (onOpenChange) {
+      onOpenChange(value);
+      return;
+    }
+    setInternalIsOpen(value);
+  }
+
   function toggleOrganization(organizationId: string) {
     if (selectedIds.has(organizationId)) {
       onSelectedOrganizationIdsChange(
@@ -44,12 +59,12 @@ export function CardOrganizationFilter({
   }
 
   return (
-    <div className="tag-filter">
+    <div className={["tag-filter", className].filter(Boolean).join(" ")}>
       <button
         type="button"
         className="ghost-button tag-filter-button"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => setIsOpen(!isOpen)}
       >
         {label}
       </button>

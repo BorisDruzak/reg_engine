@@ -2557,6 +2557,10 @@ test("filters cards by search organization and archive visibility", async () => 
   expect(
     within(searchBar).getByRole("button", { name: "Организации: все доступные" }),
   ).toBeInTheDocument();
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
+  expect(within(tagMenu).getByRole("button", { name: /^Организации/ })).toBeInTheDocument();
+  expect(within(tagMenu).getByRole("button", { name: "Статус" })).toBeInTheDocument();
   expect(screen.getByLabelText("Показывать архивные и замененные карточки")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
@@ -2635,8 +2639,9 @@ test("adds dynamic field filters from the unified card search bar", async () => 
   expect(await screen.findByText("Карточка актива")).toBeInTheDocument();
   expect(screen.getByText("Карточка без статуса")).toBeInTheDocument();
 
-  await user.click(within(searchBar).getByRole("button", { name: "Добавить фильтр" }));
-  await user.click(screen.getByRole("button", { name: "Статус" }));
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
+  await user.click(within(tagMenu).getByRole("button", { name: "Статус" }));
   await user.type(screen.getByLabelText("Значение фильтра Статус"), "drafted");
   await user.click(screen.getByRole("button", { name: "Добавить" }));
 

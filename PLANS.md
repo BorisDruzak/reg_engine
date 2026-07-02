@@ -42,6 +42,9 @@ not a hardcoded employee registry.
   uses one Russian-first search bar for free-text, organization, and
   schema-field tags; backend list APIs accept typed field filters without
   bypassing RBAC.
+- Phase 7E.1 card tag search UX polish is implemented locally: the search
+  input is now the primary long control, focusing it opens the available tag
+  list, and the organization selector is launched from the same tag workflow.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -1035,11 +1038,16 @@ Implemented scope:
 2. Frontend card list:
    - replaced the separate search input plus standalone organization tag with
      one `Поисковая строка карточек` control;
+   - expanded the search input into the primary wide control so text and tags
+     fit inside the search row;
+   - focusing the search input opens one available-tags menu with
+     `Организации` and active schema fields;
    - free text becomes a visible `Текст: ...` tag after Enter;
    - the current organization tag selector is rendered inside the same search
      row and still supports multiple RBAC-visible organizations plus the
      descendants toggle;
-   - active schema fields can be added as field tags from `Добавить фильтр`;
+   - active schema fields can be added as field tags from the same search-menu
+     workflow;
    - field tag state is persisted in the existing workspace UI localStorage;
    - the ordinary card list continues to call the organization-centered list
      endpoint and does not perform frontend-only access filtering.
@@ -1076,6 +1084,17 @@ Verification completed so far:
   organization"`: passed.
 - `pnpm -C frontend test:run`: 6 files passed, 57 tests passed.
 - `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
+  organization|dynamic field filters"`: passed for the Phase 7E.1 search-menu
+  regression.
+- `pnpm -C frontend lint`: passed for the Phase 7E.1 UI polish.
+- `pnpm -C frontend format:check`: passed for the Phase 7E.1 UI polish.
+- `pnpm -C frontend typecheck`: passed for the Phase 7E.1 UI polish.
+- `pnpm -C frontend test:run`: 6 files passed, 57 tests passed for the Phase
+  7E.1 UI polish.
+- `pnpm -C frontend build`: passed for the Phase 7E.1 UI polish.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.1
+  UI polish.
 - `backend\.venv\Scripts\ruff.exe check
   backend\app\api\v1\endpoints\cards.py backend\app\services\cards.py
   backend\tests\test_api_phase_1g.py`: passed.

@@ -48,9 +48,19 @@ export function CardTagSearchBar({
   onIncludeDescendantOrganizationsChange: (value: boolean) => void;
 }) {
   const [searchInput, setSearchInput] = useState("");
-  const [isFieldMenuOpen, setIsFieldMenuOpen] = useState(false);
+  const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
+  const [isOrganizationFilterOpen, setIsOrganizationFilterOpen] = useState(false);
   const [draftFilter, setDraftFilter] = useState<DraftFilter | null>(null);
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
+  const organizationsById = useMemo(
+    () => new Map(organizations.map((organization) => [organization.id, organization])),
+    [organizations],
+  );
+  const organizationFilterSummary = organizationFilterLabel({
+    organizationsById,
+    selectedOrganizationIds,
+    includeDescendants: includeDescendantOrganizations,
+  });
   const searchableFields = useMemo(
     () =>
       fields
@@ -78,14 +88,20 @@ export function CardTagSearchBar({
     }
     onTextQueryChange(nextQuery);
     setSearchInput("");
+    setIsTagMenuOpen(false);
   }
 
   function startFieldFilter(field: FormFieldRead) {
-    setIsFieldMenuOpen(false);
+    setIsTagMenuOpen(false);
     setDraftFilter({
       field,
       value: field.field_type === "bool" ? "true" : "",
     });
+  }
+
+  function openOrganizationFilter() {
+    setIsTagMenuOpen(false);
+    setIsOrganizationFilterOpen(true);
   }
 
   function submitFieldFilter(event: FormEvent<HTMLFormElement>) {
@@ -123,9 +139,17 @@ export function CardTagSearchBar({
           </span>
         )}
         <CardOrganizationFilter
+          className="card-tag-organization-filter"
           organizations={organizations}
           selectedOrganizationIds={selectedOrganizationIds}
           includeDescendants={includeDescendantOrganizations}
+          isOpen={isOrganizationFilterOpen}
+          onOpenChange={(nextIsOpen) => {
+            setIsOrganizationFilterOpen(nextIsOpen);
+            if (nextIsOpen) {
+              setIsTagMenuOpen(false);
+            }
+          }}
           onSelectedOrganizationIdsChange={onSelectedOrganizationIdsChange}
           onIncludeDescendantsChange={onIncludeDescendantOrganizationsChange}
         />
@@ -148,42 +172,48 @@ export function CardTagSearchBar({
               placeholder={uiText.cardSearchPlaceholder}
               value={searchInput}
               onChange={(event) => setSearchInput(event.currentTarget.value)}
+              onFocus={() => setIsTagMenuOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setIsTagMenuOpen(false);
+                }
+              }}
             />
           </label>
         </form>
-        <div className="tag-filter">
-          <button
-            type="button"
-            className="ghost-button tag-filter-button"
-            aria-expanded={isFieldMenuOpen}
-            onClick={() => setIsFieldMenuOpen((current) => !current)}
-          >
-            {uiText.addFilter}
-          </button>
-          {isFieldMenuOpen && (
-            <div className="tag-filter-popover">
-              {searchableFields.length === 0 ? (
-                <p className="data-empty">{uiText.noData}</p>
-              ) : (
-                <div className="search-field-menu">
-                  {searchableFields.map((field) => (
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      key={field.id}
-                      aria-label={field.label}
-                      onClick={() => startFieldFilter(field)}
-                    >
-                      {field.label}
-                      <span>{fieldTypeLabel(field.field_type)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
+      {isTagMenuOpen && (
+        <div className="search-tag-popover" role="listbox" aria-label={uiText.searchTagMenu}>
+          <div className="search-tag-section">
+            <p>{uiText.basicSearchTags}</p>
+            <button type="button" className="search-tag-option" onClick={openOrganizationFilter}>
+              <span>{uiText.organizations}</span>
+              <small>{organizationFilterSummary}</small>
+            </button>
+          </div>
+          <div className="search-tag-section">
+            <p>{uiText.cardFields}</p>
+            {searchableFields.length === 0 ? (
+              <p className="data-empty">{uiText.noData}</p>
+            ) : (
+              <div className="search-field-menu">
+                {searchableFields.map((field) => (
+                  <button
+                    type="button"
+                    className="search-tag-option"
+                    key={field.id}
+                    aria-label={field.label}
+                    onClick={() => startFieldFilter(field)}
+                  >
+                    <span>{field.label}</span>
+                    <small>{fieldTypeLabel(field.field_type)}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {draftFilter && (
         <form className="search-filter-draft" onSubmit={submitFieldFilter}>
           <label>
@@ -263,4 +293,26 @@ function buildFieldFilterPayload(draftFilter: DraftFilter): CardFieldFilterPaylo
 function fieldFilterLabel(filter: CardFieldFilterPayload, fieldById: Map<string, FormFieldRead>) {
   const label = fieldById.get(filter.field_id)?.label ?? filter.field_id;
   return `${label}: ${String(filter.value)}`;
+}
+
+function organizationFilterLabel({
+  organizationsById,
+  selectedOrganizationIds,
+  includeDescendants,
+}: {
+  organizationsById: Map<string, OrganizationRead>;
+  selectedOrganizationIds: string[];
+  includeDescendants: boolean;
+}) {
+  if (selectedOrganizationIds.length === 0) {
+    return `${uiText.organizations}: ${uiText.allAccessibleOrganizations}`;
+  }
+
+  const suffix = includeDescendants ? ` + ${uiText.descendantOrganizationsShort}` : "";
+  if (selectedOrganizationIds.length === 1) {
+    const organizationName =
+      organizationsById.get(selectedOrganizationIds[0])?.name ?? selectedOrganizationIds[0];
+    return `${uiText.organizations}: ${organizationName}${suffix}`;
+  }
+  return `${uiText.organizations}: ${selectedOrganizationIds.length} ${uiText.selectedCount}${suffix}`;
 }

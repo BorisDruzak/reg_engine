@@ -569,16 +569,18 @@ tr:last-child td {
 .card-tag-search {
   display: grid;
   grid-column: 1 / -1;
+  position: relative;
   gap: 8px;
 }
 
 .card-tag-row {
   display: flex;
-  min-height: 44px;
+  min-height: 54px;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px;
+  width: 100%;
+  padding: 10px;
   border: 1px solid #d6dde8;
   border-radius: 8px;
   background: #fff;
@@ -591,6 +593,17 @@ tr:last-child td {
 .card-tag-row .tag-filter-button {
   width: auto;
   min-height: 34px;
+}
+
+.card-tag-organization-filter .tag-filter-button {
+  max-width: min(560px, 100%);
+  overflow: hidden;
+  border-color: #b9c7d9;
+  background: #f8fafc;
+  color: #17324d;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-chip {
@@ -627,8 +640,8 @@ tr:last-child td {
 }
 
 .card-tag-input-form {
-  min-width: min(280px, 100%);
-  flex: 1 1 280px;
+  min-width: min(520px, 100%);
+  flex: 10 1 520px;
 }
 
 .card-tag-input-form label {
@@ -645,6 +658,7 @@ tr:last-child td {
 }
 
 .card-tag-input-form input {
+  width: 100%;
   min-height: 34px;
   border: 0;
   background: transparent;
@@ -661,13 +675,68 @@ tr:last-child td {
 }
 
 .search-field-menu button {
+  width: 100%;
+}
+
+.search-field-menu small {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.search-tag-popover {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  width: min(760px, 100%);
+  max-height: 420px;
+  overflow: auto;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.16);
+}
+
+.search-tag-section {
+  display: grid;
+  gap: 6px;
+}
+
+.search-tag-section > p {
+  margin: 0;
+  color: #53657d;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.search-tag-option {
   display: flex;
+  min-height: 38px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
 }
 
-.search-field-menu span {
+.search-tag-option:hover {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.search-tag-option small {
   color: #667085;
   font-size: 0.82rem;
   font-weight: 500;
