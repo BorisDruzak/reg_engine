@@ -51,6 +51,11 @@ not a hardcoded employee registry.
   organization filtering is no longer rendered as a separate duplicate
   control, selected filters are chips inside the same search box, and field
   values are entered inline as `Поле: значение` before Enter creates the tag.
+- Phase 7E.3 card editor action-panel hardening is implemented locally:
+  the tag-search menu closes on outside click/Escape, opened card tabs have a
+  close button with an unsaved-changes warning, and save/activate/archive card
+  actions live in one sticky `Панель действий карточки` instead of being split
+  across metadata and the bulk-field form.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -1118,6 +1123,20 @@ Verification completed so far:
   UI polish.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.2 UI polish.
+- `pnpm -C frontend test:run src/App.test.tsx -t "warns before closing a dirty
+  card tab|shows card editor actions in the sticky card panel|filters cards by
+  search organization"`: passed for the Phase 7E.3 card editor/search
+  regressions.
+- `pnpm -C frontend test:run`: 6 files passed, 59 tests passed for the Phase
+  7E.3 UI hardening.
+- `pnpm -C frontend lint`: passed for the Phase 7E.3 UI hardening.
+- `pnpm -C frontend typecheck`: passed for the Phase 7E.3 UI hardening.
+- `pnpm -C frontend format:check`: passed for the Phase 7E.3 UI hardening.
+- `pnpm -C frontend build`: passed for the Phase 7E.3 UI hardening.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.3
+  UI hardening.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed for the Phase 7E.3 UI hardening.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
   checkout fast-forwarded to `e9632be` and server checks passed.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { listReferenceItems } from "@/api/client";
 import type { CardFieldFilterPayload, FormFieldRead, OrganizationRead } from "@/api/types";
@@ -49,6 +49,7 @@ export function CardTagSearchBar({
   onSelectedOrganizationIdsChange: (value: string[]) => void;
   onIncludeDescendantOrganizationsChange: (value: boolean) => void;
 }) {
+  const searchRootRef = useRef<HTMLDivElement | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
   const [isOrganizationFilterOpen, setIsOrganizationFilterOpen] = useState(false);
@@ -81,6 +82,39 @@ export function CardTagSearchBar({
     queryFn: () => listReferenceItems(token, draftReferenceListId ?? ""),
     enabled: Boolean(token && draftReferenceListId),
   });
+
+  useEffect(() => {
+    if (!isTagMenuOpen && !isOrganizationFilterOpen) {
+      return;
+    }
+
+    function closeSearchPopovers() {
+      setIsTagMenuOpen(false);
+      setIsOrganizationFilterOpen(false);
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && searchRootRef.current?.contains(target)) {
+        return;
+      }
+      closeSearchPopovers();
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeSearchPopovers();
+        setDraftFilter(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOrganizationFilterOpen, isTagMenuOpen]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -143,7 +177,12 @@ export function CardTagSearchBar({
   }
 
   return (
-    <div className="card-tag-search" role="group" aria-label={uiText.cardTagSearch}>
+    <div
+      ref={searchRootRef}
+      className="card-tag-search"
+      role="group"
+      aria-label={uiText.cardTagSearch}
+    >
       <div
         className={[
           "card-tag-row",

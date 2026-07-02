@@ -982,7 +982,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByRole("button", { name: "Сохранить Статус" })).toHaveCount(0);
   await fieldValuesForm.getByLabel("Статус").fill("published");
   await fieldValuesForm.getByLabel("Подтверждено").check();
-  await fieldValuesForm.getByRole("button", { name: "Сохранить все поля" }).click();
+  await page.getByRole("button", { name: "Сохранить все поля" }).click();
   await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
   await page.getByRole("tab", { name: "Публичные ссылки" }).click();
   await expect(page.getByRole("heading", { name: "Публичные ссылки" })).toBeVisible();
@@ -1045,11 +1045,9 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Карточка создана")).toBeVisible();
   await expect(page.getByText("Новая карточка").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Редактировать карточку Новая карточка" }).click();
-  await page.getByLabel("Название карточки").fill("Новая карточка обновлена");
-  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.getByText("Карточка обновлена", { exact: true })).toBeVisible();
-  await expect(page.getByText("Новая карточка обновлена").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Редактировать карточку Новая карточка" }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
   await expect(page.getByText("Экземпляр блока создан")).toBeVisible();
@@ -1057,7 +1055,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await bulkForm.getByLabel("Статус").fill("published");
   await bulkForm.getByLabel("Подтверждено").check();
   await bulkForm.getByLabel("Комментарий").fill("Комментарий по карточке");
-  await bulkForm.getByRole("button", { name: "Сохранить все поля" }).click();
+  await page.getByRole("button", { name: "Сохранить все поля" }).click();
   await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
   await page
     .getByRole("button", {
@@ -1066,9 +1064,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     .click();
   await expect(page.getByText("Экземпляр блока архивирован")).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Архивировать карточку Новая карточка обновлена" })
-    .click();
+  await page.getByRole("button", { name: "Архивировать карточку Новая карточка" }).click();
   const archiveCardDialog = page.getByRole("dialog", { name: "Архивировать карточку" });
   await expect(archiveCardDialog).toBeVisible();
   await archiveCardDialog.getByRole("button", { name: "Архивировать", exact: true }).click();
@@ -2166,7 +2162,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   const bulkForm = page.getByRole("form", { name: "Массовое сохранение полей" });
   await bulkForm.getByLabel("Статус проверки").selectOption("51515151-5151-4515-8515-515151515151");
-  await bulkForm.getByRole("button", { name: "Сохранить все поля" }).click();
+  await page.getByRole("button", { name: "Сохранить все поля" }).click();
   await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
 
   await page.getByRole("tab", { name: "Вложения" }).click();

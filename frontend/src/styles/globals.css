@@ -815,6 +815,49 @@ tr:last-child td {
   display: none;
 }
 
+.card-action-panel {
+  position: sticky;
+  z-index: 20;
+  top: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+}
+
+.card-action-status {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.card-action-status strong {
+  color: #101828;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.card-action-status > span {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.card-action-status .inline-alert,
+.card-action-status .inline-success {
+  margin-top: 2px;
+}
+
+.card-action-buttons {
+  flex: 0 0 auto;
+}
+
 .card-metadata-panel,
 .repeatable-block-controls,
 .bulk-field-form {
@@ -998,13 +1041,25 @@ tr:last-child td {
   background: #ffffff;
 }
 
+.workspace-tab-shell {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.workspace-tab-shell.is-active {
+  background: #17324d;
+}
+
 .card-metadata-panel .workspace-tabs {
   margin-top: 2px;
 }
 
 .workspace-tab {
   min-height: 34px;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 7px;
   padding: 7px 11px;
   color: #344054;
@@ -1014,6 +1069,10 @@ tr:last-child td {
   line-height: 1.2;
 }
 
+.workspace-tab-shell.has-close .workspace-tab {
+  border-radius: 7px 0 0 7px;
+}
+
 .workspace-tab:hover {
   background: #eef3f2;
 }
@@ -1021,6 +1080,35 @@ tr:last-child td {
 .workspace-tab.is-active {
   color: #ffffff;
   background: #17324d;
+}
+
+.workspace-tab-close {
+  display: inline-flex;
+  width: 28px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+  color: #52677f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.workspace-tab-close:hover {
+  background: #e9eef5;
+  color: #17324d;
+}
+
+.workspace-tab-shell.is-active .workspace-tab-close {
+  color: #d8e3ef;
+}
+
+.workspace-tab-shell.is-active .workspace-tab-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
 }
 
 .schema-workspace {

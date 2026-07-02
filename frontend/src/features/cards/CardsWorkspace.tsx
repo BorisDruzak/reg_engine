@@ -69,6 +69,13 @@ const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
 
 type CardShellTab = "list" | `card:${string}`;
 
+type CardEditorPanelState = {
+  isDirty: boolean;
+  isPending: boolean;
+  error: string | null;
+  saved: boolean;
+};
+
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
 
 export function CardsWorkspace({
@@ -112,13 +119,16 @@ export function CardsWorkspace({
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
-  const [cardFormMode, setCardFormMode] = useState<"create" | "edit" | null>(null);
+  const [cardFormMode, setCardFormMode] = useState<"create" | null>(null);
   const [activeTab, setActiveTab] = useState<CardWorkspaceTab>("fields");
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
   const [dirtyCardIds, setDirtyCardIds] = useState<Set<string>>(() => new Set());
+  const [fieldEditorStates, setFieldEditorStates] = useState<Record<string, CardEditorPanelState>>(
+    {},
+  );
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
     initialCreateCardForm(organizations),
   );
@@ -143,11 +153,20 @@ export function CardsWorkspace({
         return {
           id: `card:${cardId}` as CardShellTab,
           label: isDirty ? `${title} *` : title,
+          closeLabel: `${uiText.closeCardTab} ${title}`,
         };
       }),
     ],
     [cards, currentUserId, dirtyCardIds, visibleOpenCardIds],
   );
+  const activeEditorState: CardEditorPanelState | null = card
+    ? (fieldEditorStates[card.id] ?? {
+        isDirty: dirtyCardIds.has(card.id) || hasCardDraft(currentUserId, card.id),
+        isPending: false,
+        error: null,
+        saved: false,
+      })
+    : null;
   const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
   const bulkFieldRows = useMemo(
     () => fieldRows.filter((field) => field.field.field_type !== "file_ref"),
@@ -161,6 +180,7 @@ export function CardsWorkspace({
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
   );
+  const bulkFieldFormId = card ? `bulk-card-values-form-${card.id}` : "";
   const createCardMutation = useMutation({
     mutationFn: () =>
       createOrganizationCard(token, cardForm.organizationId, {
@@ -177,23 +197,6 @@ export function CardsWorkspace({
       );
       setActiveShellTab(`card:${created.id}`);
       await invalidateCardQueries(queryClient, token, created.registry_id, created.id);
-    },
-  });
-  const updateCardMutation = useMutation({
-    mutationFn: () => {
-      if (!card) {
-        throw new Error(uiText.notFound);
-      }
-      return updateCard(token, card.id, {
-        display_name: cardForm.displayName.trim(),
-        public_view_enabled: cardForm.publicViewEnabled,
-        public_edit_enabled: cardForm.publicEditEnabled,
-      });
-    },
-    onSuccess: async (updated) => {
-      setSuccessMessage(uiText.cardUpdated);
-      setCardFormMode(null);
-      await invalidateCardQueries(queryClient, token, updated.registry_id, updated.id);
     },
   });
   const activateCardMutation = useMutation({
@@ -268,23 +271,6 @@ export function CardsWorkspace({
     setLocalError(null);
   }
 
-  function openEditForm() {
-    if (!card) {
-      return;
-    }
-    setCardForm({
-      organizationId: card.organization_id,
-      orgUnitId: selectedCard?.org_unit_id ?? "",
-      displayName: card.display_name,
-      publicViewEnabled: selectedCard?.public_view_enabled ?? false,
-      publicEditEnabled: selectedCard?.public_edit_enabled ?? false,
-    });
-    setCardFormMode("edit");
-    setArchiveTarget(null);
-    setSuccessMessage(null);
-    setLocalError(null);
-  }
-
   function handleCardFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
@@ -299,9 +285,6 @@ export function CardsWorkspace({
     if (cardFormMode === "create") {
       createCardMutation.mutate();
       return;
-    }
-    if (cardFormMode === "edit") {
-      updateCardMutation.mutate();
     }
   }
 
@@ -325,6 +308,37 @@ export function CardsWorkspace({
     }
   }
 
+  function handleShellTabClose(tabId: CardShellTab) {
+    if (!tabId.startsWith("card:")) {
+      return;
+    }
+    const cardId = tabId.slice("card:".length);
+    const hasUnsavedChanges = dirtyCardIds.has(cardId) || hasCardDraft(currentUserId, cardId);
+    if (hasUnsavedChanges && !window.confirm(uiText.closeDirtyCardTabConfirmation)) {
+      return;
+    }
+
+    setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
+    setDirtyCardIds((current) => {
+      const next = new Set(current);
+      next.delete(cardId);
+      return next;
+    });
+    setFieldEditorStates((current) => {
+      const next = { ...current };
+      delete next[cardId];
+      return next;
+    });
+    setCardFormMode(null);
+    setArchiveTarget(null);
+    setSuccessMessage(null);
+    setLocalError(null);
+    if (activeShellTab === tabId) {
+      setActiveShellTab("list");
+      onSelectCard(cards.find((item) => item.id !== cardId)?.id ?? "");
+    }
+  }
+
   function handleCardDirtyChange(cardId: string, isDirty: boolean) {
     setDirtyCardIds((current) => {
       if (current.has(cardId) === isDirty) {
@@ -340,6 +354,26 @@ export function CardsWorkspace({
     });
   }
 
+  function handleCardEditorStateChange(cardId: string, nextState: CardEditorPanelState) {
+    setFieldEditorStates((current) => {
+      const previous = current[cardId];
+      if (
+        previous &&
+        previous.isDirty === nextState.isDirty &&
+        previous.isPending === nextState.isPending &&
+        previous.error === nextState.error &&
+        previous.saved === nextState.saved
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        [cardId]: nextState,
+      };
+    });
+    handleCardDirtyChange(cardId, nextState.isDirty);
+  }
+
   return (
     <div className="stack">
       <WorkspaceTabs
@@ -347,6 +381,7 @@ export function CardsWorkspace({
         activeTab={activeShellTab}
         ariaLabel={uiText.cardEditorTabs}
         onChange={handleShellTabChange}
+        onClose={handleShellTabClose}
       />
       {activeShellTab === "list" ? (
         <Panel title={uiText.cards}>
@@ -386,7 +421,6 @@ export function CardsWorkspace({
           {cardFormMode === "create" && (
             <div className="panel-form">
               <CardMutationForm
-                mode="create"
                 form={cardForm}
                 organizations={organizations}
                 isSubmitting={createCardMutation.isPending}
@@ -400,6 +434,25 @@ export function CardsWorkspace({
         </Panel>
       ) : (
         <div className="stack">
+          {card && selectedCard && activeEditorState && (
+            <CardActionPanel
+              card={card}
+              selectedCard={selectedCard}
+              editorState={activeEditorState}
+              fieldFormId={
+                activeTab === "fields" && bulkFieldRows.length > 0 ? bulkFieldFormId : undefined
+              }
+              isActivating={activateCardMutation.isPending}
+              actionError={activateCardMutation.error ?? archiveCardMutation.error}
+              successMessage={successMessage}
+              onActivate={() => activateCardMutation.mutate()}
+              onArchive={() => {
+                setArchiveTarget(selectedCard);
+                setCardFormMode(null);
+                setSuccessMessage(null);
+              }}
+            />
+          )}
           <Panel
             title={
               cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card
@@ -432,51 +485,6 @@ export function CardsWorkspace({
                     <dd>{selectedCard.public_edit_enabled ? uiText.yes : uiText.no}</dd>
                   </div>
                 </dl>
-                <div className="row-actions card-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.editCard} ${card.display_name}`}
-                    onClick={openEditForm}
-                  >
-                    {uiText.editCard}
-                  </button>
-                  {selectedCard.lifecycle_status === "draft" && (
-                    <button
-                      type="button"
-                      className="primary-button"
-                      aria-label={`${uiText.activateCard} ${card.display_name}`}
-                      disabled={activateCardMutation.isPending}
-                      onClick={() => activateCardMutation.mutate()}
-                    >
-                      {uiText.activateCard}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="danger-button"
-                    aria-label={`${uiText.archiveCard} ${card.display_name}`}
-                    onClick={() => {
-                      setArchiveTarget(selectedCard);
-                      setCardFormMode(null);
-                      setSuccessMessage(null);
-                    }}
-                  >
-                    {uiText.archive}
-                  </button>
-                </div>
-                {cardFormMode === "edit" && (
-                  <CardMutationForm
-                    mode="edit"
-                    form={cardForm}
-                    organizations={organizations}
-                    isSubmitting={updateCardMutation.isPending}
-                    error={localError ? new Error(localError) : updateCardMutation.error}
-                    onCancel={() => setCardFormMode(null)}
-                    onChange={setCardForm}
-                    onSubmit={handleCardFormSubmit}
-                  />
-                )}
                 {repeatableBlocks.length > 0 && (
                   <RepeatableBlockControls
                     blocks={repeatableBlocks}
@@ -490,13 +498,7 @@ export function CardsWorkspace({
                   />
                 )}
                 <MutationFeedback
-                  error={
-                    activateCardMutation.error ??
-                    archiveCardMutation.error ??
-                    createBlockInstanceMutation.error ??
-                    archiveBlockInstanceMutation.error
-                  }
-                  successMessage={successMessage}
+                  error={createBlockInstanceMutation.error ?? archiveBlockInstanceMutation.error}
                 />
                 <WorkspaceTabs
                   tabs={cardWorkspaceTabs}
@@ -518,7 +520,8 @@ export function CardsWorkspace({
                   fields={bulkFieldRows}
                   token={token}
                   currentUserId={currentUserId}
-                  onDirtyChange={handleCardDirtyChange}
+                  formId={bulkFieldFormId}
+                  onEditorStateChange={handleCardEditorStateChange}
                 />
               )}
               {fileRefFieldRows.length > 0 && (
@@ -567,6 +570,80 @@ type CardFormState = {
   publicViewEnabled: boolean;
   publicEditEnabled: boolean;
 };
+
+function CardActionPanel({
+  card,
+  selectedCard,
+  editorState,
+  fieldFormId,
+  isActivating,
+  actionError,
+  successMessage,
+  onActivate,
+  onArchive,
+}: {
+  card: CardRead;
+  selectedCard: CardSummaryRead;
+  editorState: CardEditorPanelState;
+  fieldFormId?: string;
+  isActivating: boolean;
+  actionError?: unknown;
+  successMessage?: string | null;
+  onActivate: () => void;
+  onArchive: () => void;
+}) {
+  return (
+    <div className="card-action-panel" role="group" aria-label={uiText.cardActionPanel}>
+      <div className="card-action-status">
+        <strong>{card.display_name}</strong>
+        <span>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</span>
+        {editorState.error && (
+          <p className="inline-alert" role="alert">
+            {editorState.error}
+          </p>
+        )}
+        {!editorState.error && editorState.isDirty && (
+          <p className="inline-alert">{uiText.unsavedCardChanges}</p>
+        )}
+        {!editorState.error && !editorState.isDirty && editorState.saved && (
+          <p className="inline-success">{uiText.cardFieldsSaved}</p>
+        )}
+        <MutationFeedback error={actionError} successMessage={successMessage} />
+      </div>
+      <div className="row-actions card-action-buttons">
+        {fieldFormId && (
+          <button
+            type="submit"
+            form={fieldFormId}
+            className="primary-button"
+            disabled={editorState.isPending}
+          >
+            {editorState.isPending ? uiText.saving : uiText.saveAllFields}
+          </button>
+        )}
+        {selectedCard.lifecycle_status === "draft" && (
+          <button
+            type="button"
+            className="primary-button"
+            aria-label={`${uiText.activateCard} ${card.display_name}`}
+            disabled={isActivating}
+            onClick={onActivate}
+          >
+            {uiText.activateCard}
+          </button>
+        )}
+        <button
+          type="button"
+          className="danger-button"
+          aria-label={`${uiText.archiveCard} ${card.display_name}`}
+          onClick={onArchive}
+        >
+          {uiText.archive}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function CardListFilters({
   cardSearch,
@@ -626,7 +703,6 @@ function CardListFilters({
 }
 
 function CardMutationForm({
-  mode,
   form,
   organizations,
   isSubmitting,
@@ -635,7 +711,6 @@ function CardMutationForm({
   onChange,
   onSubmit,
 }: {
-  mode: "create" | "edit";
   form: CardFormState;
   organizations: OrganizationRead[];
   isSubmitting: boolean;
@@ -646,31 +721,27 @@ function CardMutationForm({
 }) {
   return (
     <AdminMutationForm
-      title={mode === "create" ? uiText.createCard : uiText.editCard}
-      submitLabel={mode === "create" ? uiText.create : uiText.save}
+      title={uiText.createCard}
+      submitLabel={uiText.create}
       isSubmitting={isSubmitting}
       error={error}
       onCancel={onCancel}
       onSubmit={onSubmit}
     >
-      {mode === "create" && (
-        <>
-          <label>
-            <span>{uiText.cardOrganization}</span>
-            <select
-              value={form.organizationId}
-              onChange={(event) => onChange({ ...form, organizationId: event.currentTarget.value })}
-            >
-              <option value="">{uiText.noData}</option>
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
+      <label>
+        <span>{uiText.cardOrganization}</span>
+        <select
+          value={form.organizationId}
+          onChange={(event) => onChange({ ...form, organizationId: event.currentTarget.value })}
+        >
+          <option value="">{uiText.noData}</option>
+          {organizations.map((organization) => (
+            <option key={organization.id} value={organization.id}>
+              {organization.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <label>
         <span>{uiText.cardDisplayName}</span>
         <input
@@ -996,13 +1067,15 @@ function BulkCardValuesForm({
   fields,
   token,
   currentUserId,
-  onDirtyChange,
+  formId,
+  onEditorStateChange,
 }: {
   card: CardRead;
   fields: EditableCardField[];
   token: string;
   currentUserId: string;
-  onDirtyChange: (cardId: string, isDirty: boolean) => void;
+  formId: string;
+  onEditorStateChange: (cardId: string, state: CardEditorPanelState) => void;
 }) {
   const queryClient = useQueryClient();
   const draftStorageKey = cardDraftStorageKey(currentUserId, card.id);
@@ -1016,10 +1089,6 @@ function BulkCardValuesForm({
   useEffect(() => {
     saveCardDraft(draftStorageKey, draftValues);
   }, [draftStorageKey, draftValues]);
-
-  useEffect(() => {
-    onDirtyChange(card.id, isDirty);
-  }, [card.id, isDirty, onDirtyChange]);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -1035,11 +1104,20 @@ function BulkCardValuesForm({
     onSuccess: async () => {
       setSaved(true);
       setDraftValues({});
-      onDirtyChange(card.id, false);
       await queryClient.invalidateQueries({ queryKey: ["card", token, card.id] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },
   });
+  const currentError = localError ?? (mutation.error ? errorText(mutation.error) : null);
+
+  useEffect(() => {
+    onEditorStateChange(card.id, {
+      isDirty,
+      isPending: mutation.isPending,
+      error: currentError,
+      saved,
+    });
+  }, [card.id, currentError, isDirty, mutation.isPending, onEditorStateChange, saved]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1058,12 +1136,14 @@ function BulkCardValuesForm({
   }
 
   return (
-    <form aria-label={uiText.bulkFieldValues} className="bulk-field-form" onSubmit={handleSubmit}>
+    <form
+      id={formId}
+      aria-label={uiText.bulkFieldValues}
+      className="bulk-field-form"
+      onSubmit={handleSubmit}
+    >
       <header className="bulk-field-header">
         <h4>{uiText.bulkFieldValues}</h4>
-        <button type="submit" className="primary-button" disabled={mutation.isPending}>
-          {mutation.isPending ? uiText.saving : uiText.saveAllFields}
-        </button>
       </header>
       <div className="bulk-field-grid">
         {fields.map((field) => (
@@ -1081,15 +1161,7 @@ function BulkCardValuesForm({
           />
         ))}
       </div>
-      <footer className="card-editor-footer" aria-label={uiText.cardEditorFooter}>
-        {(localError || mutation.error) && (
-          <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
-        )}
-        {isDirty && !localError && !mutation.error && (
-          <p className="inline-alert">{uiText.unsavedCardChanges}</p>
-        )}
-        {saved && <p className="inline-success">{uiText.cardFieldsSaved}</p>}
-      </footer>
+      <footer className="card-editor-footer" aria-label={uiText.cardEditorFooter} />
     </form>
   );
 }

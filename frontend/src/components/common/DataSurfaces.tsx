@@ -53,26 +53,51 @@ export function WorkspaceTabs<T extends string>({
   activeTab,
   ariaLabel,
   onChange,
+  onClose,
 }: {
-  tabs: { id: T; label: string }[];
+  tabs: { id: T; label: string; closeLabel?: string }[];
   activeTab: T;
   ariaLabel: string;
   onChange: (tabId: T) => void;
+  onClose?: (tabId: T) => void;
 }) {
   return (
     <div className="workspace-tabs" role="tablist" aria-label={ariaLabel}>
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          role="tab"
-          aria-selected={activeTab === tab.id}
-          className={activeTab === tab.id ? "workspace-tab is-active" : "workspace-tab"}
-          onClick={() => onChange(tab.id)}
-        >
-          {tab.label}
-        </button>
-      ))}
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <span
+            key={tab.id}
+            className={[
+              "workspace-tab-shell",
+              isActive ? "is-active" : "",
+              tab.closeLabel ? "has-close" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={isActive ? "workspace-tab is-active" : "workspace-tab"}
+              onClick={() => onChange(tab.id)}
+            >
+              {tab.label}
+            </button>
+            {tab.closeLabel && onClose && (
+              <button
+                type="button"
+                className="workspace-tab-close"
+                aria-label={tab.closeLabel}
+                onClick={() => onClose(tab.id)}
+              >
+                x
+              </button>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
