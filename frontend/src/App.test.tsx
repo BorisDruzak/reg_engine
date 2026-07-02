@@ -2472,10 +2472,11 @@ test("creates form fields with required mode from Russian UI", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
-  await user.click(await screen.findByRole("button", { name: "Создать поле формы" }));
-  await user.selectOptions(screen.getByLabelText("Блок формы"), [
-    "88888888-8888-4888-8888-888888888888",
-  ]);
+  await user.click(
+    await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
+  );
+  expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название поля формы"), "Обязательное поле");
   await user.selectOptions(screen.getByLabelText("Обязательность поля"), ["required"]);
   await user.click(screen.getByRole("button", { name: "Создать" }));
@@ -2528,6 +2529,102 @@ test("renders registry workspace as focused schema tabs", async () => {
   expect(screen.getByRole("tab", { name: "Справочники" })).toHaveAttribute("aria-selected", "true");
   expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Импорт и экспорт" })).not.toBeInTheDocument();
+});
+
+test("renders a visual card schema editor with fields inside blocks", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const visualEditor = await screen.findByRole("region", {
+    name: "Визуальный редактор схемы карточки",
+  });
+  expect(within(visualEditor).getByText("Название карточки")).toBeInTheDocument();
+  expect(within(visualEditor).getByRole("heading", { name: "Основной блок" })).toBeInTheDocument();
+  expect(within(visualEditor).getByText("Статус")).toBeInTheDocument();
+  expect(within(visualEditor).getByText("Подтверждено")).toBeInTheDocument();
+  expect(
+    within(visualEditor).getByRole("button", { name: "Добавить поле в блок Основной блок" }),
+  ).toBeInTheDocument();
+  expect(
+    within(visualEditor).getByRole("button", { name: "Добавить блок формы" }),
+  ).toBeInTheDocument();
+});
+
+test("creates fields from the visual block without description or manual position", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  await user.click(
+    await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
+  );
+
+  expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Описание поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Название поля формы"), "Новый реквизит");
+  await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["number"]);
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
+  expect(screen.getByText("Новый реквизит")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const createFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields") &&
+          init?.method === "POST",
+      );
+    expect(createFieldCall).toBeTruthy();
+    const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      code: "novyy_rekvizit",
+      label: "Новый реквизит",
+      field_type: "number",
+      description: null,
+      position: 2,
+    });
+  });
+});
+
+test("renders reference list details and items in one editor", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+
+  const referenceEditor = await screen.findByRole("region", {
+    name: "Редактор справочника Статусы актива",
+  });
+  expect(
+    within(referenceEditor).getByRole("heading", { name: "Статусы актива" }),
+  ).toBeInTheDocument();
+  expect(within(referenceEditor).getByText("Активен")).toBeInTheDocument();
+  expect(
+    within(referenceEditor).getByRole("button", { name: "Создать элемент справочника" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Редактировать справочник Статусы актива" }),
+  ).toBeInTheDocument();
 });
 
 test("uses compact visible row actions with full accessible labels", async () => {
@@ -3711,7 +3808,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
           ) && init?.method === "POST",
       ).length;
 
-  await user.click(screen.getByRole("button", { name: "Создать блок формы" }));
+  await user.click(screen.getByRole("button", { name: "Добавить блок формы" }));
   const blockPostCountBeforeValidation = blockPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -3719,67 +3816,61 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   expect(blockPostCount()).toBe(blockPostCountBeforeValidation);
 
   expect(screen.queryByLabelText("Код блока формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Описание блока формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция блока формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название блока формы"), {
     target: { value: "Детали карточки" },
   });
-  fireEvent.change(screen.getByLabelText("Описание блока формы"), {
-    target: { value: "Дополнительные данные" },
-  });
-  fireEvent.change(screen.getByLabelText("Позиция блока формы"), { target: { value: "10" } });
   await user.click(screen.getByLabelText("Повторяемый блок"));
   await user.click(screen.getByLabelText("Редактировать блок в публичной ссылке"));
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Блок формы создан")).toBeInTheDocument();
   expect(screen.getByText("Детали карточки")).toBeInTheDocument();
-  expect(screen.getAllByText("Да").length).toBeGreaterThan(0);
+  expect(
+    screen.getByRole("button", { name: "Добавить поле в блок Детали карточки" }),
+  ).toBeInTheDocument();
 
   await user.click(
     screen.getByRole("button", { name: "Редактировать блок формы Детали карточки" }),
   );
   const blockTitleInput = await screen.findByLabelText("Название блока формы");
   fireEvent.change(blockTitleInput, { target: { value: "Детали карточки обновлены" } });
-  const blockDescriptionInput = screen.getByLabelText("Описание блока формы");
-  fireEvent.change(blockDescriptionInput, { target: { value: "Обновленное описание" } });
-  fireEvent.change(screen.getByLabelText("Позиция блока формы"), { target: { value: "11" } });
+  expect(screen.queryByLabelText("Описание блока формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция блока формы")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(await screen.findByText("Блок формы обновлен")).toBeInTheDocument();
   expect(screen.getByText("Детали карточки обновлены")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
-  await user.selectOptions(screen.getByLabelText("Блок формы"), [
-    "26262626-2626-4262-8262-262626262626",
-  ]);
+  await user.click(
+    screen.getByRole("button", { name: "Добавить поле в блок Детали карточки обновлены" }),
+  );
+  expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Описание поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция поля формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название поля формы"), { target: { value: "Сумма" } });
-  fireEvent.change(screen.getByLabelText("Описание поля формы"), {
-    target: { value: "Числовое значение" },
-  });
   await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["number"]);
-  fireEvent.change(screen.getByLabelText("Позиция поля формы"), { target: { value: "20" } });
   await user.click(screen.getByLabelText("Редактировать поле в публичной ссылке"));
   expect(screen.getByRole("option", { name: "Ссылка на организацию" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
   expect(screen.getByText("Сумма")).toBeInTheDocument();
-  expect(screen.getByText("Число")).toBeInTheDocument();
+  expect(screen.getByText(/Число/)).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Редактировать поле формы Сумма" }));
   const fieldLabelInput = await screen.findByLabelText("Название поля формы");
   fireEvent.change(fieldLabelInput, { target: { value: "Сумма обновленная" } });
-  const fieldDescriptionInput = screen.getByLabelText("Описание поля формы");
-  fireEvent.change(fieldDescriptionInput, {
-    target: { value: "Обновленное числовое значение" },
-  });
-  fireEvent.change(screen.getByLabelText("Позиция поля формы"), { target: { value: "21" } });
+  expect(screen.queryByLabelText("Описание поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция поля формы")).not.toBeInTheDocument();
   await user.click(screen.getByLabelText("Активное поле"));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(await screen.findByText("Поле формы обновлено")).toBeInTheDocument();
   expect(screen.getByText("Сумма обновленная")).toBeInTheDocument();
-  expect(screen.getAllByText("Неактивно").length).toBeGreaterThan(0);
+  expect(screen.getByText(/Неактивно/)).toBeInTheDocument();
 
   await user.click(
     screen.getByRole("button", { name: "Архивировать поле формы Сумма обновленная" }),
@@ -3822,8 +3913,8 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
     expect(createBlockBody).toEqual({
       code: "detali_kartochki",
       title: "Детали карточки",
-      description: "Дополнительные данные",
-      position: 10,
+      description: null,
+      position: 1,
       is_repeatable: true,
       public_visible: true,
       public_editable: true,
@@ -3843,8 +3934,8 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       code: "summa",
       label: "Сумма",
       field_type: "number",
-      description: "Числовое значение",
-      position: 20,
+      description: null,
+      position: 0,
       required_mode: "not_required",
       options_source_type: null,
       options_source_id: null,
@@ -3875,7 +3966,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
           return false;
         }
         const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
-        return body.title === "Детали карточки обновлены" && body.position === 11;
+        return body.title === "Детали карточки обновлены" && body.position === 1;
       }),
     ).toBe(true);
     expect(
@@ -3888,7 +3979,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
         }
         const body = JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
         return (
-          body.label === "Сумма обновленная" && body.position === 21 && body.is_active === false
+          body.label === "Сумма обновленная" && body.position === 0 && body.is_active === false
         );
       }),
     ).toBe(true);
@@ -4154,8 +4245,11 @@ test("wires select fields to reference lists without hardcoded options", async (
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
-  await user.click(screen.getByRole("button", { name: "Создать поле формы" }));
+  await user.click(screen.getByRole("button", { name: "Добавить поле в блок Основной блок" }));
+  expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Описание поля формы")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Позиция поля формы")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название поля формы"), {
     target: { value: "Состояние" },
   });
@@ -4168,7 +4262,7 @@ test("wires select fields to reference lists without hardcoded options", async (
 
   expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
   expect(screen.getByText("Состояние")).toBeInTheDocument();
-  expect(screen.getAllByText("Справочник").length).toBeGreaterThan(0);
+  expect(screen.getByText(/Выбор/)).toBeInTheDocument();
 
   await waitFor(() => {
     const createFieldCall = vi
@@ -4184,6 +4278,7 @@ test("wires select fields to reference lists without hardcoded options", async (
       code: "sostoyanie",
       label: "Состояние",
       field_type: "select",
+      position: 2,
       options_source_type: "reference_list",
       options_source_id: "abababab-abab-4aba-8aba-abababababab",
     });

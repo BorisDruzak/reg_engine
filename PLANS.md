@@ -57,11 +57,16 @@ not a hardcoded employee registry.
   close button with an unsaved-changes warning, and save/activate/archive card
   actions live in one sticky `Панель действий карточки` instead of being split
   across metadata and the bulk-field form.
+- Phase 7F visual registry schema/reference editor is implemented and locally
+  verified: `Схема карточки` now uses one visual editor where fields live inside
+  blocks, technical codes/positions/descriptions are not manual create-form
+  burden, and `Справочники` now edits reference-list metadata and items in one
+  selected-list editor.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next checkpoint after Phase 7E is deeper field-picker polish only if live use
-  shows a missing typed control.
+- Next checkpoint after Phase 7F is visual field/block arrangement polish only
+  if live use shows a missing layout control.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -840,6 +845,9 @@ Verification completed:
 - `pnpm -C frontend build`: passed.
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed, including backend ruff, backend format check, backend mypy, backend
   pytest, frontend lint, frontend typecheck, frontend tests, frontend build,
   and project-map check.
@@ -1214,3 +1222,55 @@ Known limitations:
   `TEST_DATABASE_URL` is not configured.
 - The first UI slice intentionally keeps field tags simple. Advanced operators,
   grouped OR semantics, and saved searches require a later approved phase.
+
+## Phase 7F: Visual Schema And Reference Editors
+
+Status: implemented and locally verified.
+
+Purpose:
+
+Reduce registry setup friction for non-technical administrators by replacing
+separate schema tables with one visual card-schema editor, and by merging
+reference-list metadata plus reference items into one selected-list editor.
+
+Implemented scope:
+
+1. `Реестры -> Схема карточки` now renders one visual editor:
+   - a card-title preview;
+   - form blocks as visual containers;
+   - fields displayed inside their block;
+   - `+ Добавить поле` from the block context;
+   - `+ Добавить блок формы` from the canvas;
+   - block and field edit/archive actions remain available.
+2. Create forms no longer ask users for manual technical codes, positions, or
+   descriptions:
+   - technical codes are generated from Russian user-facing names;
+   - positions are resolved from the current visual order;
+   - field creation uses the selected visual block instead of a separate block
+     selector.
+3. `Реестры -> Справочники` now uses one editor:
+   - the left side selects or creates a reference list;
+   - the right side edits the selected reference list metadata;
+   - reference items are created, edited, and archived inside the same
+     reference-list editor.
+4. Existing backend schema/admin APIs remain unchanged.
+
+Non-goals:
+
+- No backend model, migration, or API contract change.
+- No drag-and-drop layout persistence yet.
+- No business-specific employee fields.
+- No import/export, reports, generated documents, attachments, MCP, auth, or
+  public-link changes.
+
+Verification completed so far:
+
+- `pnpm -C frontend test:run src/App.test.tsx -t "schema blocks|reference
+  lists|wires select|registry workspace|required mode|visual card schema|visual
+  block|one editor"`: 8 tests passed.
+- `pnpm -C frontend test:run`: 6 files passed, 62 tests passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.

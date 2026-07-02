@@ -35,7 +35,6 @@ import {
   booleanLabel,
   fieldTypeLabel,
   lifecycleStatusLabel,
-  optionsSourceLabel,
   requiredModeLabel,
   uiText,
 } from "@/app/uiText";
@@ -160,10 +159,6 @@ export function RegistriesAndSchema({
   const [archiveTarget, setArchiveTarget] = useState<RegistryRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const blocksById = useMemo(
-    () => new Map((schema?.blocks ?? []).map((block) => [block.id, block])),
-    [schema?.blocks],
-  );
   const referenceListsQuery = useQuery({
     queryKey: ["reference-lists", token, selectedRegistryId],
     queryFn: () => listReferenceLists(token, selectedRegistryId),
@@ -390,26 +385,15 @@ export function RegistriesAndSchema({
         )}
         <div className="stack">
           {activeTab === "schema" && (
-            <>
-              <Panel title={uiText.cardSchema}>
-                <div className="schema-workspace">
-                  <SchemaBlocksPanel
-                    blocks={schema?.blocks ?? []}
-                    selectedRegistryId={selectedRegistryId}
-                    token={token}
-                  />
-                </div>
-              </Panel>
-              <Panel title={uiText.schemaFields}>
-                <SchemaFieldsPanel
-                  blocks={schema?.blocks ?? []}
-                  blocksById={blocksById}
-                  fields={schema?.fields ?? []}
-                  referenceLists={referenceLists}
-                  token={token}
-                />
-              </Panel>
-            </>
+            <Panel title={uiText.cardSchema}>
+              <SchemaVisualEditor
+                blocks={schema?.blocks ?? []}
+                fields={schema?.fields ?? []}
+                referenceLists={referenceLists}
+                selectedRegistryId={selectedRegistryId}
+                token={token}
+              />
+            </Panel>
           )}
           {activeTab === "references" && (
             <Panel title={uiText.referenceLists}>
@@ -491,21 +475,43 @@ function RegistriesTable({
   );
 }
 
-function SchemaBlocksPanel({
+function SchemaVisualEditor({
   blocks,
+  fields,
+  referenceLists,
   selectedRegistryId,
   token,
 }: {
   blocks: FormBlockRead[];
+  fields: FormFieldRead[];
+  referenceLists: ReferenceListRead[];
   selectedRegistryId: string;
   token: string;
 }) {
   const queryClient = useQueryClient();
-  const [formState, setFormState] = useState<BlockFormState | null>(null);
-  const [archiveTarget, setArchiveTarget] = useState<FormBlockRead | null>(null);
+  const [blockFormState, setBlockFormState] = useState<BlockFormState | null>(null);
+  const [fieldFormState, setFieldFormState] = useState<FieldFormState | null>(null);
+  const [blockArchiveTarget, setBlockArchiveTarget] = useState<FormBlockRead | null>(null);
+  const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const createMutation = useMutation({
+  const sortedBlocks = useMemo(
+    () => [...blocks].sort((left, right) => left.position - right.position),
+    [blocks],
+  );
+  const fieldsByBlockId = useMemo(() => {
+    const grouped = new Map<string, FormFieldRead[]>();
+    for (const field of fields) {
+      const blockFields = grouped.get(field.block_id) ?? [];
+      blockFields.push(field);
+      grouped.set(field.block_id, blockFields);
+    }
+    for (const blockFields of grouped.values()) {
+      blockFields.sort((left, right) => left.position - right.position);
+    }
+    return grouped;
+  }, [fields]);
+  const createBlockMutation = useMutation({
     mutationFn: (payload: {
       code: string;
       title: string;
@@ -516,12 +522,12 @@ function SchemaBlocksPanel({
       public_editable: boolean;
     }) => createFormBlock(token, selectedRegistryId, payload),
     onSuccess: async () => {
-      setFormState(null);
+      setBlockFormState(null);
       setSuccessMessage(uiText.formBlockCreated);
       await invalidateRegistryData(queryClient, token);
     },
   });
-  const updateMutation = useMutation({
+  const updateBlockMutation = useMutation({
     mutationFn: (payload: {
       blockId: string;
       title: string;
@@ -534,303 +540,20 @@ function SchemaBlocksPanel({
         position: payload.position,
       }),
     onSuccess: async () => {
-      setFormState(null);
+      setBlockFormState(null);
       setSuccessMessage(uiText.formBlockUpdated);
       await invalidateRegistryData(queryClient, token);
     },
   });
-  const archiveMutation = useMutation({
+  const archiveBlockMutation = useMutation({
     mutationFn: (blockId: string) => archiveFormBlock(token, blockId),
     onSuccess: async () => {
-      setArchiveTarget(null);
+      setBlockArchiveTarget(null);
       setSuccessMessage(uiText.formBlockArchived);
       await invalidateRegistryData(queryClient, token);
     },
   });
-  const mutationError = localError
-    ? new Error(localError)
-    : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
-  const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
-
-  function openCreateForm() {
-    setLocalError(null);
-    setSuccessMessage(null);
-    setFormState({
-      mode: "create",
-      blockId: null,
-      code: "",
-      title: "",
-      description: "",
-      position: "0",
-      isRepeatable: false,
-      publicVisible: true,
-      publicEditable: false,
-    });
-  }
-
-  function openEditForm(block: FormBlockRead) {
-    setLocalError(null);
-    setSuccessMessage(null);
-    setFormState({
-      mode: "edit",
-      blockId: block.id,
-      code: block.code,
-      title: block.title,
-      description: block.description ?? "",
-      position: String(block.position),
-      isRepeatable: block.is_repeatable,
-      publicVisible: block.public_visible,
-      publicEditable: block.public_editable,
-    });
-  }
-
-  function closeForm() {
-    setFormState(null);
-    setLocalError(null);
-  }
-
-  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!formState) {
-      return;
-    }
-
-    const title = formState.title.trim();
-    const description = formState.description.trim();
-    if (!title) {
-      setLocalError(uiText.requiredFields);
-      return;
-    }
-
-    setLocalError(null);
-    setSuccessMessage(null);
-    if (formState.mode === "create") {
-      createMutation.mutate({
-        code: generateTechnicalCode(
-          title,
-          "block",
-          blocks.map((block) => block.code),
-        ),
-        title,
-        description: description || null,
-        position: positionNumber(formState.position),
-        is_repeatable: formState.isRepeatable,
-        public_visible: formState.publicVisible,
-        public_editable: formState.publicEditable,
-      });
-      return;
-    }
-
-    if (formState.blockId) {
-      updateMutation.mutate({
-        blockId: formState.blockId,
-        title,
-        description: description || null,
-        position: positionNumber(formState.position),
-      });
-    }
-  }
-
-  return (
-    <div className="stack">
-      <div className="panel-toolbar">
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!selectedRegistryId}
-          onClick={openCreateForm}
-        >
-          {uiText.createFormBlock}
-        </button>
-      </div>
-      <div className="panel-feedback">
-        <MutationFeedback
-          error={formState ? null : mutationError}
-          successMessage={successMessage}
-        />
-      </div>
-      {formState && (
-        <div className="panel-form">
-          <AdminMutationForm
-            title={formState.mode === "create" ? uiText.createFormBlock : uiText.editFormBlock}
-            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
-            isSubmitting={isFormSubmitting}
-            error={mutationError}
-            successMessage={null}
-            onCancel={closeForm}
-            onSubmit={handleFormSubmit}
-          >
-            <label>
-              {uiText.formBlockTitle}
-              <input
-                value={formState.title}
-                onChange={(event) =>
-                  setFormState({ ...formState, title: event.currentTarget.value })
-                }
-              />
-            </label>
-            <label>
-              {uiText.formBlockDescription}
-              <textarea
-                value={formState.description}
-                onChange={(event) =>
-                  setFormState({ ...formState, description: event.currentTarget.value })
-                }
-              />
-            </label>
-            <label>
-              {uiText.formBlockPosition}
-              <input
-                type="number"
-                value={formState.position}
-                onChange={(event) =>
-                  setFormState({ ...formState, position: event.currentTarget.value })
-                }
-              />
-            </label>
-            {formState.mode === "create" && (
-              <>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={formState.isRepeatable}
-                    onChange={(event) =>
-                      setFormState({ ...formState, isRepeatable: event.currentTarget.checked })
-                    }
-                  />
-                  {uiText.repeatableBlock}
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={formState.publicVisible}
-                    onChange={(event) =>
-                      setFormState({ ...formState, publicVisible: event.currentTarget.checked })
-                    }
-                  />
-                  {uiText.publicVisibleBlock}
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={formState.publicEditable}
-                    onChange={(event) =>
-                      setFormState({ ...formState, publicEditable: event.currentTarget.checked })
-                    }
-                  />
-                  {uiText.publicEditableBlock}
-                </label>
-              </>
-            )}
-          </AdminMutationForm>
-        </div>
-      )}
-      {archiveTarget && (
-        <AdminMutationDialog title={uiText.archiveFormBlock}>
-          <ArchiveConfirmation
-            entityLabel={uiText.formBlock}
-            itemLabel={archiveTarget.title}
-            isPending={archiveMutation.isPending}
-            onCancel={() => setArchiveTarget(null)}
-            onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
-          />
-        </AdminMutationDialog>
-      )}
-      <BlocksTable
-        blocks={blocks}
-        onArchiveBlock={(block) => {
-          setLocalError(null);
-          setSuccessMessage(null);
-          setArchiveTarget(block);
-        }}
-        onEditBlock={openEditForm}
-      />
-    </div>
-  );
-}
-
-function BlocksTable({
-  blocks,
-  onEditBlock,
-  onArchiveBlock,
-}: {
-  blocks: FormBlockRead[];
-  onEditBlock: (block: FormBlockRead) => void;
-  onArchiveBlock: (block: FormBlockRead) => void;
-}) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{uiText.title}</th>
-            <th>{uiText.code}</th>
-            <th>{uiText.repeatable}</th>
-            <th>{uiText.status}</th>
-            <th>{uiText.action}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {blocks.map((block) => (
-            <tr key={block.id}>
-              <td>{block.title}</td>
-              <td>{block.code}</td>
-              <td>{booleanLabel(block.is_repeatable)}</td>
-              <td>{activityLabel(block.is_active)}</td>
-              <td>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.editFormBlock} ${block.title}`}
-                    onClick={() => onEditBlock(block)}
-                  >
-                    {uiText.edit}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.archiveFormBlock} ${block.title}`}
-                    onClick={() => onArchiveBlock(block)}
-                  >
-                    {uiText.moveToArchive}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-async function invalidateRegistryData(queryClient: QueryClient, token: string) {
-  await queryClient.invalidateQueries({ queryKey: ["registries", token] });
-  await queryClient.invalidateQueries({ queryKey: ["registry-schema", token] });
-  await queryClient.invalidateQueries({ queryKey: ["cards", token] });
-  await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
-}
-
-function SchemaFieldsPanel({
-  blocks,
-  fields,
-  blocksById,
-  referenceLists,
-  token,
-}: {
-  blocks: FormBlockRead[];
-  fields: FormFieldRead[];
-  blocksById: Map<string, FormBlockRead>;
-  referenceLists: ReferenceListRead[];
-  token: string;
-}) {
-  const queryClient = useQueryClient();
-  const [formState, setFormState] = useState<FieldFormState | null>(null);
-  const [archiveTarget, setArchiveTarget] = useState<FormFieldRead | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const createMutation = useMutation({
+  const createFieldMutation = useMutation({
     mutationFn: (payload: {
       blockId: string;
       code: string;
@@ -857,12 +580,12 @@ function SchemaFieldsPanel({
         public_editable: payload.public_editable,
       }),
     onSuccess: async () => {
-      setFormState(null);
+      setFieldFormState(null);
       setSuccessMessage(uiText.formFieldCreated);
       await invalidateRegistryData(queryClient, token);
     },
   });
-  const updateMutation = useMutation({
+  const updateFieldMutation = useMutation({
     mutationFn: (payload: {
       fieldId: string;
       label: string;
@@ -879,36 +602,82 @@ function SchemaFieldsPanel({
         is_active: payload.is_active,
       }),
     onSuccess: async () => {
-      setFormState(null);
+      setFieldFormState(null);
       setSuccessMessage(uiText.formFieldUpdated);
       await invalidateRegistryData(queryClient, token);
     },
   });
-  const archiveMutation = useMutation({
+  const archiveFieldMutation = useMutation({
     mutationFn: (fieldId: string) => archiveFormField(token, fieldId),
     onSuccess: async () => {
-      setArchiveTarget(null);
+      setFieldArchiveTarget(null);
       setSuccessMessage(uiText.formFieldArchived);
       await invalidateRegistryData(queryClient, token);
     },
   });
   const mutationError = localError
     ? new Error(localError)
-    : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
-  const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
+    : (createBlockMutation.error ??
+      updateBlockMutation.error ??
+      archiveBlockMutation.error ??
+      createFieldMutation.error ??
+      updateFieldMutation.error ??
+      archiveFieldMutation.error);
+  const isBlockFormSubmitting = createBlockMutation.isPending || updateBlockMutation.isPending;
+  const isFieldFormSubmitting = createFieldMutation.isPending || updateFieldMutation.isPending;
 
-  function openCreateForm() {
+  function openCreateBlockForm() {
     setLocalError(null);
     setSuccessMessage(null);
-    setFormState({
+    setFieldFormState(null);
+    setBlockFormState({
+      mode: "create",
+      blockId: null,
+      code: "",
+      title: "",
+      description: "",
+      position: String(nextPosition(blocks)),
+      isRepeatable: false,
+      publicVisible: true,
+      publicEditable: false,
+    });
+  }
+
+  function openEditBlockForm(block: FormBlockRead) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFieldFormState(null);
+    setBlockFormState({
+      mode: "edit",
+      blockId: block.id,
+      code: block.code,
+      title: block.title,
+      description: block.description ?? "",
+      position: String(block.position),
+      isRepeatable: block.is_repeatable,
+      publicVisible: block.public_visible,
+      publicEditable: block.public_editable,
+    });
+  }
+
+  function closeBlockForm() {
+    setBlockFormState(null);
+    setLocalError(null);
+  }
+
+  function openCreateFieldForm(blockId: string) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setBlockFormState(null);
+    setFieldFormState({
       mode: "create",
       fieldId: null,
-      blockId: blocks[0]?.id ?? "",
+      blockId,
       code: "",
       label: "",
       description: "",
       fieldType: "text",
-      position: "0",
+      position: String(nextPosition(fields.filter((field) => field.block_id === blockId))),
       requiredMode: "not_required",
       optionsSourceId: "",
       isActive: true,
@@ -917,10 +686,11 @@ function SchemaFieldsPanel({
     });
   }
 
-  function openEditForm(field: FormFieldRead) {
+  function openEditFieldForm(field: FormFieldRead) {
     setLocalError(null);
     setSuccessMessage(null);
-    setFormState({
+    setBlockFormState(null);
+    setFieldFormState({
       mode: "edit",
       fieldId: field.id,
       blockId: field.block_id,
@@ -938,31 +708,72 @@ function SchemaFieldsPanel({
     });
   }
 
-  function closeForm() {
-    setFormState(null);
+  function closeFieldForm() {
+    setFieldFormState(null);
     setLocalError(null);
   }
 
-  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleBlockFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formState) {
+    if (!blockFormState) {
       return;
     }
 
-    const label = formState.label.trim();
-    const blockId = formState.blockId.trim();
-    const description = formState.description.trim();
-    const optionsSourceId = formState.optionsSourceId.trim();
-    if (!label || (formState.mode === "create" && !blockId)) {
+    const title = blockFormState.title.trim();
+    const description = blockFormState.description.trim();
+    if (!title) {
       setLocalError(uiText.requiredFields);
       return;
     }
 
     setLocalError(null);
     setSuccessMessage(null);
-    if (formState.mode === "create") {
-      const usesReferenceList = referenceBackedFieldTypes.has(formState.fieldType);
-      createMutation.mutate({
+    if (blockFormState.mode === "create") {
+      createBlockMutation.mutate({
+        code: generateTechnicalCode(
+          title,
+          "block",
+          blocks.map((block) => block.code),
+        ),
+        title,
+        description: description || null,
+        position: positionNumber(blockFormState.position),
+        is_repeatable: blockFormState.isRepeatable,
+        public_visible: blockFormState.publicVisible,
+        public_editable: blockFormState.publicEditable,
+      });
+      return;
+    }
+
+    if (blockFormState.blockId) {
+      updateBlockMutation.mutate({
+        blockId: blockFormState.blockId,
+        title,
+        description: description || null,
+        position: positionNumber(blockFormState.position),
+      });
+    }
+  }
+
+  function handleFieldFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!fieldFormState) {
+      return;
+    }
+
+    const label = fieldFormState.label.trim();
+    const blockId = fieldFormState.blockId.trim();
+    const optionsSourceId = fieldFormState.optionsSourceId.trim();
+    if (!label || (fieldFormState.mode === "create" && !blockId)) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    if (fieldFormState.mode === "create") {
+      const usesReferenceList = referenceBackedFieldTypes.has(fieldFormState.fieldType);
+      createFieldMutation.mutate({
         blockId,
         code: generateTechnicalCode(
           label,
@@ -970,133 +781,161 @@ function SchemaFieldsPanel({
           fields.map((field) => field.code),
         ),
         label,
-        field_type: formState.fieldType,
-        description: description || null,
-        position: positionNumber(formState.position),
-        required_mode: formState.requiredMode,
+        field_type: fieldFormState.fieldType,
+        description: null,
+        position: positionNumber(fieldFormState.position),
+        required_mode: fieldFormState.requiredMode,
         options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
         options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
-        public_visible: formState.publicVisible,
-        public_editable: formState.publicEditable,
+        public_visible: fieldFormState.publicVisible,
+        public_editable: fieldFormState.publicEditable,
       });
       return;
     }
 
-    if (formState.fieldId) {
-      updateMutation.mutate({
-        fieldId: formState.fieldId,
+    if (fieldFormState.fieldId) {
+      updateFieldMutation.mutate({
+        fieldId: fieldFormState.fieldId,
         label,
-        description: description || null,
-        position: positionNumber(formState.position),
-        required_mode: formState.requiredMode,
-        is_active: formState.isActive,
+        description: fieldFormState.description || null,
+        position: positionNumber(fieldFormState.position),
+        required_mode: fieldFormState.requiredMode,
+        is_active: fieldFormState.isActive,
       });
     }
   }
 
   return (
-    <div className="stack">
-      <div className="panel-toolbar">
-        <button
-          type="button"
-          className="primary-button"
-          disabled={blocks.length === 0}
-          onClick={openCreateForm}
-        >
-          {uiText.createFormField}
-        </button>
-      </div>
+    <section
+      className="schema-visual-editor"
+      role="region"
+      aria-label={uiText.visualCardSchemaEditor}
+    >
       <div className="panel-feedback">
         <MutationFeedback
-          error={formState ? null : mutationError}
+          error={blockFormState || fieldFormState ? null : mutationError}
           successMessage={successMessage}
         />
       </div>
-      {formState && (
+      <div className="schema-card-title-preview">{uiText.cardDisplayName}</div>
+      {blockFormState && (
         <div className="panel-form">
           <AdminMutationForm
-            title={formState.mode === "create" ? uiText.createFormField : uiText.editFormField}
-            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
-            isSubmitting={isFormSubmitting}
+            title={blockFormState.mode === "create" ? uiText.createFormBlock : uiText.editFormBlock}
+            submitLabel={blockFormState.mode === "create" ? uiText.create : uiText.save}
+            isSubmitting={isBlockFormSubmitting}
             error={mutationError}
             successMessage={null}
-            onCancel={closeForm}
-            onSubmit={handleFormSubmit}
+            onCancel={closeBlockForm}
+            onSubmit={handleBlockFormSubmit}
           >
-            {formState.mode === "create" && (
+            <label>
+              {uiText.formBlockTitle}
+              <input
+                value={blockFormState.title}
+                onChange={(event) =>
+                  setBlockFormState({ ...blockFormState, title: event.currentTarget.value })
+                }
+              />
+            </label>
+            {blockFormState.mode === "create" && (
               <>
                 <label>
-                  {uiText.formBlock}
-                  <select
-                    value={formState.blockId}
+                  <input
+                    type="checkbox"
+                    checked={blockFormState.isRepeatable}
                     onChange={(event) =>
-                      setFormState({ ...formState, blockId: event.currentTarget.value })
-                    }
-                  >
-                    {blocks.map((block) => (
-                      <option key={block.id} value={block.id}>
-                        {block.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {uiText.formFieldType}
-                  <select
-                    value={formState.fieldType}
-                    onChange={(event) =>
-                      setFormState({
-                        ...formState,
-                        fieldType: event.currentTarget.value,
-                        optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
-                          ? formState.optionsSourceId
-                          : "",
+                      setBlockFormState({
+                        ...blockFormState,
+                        isRepeatable: event.currentTarget.checked,
                       })
                     }
-                  >
-                    {supportedFieldTypes.map((fieldType) => (
-                      <option key={fieldType} value={fieldType}>
-                        {fieldTypeLabel(fieldType)}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {uiText.repeatableBlock}
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={blockFormState.publicVisible}
+                    onChange={(event) =>
+                      setBlockFormState({
+                        ...blockFormState,
+                        publicVisible: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                  {uiText.publicVisibleBlock}
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={blockFormState.publicEditable}
+                    onChange={(event) =>
+                      setBlockFormState({
+                        ...blockFormState,
+                        publicEditable: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                  {uiText.publicEditableBlock}
                 </label>
               </>
+            )}
+          </AdminMutationForm>
+        </div>
+      )}
+      {fieldFormState && (
+        <div className="panel-form">
+          <AdminMutationForm
+            title={fieldFormState.mode === "create" ? uiText.createFormField : uiText.editFormField}
+            submitLabel={fieldFormState.mode === "create" ? uiText.create : uiText.save}
+            isSubmitting={isFieldFormSubmitting}
+            error={mutationError}
+            successMessage={null}
+            onCancel={closeFieldForm}
+            onSubmit={handleFieldFormSubmit}
+          >
+            {fieldFormState.mode === "create" && (
+              <label>
+                {uiText.formFieldType}
+                <select
+                  value={fieldFormState.fieldType}
+                  onChange={(event) =>
+                    setFieldFormState({
+                      ...fieldFormState,
+                      fieldType: event.currentTarget.value,
+                      optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
+                        ? fieldFormState.optionsSourceId
+                        : "",
+                    })
+                  }
+                >
+                  {supportedFieldTypes.map((fieldType) => (
+                    <option key={fieldType} value={fieldType}>
+                      {fieldTypeLabel(fieldType)}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
             <label>
               {uiText.formFieldLabel}
               <input
-                value={formState.label}
+                value={fieldFormState.label}
                 onChange={(event) =>
-                  setFormState({ ...formState, label: event.currentTarget.value })
-                }
-              />
-            </label>
-            <label>
-              {uiText.formFieldDescription}
-              <textarea
-                value={formState.description}
-                onChange={(event) =>
-                  setFormState({ ...formState, description: event.currentTarget.value })
-                }
-              />
-            </label>
-            <label>
-              {uiText.formFieldPosition}
-              <input
-                type="number"
-                value={formState.position}
-                onChange={(event) =>
-                  setFormState({ ...formState, position: event.currentTarget.value })
+                  setFieldFormState({ ...fieldFormState, label: event.currentTarget.value })
                 }
               />
             </label>
             <label>
               {uiText.formFieldRequiredMode}
               <select
-                value={formState.requiredMode}
+                value={fieldFormState.requiredMode}
                 onChange={(event) =>
-                  setFormState({ ...formState, requiredMode: event.currentTarget.value })
+                  setFieldFormState({
+                    ...fieldFormState,
+                    requiredMode: event.currentTarget.value,
+                  })
                 }
               >
                 <option value="not_required">{uiText.notRequiredField}</option>
@@ -1104,15 +943,18 @@ function SchemaFieldsPanel({
                 <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
               </select>
             </label>
-            {formState.mode === "create" && (
+            {fieldFormState.mode === "create" && (
               <>
-                {referenceBackedFieldTypes.has(formState.fieldType) && (
+                {referenceBackedFieldTypes.has(fieldFormState.fieldType) && (
                   <label>
                     {uiText.referenceListForField}
                     <select
-                      value={formState.optionsSourceId}
+                      value={fieldFormState.optionsSourceId}
                       onChange={(event) =>
-                        setFormState({ ...formState, optionsSourceId: event.currentTarget.value })
+                        setFieldFormState({
+                          ...fieldFormState,
+                          optionsSourceId: event.currentTarget.value,
+                        })
                       }
                     >
                       <option value="">{uiText.noReferenceList}</option>
@@ -1127,9 +969,12 @@ function SchemaFieldsPanel({
                 <label>
                   <input
                     type="checkbox"
-                    checked={formState.publicVisible}
+                    checked={fieldFormState.publicVisible}
                     onChange={(event) =>
-                      setFormState({ ...formState, publicVisible: event.currentTarget.checked })
+                      setFieldFormState({
+                        ...fieldFormState,
+                        publicVisible: event.currentTarget.checked,
+                      })
                     }
                   />
                   {uiText.publicVisibleField}
@@ -1137,22 +982,28 @@ function SchemaFieldsPanel({
                 <label>
                   <input
                     type="checkbox"
-                    checked={formState.publicEditable}
+                    checked={fieldFormState.publicEditable}
                     onChange={(event) =>
-                      setFormState({ ...formState, publicEditable: event.currentTarget.checked })
+                      setFieldFormState({
+                        ...fieldFormState,
+                        publicEditable: event.currentTarget.checked,
+                      })
                     }
                   />
                   {uiText.publicEditableField}
                 </label>
               </>
             )}
-            {formState.mode === "edit" && (
+            {fieldFormState.mode === "edit" && (
               <label>
                 <input
                   type="checkbox"
-                  checked={formState.isActive}
+                  checked={fieldFormState.isActive}
                   onChange={(event) =>
-                    setFormState({ ...formState, isActive: event.currentTarget.checked })
+                    setFieldFormState({
+                      ...fieldFormState,
+                      isActive: event.currentTarget.checked,
+                    })
                   }
                 />
                 {uiText.activeFormField}
@@ -1161,93 +1012,131 @@ function SchemaFieldsPanel({
           </AdminMutationForm>
         </div>
       )}
-      {archiveTarget && (
-        <AdminMutationDialog title={uiText.archiveFormField}>
+      {blockArchiveTarget && (
+        <AdminMutationDialog title={uiText.archiveFormBlock}>
           <ArchiveConfirmation
-            entityLabel={uiText.formField}
-            itemLabel={archiveTarget.label}
-            isPending={archiveMutation.isPending}
-            onCancel={() => setArchiveTarget(null)}
-            onConfirm={() => archiveMutation.mutate(archiveTarget.id)}
+            entityLabel={uiText.formBlock}
+            itemLabel={blockArchiveTarget.title}
+            isPending={archiveBlockMutation.isPending}
+            onCancel={() => setBlockArchiveTarget(null)}
+            onConfirm={() => archiveBlockMutation.mutate(blockArchiveTarget.id)}
           />
         </AdminMutationDialog>
       )}
-      <FieldsTable
-        blocksById={blocksById}
-        fields={fields}
-        onArchiveField={(field) => {
-          setLocalError(null);
-          setSuccessMessage(null);
-          setArchiveTarget(field);
-        }}
-        onEditField={openEditForm}
-      />
-    </div>
-  );
-}
-
-function FieldsTable({
-  fields,
-  blocksById,
-  onEditField,
-  onArchiveField,
-}: {
-  fields: FormFieldRead[];
-  blocksById: Map<string, FormBlockRead>;
-  onEditField: (field: FormFieldRead) => void;
-  onArchiveField: (field: FormFieldRead) => void;
-}) {
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{uiText.field}</th>
-            <th>{uiText.code}</th>
-            <th>{uiText.block}</th>
-            <th>{uiText.type}</th>
-            <th>{uiText.formFieldRequiredMode}</th>
-            <th>{uiText.options}</th>
-            <th>{uiText.status}</th>
-            <th>{uiText.action}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fields.map((field) => (
-            <tr key={field.id}>
-              <td>{field.label}</td>
-              <td>{field.code}</td>
-              <td>{blocksById.get(field.block_id)?.title ?? shortId(field.block_id)}</td>
-              <td>{fieldTypeLabel(field.field_type)}</td>
-              <td>{requiredModeLabel(field.required_mode)}</td>
-              <td>{optionsSourceLabel(field.options_source_type)}</td>
-              <td>{activityLabel(field.is_active)}</td>
-              <td>
+      {fieldArchiveTarget && (
+        <AdminMutationDialog title={uiText.archiveFormField}>
+          <ArchiveConfirmation
+            entityLabel={uiText.formField}
+            itemLabel={fieldArchiveTarget.label}
+            isPending={archiveFieldMutation.isPending}
+            onCancel={() => setFieldArchiveTarget(null)}
+            onConfirm={() => archiveFieldMutation.mutate(fieldArchiveTarget.id)}
+          />
+        </AdminMutationDialog>
+      )}
+      <div className="schema-canvas">
+        {sortedBlocks.map((block) => {
+          const blockFields = fieldsByBlockId.get(block.id) ?? [];
+          return (
+            <article key={block.id} className="schema-block-card">
+              <header className="schema-block-header">
+                <div>
+                  <h3>{block.title}</h3>
+                  <span>{`${uiText.technicalCode}: ${block.code}`}</span>
+                </div>
                 <div className="row-actions">
                   <button
                     type="button"
                     className="ghost-button"
-                    aria-label={`${uiText.editFormField} ${field.label}`}
-                    onClick={() => onEditField(field)}
+                    aria-label={`${uiText.editFormBlock} ${block.title}`}
+                    onClick={() => openEditBlockForm(block)}
                   >
                     {uiText.edit}
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
-                    aria-label={`${uiText.archiveFormField} ${field.label}`}
-                    onClick={() => onArchiveField(field)}
+                    aria-label={`${uiText.archiveFormBlock} ${block.title}`}
+                    onClick={() => {
+                      setLocalError(null);
+                      setSuccessMessage(null);
+                      setBlockArchiveTarget(block);
+                    }}
                   >
                     {uiText.moveToArchive}
                   </button>
                 </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </header>
+              <div className="schema-field-list">
+                {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+                {blockFields.map((field) => (
+                  <div key={field.id} className="schema-field-row">
+                    <div className="schema-field-main">
+                      <strong>{field.label}</strong>
+                      <span>
+                        {fieldTypeLabel(field.field_type)}
+                        {" / "}
+                        {requiredModeLabel(field.required_mode)}
+                        {" / "}
+                        {activityLabel(field.is_active)}
+                      </span>
+                    </div>
+                    <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        aria-label={`${uiText.editFormField} ${field.label}`}
+                        onClick={() => openEditFieldForm(field)}
+                      >
+                        {uiText.edit}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        aria-label={`${uiText.archiveFormField} ${field.label}`}
+                        onClick={() => {
+                          setLocalError(null);
+                          setSuccessMessage(null);
+                          setFieldArchiveTarget(field);
+                        }}
+                      >
+                        {uiText.moveToArchive}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="ghost-button schema-add-field-button"
+                aria-label={`${uiText.addFieldToBlock} ${block.title}`}
+                onClick={() => openCreateFieldForm(block.id)}
+              >
+                + {uiText.addField}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="ghost-button schema-add-block-button"
+        aria-label={uiText.addFormBlock}
+        disabled={!selectedRegistryId}
+        onClick={openCreateBlockForm}
+      >
+        + {uiText.addFormBlock}
+      </button>
+    </section>
   );
+}
+
+async function invalidateRegistryData(queryClient: QueryClient, token: string) {
+  await queryClient.invalidateQueries({ queryKey: ["registries", token] });
+  await queryClient.invalidateQueries({ queryKey: ["registry-schema", token] });
+  await queryClient.invalidateQueries({ queryKey: ["cards", token] });
+  await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
 }
 
 function ReferenceListsPanel({
@@ -1547,330 +1436,311 @@ function ReferenceListsPanel({
   }
 
   return (
-    <div className="stack">
-      <div className="split-grid">
-        <div className="stack">
-          <div className="panel-toolbar">
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!selectedRegistryId}
-              onClick={openCreateListForm}
-            >
-              {uiText.createReferenceList}
-            </button>
-          </div>
-          <div className="panel-feedback">
-            <MutationFeedback
-              error={listFormState || itemFormState ? null : mutationError}
-              successMessage={successMessage}
-            />
-          </div>
-          {listFormState && (
-            <div className="panel-form">
-              <AdminMutationForm
-                title={
-                  listFormState.mode === "create"
-                    ? uiText.createReferenceList
-                    : uiText.editReferenceList
-                }
-                submitLabel={listFormState.mode === "create" ? uiText.create : uiText.save}
-                isSubmitting={createListMutation.isPending || updateListMutation.isPending}
-                error={mutationError}
-                successMessage={null}
-                onCancel={closeListForm}
-                onSubmit={handleListFormSubmit}
-              >
-                <label>
-                  {uiText.referenceListName}
-                  <input
-                    value={listFormState.name}
-                    onChange={(event) =>
-                      setListFormState({ ...listFormState, name: event.currentTarget.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {uiText.referenceListDescription}
-                  <textarea
-                    value={listFormState.description}
-                    onChange={(event) =>
-                      setListFormState({
-                        ...listFormState,
-                        description: event.currentTarget.value,
-                      })
-                    }
-                  />
-                </label>
-                {listFormState.mode === "create" && (
-                  <>
-                    <label>
-                      {uiText.referenceListOwnerOrganization}
-                      <select
-                        value={listFormState.ownerOrganizationId}
-                        onChange={(event) =>
-                          setListFormState({
-                            ...listFormState,
-                            ownerOrganizationId: event.currentTarget.value,
-                          })
-                        }
-                      >
-                        <option value="">{uiText.noOwnerOrganization}</option>
-                        {organizations.map((organization) => (
-                          <option key={organization.id} value={organization.id}>
-                            {organization.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={listFormState.inheritToDescendants}
-                        onChange={(event) =>
-                          setListFormState({
-                            ...listFormState,
-                            inheritToDescendants: event.currentTarget.checked,
-                          })
-                        }
-                      />
-                      {uiText.inheritReferenceListToDescendants}
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={listFormState.lockedForDescendants}
-                        onChange={(event) =>
-                          setListFormState({
-                            ...listFormState,
-                            lockedForDescendants: event.currentTarget.checked,
-                          })
-                        }
-                      />
-                      {uiText.lockReferenceListForDescendants}
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={listFormState.managedBySystemOnly}
-                        onChange={(event) =>
-                          setListFormState({
-                            ...listFormState,
-                            managedBySystemOnly: event.currentTarget.checked,
-                          })
-                        }
-                      />
-                      {uiText.managedBySystemOnly}
-                    </label>
-                  </>
-                )}
-              </AdminMutationForm>
-            </div>
-          )}
-          {listArchiveTarget && (
-            <AdminMutationDialog title={uiText.archiveReferenceList}>
-              <ArchiveConfirmation
-                entityLabel={uiText.referenceList}
-                itemLabel={listArchiveTarget.name}
-                isPending={archiveListMutation.isPending}
-                onCancel={() => setListArchiveTarget(null)}
-                onConfirm={() => archiveListMutation.mutate(listArchiveTarget.id)}
-              />
-            </AdminMutationDialog>
-          )}
-          <SelectableList
-            items={referenceLists.map((referenceList) => ({
-              id: referenceList.id,
-              title: referenceList.name,
-              detail: `${referenceList.code} / ${organizationLabel(
-                referenceList.owner_organization_id,
-              )}`,
-            }))}
-            selectedId={activeReferenceListId}
-            onSelect={(referenceListId) => {
-              setSelectedReferenceListId(referenceListId);
-              setLocalError(null);
-              setSuccessMessage(null);
-            }}
-          />
-          <ReferenceListsTable
-            organizationLabel={organizationLabel}
-            referenceLists={referenceLists}
-            onArchiveReferenceList={(referenceList) => {
-              setLocalError(null);
-              setSuccessMessage(null);
-              setListArchiveTarget(referenceList);
-            }}
-            onEditReferenceList={openEditListForm}
+    <div className="reference-workspace">
+      <aside className="reference-list-sidebar" aria-label={uiText.referenceLists}>
+        <div className="panel-toolbar">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!selectedRegistryId}
+            onClick={openCreateListForm}
+          >
+            {uiText.createReferenceList}
+          </button>
+        </div>
+        <SelectableList
+          items={referenceLists.map((referenceList) => ({
+            id: referenceList.id,
+            title: referenceList.name,
+            detail: `${referenceList.code} / ${organizationLabel(
+              referenceList.owner_organization_id,
+            )}`,
+          }))}
+          selectedId={activeReferenceListId}
+          onSelect={(referenceListId) => {
+            setSelectedReferenceListId(referenceListId);
+            setLocalError(null);
+            setSuccessMessage(null);
+            setListFormState(null);
+            setItemFormState(null);
+          }}
+        />
+      </aside>
+      <section
+        className="reference-list-editor"
+        role="region"
+        aria-label={
+          activeReferenceList
+            ? `${uiText.referenceListEditor} ${activeReferenceList.name}`
+            : uiText.referenceListEditor
+        }
+      >
+        <div className="panel-feedback">
+          <MutationFeedback
+            error={listFormState || itemFormState ? null : mutationError}
+            successMessage={successMessage}
           />
         </div>
-        <div className="stack">
-          <h3>{uiText.referenceItems}</h3>
-          <div className="panel-toolbar">
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!activeReferenceList}
-              onClick={openCreateItemForm}
+        {listFormState ? (
+          <div className="panel-form">
+            <AdminMutationForm
+              title={
+                listFormState.mode === "create"
+                  ? uiText.createReferenceList
+                  : uiText.editReferenceList
+              }
+              submitLabel={listFormState.mode === "create" ? uiText.create : uiText.save}
+              isSubmitting={createListMutation.isPending || updateListMutation.isPending}
+              error={mutationError}
+              successMessage={null}
+              onCancel={closeListForm}
+              onSubmit={handleListFormSubmit}
             >
-              {uiText.createReferenceItem}
-            </button>
-          </div>
-          {itemFormState && (
-            <div className="panel-form">
-              <AdminMutationForm
-                title={
-                  itemFormState.mode === "create"
-                    ? uiText.createReferenceItem
-                    : uiText.editReferenceItem
-                }
-                submitLabel={itemFormState.mode === "create" ? uiText.create : uiText.save}
-                isSubmitting={createItemMutation.isPending || updateItemMutation.isPending}
-                error={mutationError}
-                successMessage={null}
-                onCancel={closeItemForm}
-                onSubmit={handleItemFormSubmit}
-              >
-                <label>
-                  {uiText.referenceItemLabel}
-                  <input
-                    value={itemFormState.label}
-                    onChange={(event) =>
-                      setItemFormState({ ...itemFormState, label: event.currentTarget.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {uiText.referenceItemDescription}
-                  <textarea
-                    value={itemFormState.description}
-                    onChange={(event) =>
-                      setItemFormState({
-                        ...itemFormState,
-                        description: event.currentTarget.value,
-                      })
-                    }
-                  />
-                </label>
-                {itemFormState.mode === "create" && (
+              <label>
+                {uiText.referenceListName}
+                <input
+                  value={listFormState.name}
+                  onChange={(event) =>
+                    setListFormState({ ...listFormState, name: event.currentTarget.value })
+                  }
+                />
+              </label>
+              <label>
+                {uiText.referenceListDescription}
+                <textarea
+                  value={listFormState.description}
+                  onChange={(event) =>
+                    setListFormState({
+                      ...listFormState,
+                      description: event.currentTarget.value,
+                    })
+                  }
+                />
+              </label>
+              {listFormState.mode === "create" && (
+                <>
                   <label>
-                    {uiText.parentReferenceItem}
+                    {uiText.referenceListOwnerOrganization}
                     <select
-                      value={itemFormState.parentId}
+                      value={listFormState.ownerOrganizationId}
                       onChange={(event) =>
-                        setItemFormState({ ...itemFormState, parentId: event.currentTarget.value })
+                        setListFormState({
+                          ...listFormState,
+                          ownerOrganizationId: event.currentTarget.value,
+                        })
                       }
                     >
-                      <option value="">{uiText.noParentReferenceItem}</option>
-                      {referenceItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label}
+                      <option value="">{uiText.noOwnerOrganization}</option>
+                      {organizations.map((organization) => (
+                        <option key={organization.id} value={organization.id}>
+                          {organization.name}
                         </option>
                       ))}
                     </select>
                   </label>
-                )}
-                <label>
-                  {uiText.referenceItemPosition}
-                  <input
-                    type="number"
-                    value={itemFormState.position}
-                    onChange={(event) =>
-                      setItemFormState({ ...itemFormState, position: event.currentTarget.value })
-                    }
-                  />
-                </label>
-              </AdminMutationForm>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={listFormState.inheritToDescendants}
+                      onChange={(event) =>
+                        setListFormState({
+                          ...listFormState,
+                          inheritToDescendants: event.currentTarget.checked,
+                        })
+                      }
+                    />
+                    {uiText.inheritReferenceListToDescendants}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={listFormState.lockedForDescendants}
+                      onChange={(event) =>
+                        setListFormState({
+                          ...listFormState,
+                          lockedForDescendants: event.currentTarget.checked,
+                        })
+                      }
+                    />
+                    {uiText.lockReferenceListForDescendants}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={listFormState.managedBySystemOnly}
+                      onChange={(event) =>
+                        setListFormState({
+                          ...listFormState,
+                          managedBySystemOnly: event.currentTarget.checked,
+                        })
+                      }
+                    />
+                    {uiText.managedBySystemOnly}
+                  </label>
+                </>
+              )}
+            </AdminMutationForm>
+          </div>
+        ) : activeReferenceList ? (
+          <>
+            <header className="reference-editor-header">
+              <div>
+                <h3>{activeReferenceList.name}</h3>
+                <span>{`${uiText.technicalCode}: ${activeReferenceList.code}`}</span>
+              </div>
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-label={`${uiText.editReferenceList} ${activeReferenceList.name}`}
+                  onClick={() => openEditListForm(activeReferenceList)}
+                >
+                  {uiText.edit}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-label={`${uiText.archiveReferenceList} ${activeReferenceList.name}`}
+                  onClick={() => {
+                    setLocalError(null);
+                    setSuccessMessage(null);
+                    setListArchiveTarget(activeReferenceList);
+                  }}
+                >
+                  {uiText.moveToArchive}
+                </button>
+              </div>
+            </header>
+            <dl className="reference-meta-grid">
+              <div>
+                <dt>{uiText.referenceListOwnerOrganization}</dt>
+                <dd>{organizationLabel(activeReferenceList.owner_organization_id)}</dd>
+              </div>
+              <div>
+                <dt>{uiText.inheritReferenceListToDescendants}</dt>
+                <dd>{booleanLabel(activeReferenceList.inherit_to_descendants)}</dd>
+              </div>
+              <div>
+                <dt>{uiText.lockedForDescendants}</dt>
+                <dd>{booleanLabel(activeReferenceList.locked_for_descendants)}</dd>
+              </div>
+              <div>
+                <dt>{uiText.status}</dt>
+                <dd>{activityLabel(activeReferenceList.is_active)}</dd>
+              </div>
+            </dl>
+            <div className="reference-items-toolbar">
+              <h3>{uiText.referenceItems}</h3>
+              <button type="button" className="primary-button" onClick={openCreateItemForm}>
+                {uiText.createReferenceItem}
+              </button>
             </div>
-          )}
-          {itemArchiveTarget && (
-            <AdminMutationDialog title={uiText.archiveReferenceItem}>
-              <ArchiveConfirmation
-                entityLabel={uiText.referenceItem}
-                itemLabel={itemArchiveTarget.label}
-                isPending={archiveItemMutation.isPending}
-                onCancel={() => setItemArchiveTarget(null)}
-                onConfirm={() => archiveItemMutation.mutate(itemArchiveTarget.id)}
-              />
-            </AdminMutationDialog>
-          )}
-          <ReferenceItemsTable
-            referenceItems={referenceItems}
-            onArchiveReferenceItem={(item) => {
-              setLocalError(null);
-              setSuccessMessage(null);
-              setItemArchiveTarget(item);
-            }}
-            onEditReferenceItem={openEditItemForm}
+            {itemFormState && (
+              <div className="panel-form">
+                <AdminMutationForm
+                  title={
+                    itemFormState.mode === "create"
+                      ? uiText.createReferenceItem
+                      : uiText.editReferenceItem
+                  }
+                  submitLabel={itemFormState.mode === "create" ? uiText.create : uiText.save}
+                  isSubmitting={createItemMutation.isPending || updateItemMutation.isPending}
+                  error={mutationError}
+                  successMessage={null}
+                  onCancel={closeItemForm}
+                  onSubmit={handleItemFormSubmit}
+                >
+                  <label>
+                    {uiText.referenceItemLabel}
+                    <input
+                      value={itemFormState.label}
+                      onChange={(event) =>
+                        setItemFormState({ ...itemFormState, label: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {uiText.referenceItemDescription}
+                    <textarea
+                      value={itemFormState.description}
+                      onChange={(event) =>
+                        setItemFormState({
+                          ...itemFormState,
+                          description: event.currentTarget.value,
+                        })
+                      }
+                    />
+                  </label>
+                  {itemFormState.mode === "create" && (
+                    <label>
+                      {uiText.parentReferenceItem}
+                      <select
+                        value={itemFormState.parentId}
+                        onChange={(event) =>
+                          setItemFormState({
+                            ...itemFormState,
+                            parentId: event.currentTarget.value,
+                          })
+                        }
+                      >
+                        <option value="">{uiText.noParentReferenceItem}</option>
+                        {referenceItems.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <label>
+                    {uiText.referenceItemPosition}
+                    <input
+                      type="number"
+                      value={itemFormState.position}
+                      onChange={(event) =>
+                        setItemFormState({ ...itemFormState, position: event.currentTarget.value })
+                      }
+                    />
+                  </label>
+                </AdminMutationForm>
+              </div>
+            )}
+            <ReferenceItemsTable
+              referenceItems={referenceItems}
+              onArchiveReferenceItem={(item) => {
+                setLocalError(null);
+                setSuccessMessage(null);
+                setItemArchiveTarget(item);
+              }}
+              onEditReferenceItem={openEditItemForm}
+            />
+          </>
+        ) : (
+          <p className="data-empty">{uiText.noData}</p>
+        )}
+      </section>
+      {listArchiveTarget && (
+        <AdminMutationDialog title={uiText.archiveReferenceList}>
+          <ArchiveConfirmation
+            entityLabel={uiText.referenceList}
+            itemLabel={listArchiveTarget.name}
+            isPending={archiveListMutation.isPending}
+            onCancel={() => setListArchiveTarget(null)}
+            onConfirm={() => archiveListMutation.mutate(listArchiveTarget.id)}
           />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReferenceListsTable({
-  organizationLabel,
-  referenceLists,
-  onEditReferenceList,
-  onArchiveReferenceList,
-}: {
-  organizationLabel: (organizationId: string | null) => string;
-  referenceLists: ReferenceListRead[];
-  onEditReferenceList: (referenceList: ReferenceListRead) => void;
-  onArchiveReferenceList: (referenceList: ReferenceListRead) => void;
-}) {
-  if (referenceLists.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>{uiText.referenceListName}</th>
-            <th>{uiText.code}</th>
-            <th>{uiText.referenceListOwnerOrganization}</th>
-            <th>{uiText.inheritReferenceListToDescendants}</th>
-            <th>{uiText.lockedForDescendants}</th>
-            <th>{uiText.status}</th>
-            <th>{uiText.action}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {referenceLists.map((referenceList) => (
-            <tr key={referenceList.id}>
-              <td>{referenceList.name}</td>
-              <td>{referenceList.code}</td>
-              <td>{organizationLabel(referenceList.owner_organization_id)}</td>
-              <td>{booleanLabel(referenceList.inherit_to_descendants)}</td>
-              <td>{booleanLabel(referenceList.locked_for_descendants)}</td>
-              <td>{activityLabel(referenceList.is_active)}</td>
-              <td>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.editReferenceList} ${referenceList.name}`}
-                    onClick={() => onEditReferenceList(referenceList)}
-                  >
-                    {uiText.edit}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.archiveReferenceList} ${referenceList.name}`}
-                    onClick={() => onArchiveReferenceList(referenceList)}
-                  >
-                    {uiText.moveToArchive}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        </AdminMutationDialog>
+      )}
+      {itemArchiveTarget && (
+        <AdminMutationDialog title={uiText.archiveReferenceItem}>
+          <ArchiveConfirmation
+            entityLabel={uiText.referenceItem}
+            itemLabel={itemArchiveTarget.label}
+            isPending={archiveItemMutation.isPending}
+            onCancel={() => setItemArchiveTarget(null)}
+            onConfirm={() => archiveItemMutation.mutate(itemArchiveTarget.id)}
+          />
+        </AdminMutationDialog>
+      )}
     </div>
   );
 }
@@ -1951,4 +1821,11 @@ async function invalidateReferenceData(
 function positionNumber(value: string) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function nextPosition(items: { position: number }[]) {
+  if (items.length === 0) {
+    return 0;
+  }
+  return Math.max(...items.map((item) => item.position)) + 1;
 }

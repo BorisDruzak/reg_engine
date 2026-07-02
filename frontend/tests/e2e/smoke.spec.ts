@@ -969,7 +969,10 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Схема карточки" }).click();
-  await expect(page.getByRole("cell", { name: "Статус", exact: true })).toBeVisible();
+  const schemaEditor = page.getByRole("region", {
+    name: "Визуальный редактор схемы карточки",
+  });
+  await expect(schemaEditor.getByText("Статус").first()).toBeVisible();
   await page.getByRole("tab", { name: "Справочники" }).click();
   await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
   await expect(page.getByText("Статусы актива").first()).toBeVisible();
@@ -2107,8 +2110,10 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("tab", { name: "Схема карточки" }).click();
-  await page.getByRole("button", { name: "Создать блок формы" }).click();
+  await page.getByRole("button", { name: "Добавить блок формы" }).click();
   await expect(page.getByLabel("Код блока формы")).toHaveCount(0);
+  await expect(page.getByLabel("Описание блока формы")).toHaveCount(0);
+  await expect(page.getByLabel("Позиция блока формы")).toHaveCount(0);
   await page.getByLabel("Название блока формы").fill("Основные сведения");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Блок формы создан")).toBeVisible();
@@ -2134,16 +2139,19 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Принято").first()).toBeVisible();
 
   await page.getByRole("tab", { name: "Схема карточки" }).click();
-  await page.getByRole("button", { name: "Создать поле формы" }).click();
-  await expect(page.getByLabel("Код поля формы")).toHaveCount(0);
+  await page.getByRole("button", { name: "Добавить поле в блок Основные сведения" }).click();
+  await expect(page.getByLabel("Код поля формы", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Блок формы", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Описание поля формы", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Позиция поля формы", { exact: true })).toHaveCount(0);
   await page.getByLabel("Тип поля формы").selectOption("select");
   await page.getByLabel("Название поля формы").fill("Статус проверки");
   await page.getByLabel("Справочник для поля").selectOption("61616161-6161-4616-8616-616161616161");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Поле формы создано")).toBeVisible();
 
-  await page.getByRole("button", { name: "Создать поле формы" }).click();
-  await expect(page.getByLabel("Код поля формы")).toHaveCount(0);
+  await page.getByRole("button", { name: "Добавить поле в блок Основные сведения" }).click();
+  await expect(page.getByLabel("Код поля формы", { exact: true })).toHaveCount(0);
   await page.getByLabel("Тип поля формы").selectOption("file_ref");
   await page.getByLabel("Название поля формы").fill("Файл проверки");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
