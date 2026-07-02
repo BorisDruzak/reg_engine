@@ -76,6 +76,7 @@ class FormBlock(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
         UniqueConstraint("registry_id", "code", name="uq_form_blocks_registry_id_code"),
         CheckConstraint("min_instances is null or min_instances >= 0", name="min_non_negative"),
         CheckConstraint("max_instances is null or max_instances >= 0", name="max_non_negative"),
+        CheckConstraint("layout_columns >= 1 and layout_columns <= 3", name="layout_columns"),
         Index("ix_form_blocks_registry_id", "registry_id"),
     )
 
@@ -94,6 +95,7 @@ class FormBlock(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     public_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     public_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     display_mode: Mapped[str] = mapped_column(String, nullable=False, server_default="section")
+    layout_columns: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
 
 
@@ -120,6 +122,7 @@ class FormField(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     options_source_type: Mapped[str | None] = mapped_column(String, nullable=True)
     options_source_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     options_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    display_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")

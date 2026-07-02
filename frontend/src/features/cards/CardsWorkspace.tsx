@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 import {
   archivePublicLink,
@@ -1138,11 +1138,13 @@ function BulkCardValuesForm({
   const mutation = useMutation({
     mutationFn: () => {
       const payload = {
-        values: fields.map((field) => ({
-          field_id: field.field.field_id,
-          value: coerceEditorValue(field.field.field_type, currentBulkValue(field, draftValues)),
-          block_instance_id: field.blockInstanceId,
-        })),
+        values: fields
+          .filter((field) => field.field.field_type !== "static_text")
+          .map((field) => ({
+            field_id: field.field.field_id,
+            value: coerceEditorValue(field.field.field_type, currentBulkValue(field, draftValues)),
+            block_instance_id: field.blockInstanceId,
+          })),
       };
       return updateCardFieldValues(token, card.id, payload);
     },
@@ -1180,6 +1182,8 @@ function BulkCardValuesForm({
     }
   }
 
+  const fieldGroups = groupedEditableFields(fields);
+
   return (
     <form
       id={formId}
@@ -1190,20 +1194,31 @@ function BulkCardValuesForm({
       <header className="bulk-field-header">
         <h4>{uiText.bulkFieldValues}</h4>
       </header>
-      <div className="bulk-field-grid">
-        {fields.map((field) => (
-          <BulkFieldEditor
-            key={field.key}
-            cardId={card.id}
-            field={field}
-            token={token}
-            value={currentBulkValue(field, draftValues)}
-            onChange={(value) => {
-              setDraftValues((current) => ({ ...current, [field.key]: value }));
-              setSaved(false);
-              setLocalError(null);
-            }}
-          />
+      <div className="bulk-field-blocks">
+        {fieldGroups.map((group) => (
+          <section
+            key={group.blockId}
+            className="bulk-field-block"
+            style={fieldColumnsStyle(group.columns)}
+          >
+            <h5>{group.blockLabel}</h5>
+            <div className="bulk-field-grid">
+              {group.fields.map((field) => (
+                <BulkFieldEditor
+                  key={field.key}
+                  cardId={card.id}
+                  field={field}
+                  token={token}
+                  value={currentBulkValue(field, draftValues)}
+                  onChange={(value) => {
+                    setDraftValues((current) => ({ ...current, [field.key]: value }));
+                    setSaved(false);
+                    setLocalError(null);
+                  }}
+                />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
       <footer className="card-editor-footer" aria-label={uiText.cardEditorFooter} />
@@ -1233,21 +1248,117 @@ function BulkFieldEditor({
     enabled: Boolean(token && cardId && isReferenceField),
   });
 
+  if (field.field.field_type === "static_text") {
+    return (
+      <div
+        className={[
+          "field-editor-control",
+          "field-editor-static-text",
+          fieldEditorLayoutClassName(field),
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={fieldGridSpanStyle(field)}
+      >
+        <span>{field.label}</span>
+        <div className="field-editor-static-text-body">{staticTextContent(field)}</div>
+        <small>
+          {field.blockLabel} / {field.instanceLabel}
+        </small>
+      </div>
+    );
+  }
+
   return (
-    <label className="field-editor-control">
+    <label
+      className={["field-editor-control", fieldEditorLayoutClassName(field)]
+        .filter(Boolean)
+        .join(" ")}
+      style={fieldGridSpanStyle(field)}
+    >
       <span>{field.label}</span>
-      <FieldEditorControl
-        fieldType={field.field.field_type}
-        label={field.label}
-        options={referenceItemsQuery.data?.items ?? []}
-        value={value}
-        onChange={onChange}
-      />
+      <div className="field-editor-widget">
+        <FieldEditorControl
+          fieldType={field.field.field_type}
+          label={field.label}
+          options={referenceItemsQuery.data?.items ?? []}
+          value={value}
+          onChange={onChange}
+        />
+      </div>
       <small>
         {field.blockLabel} / {field.instanceLabel}
       </small>
     </label>
   );
+}
+
+function groupedEditableFields(fields: EditableCardField[]) {
+  const groups: {
+    blockId: string;
+    blockLabel: string;
+    columns: number;
+    fields: EditableCardField[];
+  }[] = [];
+  for (const field of fields) {
+    let group = groups.find((item) => item.blockId === field.blockId);
+    if (!group) {
+      group = {
+        blockId: field.blockId,
+        blockLabel: field.blockLabel,
+        columns: clampColumns(field.blockLayoutColumns),
+        fields: [],
+      };
+      groups.push(group);
+    }
+    group.fields.push(field);
+  }
+  return groups;
+}
+
+function fieldColumnsStyle(columns: number): CSSProperties {
+  return { "--field-editor-columns": String(clampColumns(columns)) } as CSSProperties;
+}
+
+function fieldGridSpanStyle(field: EditableCardField): CSSProperties {
+  const span = Math.min(
+    clampColumns(field.blockLayoutColumns),
+    displayConfigNumber(field.schema, "column_span", 1),
+  );
+  return { "--field-editor-span": String(span) } as CSSProperties;
+}
+
+function fieldEditorLayoutClassName(field: EditableCardField) {
+  const labelPosition = displayConfigString(field.schema, "label_position", "top");
+  const separatorStyle = displayConfigString(field.schema, "separator_style", "none");
+  return [
+    `field-editor-control--label-${labelPosition}`,
+    separatorStyle !== "none" ? `field-editor-control--separator-${separatorStyle}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function staticTextContent(field: EditableCardField) {
+  const value = field.schema?.options_config_json?.static_text;
+  return typeof value === "string" && value.trim() ? value : uiText.empty;
+}
+
+function displayConfigString(schema: FormFieldRead | null, key: string, fallback: string) {
+  const value = schema?.display_config_json?.[key];
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function displayConfigNumber(schema: FormFieldRead | null, key: string, fallback: number) {
+  const value = schema?.display_config_json?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function clampColumns(value: number | null | undefined) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.min(3, Math.max(1, Number(value)));
 }
 
 function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
@@ -1272,6 +1383,7 @@ function requiredMissingFieldLabels(
 ) {
   return fields
     .filter((field) => field.schema?.required_mode === "required")
+    .filter((field) => field.field.field_type !== "static_text")
     .filter((field) =>
       isEditorValueEmpty(field.field.field_type, currentBulkValue(field, draftValues)),
     )
@@ -1442,6 +1554,8 @@ async function invalidateCardQueries(
 type EditableCardField = {
   key: string;
   blockLabel: string;
+  blockId: string;
+  blockLayoutColumns: number;
   instanceLabel: string;
   label: string;
   field: CardRead["fields"][string];
@@ -1600,7 +1714,9 @@ function buildEditableCardFields(
           const blockSchema = blocksById.get(block.block_id);
           return {
             key: `${card.id}:${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
+            blockId: block.block_id,
             blockLabel: blockSchema?.title ?? block.code,
+            blockLayoutColumns: blockSchema?.layout_columns ?? 1,
             instanceLabel: instanceLabel(instance.ordinal),
             label: fieldSchema?.label ?? field.code,
             field,

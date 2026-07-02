@@ -1046,6 +1046,7 @@ beforeEach(() => {
             is_repeatable?: boolean;
             public_visible?: boolean;
             public_editable?: boolean;
+            layout_columns?: number;
           };
           const created: FormBlockRead = {
             id: "26262626-2626-4262-8262-262626262626",
@@ -1058,6 +1059,7 @@ beforeEach(() => {
             is_active: true,
             public_visible: payload.public_visible ?? true,
             public_editable: payload.public_editable ?? false,
+            layout_columns: payload.layout_columns ?? 1,
           };
           schemaBlockItems = [...schemaBlockItems, created];
           return jsonResponse(created, { status: 201 });
@@ -1080,6 +1082,7 @@ beforeEach(() => {
             options_source_type?: string | null;
             options_source_id?: string | null;
             options_config_json?: Record<string, unknown> | null;
+            display_config_json?: Record<string, unknown> | null;
             is_list_display?: boolean;
             public_visible?: boolean;
             public_editable?: boolean;
@@ -1096,6 +1099,7 @@ beforeEach(() => {
             options_source_type: payload.options_source_type ?? null,
             options_source_id: payload.options_source_id ?? null,
             options_config_json: payload.options_config_json ?? null,
+            display_config_json: payload.display_config_json ?? null,
             is_active: true,
             is_list_display: payload.is_list_display ?? false,
             public_visible: payload.public_visible ?? true,
@@ -1116,12 +1120,14 @@ beforeEach(() => {
             title?: string | null;
             description?: string | null;
             position?: number | null;
+            layout_columns?: number | null;
           };
           const updated: FormBlockRead = {
             ...current,
             title: payload.title ?? current.title,
             description: payload.description ?? current.description,
             position: payload.position ?? current.position,
+            layout_columns: payload.layout_columns ?? current.layout_columns,
           };
           schemaBlockItems = schemaBlockItems.map((item) => (item.id === blockId ? updated : item));
           return jsonResponse(updated);
@@ -1147,6 +1153,8 @@ beforeEach(() => {
             required_mode?: string | null;
             is_active?: boolean | null;
             is_list_display?: boolean | null;
+            options_config_json?: Record<string, unknown> | null;
+            display_config_json?: Record<string, unknown> | null;
           };
           const updated: FormFieldRead = {
             ...current,
@@ -1156,6 +1164,12 @@ beforeEach(() => {
             required_mode: payload.required_mode ?? current.required_mode,
             is_active: payload.is_active ?? current.is_active,
             is_list_display: payload.is_list_display ?? current.is_list_display,
+            options_config_json: Object.hasOwn(payload, "options_config_json")
+              ? (payload.options_config_json ?? null)
+              : current.options_config_json,
+            display_config_json: Object.hasOwn(payload, "display_config_json")
+              ? (payload.display_config_json ?? null)
+              : current.display_config_json,
           };
           schemaFieldItems = schemaFieldItems.map((item) => (item.id === fieldId ? updated : item));
           return jsonResponse(updated);
@@ -2172,6 +2186,25 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
       value: state.fileRef,
     };
   }
+  for (const staticField of schemaFieldItems.filter(
+    (field) => field.field_type === "static_text",
+  )) {
+    if (staticField.block_id !== "88888888-8888-4888-8888-888888888888") {
+      continue;
+    }
+    blocks.main.instances[0].fields[staticField.code] = {
+      field_id: staticField.id,
+      code: staticField.code,
+      field_type: staticField.field_type,
+      value: null,
+    };
+    fields[staticField.code] = {
+      field_id: staticField.id,
+      code: staticField.code,
+      field_type: staticField.field_type,
+      value: null,
+    };
+  }
 
   return {
     ...apiPayloads.cardRead,
@@ -2237,6 +2270,38 @@ function enableFileRefSchema() {
   syncTemplateFieldIds();
 }
 
+function enableStaticTextSchema() {
+  schemaBlockItems = schemaBlockItems.map((block) =>
+    block.id === "88888888-8888-4888-8888-888888888888" ? { ...block, layout_columns: 3 } : block,
+  );
+  schemaFieldItems = [
+    ...schemaFieldItems,
+    {
+      id: "98989898-9898-4989-8989-989898989897",
+      block_id: "88888888-8888-4888-8888-888888888888",
+      code: "hint",
+      label: "Пояснение",
+      description: null,
+      field_type: "static_text",
+      position: 2,
+      required_mode: "not_required",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: { static_text: "Текст подсказки для карточки" },
+      display_config_json: {
+        column_span: 3,
+        label_position: "top",
+        separator_style: "line",
+      },
+      is_active: true,
+      is_list_display: false,
+      public_visible: true,
+      public_editable: false,
+    },
+  ];
+  syncTemplateFieldIds();
+}
+
 function syncTemplateFieldIds() {
   const activeFieldIds = schemaFieldItems
     .filter((field) => field.is_active)
@@ -2255,11 +2320,16 @@ async function openExistingCardEditor(user: ReturnType<typeof userEvent.setup>) 
 
 async function openDefaultSchemaTemplateEditor(user: ReturnType<typeof userEvent.setup>) {
   const templateSection = await screen.findByRole("region", { name: "Шаблоны карточек" });
-  await user.click(
-    within(templateSection).getByRole("button", {
+  const templateCard = within(templateSection)
+    .getByText("Муниципальная карточка")
+    .closest("article");
+  expect(templateCard).not.toBeNull();
+  expect(
+    within(templateSection).queryByRole("button", {
       name: "Открыть шаблон Муниципальная карточка",
     }),
-  );
+  ).not.toBeInTheDocument();
+  await user.click(templateCard as HTMLElement);
   return screen.findByRole("region", {
     name: "Редактор шаблона Муниципальная карточка",
   });
@@ -2503,6 +2573,26 @@ test("logs in and renders authenticated admin workspace", async () => {
   });
 });
 
+test("collapses and restores the admin navigation while keeping sections accessible", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+
+  expect(await screen.findByRole("main")).not.toHaveClass("is-sidebar-collapsed");
+
+  await user.click(screen.getByRole("button", { name: "Свернуть навигацию" }));
+
+  expect(container.querySelector(".workspace-shell")).toHaveClass("is-sidebar-collapsed");
+  expect(screen.getByRole("button", { name: "Реестры" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Развернуть навигацию" }));
+
+  expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-collapsed");
+});
+
 test("renders refactored card workspace with focused tabs and simple metadata", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -2540,6 +2630,44 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   await user.click(screen.getByRole("button", { name: "Создать карточку" }));
   expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
   expect(screen.queryByText("Данные карточки")).not.toBeInTheDocument();
+});
+
+test("renders static text schema fields without sending them in bulk card saves", async () => {
+  enableStaticTextSchema();
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openExistingCardEditor(user);
+
+  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  expect(within(bulkForm).getByText("Пояснение")).toBeInTheDocument();
+  expect(within(bulkForm).getByText("Текст подсказки для карточки")).toBeInTheDocument();
+  expect(within(bulkForm).queryByLabelText("Пояснение")).not.toBeInTheDocument();
+
+  const statusInput = within(bulkForm).getByLabelText("Статус");
+  await user.clear(statusInput);
+  await user.type(statusInput, "published");
+  await user.click(screen.getByRole("button", { name: "Сохранить все поля" }));
+
+  await waitFor(() => {
+    const bulkCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+          init?.method === "PATCH",
+      );
+    expect(bulkCall).toBeTruthy();
+    const body = JSON.parse(String(bulkCall?.[1]?.body ?? "{}")) as {
+      values: { field_id: string }[];
+    };
+    expect(body.values.map((value) => value.field_id)).not.toContain(
+      "98989898-9898-4989-8989-989898989897",
+    );
+  });
 });
 
 test("opens card editor in tabs and restores unsaved draft after remount", async () => {
@@ -2772,11 +2900,16 @@ test("renders a visual card schema editor with fields inside blocks", async () =
   expect(screen.queryByRole("heading", { name: "Основной блок" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Добавить блок формы" })).not.toBeInTheDocument();
 
-  await user.click(
-    within(templateSection).getByRole("button", {
+  const templateCard = within(templateSection)
+    .getByText("Муниципальная карточка")
+    .closest("article");
+  expect(templateCard).not.toBeNull();
+  expect(
+    within(templateSection).queryByRole("button", {
       name: "Открыть шаблон Муниципальная карточка",
     }),
-  );
+  ).not.toBeInTheDocument();
+  await user.click(templateCard as HTMLElement);
 
   const visualEditor = await screen.findByRole("region", {
     name: "Редактор шаблона Муниципальная карточка",
@@ -2928,6 +3061,60 @@ test("keeps the field form compact inside the selected visual block", async () =
   ).toHaveClass("checkbox-inline");
 });
 
+test("creates static text fields with visual layout settings", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  await user.click(
+    await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
+  );
+  await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["static_text"]);
+  await user.type(screen.getByLabelText("Название поля формы"), "Пояснение");
+  await user.type(screen.getByLabelText("Текст"), "Показывается в шаблоне карточки");
+  await user.selectOptions(screen.getByLabelText("Ширина поля"), ["3"]);
+  await user.selectOptions(screen.getByLabelText("Расположение подписи"), ["left"]);
+  await user.selectOptions(screen.getByLabelText("Разделитель"), ["line"]);
+  expect(screen.queryByLabelText("Отображать поле в списке карточек")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Редактировать поле в публичной ссылке")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+  expect(await screen.findByText("Поле формы создано")).toBeInTheDocument();
+
+  await waitFor(() => {
+    const createFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields") &&
+          init?.method === "POST",
+      );
+    expect(createFieldCall).toBeTruthy();
+    const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      code: "poyasnenie",
+      label: "Пояснение",
+      field_type: "static_text",
+      required_mode: "not_required",
+      options_config_json: { static_text: "Показывается в шаблоне карточки" },
+      display_config_json: {
+        column_span: 3,
+        label_position: "left",
+        separator_style: "line",
+      },
+      is_list_display: false,
+      public_visible: true,
+      public_editable: false,
+    });
+  });
+});
+
 test("does not expose a free card title editor in the visual schema editor", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -2957,16 +3144,17 @@ test("opens field edit and create forms inline at the acted row", async () => {
     "article",
   );
   expect(blockCard).not.toBeNull();
+  expect(
+    within(blockCard as HTMLElement).queryByRole("button", {
+      name: "Редактировать поле формы Статус",
+    }),
+  ).not.toBeInTheDocument();
   const statusRow = within(blockCard as HTMLElement)
-    .getByRole("button", { name: "Редактировать поле формы Статус" })
+    .getByText("Статус")
     .closest(".schema-field-row");
   expect(statusRow).not.toBeNull();
 
-  await user.click(
-    within(statusRow as HTMLElement).getByRole("button", {
-      name: "Редактировать поле формы Статус",
-    }),
-  );
+  await user.click(statusRow as HTMLElement);
 
   const editForm = await within(statusRow as HTMLElement).findByRole("form", {
     name: "Редактировать поле формы",
@@ -3077,7 +3265,9 @@ test("marks schema fields for display in the card list", async () => {
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
   await openDefaultSchemaTemplateEditor(user);
 
-  await user.click(await screen.findByRole("button", { name: "Редактировать поле формы Статус" }));
+  const statusRow = (await screen.findByText("Статус")).closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+  await user.click(statusRow as HTMLElement);
   await user.click(await screen.findByLabelText("Отображать поле в списке карточек"));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -4692,6 +4882,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   fireEvent.change(screen.getByLabelText("Название блока формы"), {
     target: { value: "Детали карточки" },
   });
+  await user.selectOptions(screen.getByLabelText("Колонки блока"), ["3"]);
   await user.click(screen.getByLabelText("Повторяемый блок"));
   await user.click(screen.getByLabelText("Редактировать блок в публичной ссылке"));
   await user.click(screen.getByRole("button", { name: "Создать" }));
@@ -4702,9 +4893,10 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
     screen.getByRole("button", { name: "Добавить поле в блок Детали карточки" }),
   ).toBeInTheDocument();
 
-  await user.click(
-    screen.getByRole("button", { name: "Редактировать блок формы Детали карточки" }),
-  );
+  expect(
+    screen.queryByRole("button", { name: "Редактировать блок формы Детали карточки" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("heading", { name: "Детали карточки" }));
   const blockTitleInput = await screen.findByLabelText("Название блока формы");
   fireEvent.change(blockTitleInput, { target: { value: "Детали карточки обновлены" } });
   expect(screen.queryByLabelText("Описание блока формы")).not.toBeInTheDocument();
@@ -4731,7 +4923,12 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   expect(screen.getByText("Сумма")).toBeInTheDocument();
   expect(screen.getByText(/Число/)).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Редактировать поле формы Сумма" }));
+  expect(
+    screen.queryByRole("button", { name: "Редактировать поле формы Сумма" }),
+  ).not.toBeInTheDocument();
+  const sumRow = screen.getByText("Сумма").closest(".schema-field-row");
+  expect(sumRow).not.toBeNull();
+  await user.click(sumRow as HTMLElement);
   const fieldLabelInput = await screen.findByLabelText("Название поля формы");
   fireEvent.change(fieldLabelInput, { target: { value: "Сумма обновленная" } });
   expect(screen.queryByLabelText("Описание поля формы")).not.toBeInTheDocument();
@@ -4743,9 +4940,10 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   expect(screen.getByText("Сумма обновленная")).toBeInTheDocument();
   expect(screen.getByText(/Неактивно/)).toBeInTheDocument();
 
-  await user.click(
-    screen.getByRole("button", { name: "Архивировать поле формы Сумма обновленная" }),
-  );
+  const updatedSumRow = screen.getByText("Сумма обновленная").closest(".schema-field-row");
+  expect(updatedSumRow).not.toBeNull();
+  await user.click(updatedSumRow as HTMLElement);
+  await user.click(screen.getByRole("button", { name: "Перенести в архив" }));
   expect(
     await screen.findByRole("dialog", { name: "Архивировать поле формы" }),
   ).toBeInTheDocument();
@@ -4754,11 +4952,8 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   expect(await screen.findByText("Поле формы архивировано")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByText("Сумма обновленная")).not.toBeInTheDocument());
 
-  await user.click(
-    screen.getByRole("button", {
-      name: "Архивировать блок формы Детали карточки обновлены",
-    }),
-  );
+  await user.click(screen.getByRole("heading", { name: "Детали карточки обновлены" }));
+  await user.click(screen.getByRole("button", { name: "Перенести в архив" }));
   expect(
     await screen.findByRole("dialog", { name: "Архивировать блок формы" }),
   ).toBeInTheDocument();
@@ -4789,6 +4984,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       is_repeatable: true,
       public_visible: true,
       public_editable: true,
+      layout_columns: 3,
     });
 
     const createFieldCall = fetchMock.mock.calls.find(
@@ -4810,6 +5006,12 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       required_mode: "not_required",
       options_source_type: null,
       options_source_id: null,
+      options_config_json: null,
+      display_config_json: {
+        column_span: 1,
+        label_position: "top",
+        separator_style: "none",
+      },
       is_list_display: false,
       public_visible: true,
       public_editable: true,
@@ -5192,7 +5394,10 @@ test("shows localized locked schema field denial text", async () => {
   await openDefaultSchemaTemplateEditor(user);
 
   denyNextFieldArchive = true;
-  await user.click(screen.getByRole("button", { name: "Архивировать поле формы Статус" }));
+  const statusRow = (await screen.findByText("Статус")).closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+  await user.click(statusRow as HTMLElement);
+  await user.click(await screen.findByRole("button", { name: "Перенести в архив" }));
   expect(
     await screen.findByRole("dialog", { name: "Архивировать поле формы" }),
   ).toBeInTheDocument();

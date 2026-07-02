@@ -70,6 +70,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0017_registry_card_title_label" in sql
     assert "0018_card_templates" in sql
     assert "0019_base_card_templates" in sql
+    assert "0020_schema_layout_static_text" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -88,6 +89,9 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "CREATE TABLE report_runs" in sql or "CREATE TABLE public.report_runs" in sql
     assert "ix_field_values_field_attachment" in sql
     assert "'file_ref'" in sql
+    assert "'static_text'" in sql
+    assert "layout_columns INTEGER DEFAULT '1' NOT NULL" in sql
+    assert "display_config_json JSONB" in sql
     assert "'mcp'" in sql
     assert "ALTER TABLE public.audit_events ALTER COLUMN created_at SET DEFAULT now()" in sql
     assert "CREATE TABLE employees" not in sql

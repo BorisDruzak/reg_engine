@@ -21,6 +21,8 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 
 DEFAULT_CARD_REGISTRY_NAME = "Реестр карточек"
 BASE_CARD_TEMPLATE_CODE = "base_template"
+FIELD_LABEL_POSITIONS = {"top", "bottom", "left", "right"}
+FIELD_SEPARATOR_STYLES = {"none", "line", "space", "muted"}
 BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
 
 
@@ -478,9 +480,11 @@ class RegistrySchemaService:
         is_locked: bool = False,
         public_visible: bool = True,
         public_editable: bool = False,
+        layout_columns: int = 1,
     ) -> FormBlock:
         self._require_schema_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
+        self._validate_layout_columns(layout_columns)
 
         block = FormBlock(
             registry_id=registry_id,
@@ -493,6 +497,7 @@ class RegistrySchemaService:
             is_locked=is_locked,
             public_visible=public_visible,
             public_editable=public_editable,
+            layout_columns=layout_columns,
             created_by=actor_user_id,
         )
         self.session.add(block)
@@ -502,7 +507,11 @@ class RegistrySchemaService:
             action="create",
             object_type="form_block",
             object_id=block.id,
-            new_data_json={"registry_id": str(registry_id), "code": code},
+            new_data_json={
+                "registry_id": str(registry_id),
+                "code": code,
+                "layout_columns": layout_columns,
+            },
         )
         return block
 
@@ -519,6 +528,7 @@ class RegistrySchemaService:
         title: str | None = None,
         description: str | None = None,
         position: int | None = None,
+        layout_columns: int | None = None,
     ) -> FormBlock:
         block = self._get_active_block(block_id)
         self._ensure_mutable_block(block)
@@ -527,7 +537,10 @@ class RegistrySchemaService:
             "title": block.title,
             "description": block.description,
             "position": block.position,
+            "layout_columns": block.layout_columns,
         }
+        if layout_columns is not None:
+            self._validate_layout_columns(layout_columns)
 
         if title is not None:
             block.title = title
@@ -535,6 +548,8 @@ class RegistrySchemaService:
             block.description = description
         if position is not None:
             block.position = position
+        if layout_columns is not None:
+            block.layout_columns = layout_columns
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -546,6 +561,7 @@ class RegistrySchemaService:
                 "title": block.title,
                 "description": block.description,
                 "position": block.position,
+                "layout_columns": block.layout_columns,
             },
         )
         self.ensure_base_card_template_for_registry(
@@ -593,6 +609,7 @@ class RegistrySchemaService:
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
         options_config_json: dict[str, object] | None = None,
+        display_config_json: dict[str, object] | None = None,
         is_system: bool = False,
         is_locked: bool = False,
         is_list_display: bool = False,
@@ -603,6 +620,17 @@ class RegistrySchemaService:
         self._require_schema_permission(actor_user_id, block.registry_id)
         self._validate_field_type(field_type)
         self._validate_required_mode(required_mode)
+        options_config_json = self._normalize_options_config_for_field(
+            field_type,
+            options_config_json,
+        )
+        display_config_json = self._normalize_field_display_config(display_config_json)
+        if field_type == "static_text":
+            required_mode = "not_required"
+            options_source_type = None
+            options_source_id = None
+            is_list_display = False
+            public_editable = False
 
         field = FormField(
             block_id=block_id,
@@ -615,6 +643,7 @@ class RegistrySchemaService:
             options_source_type=options_source_type,
             options_source_id=options_source_id,
             options_config_json=options_config_json,
+            display_config_json=display_config_json,
             is_system=is_system,
             is_locked=is_locked,
             is_list_display=is_list_display,
@@ -635,6 +664,7 @@ class RegistrySchemaService:
                 "field_type": field_type,
                 "required_mode": required_mode,
                 "is_list_display": is_list_display,
+                "display_config_json": display_config_json,
             },
         )
         self.ensure_base_card_template_for_registry(
@@ -658,6 +688,8 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int | None = None,
         required_mode: str | None = None,
+        options_config_json: dict[str, object] | None = None,
+        display_config_json: dict[str, object] | None = None,
         is_active: bool | None = None,
         is_list_display: bool | None = None,
     ) -> FormField:
@@ -670,11 +702,25 @@ class RegistrySchemaService:
             "description": field.description,
             "position": field.position,
             "required_mode": field.required_mode,
+            "options_config_json": field.options_config_json,
+            "display_config_json": field.display_config_json,
             "is_active": field.is_active,
             "is_list_display": field.is_list_display,
         }
         if required_mode is not None:
             self._validate_required_mode(required_mode)
+        if options_config_json is not None:
+            options_config_json = self._normalize_options_config_for_field(
+                field.field_type,
+                options_config_json,
+            )
+        if display_config_json is not None:
+            display_config_json = self._normalize_field_display_config(display_config_json)
+        if field.field_type == "static_text":
+            if required_mode not in (None, "not_required"):
+                raise RegistrySchemaError("Static text fields cannot be required.")
+            if is_list_display:
+                raise RegistrySchemaError("Static text fields cannot be shown in card lists.")
 
         if label is not None:
             field.label = label
@@ -684,6 +730,10 @@ class RegistrySchemaService:
             field.position = position
         if required_mode is not None:
             field.required_mode = required_mode
+        if options_config_json is not None:
+            field.options_config_json = options_config_json
+        if display_config_json is not None:
+            field.display_config_json = display_config_json
         if is_active is not None:
             field.is_active = is_active
         if is_list_display is not None:
@@ -700,6 +750,8 @@ class RegistrySchemaService:
                 "description": field.description,
                 "position": field.position,
                 "required_mode": field.required_mode,
+                "options_config_json": field.options_config_json,
+                "display_config_json": field.display_config_json,
                 "is_active": field.is_active,
                 "is_list_display": field.is_list_display,
             },
@@ -1074,6 +1126,61 @@ class RegistrySchemaService:
     def _validate_required_mode(self, required_mode: str) -> None:
         if required_mode not in REQUIRED_MODES:
             raise RegistrySchemaError(f"Unsupported required mode: {required_mode}")
+
+    def _validate_layout_columns(self, layout_columns: int) -> None:
+        if isinstance(layout_columns, bool) or layout_columns < 1 or layout_columns > 3:
+            raise RegistrySchemaError("Block layout columns must be between 1 and 3.")
+
+    def _normalize_field_display_config(
+        self,
+        display_config_json: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if display_config_json is None:
+            return None
+        if not isinstance(display_config_json, dict):
+            raise RegistrySchemaError("Field display config must be an object.")
+
+        normalized: dict[str, object] = {}
+        column_span = display_config_json.get("column_span")
+        if column_span is not None:
+            if isinstance(column_span, bool) or not isinstance(column_span, int):
+                raise RegistrySchemaError("Field column span must be a number from 1 to 3.")
+            if column_span < 1 or column_span > 3:
+                raise RegistrySchemaError("Field column span must be a number from 1 to 3.")
+            normalized["column_span"] = column_span
+
+        label_position = display_config_json.get("label_position")
+        if label_position is not None:
+            if not isinstance(label_position, str) or label_position not in FIELD_LABEL_POSITIONS:
+                raise RegistrySchemaError("Unsupported field label position.")
+            normalized["label_position"] = label_position
+
+        separator_style = display_config_json.get("separator_style")
+        if separator_style is not None:
+            if (
+                not isinstance(separator_style, str)
+                or separator_style not in FIELD_SEPARATOR_STYLES
+            ):
+                raise RegistrySchemaError("Unsupported field separator style.")
+            normalized["separator_style"] = separator_style
+
+        return normalized or None
+
+    def _normalize_options_config_for_field(
+        self,
+        field_type: str,
+        options_config_json: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if field_type != "static_text":
+            return options_config_json
+
+        static_text = ""
+        if options_config_json is not None:
+            raw_text = options_config_json.get("static_text")
+            if raw_text is not None and not isinstance(raw_text, str):
+                raise RegistrySchemaError("Static text content must be a string.")
+            static_text = raw_text or ""
+        return {"static_text": static_text}
 
     def _ensure_default_registry_archive_allowed(self, registry: Registry) -> None:
         if not registry.is_default_for_owner_tree:

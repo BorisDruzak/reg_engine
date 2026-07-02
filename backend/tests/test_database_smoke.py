@@ -180,7 +180,7 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0019_base_card_templates"
+    assert version == "0020_schema_layout_static_text"
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:
@@ -314,6 +314,7 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             registry_id=registry_id,
             code="main",
             title="Main",
+            layout_columns=3,
             created_by=user_id,
         )
         text_field_id = _insert_returning_id(
@@ -345,13 +346,34 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             field_type="file_ref",
             created_by=user_id,
         )
+        static_text_field_id = _insert_returning_id(
+            connection,
+            "form_fields",
+            block_id=block_id,
+            code="help_text",
+            label="Help text",
+            field_type="static_text",
+            options_config_json={"static_text": "Read-only instruction"},
+            display_config_json={
+                "column_span": 3,
+                "label_position": "top",
+                "separator_style": "line",
+            },
+            created_by=user_id,
+        )
         card_template_id = _insert_returning_id(
             connection,
             "card_templates",
             registry_id=registry_id,
             code="asset_card",
             name="Asset card",
-            field_schema_json={"field_ids": [str(text_field_id), str(multi_select_field_id)]},
+            field_schema_json={
+                "field_ids": [
+                    str(text_field_id),
+                    str(multi_select_field_id),
+                    str(static_text_field_id),
+                ]
+            },
             default_values_json=[
                 {"field_id": str(text_field_id), "value": "SN-TEMPLATE"},
             ],

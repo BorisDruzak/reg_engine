@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type CSSProperties, type FormEvent } from "react";
 
 import {
   archiveFormBlock,
@@ -73,6 +73,7 @@ type BlockFormState = {
   isRepeatable: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
+  layoutColumns: string;
 };
 
 type FieldFormState = {
@@ -86,6 +87,10 @@ type FieldFormState = {
   position: string;
   requiredMode: string;
   optionsSourceId: string;
+  staticText: string;
+  columnSpan: string;
+  labelPosition: string;
+  separatorStyle: string;
   isActive: boolean;
   isListDisplay: boolean;
   publicVisible: boolean;
@@ -137,9 +142,12 @@ const supportedFieldTypes = [
   "org_unit_ref",
   "registry_ref",
   "file_ref",
+  "static_text",
 ];
 
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
+const fieldLabelPositions = ["top", "left", "right", "bottom"];
+const fieldSeparatorStyles = ["none", "line", "space", "muted"];
 
 type RegistryWorkspaceTab = "registries" | "schema" | "references" | "importExport" | "reports";
 
@@ -150,6 +158,21 @@ const registryWorkspaceTabs: { id: RegistryWorkspaceTab; label: string }[] = [
   { id: "importExport", label: uiText.importExport },
   { id: "reports", label: uiText.reports },
 ];
+
+function displayConfigValue(field: FormFieldRead, key: string, fallback: string) {
+  const value = field.display_config_json?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function displayConfigNumber(field: FormFieldRead, key: string, fallback: number) {
+  const value = field.display_config_json?.[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function staticTextValue(field: FormFieldRead) {
+  const value = field.options_config_json?.static_text;
+  return typeof value === "string" ? value : "";
+}
 
 export function RegistriesAndSchema({
   registries,
@@ -555,6 +578,7 @@ function SchemaVisualEditor({
       is_repeatable: boolean;
       public_visible: boolean;
       public_editable: boolean;
+      layout_columns: number;
     }) => createFormBlock(token, selectedRegistryId, payload),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -568,11 +592,13 @@ function SchemaVisualEditor({
       title: string;
       description: string | null;
       position: number;
+      layout_columns: number;
     }) =>
       updateFormBlock(token, payload.blockId, {
         title: payload.title,
         description: payload.description,
         position: payload.position,
+        layout_columns: payload.layout_columns,
       }),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -599,6 +625,8 @@ function SchemaVisualEditor({
       required_mode: string;
       options_source_type: string | null;
       options_source_id: string | null;
+      options_config_json: Record<string, unknown> | null;
+      display_config_json: Record<string, unknown> | null;
       is_list_display: boolean;
       public_visible: boolean;
       public_editable: boolean;
@@ -612,6 +640,8 @@ function SchemaVisualEditor({
         required_mode: payload.required_mode,
         options_source_type: payload.options_source_type,
         options_source_id: payload.options_source_id,
+        options_config_json: payload.options_config_json,
+        display_config_json: payload.display_config_json,
         is_list_display: payload.is_list_display,
         public_visible: payload.public_visible,
         public_editable: payload.public_editable,
@@ -638,6 +668,8 @@ function SchemaVisualEditor({
       description: string | null;
       position: number;
       required_mode: string;
+      options_config_json: Record<string, unknown> | null;
+      display_config_json: Record<string, unknown> | null;
       is_active: boolean;
       is_list_display: boolean;
     }) =>
@@ -646,6 +678,8 @@ function SchemaVisualEditor({
         description: payload.description,
         position: payload.position,
         required_mode: payload.required_mode,
+        options_config_json: payload.options_config_json,
+        display_config_json: payload.display_config_json,
         is_active: payload.is_active,
         is_list_display: payload.is_list_display,
       }),
@@ -730,6 +764,7 @@ function SchemaVisualEditor({
       isRepeatable: false,
       publicVisible: true,
       publicEditable: false,
+      layoutColumns: "1",
     });
   }
 
@@ -747,6 +782,7 @@ function SchemaVisualEditor({
       isRepeatable: block.is_repeatable,
       publicVisible: block.public_visible,
       publicEditable: block.public_editable,
+      layoutColumns: String(block.layout_columns || 1),
     });
   }
 
@@ -770,6 +806,10 @@ function SchemaVisualEditor({
       position: String(nextPosition(fields.filter((field) => field.block_id === blockId))),
       requiredMode: "not_required",
       optionsSourceId: "",
+      staticText: "",
+      columnSpan: "1",
+      labelPosition: "top",
+      separatorStyle: "none",
       isActive: true,
       isListDisplay: false,
       publicVisible: true,
@@ -793,6 +833,10 @@ function SchemaVisualEditor({
       requiredMode: field.required_mode,
       optionsSourceId:
         field.options_source_type === "reference_list" ? (field.options_source_id ?? "") : "",
+      staticText: staticTextValue(field),
+      columnSpan: String(displayConfigNumber(field, "column_span", 1)),
+      labelPosition: displayConfigValue(field, "label_position", "top"),
+      separatorStyle: displayConfigValue(field, "separator_style", "none"),
       isActive: field.is_active,
       isListDisplay: field.is_list_display,
       publicVisible: field.public_visible,
@@ -869,6 +913,7 @@ function SchemaVisualEditor({
         is_repeatable: blockFormState.isRepeatable,
         public_visible: blockFormState.publicVisible,
         public_editable: blockFormState.publicEditable,
+        layout_columns: layoutNumber(blockFormState.layoutColumns),
       });
       return;
     }
@@ -879,6 +924,7 @@ function SchemaVisualEditor({
         title,
         description: description || null,
         position: positionNumber(blockFormState.position),
+        layout_columns: layoutNumber(blockFormState.layoutColumns),
       });
     }
   }
@@ -901,6 +947,7 @@ function SchemaVisualEditor({
     setSuccessMessage(null);
     if (fieldFormState.mode === "create") {
       const usesReferenceList = referenceBackedFieldTypes.has(fieldFormState.fieldType);
+      const isStaticText = fieldFormState.fieldType === "static_text";
       createFieldMutation.mutate({
         blockId,
         code: generateTechnicalCode(
@@ -912,12 +959,16 @@ function SchemaVisualEditor({
         field_type: fieldFormState.fieldType,
         description: null,
         position: positionNumber(fieldFormState.position),
-        required_mode: fieldFormState.requiredMode,
+        required_mode: isStaticText ? "not_required" : fieldFormState.requiredMode,
         options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
         options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
-        is_list_display: fieldFormState.isListDisplay,
+        options_config_json: isStaticText
+          ? { static_text: fieldFormState.staticText.trim() }
+          : null,
+        display_config_json: fieldDisplayConfig(fieldFormState),
+        is_list_display: isStaticText ? false : fieldFormState.isListDisplay,
         public_visible: fieldFormState.publicVisible,
-        public_editable: fieldFormState.publicEditable,
+        public_editable: isStaticText ? false : fieldFormState.publicEditable,
       });
       return;
     }
@@ -928,9 +979,16 @@ function SchemaVisualEditor({
         label,
         description: fieldFormState.description || null,
         position: positionNumber(fieldFormState.position),
-        required_mode: fieldFormState.requiredMode,
+        required_mode:
+          fieldFormState.fieldType === "static_text" ? "not_required" : fieldFormState.requiredMode,
+        options_config_json:
+          fieldFormState.fieldType === "static_text"
+            ? { static_text: fieldFormState.staticText.trim() }
+            : null,
+        display_config_json: fieldDisplayConfig(fieldFormState),
         is_active: fieldFormState.isActive,
-        is_list_display: fieldFormState.isListDisplay,
+        is_list_display:
+          fieldFormState.fieldType === "static_text" ? false : fieldFormState.isListDisplay,
       });
     }
   }
@@ -1027,6 +1085,22 @@ function SchemaVisualEditor({
             }
           />
         </label>
+        <label>
+          {uiText.formBlockColumns}
+          <select
+            value={blockFormState.layoutColumns}
+            onChange={(event) =>
+              setBlockFormState({
+                ...blockFormState,
+                layoutColumns: event.currentTarget.value,
+              })
+            }
+          >
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
         {blockFormState.mode === "create" && (
           <div className="schema-field-options">
             <label className="checkbox-inline">
@@ -1070,6 +1144,22 @@ function SchemaVisualEditor({
             </label>
           </div>
         )}
+        {blockFormState.mode === "edit" && blockFormState.blockId && (
+          <div className="schema-danger-inline">
+            <button
+              type="button"
+              className="danger-button"
+              disabled={archiveBlockMutation.isPending}
+              onClick={() =>
+                setBlockArchiveTarget(
+                  blocks.find((block) => block.id === blockFormState.blockId) ?? null,
+                )
+              }
+            >
+              {uiText.archiveInEditor}
+            </button>
+          </div>
+        )}
       </AdminMutationForm>
     );
   }
@@ -1099,6 +1189,18 @@ function SchemaVisualEditor({
                   setFieldFormState({
                     ...fieldFormState,
                     fieldType: event.currentTarget.value,
+                    requiredMode:
+                      event.currentTarget.value === "static_text"
+                        ? "not_required"
+                        : fieldFormState.requiredMode,
+                    isListDisplay:
+                      event.currentTarget.value === "static_text"
+                        ? false
+                        : fieldFormState.isListDisplay,
+                    publicEditable:
+                      event.currentTarget.value === "static_text"
+                        ? false
+                        : fieldFormState.publicEditable,
                     optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
                       ? fieldFormState.optionsSourceId
                       : "",
@@ -1138,6 +1240,20 @@ function SchemaVisualEditor({
               <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
             </select>
           </label>
+          {fieldFormState.fieldType === "static_text" && (
+            <label className="schema-static-text-label">
+              {uiText.staticTextContent}
+              <textarea
+                value={fieldFormState.staticText}
+                onChange={(event) =>
+                  setFieldFormState({
+                    ...fieldFormState,
+                    staticText: event.currentTarget.value,
+                  })
+                }
+              />
+            </label>
+          )}
           {fieldFormState.mode === "create" &&
             referenceBackedFieldTypes.has(fieldFormState.fieldType) && (
               <label>
@@ -1160,21 +1276,73 @@ function SchemaVisualEditor({
                 </select>
               </label>
             )}
-        </div>
-        <div className="schema-field-options">
-          <label className="checkbox-inline">
-            <input
-              type="checkbox"
-              checked={fieldFormState.isListDisplay}
+          <label>
+            {uiText.fieldColumnSpan}
+            <select
+              value={fieldFormState.columnSpan}
               onChange={(event) =>
                 setFieldFormState({
                   ...fieldFormState,
-                  isListDisplay: event.currentTarget.checked,
+                  columnSpan: event.currentTarget.value,
                 })
               }
-            />
-            {uiText.listDisplayField}
+            >
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
           </label>
+          <label>
+            {uiText.fieldLabelPosition}
+            <select
+              value={fieldFormState.labelPosition}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  labelPosition: event.currentTarget.value,
+                })
+              }
+            >
+              <option value="top">{uiText.labelPositionTop}</option>
+              <option value="left">{uiText.labelPositionLeft}</option>
+              <option value="right">{uiText.labelPositionRight}</option>
+              <option value="bottom">{uiText.labelPositionBottom}</option>
+            </select>
+          </label>
+          <label>
+            {uiText.fieldSeparatorStyle}
+            <select
+              value={fieldFormState.separatorStyle}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  separatorStyle: event.currentTarget.value,
+                })
+              }
+            >
+              <option value="none">{uiText.separatorNone}</option>
+              <option value="line">{uiText.separatorLine}</option>
+              <option value="space">{uiText.separatorSpace}</option>
+              <option value="muted">{uiText.separatorMuted}</option>
+            </select>
+          </label>
+        </div>
+        <div className="schema-field-options">
+          {fieldFormState.fieldType !== "static_text" && (
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={fieldFormState.isListDisplay}
+                onChange={(event) =>
+                  setFieldFormState({
+                    ...fieldFormState,
+                    isListDisplay: event.currentTarget.checked,
+                  })
+                }
+              />
+              {uiText.listDisplayField}
+            </label>
+          )}
           {fieldFormState.mode === "create" && (
             <>
               <label className="checkbox-inline">
@@ -1190,19 +1358,21 @@ function SchemaVisualEditor({
                 />
                 {uiText.publicVisibleField}
               </label>
-              <label className="checkbox-inline">
-                <input
-                  type="checkbox"
-                  checked={fieldFormState.publicEditable}
-                  onChange={(event) =>
-                    setFieldFormState({
-                      ...fieldFormState,
-                      publicEditable: event.currentTarget.checked,
-                    })
-                  }
-                />
-                {uiText.publicEditableField}
-              </label>
+              {fieldFormState.fieldType !== "static_text" && (
+                <label className="checkbox-inline">
+                  <input
+                    type="checkbox"
+                    checked={fieldFormState.publicEditable}
+                    onChange={(event) =>
+                      setFieldFormState({
+                        ...fieldFormState,
+                        publicEditable: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                  {uiText.publicEditableField}
+                </label>
+              )}
             </>
           )}
           {fieldFormState.mode === "edit" && (
@@ -1221,6 +1391,22 @@ function SchemaVisualEditor({
             </label>
           )}
         </div>
+        {fieldFormState.mode === "edit" && fieldFormState.fieldId && (
+          <div className="schema-danger-inline">
+            <button
+              type="button"
+              className="danger-button"
+              disabled={archiveFieldMutation.isPending}
+              onClick={() =>
+                setFieldArchiveTarget(
+                  fields.find((field) => field.id === fieldFormState.fieldId) ?? null,
+                )
+              }
+            >
+              {uiText.archiveInEditor}
+            </button>
+          </div>
+        )}
       </AdminMutationForm>
     );
   }
@@ -1305,6 +1491,16 @@ function SchemaVisualEditor({
                   ]
                     .filter(Boolean)
                     .join(" ")}
+                  role="button"
+                  aria-label={`${uiText.cardTemplate} ${template.name}`}
+                  tabIndex={0}
+                  onClick={() => openTemplateEditor(template)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openTemplateEditor(template);
+                    }
+                  }}
                 >
                   <header className="card-template-card-header">
                     <div>
@@ -1316,16 +1512,11 @@ function SchemaVisualEditor({
                       <button
                         type="button"
                         className="ghost-button"
-                        aria-label={`${uiText.openCardTemplate} ${template.name}`}
-                        onClick={() => openTemplateEditor(template)}
-                      >
-                        {uiText.open}
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
                         aria-label={`${uiText.archiveCardTemplate} ${template.name}`}
-                        onClick={() => setTemplateArchiveTarget(template)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setTemplateArchiveTarget(template);
+                        }}
                       >
                         {uiText.moveToArchive}
                       </button>
@@ -1391,37 +1582,39 @@ function SchemaVisualEditor({
             {sortedBlocks.map((block) => {
               const blockFields = fieldsByBlockId.get(block.id) ?? [];
               return (
-                <article key={block.id} className="schema-block-card">
-                  <header className="schema-block-header">
+                <article
+                  key={block.id}
+                  className="schema-block-card"
+                  style={
+                    {
+                      "--schema-block-columns": String(block.layout_columns || 1),
+                    } as CSSProperties
+                  }
+                >
+                  <header
+                    className="schema-block-header schema-clickable-header"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEditBlockForm(block)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openEditBlockForm(block);
+                      }
+                    }}
+                  >
                     <div>
                       <h3>{block.title}</h3>
                       <span>{`${uiText.technicalCode}: ${block.code}`}</span>
                     </div>
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        aria-label={`${uiText.editFormBlock} ${block.title}`}
-                        onClick={() => openEditBlockForm(block)}
-                      >
-                        {uiText.edit}
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        aria-label={`${uiText.archiveFormBlock} ${block.title}`}
-                        onClick={() => {
-                          setLocalError(null);
-                          setSuccessMessage(null);
-                          setBlockArchiveTarget(block);
-                        }}
-                      >
-                        {uiText.moveToArchive}
-                      </button>
-                    </div>
                   </header>
                   {blockFormState?.mode === "edit" && blockFormState.blockId === block.id && (
-                    <div className="panel-form schema-block-inline-form">{renderBlockForm()}</div>
+                    <div
+                      className="panel-form schema-block-inline-form"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {renderBlockForm()}
+                    </div>
                   )}
                   <div className="schema-field-list">
                     {blockFields.length === 0 && (
@@ -1430,16 +1623,36 @@ function SchemaVisualEditor({
                     {blockFields.map((field) => {
                       const isEditingField =
                         fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
+                      const fieldColumnSpan = Math.min(
+                        block.layout_columns || 1,
+                        displayConfigNumber(field, "column_span", 1),
+                      );
+                      const isStaticText = field.field_type === "static_text";
                       return (
                         <div
                           key={field.id}
                           className={[
                             "schema-field-row",
+                            isStaticText ? "is-static-text" : "",
                             draggedFieldId === field.id ? "is-dragging" : "",
                             isEditingField ? "is-expanded" : "",
                           ]
                             .filter(Boolean)
                             .join(" ")}
+                          role="button"
+                          tabIndex={0}
+                          style={
+                            {
+                              "--schema-field-span": String(fieldColumnSpan),
+                            } as CSSProperties
+                          }
+                          onClick={() => openEditFieldForm(field)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openEditFieldForm(field);
+                            }
+                          }}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={() => handleFieldDrop(blockFields, field.id)}
                         >
@@ -1448,6 +1661,7 @@ function SchemaVisualEditor({
                             className="drag-handle schema-drag-handle"
                             aria-label={`Перетащить поле ${field.label}`}
                             draggable
+                            onClick={(event) => event.stopPropagation()}
                             onDragStart={(event) => {
                               if (event.dataTransfer) {
                                 event.dataTransfer.effectAllowed = "move";
@@ -1469,30 +1683,16 @@ function SchemaVisualEditor({
                             </span>
                           </div>
                           <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
-                          <div className="row-actions">
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              aria-label={`${uiText.editFormField} ${field.label}`}
-                              onClick={() => openEditFieldForm(field)}
-                            >
-                              {uiText.edit}
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              aria-label={`${uiText.archiveFormField} ${field.label}`}
-                              onClick={() => {
-                                setLocalError(null);
-                                setSuccessMessage(null);
-                                setFieldArchiveTarget(field);
-                              }}
-                            >
-                              {uiText.moveToArchive}
-                            </button>
-                          </div>
+                          {isStaticText && (
+                            <small className="schema-static-text-preview">
+                              {staticTextValue(field)}
+                            </small>
+                          )}
                           {isEditingField && (
-                            <div className="schema-field-inline-form">
+                            <div
+                              className="schema-field-inline-form"
+                              onClick={(event) => event.stopPropagation()}
+                            >
                               <div className="panel-form schema-field-form-panel">
                                 {renderFieldForm()}
                               </div>
@@ -2328,6 +2528,26 @@ function templateFieldIds(template: CardTemplateRead) {
 function positionNumber(value: string) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function layoutNumber(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+  return Math.min(3, Math.max(1, parsed));
+}
+
+function fieldDisplayConfig(fieldFormState: FieldFormState) {
+  return {
+    column_span: layoutNumber(fieldFormState.columnSpan),
+    label_position: fieldLabelPositions.includes(fieldFormState.labelPosition)
+      ? fieldFormState.labelPosition
+      : "top",
+    separator_style: fieldSeparatorStyles.includes(fieldFormState.separatorStyle)
+      ? fieldFormState.separatorStyle
+      : "none",
+  };
 }
 
 function nextPosition(items: { position: number }[]) {

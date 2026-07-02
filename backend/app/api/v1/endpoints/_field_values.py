@@ -72,6 +72,8 @@ def coerce_api_field_value(session: Session, field_id: UUID, value: Any) -> obje
         if value is None:
             return None
         return _coerce_uuid(value, "file_ref fields require a UUID string.")
+    if field.field_type == "static_text":
+        raise HTTPException(status_code=422, detail="Static text fields cannot be edited.")
     if field.field_type == "multi_select":
         if not isinstance(value, list):
             raise HTTPException(

@@ -80,6 +80,8 @@ class PublicLinkPreviewFieldRead(BaseModel):
     value: Any
     options_source_type: str | None
     options_source_id: UUID | None
+    options_config_json: dict[str, Any] | None
+    display_config_json: dict[str, Any] | None
     options: list[PublicLinkPreviewOptionRead]
 
 
@@ -93,6 +95,7 @@ class PublicLinkPreviewBlockRead(BaseModel):
     block_id: UUID
     code: str
     title: str
+    layout_columns: int
     instances: list[PublicLinkPreviewBlockInstanceRead]
 
 

@@ -564,6 +564,94 @@ def test_registry_admin_can_manage_schema_but_org_admin_cannot(
         )
 
 
+def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="layout-block",
+        title="Layout block",
+        layout_columns=3,
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="instruction",
+        label="Instruction",
+        field_type="static_text",
+        required_mode="required",
+        options_config_json={"static_text": "Read this before editing."},
+        display_config_json={
+            "column_span": 3,
+            "label_position": "top",
+            "separator_style": "line",
+        },
+        is_list_display=True,
+        public_editable=True,
+    )
+
+    updated_block = schema_service.update_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        layout_columns=2,
+    )
+    updated_field = schema_service.update_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        field_id=field.id,
+        options_config_json={"static_text": "Updated read-only text."},
+        display_config_json={
+            "column_span": 2,
+            "label_position": "left",
+            "separator_style": "muted",
+        },
+    )
+
+    assert updated_block.layout_columns == 2
+    assert field.required_mode == "not_required"
+    assert field.is_list_display is False
+    assert field.public_editable is False
+    assert updated_field.options_config_json == {"static_text": "Updated read-only text."}
+    assert updated_field.display_config_json == {
+        "column_span": 2,
+        "label_position": "left",
+        "separator_style": "muted",
+    }
+
+
+def test_static_text_fields_cannot_be_edited_as_card_values(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="static-card-block",
+        title="Static card block",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="static_help",
+        label="Static help",
+        field_type="static_text",
+        options_config_json={"static_text": "Not editable."},
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+
+    with pytest.raises(InvalidFieldValueError, match="Static text fields cannot be edited"):
+        CardService(db_session).set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value="attempt",
+        )
+
+
 def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visibility(
     db_session: Session,
 ) -> None:

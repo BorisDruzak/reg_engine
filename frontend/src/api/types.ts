@@ -118,6 +118,7 @@ export type FormBlockRead = {
   is_active: boolean;
   public_visible: boolean;
   public_editable: boolean;
+  layout_columns?: number;
 };
 
 export type FormBlockCreatePayload = {
@@ -128,12 +129,14 @@ export type FormBlockCreatePayload = {
   is_repeatable?: boolean;
   public_visible?: boolean;
   public_editable?: boolean;
+  layout_columns?: number;
 };
 
 export type FormBlockUpdatePayload = {
   title?: string | null;
   description?: string | null;
   position?: number | null;
+  layout_columns?: number | null;
 };
 
 export type FormFieldRead = {
@@ -148,6 +151,7 @@ export type FormFieldRead = {
   options_source_type: string | null;
   options_source_id: string | null;
   options_config_json: Record<string, unknown> | null;
+  display_config_json?: Record<string, unknown> | null;
   is_active: boolean;
   is_list_display: boolean;
   public_visible: boolean;
@@ -164,6 +168,7 @@ export type FormFieldCreatePayload = {
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
+  display_config_json?: Record<string, unknown> | null;
   is_list_display?: boolean;
   public_visible?: boolean;
   public_editable?: boolean;
@@ -174,6 +179,8 @@ export type FormFieldUpdatePayload = {
   description?: string | null;
   position?: number | null;
   required_mode?: string | null;
+  options_config_json?: Record<string, unknown> | null;
+  display_config_json?: Record<string, unknown> | null;
   is_active?: boolean | null;
   is_list_display?: boolean | null;
 };
@@ -515,6 +522,8 @@ export type PublicLinkPreviewFieldRead = {
   value: unknown;
   options_source_type: string | null;
   options_source_id: string | null;
+  options_config_json?: Record<string, unknown> | null;
+  display_config_json?: Record<string, unknown> | null;
   options: PublicLinkPreviewOptionRead[];
 };
 
@@ -528,6 +537,7 @@ export type PublicLinkPreviewBlockRead = {
   block_id: string;
   code: string;
   title: string;
+  layout_columns?: number;
   instances: PublicLinkPreviewBlockInstanceRead[];
 };
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import {
@@ -72,17 +72,28 @@ export function PublicLinkEditPage() {
                   <header>
                     <h3>{block.title}</h3>
                   </header>
-                  <div className="field-editor-list">
+                  <div
+                    className="field-editor-list"
+                    style={publicFieldColumnsStyle(block.layout_columns)}
+                  >
                     {block.instances.flatMap((instance) =>
-                      instance.fields.map((field) => (
-                        <PublicFieldEditor
-                          key={`${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`}
-                          blockInstanceId={instance.block_instance_id}
-                          field={field}
-                          instanceOrdinal={instance.ordinal}
-                          rawToken={rawToken}
-                        />
-                      )),
+                      instance.fields.map((field) =>
+                        field.field_type === "static_text" ? (
+                          <PublicStaticField
+                            key={`${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`}
+                            field={field}
+                            instanceOrdinal={instance.ordinal}
+                          />
+                        ) : (
+                          <PublicFieldEditor
+                            key={`${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`}
+                            blockInstanceId={instance.block_instance_id}
+                            field={field}
+                            instanceOrdinal={instance.ordinal}
+                            rawToken={rawToken}
+                          />
+                        ),
+                      ),
                     )}
                   </div>
                 </section>
@@ -286,7 +297,11 @@ function PublicFieldEditor({
   }
 
   return (
-    <form className="field-editor-row" onSubmit={handleSubmit}>
+    <form
+      className={["field-editor-row", publicFieldLayoutClassName(field)].filter(Boolean).join(" ")}
+      style={publicFieldSpanStyle(field)}
+      onSubmit={handleSubmit}
+    >
       <div className="field-editor-meta">
         <strong>{field.label}</strong>
         <span>
@@ -298,13 +313,15 @@ function PublicFieldEditor({
       </div>
       <label className="field-editor-control">
         <span>{field.label}</span>
-        <FieldEditorControl
-          fieldType={field.field_type}
-          label={field.label}
-          options={field.options}
-          value={rawValue}
-          onChange={updateRawValue}
-        />
+        <div className="field-editor-widget">
+          <FieldEditorControl
+            fieldType={field.field_type}
+            label={field.label}
+            options={field.options}
+            value={rawValue}
+            onChange={updateRawValue}
+          />
+        </div>
       </label>
       <button type="submit" className="primary-button" disabled={mutation.isPending}>
         {saveLabel(field.label)}
@@ -315,6 +332,77 @@ function PublicFieldEditor({
       {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
     </form>
   );
+}
+
+function PublicStaticField({
+  field,
+  instanceOrdinal,
+}: {
+  field: PublicLinkPreviewFieldRead;
+  instanceOrdinal: number;
+}) {
+  return (
+    <div
+      className={["field-editor-row", "field-editor-static-row", publicFieldLayoutClassName(field)]
+        .filter(Boolean)
+        .join(" ")}
+      style={publicFieldSpanStyle(field)}
+    >
+      <div className="field-editor-meta">
+        <strong>{field.label}</strong>
+        <span>
+          {instanceLabel(instanceOrdinal)} / {fieldTypeLabel(field.field_type)}
+        </span>
+      </div>
+      <div className="field-editor-control field-editor-static-text">
+        <span>{field.label}</span>
+        <div className="field-editor-static-text-body">{publicStaticTextContent(field)}</div>
+      </div>
+    </div>
+  );
+}
+
+function publicFieldColumnsStyle(columns: number | null | undefined): CSSProperties {
+  return { "--field-editor-columns": String(clampColumns(columns)) } as CSSProperties;
+}
+
+function publicFieldSpanStyle(field: PublicLinkPreviewFieldRead): CSSProperties {
+  return {
+    "--field-editor-span": String(displayConfigNumber(field, "column_span", 1)),
+  } as CSSProperties;
+}
+
+function publicFieldLayoutClassName(field: PublicLinkPreviewFieldRead) {
+  const labelPosition = displayConfigString(field, "label_position", "top");
+  const separatorStyle = displayConfigString(field, "separator_style", "none");
+  return [
+    `field-editor-control--label-${labelPosition}`,
+    separatorStyle !== "none" ? `field-editor-control--separator-${separatorStyle}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
+  const value = field.options_config_json?.static_text;
+  return typeof value === "string" && value.trim() ? value : uiText.empty;
+}
+
+function displayConfigString(field: PublicLinkPreviewFieldRead, key: string, fallback: string) {
+  const value = field.display_config_json?.[key];
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function displayConfigNumber(field: PublicLinkPreviewFieldRead, key: string, fallback: number) {
+  const value = field.display_config_json?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? clampColumns(value) : fallback;
+}
+
+function clampColumns(value: number | null | undefined) {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.min(3, Math.max(1, Number(value)));
 }
 
 function formatBytes(value: number) {

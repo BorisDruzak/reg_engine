@@ -336,6 +336,56 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
         )
 
 
+def test_public_link_preview_includes_visible_static_text_without_editing(
+    db_session: Session,
+) -> None:
+    context = _phase_1e_context(db_session)
+    static_field = RegistrySchemaService(db_session).create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=context["block"].id,
+        code="instruction",
+        label="Instruction",
+        field_type="static_text",
+        options_config_json={"static_text": "Read before editing."},
+        display_config_json={
+            "column_span": 2,
+            "label_position": "left",
+            "separator_style": "line",
+        },
+        public_visible=True,
+        public_editable=True,
+    )
+    public_link_service = PublicLinkService(db_session)
+    created = public_link_service.create_public_link_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    preview = public_link_service.preview_public_link(raw_token=created.raw_token)
+    preview_block = next(block for block in preview.blocks if block.block_id == context["block"].id)
+    preview_field = next(
+        field
+        for instance in preview_block.instances
+        for field in instance.fields
+        if field.field_id == static_field.id
+    )
+
+    assert preview_block.layout_columns == 1
+    assert preview_field.field_type == "static_text"
+    assert preview_field.options_config_json == {"static_text": "Read before editing."}
+    assert preview_field.display_config_json == {
+        "column_span": 2,
+        "label_position": "left",
+        "separator_style": "line",
+    }
+    with pytest.raises(PermissionDeniedError, match="static text"):
+        public_link_service.edit_card_field_with_token(
+            raw_token=created.raw_token,
+            field_id=static_field.id,
+            value="changed",
+        )
+
+
 def test_public_link_uses_card_organization_effective_reference_list(
     db_session: Session,
 ) -> None:

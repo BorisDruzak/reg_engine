@@ -51,6 +51,8 @@ class PublicPreviewField:
     value: object | None
     options_source_type: str | None
     options_source_id: UUID | None
+    options_config_json: dict[str, Any] | None = None
+    display_config_json: dict[str, Any] | None = None
     options: list[PublicPreviewOption] = field(default_factory=list)
 
 
@@ -66,6 +68,7 @@ class PublicPreviewBlock:
     block_id: UUID
     code: str
     title: str
+    layout_columns: int
     instances: list[PublicPreviewBlockInstance] = field(default_factory=list)
 
 
@@ -226,6 +229,7 @@ class PublicLinkService:
                     block_id=block.id,
                     code=block.code,
                     title=block.title,
+                    layout_columns=block.layout_columns,
                     instances=preview_instances,
                 )
             )
@@ -264,6 +268,8 @@ class PublicLinkService:
             raise PermissionDeniedError("Public link cannot edit this field.")
         if field.field_type == "file_ref":
             raise PermissionDeniedError("Public links cannot edit file reference fields.")
+        if field.field_type == "static_text":
+            raise PermissionDeniedError("Public links cannot edit static text fields.")
 
         field_value = CardService(self.session).set_field_value_from_public_link(
             actor_public_link_id=public_link.id,
@@ -355,10 +361,10 @@ class PublicLinkService:
                 FormBlock.registry_id == registry_id,
                 FormBlock.archived_at.is_(None),
                 FormBlock.is_active.is_(True),
-                FormBlock.public_editable.is_(True),
+                FormBlock.public_visible.is_(True),
                 FormField.archived_at.is_(None),
                 FormField.is_active.is_(True),
-                FormField.public_editable.is_(True),
+                FormField.public_visible.is_(True),
             )
             .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
         )
@@ -367,6 +373,10 @@ class PublicLinkService:
             for block, field_model in rows
             if self._public_link_allows(public_link.allowed_blocks_json, block.id)
             and self._public_link_allows(public_link.allowed_fields_json, field_model.id)
+            and (
+                (block.public_editable and field_model.public_editable)
+                or field_model.field_type == "static_text"
+            )
         ]
 
     def _ordered_public_blocks(
@@ -444,6 +454,8 @@ class PublicLinkService:
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
             options_source_type=field_model.options_source_type,
             options_source_id=field_model.options_source_id,
+            options_config_json=field_model.options_config_json,
+            display_config_json=field_model.display_config_json,
             options=self._reference_options(
                 field_model,
                 registry_id=registry_id,

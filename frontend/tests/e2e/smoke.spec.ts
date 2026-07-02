@@ -2321,7 +2321,9 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Принято").first()).toBeVisible();
 
   await page.getByRole("tab", { name: "Схема карточки" }).click();
-  await page.getByRole("button", { name: "Открыть шаблон Карточка проверки" }).click();
+  await page
+    .getByRole("button", { name: "Шаблон карточки Карточка проверки", exact: true })
+    .click();
   await expect(
     page.getByRole("region", { name: "Редактор шаблона Карточка проверки" }),
   ).toBeVisible();

@@ -98,6 +98,13 @@ not a hardcoded employee registry.
   selecting a template opens the visual block/field editor, and the separate
   checkbox/default-value template editor is removed from the ordinary UI. No
   database migration or backend API change is required.
+- Phase 7J schema layout/static-text variant B is implemented locally and
+  pending full verification/deployment: blocks get a 1-3 column layout,
+  fields get visual placement/display settings, `static_text` fields render as
+  non-editable template text, schema editing opens by clicking blocks/fields,
+  and the admin navigation can be collapsed. Migration
+  `0020_schema_layout_static_text` is planned but production has not been
+  migrated yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1914,3 +1921,84 @@ Deployment and live evidence:
   template is opened, opening `Базовый шаблон` shows `Редактор шаблона:
   Базовый шаблон`, existing blocks/fields are visible inside that editor, and
   the removed default-value template editor is not rendered.
+
+## Phase 7J: Schema Layout Static Text And Collapsible Navigation
+
+Status: implemented and locally verified, pending migration deployment and
+browser live check.
+
+Purpose:
+
+Implement the approved variant B for the visual schema editor: template text
+and card field placement are configured in the same schema editor that already
+owns blocks and fields. The ordinary card and public-link editors must render
+that schema without adding hardcoded business fields.
+
+Implemented scope:
+
+1. Database/API model:
+   - add Alembic migration `0020_schema_layout_static_text`;
+   - add `form_blocks.layout_columns` with a 1-3 column constraint;
+   - add `form_fields.display_config_json` for visual field settings;
+   - register `static_text` as a schema field type.
+2. Backend behavior:
+   - validate block column count and field display settings;
+   - keep `static_text` values non-editable in authenticated and public edit
+     workflows;
+   - exclude `static_text` from required-value validation and bulk save
+     payloads;
+   - expose visible static text in public-link preview without allowing public
+     edits.
+3. Visual schema editor:
+   - template cards open by clicking the template area, not a separate Open
+     button;
+   - block and field edit forms open inline from the clicked block/field;
+   - archive controls are moved inside the edit forms;
+   - block settings include column count;
+   - field settings include column width, label position, separator style, and
+     non-editable text content for `static_text`;
+   - field order remains mouse drag/drop and is rendered through the block grid.
+4. Card/public editors:
+   - ordinary card fields render by block with the configured 1-3 column grid;
+   - `static_text` appears as non-editable explanatory text and is not sent in
+     bulk value updates;
+   - public-link card preview renders the same visible static text and layout
+     metadata.
+5. Workspace navigation:
+   - the left admin navigation can be collapsed and restored;
+   - each navigation section has a visual icon;
+   - the collapsed state is stored in the existing admin workspace state.
+
+Non-goals:
+
+- No hardcoded employee/HR schema or business-specific columns.
+- No separate per-template physical schema tables.
+- No one-registry-per-organization behavior.
+- No import/export, reports, generated-document, attachment, MCP, auth-flow,
+  or public attachment workflow changes.
+- No production migration until disposable PostgreSQL verification, backup,
+  preflight, migration, and post-check are completed under the standing
+  migration rules.
+
+Verification completed locally so far:
+
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "collapses and restores"`:
+  passed, 1 targeted test.
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "static text|visual layout|inline at the acted row|creates edits and archives schema blocks"`:
+  passed, 4 targeted tests.
+- `.venv\Scripts\python.exe -m pytest tests/test_models_smoke.py tests/test_migrations.py tests/test_registry_card_services.py -q`:
+  passed, 15 passed and 26 skipped.
+- `.venv\Scripts\python.exe -m pytest tests/test_public_link_transfer_audit_services.py -q`:
+  skipped because local `TEST_DATABASE_URL` is not set.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
+
+Known limitations / next work:
+
+- Disposable PostgreSQL verification for migration `0020_schema_layout_static_text`
+  is still required before any production migration.
+- Server deployment and browser live check are still pending.

@@ -261,6 +261,7 @@ def create_block(
             is_repeatable=payload.is_repeatable,
             public_visible=payload.public_visible,
             public_editable=payload.public_editable,
+            layout_columns=payload.layout_columns,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -281,6 +282,7 @@ def update_block(
             title=payload.title,
             description=payload.description,
             position=payload.position,
+            layout_columns=payload.layout_columns,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -327,6 +329,7 @@ def create_field(
             options_source_type=payload.options_source_type,
             options_source_id=payload.options_source_id,
             options_config_json=payload.options_config_json,
+            display_config_json=payload.display_config_json,
             is_list_display=payload.is_list_display,
             public_visible=payload.public_visible,
             public_editable=payload.public_editable,
@@ -351,6 +354,8 @@ def update_field(
             description=payload.description,
             position=payload.position,
             required_mode=payload.required_mode,
+            options_config_json=payload.options_config_json,
+            display_config_json=payload.display_config_json,
             is_active=payload.is_active,
             is_list_display=payload.is_list_display,
         )

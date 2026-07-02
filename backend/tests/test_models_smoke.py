@@ -105,6 +105,7 @@ def test_dynamic_values_use_typed_columns() -> None:
 
 def test_file_ref_database_foundation_metadata_is_registered() -> None:
     assert "file_ref" in FIELD_TYPES
+    assert "static_text" in FIELD_TYPES
 
     field_values = Base.metadata.tables["field_values"]
 
@@ -125,6 +126,23 @@ def test_file_ref_database_foundation_metadata_is_registered() -> None:
     }
 
     assert "file_ref" in field_type_checks["ck_form_fields_field_type"]
+    assert "static_text" in field_type_checks["ck_form_fields_field_type"]
+
+
+def test_schema_layout_metadata_is_registered() -> None:
+    form_blocks = Base.metadata.tables["form_blocks"]
+    form_fields = Base.metadata.tables["form_fields"]
+
+    assert "layout_columns" in form_blocks.c
+    assert "display_config_json" in form_fields.c
+
+    block_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in form_blocks.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert "layout_columns >= 1" in block_checks["ck_form_blocks_layout_columns"]
+    assert "layout_columns <= 3" in block_checks["ck_form_blocks_layout_columns"]
 
 
 def test_attachment_metadata_tables_use_required_columns() -> None:

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-02 20:20:59 +05:00
+- Generated: 2026-07-02 23:35:37 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -122,6 +122,7 @@
 - `backend/migrations/versions/0017_registry_card_title_label.py`
 - `backend/migrations/versions/0018_card_templates.py`
 - `backend/migrations/versions/0019_base_card_templates.py`
+- `backend/migrations/versions/0020_schema_layout_static_text.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -186,6 +187,7 @@
 - `docs/superpowers/plans/2026-07-02-card-organization-tag-search.md`
 - `docs/superpowers/plans/2026-07-02-card-unified-tag-search.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
+- `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`

@@ -51,6 +51,7 @@ class FormBlockCreate(BaseModel):
     is_repeatable: bool = False
     public_visible: bool = True
     public_editable: bool = False
+    layout_columns: int = Field(default=1, ge=1, le=3)
 
 
 class FormBlockRead(BaseModel):
@@ -66,12 +67,14 @@ class FormBlockRead(BaseModel):
     is_active: bool
     public_visible: bool
     public_editable: bool
+    layout_columns: int
 
 
 class FormBlockUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     position: int | None = None
+    layout_columns: int | None = Field(default=None, ge=1, le=3)
 
 
 class FormFieldCreate(BaseModel):
@@ -84,6 +87,7 @@ class FormFieldCreate(BaseModel):
     options_source_type: str | None = None
     options_source_id: UUID | None = None
     options_config_json: dict[str, Any] | None = None
+    display_config_json: dict[str, Any] | None = None
     is_list_display: bool = False
     public_visible: bool = True
     public_editable: bool = False
@@ -103,6 +107,7 @@ class FormFieldRead(BaseModel):
     options_source_type: str | None
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None
+    display_config_json: dict[str, Any] | None
     is_active: bool
     is_list_display: bool
     public_visible: bool
@@ -114,6 +119,8 @@ class FormFieldUpdate(BaseModel):
     description: str | None = None
     position: int | None = None
     required_mode: str | None = None
+    options_config_json: dict[str, Any] | None = None
+    display_config_json: dict[str, Any] | None = None
     is_active: bool | None = None
     is_list_display: bool | None = None
 

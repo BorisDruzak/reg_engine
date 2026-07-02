@@ -258,6 +258,7 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
                 block_id=block.block_id,
                 code=block.code,
                 title=block.title,
+                layout_columns=block.layout_columns,
                 instances=[
                     PublicLinkPreviewBlockInstanceRead(
                         block_instance_id=instance.block_instance_id,
@@ -271,6 +272,8 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
                                 value=field.value,
                                 options_source_type=field.options_source_type,
                                 options_source_id=field.options_source_id,
+                                options_config_json=field.options_config_json,
+                                display_config_json=field.display_config_json,
                                 options=[
                                     PublicLinkPreviewOptionRead(
                                         id=option.id,

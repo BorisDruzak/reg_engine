@@ -1407,6 +1407,7 @@ class CardService:
             (block, field_model)
             for block, field_model in self._active_schema_rows_for_registry(card.registry_id)
             if field_model.required_mode in required_modes
+            and field_model.field_type != "static_text"
         ]
         if not schema_rows:
             return
@@ -1612,6 +1613,9 @@ class CardService:
             )
             self._ensure_active_attachment_reference(attachment_id, card_id=card_id)
             return _FieldAssignment(value_attachment_id=attachment_id)
+
+        if field_model.field_type == "static_text":
+            raise InvalidFieldValueError("Static text fields cannot be edited.")
 
         raise InvalidFieldValueError(f"Unsupported field type: {field_model.field_type}")
 
