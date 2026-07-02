@@ -46,8 +46,8 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     )
 
     registry_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("registries.id"))
-    card_template_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("card_templates.id")
+    card_template_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("card_templates.id"), nullable=False
     )
     organization_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("organizations.id")

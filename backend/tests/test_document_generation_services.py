@@ -113,6 +113,8 @@ def _card_read_with_file_ref(value: FileRefValueRead | None) -> CardRead:
     return CardRead(
         card_id=uuid4(),
         registry_id=uuid4(),
+        card_template_id=uuid4(),
+        card_template_name="Базовый шаблон",
         organization_id=uuid4(),
         display_name="File ref render card",
         fields={

@@ -89,7 +89,7 @@ class CardRead:
     registry_id: UUID
     organization_id: UUID
     display_name: str
-    card_template_id: UUID | None = None
+    card_template_id: UUID
     card_template_name: str | None = None
     blocks: dict[str, CardBlockRead] = field(default_factory=dict)
     fields: dict[str, CardFieldRead] = field(default_factory=dict)
@@ -175,9 +175,7 @@ class CardService:
             new_data_json={
                 "registry_id": str(registry_id),
                 "organization_id": str(organization_id),
-                "card_template_id": str(card.card_template_id)
-                if card.card_template_id is not None
-                else None,
+                "card_template_id": str(card.card_template_id),
             },
         )
         return card
@@ -222,6 +220,7 @@ class CardService:
         template = self._get_active_card_template_for_registry(
             card_template_id,
             registry_id=registry_id,
+            actor_user_id=created_by,
         )
         resolved_display_name = self._card_display_name_from_input(
             display_name=display_name,
@@ -229,7 +228,7 @@ class CardService:
         )
         card = Card(
             registry_id=registry_id,
-            card_template_id=template.id if template is not None else None,
+            card_template_id=template.id,
             organization_id=organization_id,
             org_unit_id=org_unit_id,
             display_name=resolved_display_name,
@@ -1143,9 +1142,13 @@ class CardService:
         template_id: UUID | None,
         *,
         registry_id: UUID,
-    ) -> CardTemplate | None:
+        actor_user_id: UUID | None,
+    ) -> CardTemplate:
         if template_id is None:
-            return None
+            return RegistrySchemaService(self.session).ensure_base_card_template_for_registry(
+                registry_id=registry_id,
+                actor_user_id=actor_user_id,
+            )
         template = self.session.get(CardTemplate, template_id)
         if (
             template is None
@@ -1160,18 +1163,16 @@ class CardService:
         self,
         *,
         display_name: str | None,
-        template: CardTemplate | None,
+        template: CardTemplate,
     ) -> str:
         cleaned_display_name = display_name.strip() if display_name is not None else ""
         if cleaned_display_name:
             return cleaned_display_name
-        if template is not None and template.name.strip():
+        if template.name.strip():
             return template.name.strip()
         raise CardServiceError("Card display name or card template is required.")
 
     def _card_template_name(self, card: Card) -> str | None:
-        if card.card_template_id is None:
-            return None
         template = self.session.get(CardTemplate, card.card_template_id)
         return template.name if template is not None else None
 

@@ -240,7 +240,10 @@ const apiPayloads = {
         description: null,
         position: 0,
         field_schema_json: {
-          field_ids: ["99999999-9999-4999-8999-999999999999"],
+          field_ids: [
+            "99999999-9999-4999-8999-999999999999",
+            "99999999-9999-4999-8999-999999999998",
+          ],
         },
         default_values_json: [
           {
@@ -305,6 +308,8 @@ const apiPayloads = {
       {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         registry_id: "77777777-7777-4777-8777-777777777777",
+        card_template_id: "71717171-7171-4171-8171-717171717171",
+        card_template_name: "Муниципальная карточка",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
         display_name: "Карточка актива",
@@ -318,6 +323,8 @@ const apiPayloads = {
   cardRead: {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     registry_id: "77777777-7777-4777-8777-777777777777",
+    card_template_id: "71717171-7171-4171-8171-717171717171",
+    card_template_name: "Муниципальная карточка",
     organization_id: "22222222-2222-4222-8222-222222222222",
     display_name: "Карточка актива",
     blocks: {
@@ -696,10 +703,14 @@ beforeEach(() => {
             public_view_enabled?: boolean;
             public_edit_enabled?: boolean;
           };
-          const template = cardTemplateItems.find((item) => item.id === payload.card_template_id);
+          const template =
+            cardTemplateItems.find((item) => item.id === payload.card_template_id) ??
+            cardTemplateItems[0];
           const created: CardSummaryRead = {
             id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
             registry_id: "77777777-7777-4777-8777-777777777777",
+            card_template_id: template.id,
+            card_template_name: template.name,
             organization_id: organizationCardMatch[1],
             org_unit_id: null,
             display_name: payload.display_name ?? template?.name ?? "Новая карточка",
@@ -1590,10 +1601,14 @@ beforeEach(() => {
             public_view_enabled?: boolean;
             public_edit_enabled?: boolean;
           };
-          const template = cardTemplateItems.find((item) => item.id === payload.card_template_id);
+          const template =
+            cardTemplateItems.find((item) => item.id === payload.card_template_id) ??
+            cardTemplateItems[0];
           const created: CardSummaryRead = {
             id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
             registry_id: "77777777-7777-4777-8777-777777777777",
+            card_template_id: template.id,
+            card_template_name: template.name,
             organization_id: payload.organization_id,
             org_unit_id: payload.org_unit_id ?? null,
             display_name: payload.display_name ?? template?.name ?? "Новая карточка",
@@ -2214,10 +2229,23 @@ function listFieldValueForState(
 function enableRepeatableDetailsSchema() {
   schemaBlockItems = [...schemaBlockItems, apiPayloads.repeatableBlock];
   schemaFieldItems = [...schemaFieldItems, apiPayloads.repeatableField];
+  syncTemplateFieldIds();
 }
 
 function enableFileRefSchema() {
   schemaFieldItems = [...schemaFieldItems, apiPayloads.fileRefField];
+  syncTemplateFieldIds();
+}
+
+function syncTemplateFieldIds() {
+  const activeFieldIds = schemaFieldItems
+    .filter((field) => field.is_active)
+    .sort((left, right) => left.position - right.position || left.label.localeCompare(right.label))
+    .map((field) => field.id);
+  cardTemplateItems = cardTemplateItems.map((template) => ({
+    ...template,
+    field_schema_json: { field_ids: activeFieldIds },
+  }));
 }
 
 async function openExistingCardEditor(user: ReturnType<typeof userEvent.setup>) {
@@ -2304,12 +2332,7 @@ function cardMatchesListFilters(item: CardSummaryRead, requestUrl: URL) {
   if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
     return false;
   }
-  if (
-    templateFilterIds.length > 0 &&
-    !templateFilterIds.includes(
-      (item as CardSummaryRead & { card_template_id?: string | null }).card_template_id ?? "",
-    )
-  ) {
+  if (templateFilterIds.length > 0 && !templateFilterIds.includes(item.card_template_id)) {
     return false;
   }
   if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
@@ -2730,7 +2753,7 @@ test("renders a visual card schema editor with fields inside blocks", async () =
   const visualEditor = await screen.findByRole("region", {
     name: "Визуальный редактор схемы карточки",
   });
-  expect(within(visualEditor).getByText("Название карточки")).toBeInTheDocument();
+  expect(within(visualEditor).queryByLabelText("Название карточки")).not.toBeInTheDocument();
   expect(within(visualEditor).getByRole("heading", { name: "Основной блок" })).toBeInTheDocument();
   expect(within(visualEditor).getAllByText("Статус").length).toBeGreaterThan(0);
   expect(within(visualEditor).getByText("Подтверждено")).toBeInTheDocument();
@@ -2877,7 +2900,7 @@ test("keeps the field form compact inside the selected visual block", async () =
   ).toHaveClass("checkbox-inline");
 });
 
-test("edits the card title label inline in the visual schema editor", async () => {
+test("does not expose a free card title editor in the visual schema editor", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -2887,29 +2910,8 @@ test("edits the card title label inline in the visual schema editor", async () =
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
-  const titleInput = await screen.findByRole("textbox", { name: "Название карточки" });
-  expect(titleInput).toHaveValue("Название карточки");
-
-  await user.clear(titleInput);
-  await user.type(titleInput, "Наименование карточки{Enter}");
-
-  expect(await screen.findByText("Реестр обновлен")).toBeInTheDocument();
-  await waitFor(() => {
-    const updateRegistryCall = vi
-      .mocked(fetch)
-      .mock.calls.find(
-        ([input, init]) =>
-          String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777") &&
-          init?.method === "PATCH" &&
-          String(init.body ?? "").includes("card_title_label"),
-      );
-    expect(updateRegistryCall).toBeTruthy();
-    const body = JSON.parse(String(updateRegistryCall?.[1]?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    expect(body).toMatchObject({ card_title_label: "Наименование карточки" });
-  });
+  expect(screen.queryByRole("textbox", { name: "Название карточки" })).not.toBeInTheDocument();
+  expect(await screen.findByRole("region", { name: "Шаблоны карточек" })).toBeInTheDocument();
 });
 
 test("opens field edit and create forms inline at the acted row", async () => {
@@ -3302,6 +3304,8 @@ test("filters cards by search organization and archive visibility", async () => 
     {
       id: "abababab-abab-4bab-8bab-abababababab",
       registry_id: "77777777-7777-4777-8777-777777777777",
+      card_template_id: "71717171-7171-4171-8171-717171717171",
+      card_template_name: "Муниципальная карточка",
       organization_id: "22222222-2222-4222-8222-222222222222",
       org_unit_id: null,
       display_name: "Архивная карточка",
@@ -3402,6 +3406,8 @@ test("adds dynamic field filters from the unified card search bar", async () => 
     {
       id: "acacacac-acac-4cac-8cac-acacacacacac",
       registry_id: "77777777-7777-4777-8777-777777777777",
+      card_template_id: "71717171-7171-4171-8171-717171717171",
+      card_template_name: "Муниципальная карточка",
       organization_id: "22222222-2222-4222-8222-222222222222",
       org_unit_id: null,
       display_name: "Карточка без статуса",
@@ -3697,15 +3703,16 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
   expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Реестр карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Название карточки")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Шаблон карточки")).toHaveValue(
+    "71717171-7171-4171-8171-717171717171",
+  );
+  await user.selectOptions(screen.getByLabelText("Организация карточки"), [""]);
   const postCountBeforeValidation = cardPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(cardPostCount()).toBe(postCountBeforeValidation);
 
-  await user.selectOptions(screen.getByLabelText("Шаблон карточки"), [
-    "71717171-7171-4171-8171-717171717171",
-  ]);
   await user.selectOptions(screen.getByLabelText("Организация карточки"), [
     "22222222-2222-4222-8222-222222222222",
   ]);

@@ -31,7 +31,7 @@ class CardListFieldValueRead(BaseModel):
 class CardSummaryRead(BaseModel):
     id: UUID
     registry_id: UUID
-    card_template_id: UUID | None = None
+    card_template_id: UUID
     card_template_name: str | None = None
     organization_id: UUID
     org_unit_id: UUID | None
@@ -110,7 +110,7 @@ class CardBlockRead(BaseModel):
 class CardRead(BaseModel):
     id: UUID
     registry_id: UUID
-    card_template_id: UUID | None = None
+    card_template_id: UUID
     card_template_name: str | None = None
     organization_id: UUID
     display_name: str

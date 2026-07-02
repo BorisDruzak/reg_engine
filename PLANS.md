@@ -86,6 +86,11 @@ not a hardcoded employee registry.
   creation, template search tags, inline typed tag choices for select,
   multi-select, bool, date, number, and text fields, readable public-link URLs,
   and mouse drag/drop field ordering in the visual schema editor.
+- Phase 7I.1 base/default template enforcement is implemented locally and
+  ready for GitHub/server synchronization: free-schema card creation is removed
+  from the UI, backend card creation resolves a base template when old callers
+  omit `card_template_id`, and migration `0019_base_card_templates` enforces
+  non-null `cards.card_template_id` after backfilling existing cards.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1721,3 +1726,81 @@ Migration and deployment notes:
   Russian UI title, `Схема карточки` shows `Шаблоны карточек`, create-card
   form uses `Шаблон карточки` and no longer shows manual `Название карточки`,
   field drag handles are visible, and the public-links tab remains available.
+
+## Phase 7I.1: Base Template Enforcement And No Free Card Schema
+
+Status: implemented locally; pending GitHub push, server synchronization,
+disposable PostgreSQL verification, production migration `0019_base_card_templates`,
+frontend deployment, and live smoke.
+
+Purpose:
+
+Close the remaining Phase 7I gap where the UI and API still allowed a card to
+exist without an explicit template. The current registry schema must be
+available as a base template, and ordinary card creation must always create a
+template-backed card.
+
+Implemented scope:
+
+1. Backend base template enforcement:
+   - added `BASE_CARD_TEMPLATE_CODE = base_template` and Russian base template
+     name `Базовый шаблон`;
+   - registry/schema service now ensures the base template exists for each
+     registry and refreshes its `field_schema_json` from all active schema
+     fields after registry, block, and field changes;
+   - the base template cannot be archived or deactivated through ordinary
+     schema service methods;
+   - card creation without `card_template_id` is still accepted for backwards
+     compatibility, but it resolves to the active base template instead of
+     creating a free-schema card.
+2. Migration:
+   - added Alembic revision `0019_base_card_templates`;
+   - the migration creates/repairs one active `base_template` per registry,
+     backfills cards with missing `card_template_id`, then sets
+     `cards.card_template_id` to `NOT NULL`.
+3. Frontend:
+   - removed the old schema editor `Название карточки` inline form;
+   - create-card form defaults to the first active template and no longer has a
+     free blank template path when templates exist;
+   - frontend API types now model returned `card_template_id` as required.
+4. Tests:
+   - model metadata asserts `cards.card_template_id` is non-nullable;
+   - migration SQL test asserts revision `0019_base_card_templates` and the
+     `NOT NULL` alter;
+   - card service regression tests cover implicit base-template card creation
+     and base-template archive protection;
+   - frontend tests cover the removed free title editor and template-backed
+     card creation.
+
+Acceptance criteria:
+
+- No hardcoded employee/HR schema is added.
+- Existing registry-based card APIs remain compatible.
+- Old callers that omit `card_template_id` do not create free-schema cards.
+- UI card creation always uses a template-backed workflow.
+- Existing cards are backfilled before enforcing `NOT NULL`.
+- Production migration is applied only after disposable PostgreSQL verification,
+  backup, preflight, and post-check under the standing migration rules.
+
+Local verification completed:
+
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 132 passed, 167
+  skipped, 1 warning.
+- `backend\.venv\Scripts\python.exe -m ruff check .`: passed.
+- `backend\.venv\Scripts\python.exe -m ruff format --check .`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `npm --prefix frontend test -- --run`: passed, 6 files and 73 tests.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run format:check`: passed.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed.
+
+Known limitations / next work:
+
+- Production database remains at Alembic head `0018_card_templates` until the
+  server migration flow applies `0019_base_card_templates`.
+- Browser live smoke is pending until the server checkout and frontend are
+  updated.

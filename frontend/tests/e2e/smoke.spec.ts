@@ -230,6 +230,8 @@ const apiPayloads = {
       {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         registry_id: "77777777-7777-4777-8777-777777777777",
+        card_template_id: "71717171-7171-4171-8171-717171717171",
+        card_template_name: "РњСѓРЅРёС†РёРїР°Р»СЊРЅР°СЏ РєР°СЂС‚РѕС‡РєР°",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
         display_name: "Карточка актива",
@@ -242,6 +244,8 @@ const apiPayloads = {
   cardRead: {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     registry_id: "77777777-7777-4777-8777-777777777777",
+    card_template_id: "71717171-7171-4171-8171-717171717171",
+    card_template_name: "РњСѓРЅРёС†РёРїР°Р»СЊРЅР°СЏ РєР°СЂС‚РѕС‡РєР°",
     organization_id: "22222222-2222-4222-8222-222222222222",
     display_name: "Карточка актива",
     blocks: {
@@ -389,7 +393,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     registry_id: string;
     organization_id: string;
     org_unit_id: string | null;
-    card_template_id?: string | null;
+    card_template_id: string;
     card_template_name?: string | null;
     display_name: string;
     lifecycle_status: string;
@@ -508,16 +512,16 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
-        const template = apiPayloads.schema.templates.find(
-          (item) => item.id === body.card_template_id,
-        );
+        const template =
+          apiPayloads.schema.templates.find((item) => item.id === body.card_template_id) ??
+          apiPayloads.schema.templates[0];
         createdCard = {
           id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
           registry_id: "77777777-7777-4777-8777-777777777777",
           organization_id: organizationCardsMatch[1],
           org_unit_id: null,
-          card_template_id: template?.id ?? null,
-          card_template_name: template?.name ?? null,
+          card_template_id: template.id,
+          card_template_name: template.name,
           display_name: body.display_name ?? template?.name ?? "Новая карточка",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
@@ -550,16 +554,16 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
-        const template = apiPayloads.schema.templates.find(
-          (item) => item.id === body.card_template_id,
-        );
+        const template =
+          apiPayloads.schema.templates.find((item) => item.id === body.card_template_id) ??
+          apiPayloads.schema.templates[0];
         createdCard = {
           id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
           registry_id: "77777777-7777-4777-8777-777777777777",
           organization_id: body.organization_id,
           org_unit_id: body.org_unit_id ?? null,
-          card_template_id: template?.id ?? null,
-          card_template_name: template?.name ?? null,
+          card_template_id: template.id,
+          card_template_name: template.name,
           display_name: body.display_name ?? template?.name ?? "Новая карточка",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
@@ -1077,6 +1081,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
 
   await page.getByRole("tab", { name: "Список карточек" }).click();
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
+  await page.getByLabel("Организация карточки").selectOption("");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Заполните обязательные поля")).toBeVisible();
   await page.getByLabel("Шаблон карточки").selectOption("71717171-7171-4171-8171-717171717171");
@@ -1278,7 +1283,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   type SetupCard = {
     id: string;
     registry_id: string;
-    card_template_id?: string | null;
+    card_template_id: string;
     card_template_name?: string | null;
     organization_id: string;
     org_unit_id: string | null;
@@ -1855,12 +1860,13 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
-        const template = cardTemplates.find((item) => item.id === body.card_template_id);
+        const template =
+          cardTemplates.find((item) => item.id === body.card_template_id) ?? cardTemplates[0];
         const created = {
           id: ids.card,
           registry_id: ids.registry,
-          card_template_id: template?.id ?? null,
-          card_template_name: template?.name ?? null,
+          card_template_id: template.id,
+          card_template_name: template.name,
           organization_id: setupOrganizationCardsMatch[1],
           org_unit_id: null,
           display_name: body.display_name ?? template?.name ?? "Карточка проверки",
@@ -1894,12 +1900,13 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
-        const template = cardTemplates.find((item) => item.id === body.card_template_id);
+        const template =
+          cardTemplates.find((item) => item.id === body.card_template_id) ?? cardTemplates[0];
         const created = {
           id: ids.card,
           registry_id: ids.registry,
-          card_template_id: template?.id ?? null,
-          card_template_name: template?.name ?? null,
+          card_template_id: template.id,
+          card_template_name: template.name,
           organization_id: body.organization_id,
           org_unit_id: body.org_unit_id ?? null,
           display_name: body.display_name ?? template?.name ?? "Карточка проверки",

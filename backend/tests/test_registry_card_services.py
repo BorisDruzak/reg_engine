@@ -648,6 +648,64 @@ def test_card_template_creates_card_name_and_default_values(
     assert values[bool_field.id].value_bool is True
 
 
+def test_card_creation_without_explicit_template_uses_base_template(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="base-template-main",
+        title="Base template main",
+    )
+    first_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="base_template_first",
+        label="Base template first",
+        field_type="text",
+    )
+    second_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="base_template_second",
+        label="Base template second",
+        field_type="bool",
+    )
+
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+    base_template = db_session.get(CardTemplate, card.card_template_id)
+
+    assert base_template is not None
+    assert base_template.code == "base_template"
+    assert base_template.name == "Базовый шаблон"
+    assert card.display_name == "Базовый шаблон"
+    assert set(base_template.field_schema_json["field_ids"]) == {
+        str(first_field.id),
+        str(second_field.id),
+    }
+
+
+def test_base_card_template_cannot_be_archived(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+
+    with pytest.raises(RegistrySchemaError, match="Base card template cannot be archived"):
+        RegistrySchemaService(db_session).archive_card_template_for_actor(
+            actor_user_id=context["registry_admin"].id,
+            template_id=card.card_template_id,
+        )
+
+
 def test_card_template_filter_is_backend_enforced(db_session: Session) -> None:
     context = _phase_1d_context(db_session)
     schema_service = RegistrySchemaService(db_session)

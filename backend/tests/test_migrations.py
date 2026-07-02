@@ -69,9 +69,11 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0016_default_registry_tree" in sql
     assert "0017_registry_card_title_label" in sql
     assert "0018_card_templates" in sql
+    assert "0019_base_card_templates" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
+    assert "ALTER TABLE public.cards ALTER COLUMN card_template_id SET NOT NULL" in sql
     assert "ck_registries_default_owner_requires_owner" in sql
     assert "ck_registries_ck_registries_default_owner_requires_owner" not in sql
     assert (

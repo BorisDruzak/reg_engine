@@ -81,6 +81,7 @@ def test_card_template_metadata_is_registered() -> None:
         assert column_name in card_templates.c
 
     assert "card_template_id" in cards.c
+    assert cards.c.card_template_id.nullable is False
     assert {
         (foreign_key.column.table.name, foreign_key.column.name)
         for foreign_key in cards.c.card_template_id.foreign_keys

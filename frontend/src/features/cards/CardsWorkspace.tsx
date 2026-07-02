@@ -185,6 +185,15 @@ export function CardsWorkspace({
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
     [schema?.blocks],
   );
+  const activeCardTemplates = useMemo(
+    () =>
+      [...(schema?.templates ?? [])]
+        .filter((template) => template.is_active)
+        .sort(
+          (left, right) => left.position - right.position || left.name.localeCompare(right.name),
+        ),
+    [schema?.templates],
+  );
   const bulkFieldFormId = card ? `bulk-card-values-form-${card.id}` : "";
   const createCardMutation = useMutation({
     mutationFn: () =>
@@ -267,7 +276,10 @@ export function CardsWorkspace({
   }, [activeShellTab, visibleOpenCardIds]);
 
   function openCreateForm() {
-    setCardForm(initialCreateCardForm(organizations));
+    setCardForm({
+      ...initialCreateCardForm(organizations),
+      cardTemplateId: activeCardTemplates[0]?.id ?? "",
+    });
     setCardFormMode("create");
     setActiveShellTab("list");
     setActiveTab("fields");
@@ -439,7 +451,7 @@ export function CardsWorkspace({
               <CardMutationForm
                 form={cardForm}
                 organizations={organizations}
-                templates={schema?.templates ?? []}
+                templates={activeCardTemplates}
                 isSubmitting={createCardMutation.isPending}
                 error={localError ? new Error(localError) : createCardMutation.error}
                 onCancel={() => setCardFormMode(null)}
@@ -769,18 +781,12 @@ function CardMutationForm({
           value={form.cardTemplateId}
           onChange={(event) => onChange({ ...form, cardTemplateId: event.currentTarget.value })}
         >
-          <option value="">{uiText.noData}</option>
-          {templates
-            .filter((template) => template.is_active)
-            .sort(
-              (left, right) =>
-                left.position - right.position || left.name.localeCompare(right.name),
-            )
-            .map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
+          {templates.length === 0 && <option value="">{uiText.noData}</option>}
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
         </select>
       </label>
       <label className="checkbox-control">

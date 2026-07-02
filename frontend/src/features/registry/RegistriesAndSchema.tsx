@@ -404,16 +404,11 @@ export function RegistriesAndSchema({
           {activeTab === "schema" && (
             <Panel title={uiText.cardSchema}>
               <SchemaVisualEditor
-                key={`${selectedRegistryId}:${schema?.registry.card_title_label ?? ""}`}
+                key={selectedRegistryId}
                 blocks={schema?.blocks ?? []}
                 fields={schema?.fields ?? []}
                 templates={schema?.templates ?? []}
                 referenceLists={referenceLists}
-                registry={
-                  schema?.registry ??
-                  registries.find((registry) => registry.id === selectedRegistryId) ??
-                  null
-                }
                 selectedRegistryId={selectedRegistryId}
                 token={token}
               />
@@ -504,7 +499,6 @@ function SchemaVisualEditor({
   fields,
   templates,
   referenceLists,
-  registry,
   selectedRegistryId,
   token,
 }: {
@@ -512,7 +506,6 @@ function SchemaVisualEditor({
   fields: FormFieldRead[];
   templates: CardTemplateRead[];
   referenceLists: ReferenceListRead[];
-  registry: RegistryRead | null;
   selectedRegistryId: string;
   token: string;
 }) {
@@ -520,9 +513,6 @@ function SchemaVisualEditor({
   const [blockFormState, setBlockFormState] = useState<BlockFormState | null>(null);
   const [fieldFormState, setFieldFormState] = useState<FieldFormState | null>(null);
   const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
-  const [cardTitleDraft, setCardTitleDraft] = useState(
-    registry?.card_title_label ?? uiText.cardDisplayName,
-  );
   const [blockArchiveTarget, setBlockArchiveTarget] = useState<FormBlockRead | null>(null);
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
@@ -549,15 +539,6 @@ function SchemaVisualEditor({
     () => [...templates].sort((left, right) => left.position - right.position),
     [templates],
   );
-  const updateRegistryTitleMutation = useMutation({
-    mutationFn: (cardTitleLabel: string) =>
-      updateRegistry(token, selectedRegistryId, { card_title_label: cardTitleLabel }),
-    onSuccess: async (updated) => {
-      setCardTitleDraft(updated.card_title_label);
-      setSuccessMessage(uiText.registryUpdated);
-      await invalidateRegistryData(queryClient, token);
-    },
-  });
   const createBlockMutation = useMutation({
     mutationFn: (payload: {
       code: string;
@@ -729,8 +710,7 @@ function SchemaVisualEditor({
   });
   const mutationError = localError
     ? new Error(localError)
-    : (updateRegistryTitleMutation.error ??
-      createBlockMutation.error ??
+    : (createBlockMutation.error ??
       updateBlockMutation.error ??
       archiveBlockMutation.error ??
       createFieldMutation.error ??
@@ -904,28 +884,6 @@ function SchemaVisualEditor({
         [fieldId]: value,
       },
     });
-  }
-
-  function submitCardTitleLabel() {
-    const nextTitle = cardTitleDraft.trim();
-    const currentTitle = registry?.card_title_label ?? uiText.cardDisplayName;
-    if (!nextTitle) {
-      setCardTitleDraft(currentTitle);
-      setLocalError(uiText.requiredFields);
-      return;
-    }
-    if (!registry || nextTitle === currentTitle || updateRegistryTitleMutation.isPending) {
-      return;
-    }
-    setLocalError(null);
-    setSuccessMessage(null);
-    updateRegistryTitleMutation.mutate(nextTitle);
-  }
-
-  function handleCardTitleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    submitCardTitleLabel();
-    event.currentTarget.querySelector("input")?.blur();
   }
 
   function handleBlockFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1430,18 +1388,6 @@ function SchemaVisualEditor({
           successMessage={successMessage}
         />
       </div>
-      <form className="schema-card-title-preview" onSubmit={handleCardTitleSubmit}>
-        <label>
-          <span>{uiText.cardDisplayName}</span>
-          <input
-            aria-label={uiText.cardDisplayName}
-            value={cardTitleDraft}
-            disabled={!selectedRegistryId || updateRegistryTitleMutation.isPending}
-            onBlur={submitCardTitleLabel}
-            onChange={(event) => setCardTitleDraft(event.currentTarget.value)}
-          />
-        </label>
-      </form>
       <section className="card-template-section" role="region" aria-label={uiText.cardTemplates}>
         <header className="card-template-section-header">
           <h3>{uiText.cardTemplates}</h3>

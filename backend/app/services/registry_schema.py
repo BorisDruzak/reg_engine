@@ -20,6 +20,8 @@ from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 DEFAULT_CARD_REGISTRY_NAME = "Реестр карточек"
+BASE_CARD_TEMPLATE_CODE = "base_template"
+BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
 
 
 class RegistrySchemaError(ValueError):
@@ -96,6 +98,10 @@ class RegistrySchemaService:
                 "card_title_label": cleaned_card_title_label,
             },
         )
+        self.ensure_base_card_template_for_registry(
+            registry_id=registry.id,
+            actor_user_id=actor_user_id,
+        )
         return registry
 
     def ensure_default_registry_for_root_organization(
@@ -138,7 +144,88 @@ class RegistrySchemaService:
                     "is_default_for_owner_tree": True,
                 },
             )
+        self.ensure_base_card_template_for_registry(
+            registry_id=registry.id,
+            actor_user_id=actor_user_id,
+        )
         return registry
+
+    def ensure_base_card_template_for_registry(
+        self,
+        *,
+        registry_id: UUID,
+        actor_user_id: UUID | None = None,
+    ) -> CardTemplate:
+        registry = self._get_active_registry(registry_id)
+        expected_schema = self._base_card_template_field_schema(registry.id)
+        template = self.session.scalar(
+            select(CardTemplate).where(
+                CardTemplate.registry_id == registry.id,
+                CardTemplate.code == BASE_CARD_TEMPLATE_CODE,
+            )
+        )
+        if template is None:
+            template = CardTemplate(
+                registry_id=registry.id,
+                code=BASE_CARD_TEMPLATE_CODE,
+                name=BASE_CARD_TEMPLATE_NAME,
+                description="Автоматический шаблон из текущей схемы карточки.",
+                position=0,
+                field_schema_json=expected_schema,
+                default_values_json=[],
+                is_active=True,
+                created_by=actor_user_id,
+                updated_by=actor_user_id,
+            )
+            self.session.add(template)
+            self.session.flush()
+            if actor_user_id is not None:
+                AuditService(self.session).record_user_event(
+                    actor_user_id=actor_user_id,
+                    action="create",
+                    object_type="card_template",
+                    object_id=template.id,
+                    new_data_json={
+                        "registry_id": str(registry.id),
+                        "code": BASE_CARD_TEMPLATE_CODE,
+                        "name": BASE_CARD_TEMPLATE_NAME,
+                        "field_schema_json": expected_schema,
+                    },
+                )
+            return template
+
+        old_data = {
+            "field_schema_json": template.field_schema_json,
+            "is_active": template.is_active,
+            "archived_at": template.archived_at.isoformat()
+            if template.archived_at is not None
+            else None,
+        }
+        changed = (
+            template.field_schema_json != expected_schema
+            or not template.is_active
+            or template.archived_at is not None
+        )
+        template.field_schema_json = expected_schema
+        template.is_active = True
+        template.archived_at = None
+        template.archived_by = None
+        template.archive_reason = None
+        template.updated_by = actor_user_id
+        self.session.flush()
+        if changed and actor_user_id is not None:
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="update",
+                object_type="card_template",
+                object_id=template.id,
+                old_data_json=old_data,
+                new_data_json={
+                    "field_schema_json": template.field_schema_json,
+                    "is_active": template.is_active,
+                },
+            )
+        return template
 
     def ensure_single_root_default_registry(
         self,
@@ -461,6 +548,10 @@ class RegistrySchemaService:
                 "position": block.position,
             },
         )
+        self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
         return block
 
     def archive_block_for_actor(
@@ -481,6 +572,10 @@ class RegistrySchemaService:
             action="archive",
             object_type="form_block",
             object_id=block.id,
+        )
+        self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
         )
         return block
 
@@ -541,6 +636,10 @@ class RegistrySchemaService:
                 "required_mode": required_mode,
                 "is_list_display": is_list_display,
             },
+        )
+        self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
         )
         return field
 
@@ -605,6 +704,10 @@ class RegistrySchemaService:
                 "is_list_display": field.is_list_display,
             },
         )
+        self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
         return field
 
     def archive_field_for_actor(
@@ -626,6 +729,10 @@ class RegistrySchemaService:
             action="archive",
             object_type="form_field",
             object_id=field.id,
+        )
+        self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
         )
         return field
 
@@ -720,6 +827,8 @@ class RegistrySchemaService:
     ) -> CardTemplate:
         template = self._get_card_template(template_id, include_archive=False)
         self._require_schema_permission(actor_user_id, template.registry_id)
+        if template.code == BASE_CARD_TEMPLATE_CODE and is_active is False:
+            raise RegistrySchemaError("Base card template must remain active.")
         old_data = {
             "name": template.name,
             "description": template.description,
@@ -733,9 +842,13 @@ class RegistrySchemaService:
             normalized_schema, normalized_defaults = self._normalize_card_template_payload(
                 registry_id=template.registry_id,
                 field_schema_json=(
-                    field_schema_json
-                    if field_schema_json is not None
-                    else template.field_schema_json
+                    self._base_card_template_field_schema(template.registry_id)
+                    if template.code == BASE_CARD_TEMPLATE_CODE
+                    else (
+                        field_schema_json
+                        if field_schema_json is not None
+                        else template.field_schema_json
+                    )
                 ),
                 default_values_json=(
                     default_values_json
@@ -753,6 +866,12 @@ class RegistrySchemaService:
             template.position = position
         if is_active is not None:
             template.is_active = is_active
+        if template.code == BASE_CARD_TEMPLATE_CODE:
+            template.field_schema_json = self._base_card_template_field_schema(template.registry_id)
+            template.is_active = True
+            template.archived_at = None
+            template.archived_by = None
+            template.archive_reason = None
         template.updated_by = actor_user_id
         self.session.flush()
         AuditService(self.session).record_user_event(
@@ -780,6 +899,8 @@ class RegistrySchemaService:
     ) -> CardTemplate:
         template = self._get_card_template(template_id, include_archive=False)
         self._require_schema_permission(actor_user_id, template.registry_id)
+        if template.code == BASE_CARD_TEMPLATE_CODE:
+            raise RegistrySchemaError("Base card template cannot be archived.")
         template.archived_at = datetime.now(UTC)
         template.archived_by = actor_user_id
         template.is_active = False
@@ -927,6 +1048,24 @@ class RegistrySchemaService:
                 )
             ).all()
         )
+
+    def _base_card_template_field_schema(self, registry_id: UUID) -> dict[str, list[str]]:
+        field_ids = [
+            str(field_id)
+            for field_id in self.session.scalars(
+                select(FormField.id)
+                .join(FormBlock, FormBlock.id == FormField.block_id)
+                .where(
+                    FormBlock.registry_id == registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                )
+                .order_by(FormBlock.position, FormField.position, FormField.label, FormField.id)
+            ).all()
+        ]
+        return {"field_ids": field_ids}
 
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:

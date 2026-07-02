@@ -301,7 +301,7 @@ export type CardListFieldValueRead = {
 export type CardSummaryRead = {
   id: string;
   registry_id: string;
-  card_template_id?: string | null;
+  card_template_id: string;
   card_template_name?: string | null;
   organization_id: string;
   org_unit_id: string | null;
@@ -432,7 +432,7 @@ export type CardBlockRead = {
 export type CardRead = {
   id: string;
   registry_id: string;
-  card_template_id?: string | null;
+  card_template_id: string;
   card_template_name?: string | null;
   organization_id: string;
   display_name: string;
