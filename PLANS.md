@@ -57,11 +57,12 @@ not a hardcoded employee registry.
   close button with an unsaved-changes warning, and save/activate/archive card
   actions live in one sticky `Панель действий карточки` instead of being split
   across metadata and the bulk-field form.
-- Phase 7F visual registry schema/reference editor is implemented and locally
-  verified: `Схема карточки` now uses one visual editor where fields live inside
-  blocks, technical codes/positions/descriptions are not manual create-form
-  burden, and `Справочники` now edits reference-list metadata and items in one
-  selected-list editor.
+- Phase 7F visual registry schema/reference editor is implemented on `main`,
+  pushed to GitHub, deployed to the server frontend, and live-smoke verified:
+  `Схема карточки` now uses one visual editor where fields live inside blocks,
+  technical codes/positions/descriptions are not manual create-form burden, and
+  `Справочники` now edits reference-list metadata and items in one selected-list
+  editor.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -1225,7 +1226,7 @@ Known limitations:
 
 ## Phase 7F: Visual Schema And Reference Editors
 
-Status: implemented and locally verified.
+Status: completed, pushed to `main`, deployed, and live-smoke verified.
 
 Purpose:
 
@@ -1274,3 +1275,19 @@ Verification completed so far:
 - `pnpm -C frontend typecheck`: passed.
 - `pnpm -C frontend build`: passed.
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
+  "Add visual registry editors" -SkipCheck`: committed and pushed
+  implementation commit `b680340b` to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
+  checkout fast-forwarded to `b680340b` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  rebuilt and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed same-origin frontend/API smoke.
+- Live Playwright smoke on `http://192.168.100.12:8000/` verified the deployed
+  page title `Реестровая система`, visible `Визуальный редактор схемы
+  карточки`, visible `Добавить блок формы`, two `Добавить поле в блок` actions,
+  no manual `Код блока формы` create field, visible `Редактор справочника`,
+  visible `Создать элемент справочника`, and no browser console warnings/errors.
