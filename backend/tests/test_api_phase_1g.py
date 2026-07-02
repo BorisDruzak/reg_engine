@@ -624,6 +624,122 @@ def test_phase_1g_rest_workflow_completion(
     assert any(item["id"] == card["id"] for item in archived_cards["items"])
 
 
+def test_organization_card_list_supports_tagged_organization_filters(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase7d-org-filter-system@example.test",
+        is_superuser=True,
+    )
+    branch_actor = _create_user(db_session, "phase7d-org-filter-actor@example.test")
+    root = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase7d-root", "name": "Phase 7D Root"},
+        actor_id=system_admin.id,
+    )
+    branch = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase7d-branch", "name": "Phase 7D Branch", "parent_id": root["id"]},
+        actor_id=system_admin.id,
+    )
+    grandchild = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {
+            "code": "phase7d-grandchild",
+            "name": "Phase 7D Grandchild",
+            "parent_id": branch["id"],
+        },
+        actor_id=system_admin.id,
+    )
+    sibling = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase7d-sibling", "name": "Phase 7D Sibling", "parent_id": root["id"]},
+        actor_id=system_admin.id,
+    )
+    branch_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{branch['id']}/cards",
+        {"display_name": "Phase 7D Branch Card"},
+        actor_id=system_admin.id,
+    )
+    grandchild_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{grandchild['id']}/cards",
+        {"display_name": "Phase 7D Grandchild Card"},
+        actor_id=system_admin.id,
+    )
+    sibling_card = _post_json(
+        api_client,
+        f"/api/v1/organizations/{sibling['id']}/cards",
+        {"display_name": "Phase 7D Sibling Card"},
+        actor_id=system_admin.id,
+    )
+    card_role = _create_role_with_permissions(
+        db_session,
+        "phase7d_org_filter_card_role",
+        ["cards.manage"],
+    )
+    _grant_access(
+        db_session,
+        user_id=branch_actor.id,
+        role_id=card_role.id,
+        organization_id=UUID(branch["id"]),
+        registry_id=UUID(branch_card["registry_id"]),
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+
+    default_descendants_response = api_client.get(
+        f"/api/v1/organizations/{branch['id']}/cards",
+        params=[("organization_ids", branch["id"])],
+        headers=_actor_headers(branch_actor.id),
+    )
+    assert default_descendants_response.status_code == 200, default_descendants_response.text
+    assert {item["id"] for item in default_descendants_response.json()["items"]} == {
+        branch_card["id"],
+        grandchild_card["id"],
+    }
+
+    exact_branch_response = api_client.get(
+        f"/api/v1/organizations/{branch['id']}/cards",
+        params=[
+            ("organization_ids", branch["id"]),
+            ("include_descendant_organizations", "false"),
+        ],
+        headers=_actor_headers(branch_actor.id),
+    )
+    assert exact_branch_response.status_code == 200, exact_branch_response.text
+    assert {item["id"] for item in exact_branch_response.json()["items"]} == {branch_card["id"]}
+
+    mixed_scope_response = api_client.get(
+        f"/api/v1/organizations/{branch['id']}/cards",
+        params=[
+            ("organization_ids", branch["id"]),
+            ("organization_ids", sibling["id"]),
+        ],
+        headers=_actor_headers(branch_actor.id),
+    )
+    assert mixed_scope_response.status_code == 200, mixed_scope_response.text
+    mixed_scope_ids = {item["id"] for item in mixed_scope_response.json()["items"]}
+    assert branch_card["id"] in mixed_scope_ids
+    assert grandchild_card["id"] in mixed_scope_ids
+    assert sibling_card["id"] not in mixed_scope_ids
+
+    inaccessible_only_response = api_client.get(
+        f"/api/v1/organizations/{branch['id']}/cards",
+        params=[("organization_ids", sibling["id"])],
+        headers=_actor_headers(branch_actor.id),
+    )
+    assert inaccessible_only_response.status_code == 200, inaccessible_only_response.text
+    assert inaccessible_only_response.json()["items"] == []
+
+
 def test_phase_1g_denied_paths_enforce_service_permissions(
     api_client: TestClient,
     db_session: Session,

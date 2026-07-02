@@ -517,7 +517,7 @@ tr:last-child td {
 
 .filter-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   padding: 0 14px 12px;
   border-bottom: 1px solid #edf0f4;
@@ -531,6 +531,48 @@ tr:last-child td {
 .card-workspace-grid .filter-grid {
   grid-template-columns: 1fr;
   padding-top: 12px;
+}
+
+.tag-filter {
+  position: relative;
+  align-self: end;
+}
+
+.tag-filter-button {
+  width: 100%;
+  min-height: 40px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.tag-filter-popover {
+  position: absolute;
+  z-index: 20;
+  display: grid;
+  width: min(360px, 88vw);
+  max-height: 360px;
+  margin-top: 6px;
+  overflow: auto;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.16);
+}
+
+.tag-filter-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.organization-filter-tree {
+  display: grid;
+  gap: 2px;
+}
+
+.organization-filter-option {
+  min-height: 32px;
 }
 
 .panel-feedback {

@@ -45,6 +45,7 @@ import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSu
 import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
 
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
+import { CardOrganizationFilter } from "./CardOrganizationFilter";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
@@ -78,11 +79,13 @@ export function CardsWorkspace({
   organizations,
   selectedCardId,
   cardSearch,
-  cardOrganizationId,
+  cardOrganizationIds,
+  cardIncludeDescendantOrganizations,
   includeArchivedCards,
   onSelectCard,
   onCardSearchChange,
-  onCardOrganizationChange,
+  onCardOrganizationIdsChange,
+  onCardIncludeDescendantOrganizationsChange,
   onIncludeArchivedCardsChange,
 }: {
   cards: CardSummaryRead[];
@@ -93,11 +96,13 @@ export function CardsWorkspace({
   organizations: OrganizationRead[];
   selectedCardId: string;
   cardSearch: string;
-  cardOrganizationId: string;
+  cardOrganizationIds: string[];
+  cardIncludeDescendantOrganizations: boolean;
   includeArchivedCards: boolean;
   onSelectCard: (cardId: string) => void;
   onCardSearchChange: (value: string) => void;
-  onCardOrganizationChange: (value: string) => void;
+  onCardOrganizationIdsChange: (value: string[]) => void;
+  onCardIncludeDescendantOrganizationsChange: (value: boolean) => void;
   onIncludeArchivedCardsChange: (value: boolean) => void;
 }) {
   const queryClient = useQueryClient();
@@ -347,11 +352,13 @@ export function CardsWorkspace({
           </div>
           <CardListFilters
             cardSearch={cardSearch}
-            organizationId={cardOrganizationId}
+            organizationIds={cardOrganizationIds}
+            includeDescendantOrganizations={cardIncludeDescendantOrganizations}
             includeArchive={includeArchivedCards}
             organizations={organizations}
             onSearchChange={onCardSearchChange}
-            onOrganizationChange={onCardOrganizationChange}
+            onOrganizationIdsChange={onCardOrganizationIdsChange}
+            onIncludeDescendantOrganizationsChange={onCardIncludeDescendantOrganizationsChange}
             onIncludeArchiveChange={onIncludeArchivedCardsChange}
           />
           <SelectableList
@@ -384,7 +391,11 @@ export function CardsWorkspace({
         </Panel>
       ) : (
         <div className="stack">
-          <Panel title={cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card}>
+          <Panel
+            title={
+              cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card
+            }
+          >
             {card && selectedCard ? (
               <div className="card-metadata-panel">
                 <dl className="metadata-list">
@@ -550,19 +561,23 @@ type CardFormState = {
 
 function CardListFilters({
   cardSearch,
-  organizationId,
+  organizationIds,
+  includeDescendantOrganizations,
   includeArchive,
   organizations,
   onSearchChange,
-  onOrganizationChange,
+  onOrganizationIdsChange,
+  onIncludeDescendantOrganizationsChange,
   onIncludeArchiveChange,
 }: {
   cardSearch: string;
-  organizationId: string;
+  organizationIds: string[];
+  includeDescendantOrganizations: boolean;
   includeArchive: boolean;
   organizations: OrganizationRead[];
   onSearchChange: (value: string) => void;
-  onOrganizationChange: (value: string) => void;
+  onOrganizationIdsChange: (value: string[]) => void;
+  onIncludeDescendantOrganizationsChange: (value: boolean) => void;
   onIncludeArchiveChange: (value: boolean) => void;
 }) {
   return (
@@ -575,20 +590,13 @@ function CardListFilters({
           onChange={(event) => onSearchChange(event.currentTarget.value)}
         />
       </label>
-      <label>
-        <span>{uiText.filterByOrganization}</span>
-        <select
-          value={organizationId}
-          onChange={(event) => onOrganizationChange(event.currentTarget.value)}
-        >
-          <option value="">{uiText.allOrganizations}</option>
-          {organizations.map((organization) => (
-            <option key={organization.id} value={organization.id}>
-              {organization.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CardOrganizationFilter
+        organizations={organizations}
+        selectedOrganizationIds={organizationIds}
+        includeDescendants={includeDescendantOrganizations}
+        onSelectedOrganizationIdsChange={onOrganizationIdsChange}
+        onIncludeDescendantsChange={onIncludeDescendantOrganizationsChange}
+      />
       <label className="checkbox-control">
         <input
           aria-label={uiText.showArchivedCards}
@@ -1133,7 +1141,9 @@ function requiredMissingFieldLabels(
 ) {
   return fields
     .filter((field) => field.schema?.required_mode === "required")
-    .filter((field) => isEditorValueEmpty(field.field.field_type, currentBulkValue(field, draftValues)))
+    .filter((field) =>
+      isEditorValueEmpty(field.field.field_type, currentBulkValue(field, draftValues)),
+    )
     .map((field) => field.label);
 }
 

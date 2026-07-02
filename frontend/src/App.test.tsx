@@ -669,11 +669,11 @@ beforeEach(() => {
           };
           return jsonResponse(created, { status: 201 });
         }
-        const organizationId = requestUrl.searchParams.get("organization_id");
+        const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
         const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
         const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
         const filteredCards = cardItems.filter((item) => {
-          if (organizationId && item.organization_id !== organizationId) {
+          if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
             return false;
           }
           if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
@@ -1491,11 +1491,11 @@ beforeEach(() => {
           };
           return jsonResponse(created, { status: 201 });
         }
-        const organizationId = requestUrl.searchParams.get("organization_id");
+        const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
         const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
         const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
         const filteredCards = cardItems.filter((item) => {
-          if (organizationId && item.organization_id !== organizationId) {
+          if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
             return false;
           }
           if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
@@ -2104,6 +2104,37 @@ function organizationTreeItems(): TestOrganizationTreeNode[] {
   return build(null);
 }
 
+function cardOrganizationFilterIds(requestUrl: URL) {
+  const organizationIds = requestUrl.searchParams.getAll("organization_ids");
+  const legacyOrganizationId = requestUrl.searchParams.get("organization_id");
+  const selectedIds =
+    organizationIds.length > 0
+      ? organizationIds
+      : legacyOrganizationId
+        ? [legacyOrganizationId]
+        : [];
+  if (selectedIds.length === 0) {
+    return null;
+  }
+  if (requestUrl.searchParams.get("include_descendant_organizations") === "false") {
+    return new Set(selectedIds);
+  }
+  const expandedIds = new Set<string>();
+  for (const organizationId of selectedIds) {
+    addOrganizationAndDescendants(expandedIds, organizationId);
+  }
+  return expandedIds;
+}
+
+function addOrganizationAndDescendants(target: Set<string>, organizationId: string) {
+  target.add(organizationId);
+  for (const organization of organizationItems) {
+    if (organization.parent_id === organizationId) {
+      addOrganizationAndDescendants(target, organization.id);
+    }
+  }
+}
+
 function currentRegistrySchema() {
   return {
     ...apiPayloads.schema,
@@ -2315,11 +2346,13 @@ test("shows required field errors in the card editor footer before bulk save", a
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
   await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
 
-  const patchCountBeforeSave = vi.mocked(fetch).mock.calls.filter(
-    ([input, init]) =>
-      String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
-      init?.method === "PATCH",
-  ).length;
+  const patchCountBeforeSave = vi
+    .mocked(fetch)
+    .mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+        init?.method === "PATCH",
+    ).length;
   const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
   const statusInput = within(bulkForm).getByLabelText("Статус");
   await user.clear(statusInput);
@@ -2327,11 +2360,13 @@ test("shows required field errors in the card editor footer before bulk save", a
 
   expect(await screen.findByText("Заполните обязательные поля: Статус")).toBeInTheDocument();
   expect(
-    vi.mocked(fetch).mock.calls.filter(
-      ([input, init]) =>
-        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
-        init?.method === "PATCH",
-    ).length,
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+          init?.method === "PATCH",
+      ).length,
   ).toBe(patchCountBeforeSave);
 });
 
@@ -2353,12 +2388,13 @@ test("creates form fields with required mode from Russian UI", async () => {
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   await waitFor(() => {
-    const createFieldCall = vi.mocked(fetch).mock.calls.find(
-      ([input, init]) =>
-        String(input).endsWith(
-          "/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields",
-        ) && init?.method === "POST",
-    );
+    const createFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields") &&
+          init?.method === "POST",
+      );
     expect(createFieldCall).toBeTruthy();
     const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as {
       required_mode?: string;
@@ -2379,10 +2415,7 @@ test("renders registry workspace as focused schema tabs", async () => {
   expect(
     await screen.findByRole("tablist", { name: "Разделы настройки реестра" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Реестры" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  expect(screen.getByRole("tab", { name: "Реестры" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getByRole("tab", { name: "Схема карточки" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Справочники" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Импорт и экспорт" })).toBeInTheDocument();
@@ -2488,7 +2521,7 @@ test("filters cards by search organization and archive visibility", async () => 
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
 
   expect(screen.getByLabelText("Поиск карточек")).toBeInTheDocument();
-  expect(screen.getByLabelText("Фильтр по организации")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Организации: все доступные" })).toBeInTheDocument();
   expect(screen.getByLabelText("Показывать архивные и замененные карточки")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
@@ -2497,9 +2530,12 @@ test("filters cards by search organization and archive visibility", async () => 
 
   await user.click(screen.getByLabelText("Показывать архивные и замененные карточки"));
   expect(await screen.findByText("Архивная карточка")).toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText("Фильтр по организации"), [
-    "22222222-2222-4222-8222-222222222222",
-  ]);
+  await user.click(screen.getByRole("button", { name: "Организации: все доступные" }));
+  expect(screen.getByRole("checkbox", { name: "Включать подведомственные" })).toBeChecked();
+  await user.click(screen.getByRole("checkbox", { name: "Главная организация" }));
+  expect(
+    screen.getByRole("button", { name: "Организации: Главная организация + подведомственные" }),
+  ).toBeInTheDocument();
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -2510,7 +2546,8 @@ test("filters cards by search organization and archive visibility", async () => 
           url.includes("/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards?") &&
           url.includes("q=%D0%90%D1%80%D1%85%D0%B8%D0%B2%D0%BD%D0%B0%D1%8F") &&
           url.includes("include_archive=true") &&
-          url.includes("organization_id=22222222-2222-4222-8222-222222222222") &&
+          url.includes("organization_ids=22222222-2222-4222-8222-222222222222") &&
+          url.includes("include_descendant_organizations=true") &&
           init?.method === "GET"
         );
       }),

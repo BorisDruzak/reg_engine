@@ -39,7 +39,8 @@ type WorkspaceUiState = {
   selectedRegistryId: string | null;
   selectedCardId: string | null;
   cardSearch: string;
-  cardOrganizationId: string;
+  cardOrganizationIds: string[];
+  cardIncludeDescendantOrganizations: boolean;
   includeArchivedCards: boolean;
 };
 
@@ -56,7 +57,8 @@ export function HomePage() {
     selectedRegistryId,
     selectedCardId,
     cardSearch,
-    cardOrganizationId,
+    cardOrganizationIds,
+    cardIncludeDescendantOrganizations,
     includeArchivedCards,
   } = workspaceUiState;
 
@@ -90,7 +92,7 @@ export function HomePage() {
     enabled: Boolean(token),
   });
   const cardListOrganizationId =
-    cardOrganizationId ||
+    cardOrganizationIds[0] ||
     organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ||
     organizationsQuery.data?.items[0]?.id ||
     "";
@@ -100,13 +102,15 @@ export function HomePage() {
       "organization-cards",
       token,
       cardListOrganizationId,
-      cardOrganizationId,
+      cardOrganizationIds.join("|"),
+      cardIncludeDescendantOrganizations,
       includeArchivedCards,
       cardSearch,
     ],
     queryFn: () =>
       listOrganizationCards(token, cardListOrganizationId, {
-        organizationId: cardOrganizationId || undefined,
+        organizationIds: cardOrganizationIds,
+        includeDescendantOrganizations: cardIncludeDescendantOrganizations,
         includeArchive: includeArchivedCards,
         q: cardSearch || undefined,
       }),
@@ -198,8 +202,15 @@ export function HomePage() {
     setWorkspaceUiState((current) => ({ ...current, cardSearch: value }));
   }
 
-  function setCardOrganizationId(value: string) {
-    setWorkspaceUiState((current) => ({ ...current, cardOrganizationId: value }));
+  function setCardOrganizationIds(value: string[]) {
+    setWorkspaceUiState((current) => ({ ...current, cardOrganizationIds: value }));
+  }
+
+  function setCardIncludeDescendantOrganizations(value: boolean) {
+    setWorkspaceUiState((current) => ({
+      ...current,
+      cardIncludeDescendantOrganizations: value,
+    }));
   }
 
   function setIncludeArchivedCards(value: boolean) {
@@ -225,8 +236,13 @@ export function HomePage() {
     setSelectedCardId(null);
   }
 
-  function handleCardOrganizationChange(value: string) {
-    setCardOrganizationId(value);
+  function handleCardOrganizationIdsChange(value: string[]) {
+    setCardOrganizationIds(value);
+    setSelectedCardId(null);
+  }
+
+  function handleCardIncludeDescendantOrganizationsChange(value: boolean) {
+    setCardIncludeDescendantOrganizations(value);
     setSelectedCardId(null);
   }
 
@@ -341,11 +357,15 @@ export function HomePage() {
             organizations={organizationsQuery.data?.items ?? []}
             selectedCardId={activeCardId}
             cardSearch={cardSearch}
-            cardOrganizationId={cardOrganizationId}
+            cardOrganizationIds={cardOrganizationIds}
+            cardIncludeDescendantOrganizations={cardIncludeDescendantOrganizations}
             includeArchivedCards={includeArchivedCards}
             onSelectCard={setSelectedCardId}
             onCardSearchChange={handleCardSearchChange}
-            onCardOrganizationChange={handleCardOrganizationChange}
+            onCardOrganizationIdsChange={handleCardOrganizationIdsChange}
+            onCardIncludeDescendantOrganizationsChange={
+              handleCardIncludeDescendantOrganizationsChange
+            }
             onIncludeArchivedCardsChange={handleIncludeArchivedCardsChange}
           />
         )}
@@ -403,7 +423,8 @@ function defaultWorkspaceUiState(): WorkspaceUiState {
     selectedRegistryId: null,
     selectedCardId: null,
     cardSearch: "",
-    cardOrganizationId: "",
+    cardOrganizationIds: [],
+    cardIncludeDescendantOrganizations: true,
     includeArchivedCards: false,
   };
 }
@@ -421,8 +442,11 @@ function loadWorkspaceUiState(): WorkspaceUiState {
         typeof parsed.selectedRegistryId === "string" ? parsed.selectedRegistryId : null,
       selectedCardId: typeof parsed.selectedCardId === "string" ? parsed.selectedCardId : null,
       cardSearch: typeof parsed.cardSearch === "string" ? parsed.cardSearch : "",
-      cardOrganizationId:
-        typeof parsed.cardOrganizationId === "string" ? parsed.cardOrganizationId : "",
+      cardOrganizationIds: normalizeCardOrganizationIds(parsed),
+      cardIncludeDescendantOrganizations:
+        typeof parsed.cardIncludeDescendantOrganizations === "boolean"
+          ? parsed.cardIncludeDescendantOrganizations
+          : true,
       includeArchivedCards:
         typeof parsed.includeArchivedCards === "boolean" ? parsed.includeArchivedCards : false,
     };
@@ -433,6 +457,17 @@ function loadWorkspaceUiState(): WorkspaceUiState {
 
 function saveWorkspaceUiState(state: WorkspaceUiState) {
   localStorage.setItem(workspaceUiStateKey, JSON.stringify(state));
+}
+
+function normalizeCardOrganizationIds(
+  parsed: Partial<WorkspaceUiState> & { cardOrganizationId?: unknown },
+) {
+  if (Array.isArray(parsed.cardOrganizationIds)) {
+    return parsed.cardOrganizationIds.filter((value): value is string => typeof value === "string");
+  }
+  return typeof parsed.cardOrganizationId === "string" && parsed.cardOrganizationId
+    ? [parsed.cardOrganizationId]
+    : [];
 }
 
 function isVisibleSection(value: unknown): value is VisibleSection {

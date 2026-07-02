@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.services.audit import AuditService
+from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
@@ -209,6 +210,8 @@ class CardService:
         actor_user_id: UUID,
         registry_id: UUID,
         organization_id: UUID | None = None,
+        organization_ids: Sequence[UUID] | None = None,
+        include_descendant_organizations: bool = True,
         include_archive: bool = False,
         query: str | None = None,
     ) -> list[Card]:
@@ -218,10 +221,14 @@ class CardService:
         )
         if not scope_ids:
             return []
-        if organization_id is not None:
-            if organization_id not in scope_ids:
-                return []
-            scope_ids = {organization_id}
+        scope_ids = self._filtered_organization_scope(
+            scope_ids=scope_ids,
+            organization_id=organization_id,
+            organization_ids=organization_ids,
+            include_descendant_organizations=include_descendant_organizations,
+        )
+        if not scope_ids:
+            return []
 
         criteria = [
             Card.registry_id == registry_id,
@@ -246,6 +253,8 @@ class CardService:
         actor_user_id: UUID,
         resolver_organization_id: UUID,
         organization_id: UUID | None = None,
+        organization_ids: Sequence[UUID] | None = None,
+        include_descendant_organizations: bool = True,
         include_archive: bool = False,
         query: str | None = None,
     ) -> list[Card]:
@@ -263,9 +272,42 @@ class CardService:
             actor_user_id=actor_user_id,
             registry_id=registry.id,
             organization_id=organization_id,
+            organization_ids=organization_ids,
+            include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=query,
         )
+
+    def _filtered_organization_scope(
+        self,
+        *,
+        scope_ids: set[UUID],
+        organization_id: UUID | None,
+        organization_ids: Sequence[UUID] | None,
+        include_descendant_organizations: bool,
+    ) -> set[UUID]:
+        requested_ids = set(organization_ids or ())
+        if organization_id is not None:
+            requested_ids.add(organization_id)
+        if not requested_ids:
+            return scope_ids
+
+        visible_requested_ids = requested_ids & scope_ids
+        if not visible_requested_ids:
+            return set()
+        if not include_descendant_organizations:
+            return visible_requested_ids
+
+        organization_service = OrganizationService(self.session)
+        expanded_ids: set[UUID] = set()
+        for selected_organization_id in visible_requested_ids:
+            expanded_ids.update(
+                organization_service.get_descendant_ids(
+                    selected_organization_id,
+                    include_self=True,
+                )
+            )
+        return expanded_ids & scope_ids
 
     def set_field_value_for_actor(
         self,

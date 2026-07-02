@@ -88,6 +88,8 @@ def list_cards(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
     organization_id: Annotated[UUID | None, Query()] = None,
+    organization_ids: Annotated[list[UUID] | None, Query()] = None,
+    include_descendant_organizations: Annotated[bool, Query()] = True,
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
 ) -> CardListRead:
@@ -96,6 +98,8 @@ def list_cards(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             organization_id=organization_id,
+            organization_ids=organization_ids,
+            include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=q,
         )
@@ -110,6 +114,8 @@ def list_organization_cards(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
     scope_organization_id: Annotated[UUID | None, Query(alias="organization_id")] = None,
+    organization_ids: Annotated[list[UUID] | None, Query()] = None,
+    include_descendant_organizations: Annotated[bool, Query()] = True,
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
 ) -> CardListRead:
@@ -118,6 +124,8 @@ def list_organization_cards(
             actor_user_id=actor_user_id,
             resolver_organization_id=organization_id,
             organization_id=scope_organization_id,
+            organization_ids=organization_ids,
+            include_descendant_organizations=include_descendant_organizations,
             include_archive=include_archive,
             query=q,
         )

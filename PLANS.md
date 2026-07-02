@@ -32,10 +32,15 @@ not a hardcoded employee registry.
 - Phase 7C card editor tabs, draft-state persistence, required field mode, and
   required-field validation are implemented and locally verified. No database
   migration is required because `form_fields.required_mode` already exists.
+- Phase 7D organization tag search for the card list is implemented locally:
+  users can filter cards by one or many RBAC-visible organizations, selected
+  parent organizations include descendants by default, and the descendants mode
+  is controlled by a visible tag toggle.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next implementation checkpoint after Phase 7C is not selected yet.
+- Next implementation checkpoint after Phase 7D is typed dynamic field tag
+  search.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -904,3 +909,82 @@ Known limitations:
 - Card tab drafts are MVP local-browser state, consistent with the current
   documented browser-session limitations; they are not a production-grade
   server-side autosave system.
+
+## Phase 7D: Organization Tag Search In Card List
+
+Status: implemented and locally verified.
+
+Purpose:
+
+Make the ordinary card list search closer to a tag-based workflow while keeping
+backend RBAC as the security boundary. This slice covers organization tags
+first; dynamic field tags remain the next step.
+
+Implemented scope:
+
+1. Backend card list filtering:
+   - `GET /api/v1/organizations/{organization_id}/cards` accepts repeated
+     `organization_ids` query parameters;
+   - `GET /api/v1/registries/{registry_id}/cards` accepts the same parameters
+     for compatibility;
+   - `include_descendant_organizations` defaults to `true`;
+   - the old single `organization_id` query parameter remains supported;
+   - requested organizations are first checked against the actor's RBAC
+     organization scope;
+   - descendants are expanded only for selected organizations already visible to
+     the actor;
+   - the final filter is intersected with backend RBAC scope, so frontend
+     filtering is not the access-control boundary.
+2. Frontend card list:
+   - replaced the single organization select with the tag
+     `Организации: все доступные`;
+   - the tag opens a compact organization tree with checkboxes;
+   - one or many organizations can be selected;
+   - `Включать подведомственные` is enabled by default and can be toggled;
+   - selected state is persisted in the existing workspace UI localStorage;
+   - old single-organization localStorage state is migrated to the new array
+     shape.
+
+Non-goals:
+
+- No dynamic field tag search yet.
+- No saved filters.
+- No new database migration.
+- No hardcoded employee or HR-specific search fields.
+- No frontend-only RBAC filtering.
+- No changes to import/export, reports, documents, attachments, MCP, auth, or
+  public-link workflows.
+
+Verification completed:
+
+- Added backend PostgreSQL-backed API regression coverage for repeated
+  `organization_ids`, descendants mode, exact mode, and inaccessible
+  organization filtering.
+- Added frontend regression coverage for the Russian organization tag UI and
+  query serialization.
+- `backend\.venv\Scripts\python.exe -m pytest`: 128 passed, 161 skipped.
+- `backend\.venv\Scripts\ruff.exe check backend`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check backend`: passed.
+- `backend\.venv\Scripts\mypy.exe backend/app`: passed.
+- `pnpm -C frontend test:run`: 6 files passed, 56 tests passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend format:check`: passed after applying Prettier to changed
+  frontend files.
+- `pnpm -C frontend e2e`: 3 Playwright smoke tests passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed after re-running separately from e2e to avoid a transient Playwright
+  `frontend/test-results` directory race.
+- `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
+  and checked `docs/PROJECT_TREE.md`.
+
+Known limitations:
+
+- Text search still uses the existing `q` behavior and does not yet search
+  dynamic field values.
+- Dynamic field tags for text/select/multi_select/date/number values are
+  deferred to the next planned slice.
+- `TEST_DATABASE_URL` was not set in the local PowerShell environment, so the
+  new PostgreSQL-backed API regression test is present but skipped in the local
+  aggregate pytest run until a disposable `_test` database is configured.

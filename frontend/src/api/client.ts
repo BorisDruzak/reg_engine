@@ -285,6 +285,8 @@ export async function archiveFormField(token: string, fieldId: string) {
 
 export type CardListOptions = {
   organizationId?: string;
+  organizationIds?: string[];
+  includeDescendantOrganizations?: boolean;
   includeArchive?: boolean;
   q?: string;
 };
@@ -293,6 +295,15 @@ export async function listCards(token: string, registryId: string, options: Card
   const params = new URLSearchParams();
   if (options.organizationId) {
     params.set("organization_id", options.organizationId);
+  }
+  for (const organizationId of options.organizationIds ?? []) {
+    params.append("organization_ids", organizationId);
+  }
+  if (options.includeDescendantOrganizations !== undefined) {
+    params.set(
+      "include_descendant_organizations",
+      options.includeDescendantOrganizations ? "true" : "false",
+    );
   }
   if (options.includeArchive) {
     params.set("include_archive", "true");
@@ -315,6 +326,15 @@ export async function listOrganizationCards(
   const params = new URLSearchParams();
   if (options.organizationId) {
     params.set("organization_id", options.organizationId);
+  }
+  for (const organizationId of options.organizationIds ?? []) {
+    params.append("organization_ids", organizationId);
+  }
+  if (options.includeDescendantOrganizations !== undefined) {
+    params.set(
+      "include_descendant_organizations",
+      options.includeDescendantOrganizations ? "true" : "false",
+    );
   }
   if (options.includeArchive) {
     params.set("include_archive", "true");
