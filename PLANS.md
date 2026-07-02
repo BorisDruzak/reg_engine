@@ -1806,11 +1806,6 @@ Verification completed:
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run format:check`: passed.
 - `npm --prefix frontend run build`: passed.
-- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
-- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
-  passed locally; includes backend ruff, backend format check, backend mypy,
-  backend pytest, frontend lint, frontend typecheck, frontend unit tests,
-  frontend build, and project-map check.
 - `npm --prefix frontend run e2e`: passed, 3 tests.
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed.
@@ -1900,3 +1895,22 @@ Verification completed locally:
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run format:check`: passed.
 - `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed locally; includes backend ruff, backend format check, backend mypy,
+  backend pytest, frontend lint, frontend typecheck, frontend unit tests,
+  frontend build, and project-map check.
+
+Deployment and live evidence:
+
+- Commit `f84a8975` was pushed to `origin/main`.
+- Server checkout was synchronized to `origin/main` at `f84a8975`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  passed; frontend smoke returned the new built assets and API healthcheck OK.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`: passed.
+- Browser live check at `http://192.168.100.12:8000/` passed: `Схема карточки`
+  opens with `Шаблоны карточек` only, `Добавить блок формы` is hidden until a
+  template is opened, opening `Базовый шаблон` shows `Редактор шаблона:
+  Базовый шаблон`, existing blocks/fields are visible inside that editor, and
+  the removed default-value template editor is not rendered.
