@@ -193,6 +193,7 @@ const apiPayloads = {
         options_source_id: null,
         options_config_json: null,
         is_active: true,
+        is_list_display: false,
         public_visible: true,
         public_editable: false,
       },
@@ -209,6 +210,7 @@ const apiPayloads = {
         options_source_id: null,
         options_config_json: null,
         is_active: true,
+        is_list_display: false,
         public_visible: true,
         public_editable: false,
       },
@@ -239,6 +241,7 @@ const apiPayloads = {
     options_source_id: null,
     options_config_json: null,
     is_active: true,
+    is_list_display: false,
     public_visible: false,
     public_editable: false,
   },
@@ -255,6 +258,7 @@ const apiPayloads = {
     options_source_id: null,
     options_config_json: null,
     is_active: true,
+    is_list_display: false,
     public_visible: false,
     public_editable: false,
   },
@@ -269,6 +273,7 @@ const apiPayloads = {
         lifecycle_status: "draft",
         public_view_enabled: false,
         public_edit_enabled: true,
+        list_fields: [],
       },
     ],
   },
@@ -659,6 +664,7 @@ beforeEach(() => {
             lifecycle_status: "draft",
             public_view_enabled: payload.public_view_enabled ?? false,
             public_edit_enabled: payload.public_edit_enabled ?? false,
+            list_fields: [],
           };
           cardItems = [...cardItems, created];
           cardValueStateById[created.id] = {
@@ -670,7 +676,7 @@ beforeEach(() => {
           return jsonResponse(created, { status: 201 });
         }
         const filteredCards = cardItems.filter((item) => cardMatchesListFilters(item, requestUrl));
-        return jsonResponse({ items: filteredCards });
+        return jsonResponse({ items: filteredCards.map(cardSummaryWithListFields) });
       }
       if (url.includes("/api/v1/organizations/") && !url.includes("/org-units")) {
         const organizationId = url.split("/api/v1/organizations/")[1];
@@ -1007,6 +1013,7 @@ beforeEach(() => {
             options_source_type?: string | null;
             options_source_id?: string | null;
             options_config_json?: Record<string, unknown> | null;
+            is_list_display?: boolean;
             public_visible?: boolean;
             public_editable?: boolean;
           };
@@ -1023,6 +1030,7 @@ beforeEach(() => {
             options_source_id: payload.options_source_id ?? null,
             options_config_json: payload.options_config_json ?? null,
             is_active: true,
+            is_list_display: payload.is_list_display ?? false,
             public_visible: payload.public_visible ?? true,
             public_editable: payload.public_editable ?? false,
           };
@@ -1071,6 +1079,7 @@ beforeEach(() => {
             position?: number | null;
             required_mode?: string | null;
             is_active?: boolean | null;
+            is_list_display?: boolean | null;
           };
           const updated: FormFieldRead = {
             ...current,
@@ -1079,6 +1088,7 @@ beforeEach(() => {
             position: payload.position ?? current.position,
             required_mode: payload.required_mode ?? current.required_mode,
             is_active: payload.is_active ?? current.is_active,
+            is_list_display: payload.is_list_display ?? current.is_list_display,
           };
           schemaFieldItems = schemaFieldItems.map((item) => (item.id === fieldId ? updated : item));
           return jsonResponse(updated);
@@ -1467,6 +1477,7 @@ beforeEach(() => {
             lifecycle_status: "draft",
             public_view_enabled: payload.public_view_enabled ?? false,
             public_edit_enabled: payload.public_edit_enabled ?? false,
+            list_fields: [],
           };
           cardItems = [...cardItems, created];
           cardValueStateById[created.id] = {
@@ -1478,7 +1489,7 @@ beforeEach(() => {
           return jsonResponse(created, { status: 201 });
         }
         const filteredCards = cardItems.filter((item) => cardMatchesListFilters(item, requestUrl));
-        return jsonResponse({ items: filteredCards });
+        return jsonResponse({ items: filteredCards.map(cardSummaryWithListFields) });
       }
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links")) {
         if (init?.method === "POST") {
@@ -1822,6 +1833,7 @@ beforeEach(() => {
             lifecycle_status: payload.lifecycle_status ?? current.lifecycle_status,
             public_view_enabled: payload.public_view_enabled ?? current.public_view_enabled,
             public_edit_enabled: payload.public_edit_enabled ?? current.public_edit_enabled,
+            list_fields: current.list_fields ?? [],
           };
           cardItems = cardItems.map((item) => (item.id === updated.id ? updated : item));
           return jsonResponse(updated);
@@ -1830,6 +1842,7 @@ beforeEach(() => {
           const archived: CardSummaryRead = {
             ...current,
             lifecycle_status: "archived",
+            list_fields: current.list_fields ?? [],
           };
           cardItems = cardItems.filter((item) => item.id !== current.id);
           return jsonResponse(archived);
@@ -2033,6 +2046,46 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     },
     fields,
   };
+}
+
+function cardSummaryWithListFields(item: CardSummaryRead): CardSummaryRead {
+  const state = cardValueStateById[item.id] ?? {
+    status: "",
+    approved: false,
+    repeatableNotes: [],
+    fileRef: null,
+  };
+  const listFields = schemaFieldItems
+    .filter((field) => field.is_active && field.is_list_display)
+    .sort((left, right) => left.position - right.position)
+    .map((field) => ({
+      field_id: field.id,
+      code: field.code,
+      label: field.label,
+      field_type: field.field_type,
+      value: listFieldValueForState(state, field),
+    }));
+
+  return {
+    ...item,
+    list_fields: listFields,
+  };
+}
+
+function listFieldValueForState(
+  state: (typeof cardValueStateById)[string],
+  field: FormFieldRead,
+): unknown {
+  if (field.code === "status") {
+    return state.status;
+  }
+  if (field.code === "approved") {
+    return state.approved;
+  }
+  if (field.code === "supporting_file") {
+    return state.fileRef;
+  }
+  return null;
 }
 
 function enableRepeatableDetailsSchema() {
@@ -2602,6 +2655,111 @@ test("creates fields from the visual block without description or manual positio
   });
 });
 
+test("keeps the field form compact inside the selected visual block", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  await user.click(
+    await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
+  );
+
+  const blockCard = screen.getByRole("heading", { name: "Основной блок" }).closest("article");
+  const fieldForm = screen.getByRole("heading", { name: "Создать поле формы" }).closest("form");
+  expect(blockCard).not.toBeNull();
+  expect(fieldForm).not.toBeNull();
+  expect(blockCard).toContainElement(fieldForm);
+  expect(fieldForm?.closest(".schema-field-form-panel")).toBeTruthy();
+  expect(screen.getByLabelText("Показывать поле в публичной ссылке").closest("label")).toHaveClass(
+    "checkbox-inline",
+  );
+  expect(
+    screen.getByLabelText("Редактировать поле в публичной ссылке").closest("label"),
+  ).toHaveClass("checkbox-inline");
+});
+
+test("changes field order from the visual schema editor", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+
+  await user.click(
+    within(blockCard as HTMLElement).getByRole("button", {
+      name: "Переместить поле Подтверждено выше",
+    }),
+  );
+
+  await waitFor(() => {
+    const fieldLabels = Array.from(
+      (blockCard as HTMLElement).querySelectorAll(".schema-field-row strong"),
+    ).map((element) => element.textContent);
+    expect(fieldLabels).toEqual(["Подтверждено", "Статус"]);
+  });
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) => String(input).includes("/api/v1/fields/") && init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ position: 0 }),
+        expect.objectContaining({ position: 1 }),
+      ]),
+    );
+  });
+});
+
+test("marks schema fields for display in the card list", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  await user.click(await screen.findByRole("button", { name: "Редактировать поле формы Статус" }));
+  await user.click(await screen.findByLabelText("Отображать поле в списке карточек"));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByText("Поле формы обновлено")).toBeInTheDocument();
+  await waitFor(() => {
+    const updateFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/99999999-9999-4999-8999-999999999999") &&
+          init?.method === "PATCH",
+      );
+    expect(updateFieldCall).toBeTruthy();
+    const body = JSON.parse(String(updateFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({ is_list_display: true });
+  });
+
+  await user.click(screen.getByRole("button", { name: "Карточки" }));
+
+  expect(await screen.findByText((text) => text.includes("Статус: drafted"))).toBeInTheDocument();
+});
+
 test("renders reference list details and items in one editor", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -2700,6 +2858,7 @@ test("filters cards by search organization and archive visibility", async () => 
       lifecycle_status: "archived",
       public_view_enabled: false,
       public_edit_enabled: false,
+      list_fields: [],
     },
   ];
   const user = userEvent.setup();
@@ -2787,6 +2946,7 @@ test("adds dynamic field filters from the unified card search bar", async () => 
       lifecycle_status: "draft",
       public_view_enabled: false,
       public_edit_enabled: false,
+      list_fields: [],
     },
   ];
   cardValueStateById["acacacac-acac-4cac-8cac-acacacacacac"] = {
@@ -3939,6 +4099,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       required_mode: "not_required",
       options_source_type: null,
       options_source_id: null,
+      is_list_display: false,
       public_visible: true,
       public_editable: true,
     });

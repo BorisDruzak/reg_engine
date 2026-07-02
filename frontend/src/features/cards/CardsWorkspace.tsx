@@ -374,6 +374,16 @@ export function CardsWorkspace({
     handleCardDirtyChange(cardId, nextState.isDirty);
   }
 
+  function cardListDetail(item: CardSummaryRead) {
+    const baseDetail = `${organizationsById.get(item.organization_id)?.name ?? shortId(item.organization_id)} / ${lifecycleStatusLabel(
+      item.lifecycle_status,
+    )}`;
+    const selectedFieldDetails = (item.list_fields ?? []).map(
+      (field) => `${field.label}: ${formatEditorValue(field.value)}`,
+    );
+    return [baseDetail, ...selectedFieldDetails].join(" / ");
+  }
+
   return (
     <div className="stack">
       <WorkspaceTabs
@@ -409,9 +419,7 @@ export function CardsWorkspace({
             items={cards.map((item) => ({
               id: item.id,
               title: item.display_name,
-              detail: `${organizationsById.get(item.organization_id)?.name ?? shortId(item.organization_id)} / ${lifecycleStatusLabel(
-                item.lifecycle_status,
-              )}`,
+              detail: cardListDetail(item),
             }))}
             selectedId={selectedCardId}
             onSelect={onSelectCard}

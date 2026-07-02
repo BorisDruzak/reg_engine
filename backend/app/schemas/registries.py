@@ -80,6 +80,7 @@ class FormFieldCreate(BaseModel):
     options_source_type: str | None = None
     options_source_id: UUID | None = None
     options_config_json: dict[str, Any] | None = None
+    is_list_display: bool = False
     public_visible: bool = True
     public_editable: bool = False
 
@@ -99,6 +100,7 @@ class FormFieldRead(BaseModel):
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None
     is_active: bool
+    is_list_display: bool
     public_visible: bool
     public_editable: bool
 
@@ -109,6 +111,7 @@ class FormFieldUpdate(BaseModel):
     position: int | None = None
     required_mode: str | None = None
     is_active: bool | None = None
+    is_list_display: bool | None = None
 
 
 class ReferenceListCreate(BaseModel):

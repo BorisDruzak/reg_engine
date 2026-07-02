@@ -467,6 +467,7 @@ class RegistrySchemaService:
         options_config_json: dict[str, object] | None = None,
         is_system: bool = False,
         is_locked: bool = False,
+        is_list_display: bool = False,
         public_visible: bool = True,
         public_editable: bool = False,
     ) -> FormField:
@@ -488,6 +489,7 @@ class RegistrySchemaService:
             options_config_json=options_config_json,
             is_system=is_system,
             is_locked=is_locked,
+            is_list_display=is_list_display,
             public_visible=public_visible,
             public_editable=public_editable,
             created_by=actor_user_id,
@@ -504,6 +506,7 @@ class RegistrySchemaService:
                 "code": code,
                 "field_type": field_type,
                 "required_mode": required_mode,
+                "is_list_display": is_list_display,
             },
         )
         return field
@@ -524,6 +527,7 @@ class RegistrySchemaService:
         position: int | None = None,
         required_mode: str | None = None,
         is_active: bool | None = None,
+        is_list_display: bool | None = None,
     ) -> FormField:
         field = self._get_active_field(field_id)
         block = self._get_active_block(field.block_id)
@@ -535,6 +539,7 @@ class RegistrySchemaService:
             "position": field.position,
             "required_mode": field.required_mode,
             "is_active": field.is_active,
+            "is_list_display": field.is_list_display,
         }
         if required_mode is not None:
             self._validate_required_mode(required_mode)
@@ -549,6 +554,8 @@ class RegistrySchemaService:
             field.required_mode = required_mode
         if is_active is not None:
             field.is_active = is_active
+        if is_list_display is not None:
+            field.is_list_display = is_list_display
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -562,6 +569,7 @@ class RegistrySchemaService:
                 "position": field.position,
                 "required_mode": field.required_mode,
                 "is_active": field.is_active,
+                "is_list_display": field.is_list_display,
             },
         )
         return field

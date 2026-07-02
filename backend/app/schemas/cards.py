@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CardCreate(BaseModel):
@@ -18,6 +18,14 @@ class OrganizationCardCreate(BaseModel):
     public_edit_enabled: bool = False
 
 
+class CardListFieldValueRead(BaseModel):
+    field_id: UUID
+    code: str
+    label: str
+    field_type: str
+    value: Any
+
+
 class CardSummaryRead(BaseModel):
     id: UUID
     registry_id: UUID
@@ -27,6 +35,7 @@ class CardSummaryRead(BaseModel):
     lifecycle_status: str
     public_view_enabled: bool
     public_edit_enabled: bool
+    list_fields: list[CardListFieldValueRead] = Field(default_factory=list)
 
 
 class CardListRead(BaseModel):

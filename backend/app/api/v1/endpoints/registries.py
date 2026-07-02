@@ -230,6 +230,7 @@ def create_field(
             options_source_type=payload.options_source_type,
             options_source_id=payload.options_source_id,
             options_config_json=payload.options_config_json,
+            is_list_display=payload.is_list_display,
             public_visible=payload.public_visible,
             public_editable=payload.public_editable,
         )
@@ -254,6 +255,7 @@ def update_field(
             position=payload.position,
             required_mode=payload.required_mode,
             is_active=payload.is_active,
+            is_list_display=payload.is_list_display,
         )
     except Exception as exc:
         raise_service_http_error(exc)

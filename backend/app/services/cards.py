@@ -49,6 +49,15 @@ class CardFieldRead:
 
 
 @dataclass(frozen=True)
+class CardListFieldRead:
+    field_id: UUID
+    code: str
+    label: str
+    field_type: str
+    value: object | None
+
+
+@dataclass(frozen=True)
 class FileRefValueRead:
     attachment_id: UUID
     title: str
@@ -291,6 +300,59 @@ class CardService:
             query=query,
             field_filters=field_filters,
         )
+
+    def list_display_fields_for_card(self, card: Card) -> list[CardListFieldRead]:
+        schema_rows = list(
+            self.session.execute(
+                select(FormBlock, FormField)
+                .join(FormField, FormField.block_id == FormBlock.id)
+                .where(
+                    FormBlock.registry_id == card.registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                    FormField.is_list_display.is_(True),
+                )
+                .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
+            ).all()
+        )
+        field_models = [field_model for _, field_model in schema_rows]
+        if not field_models:
+            return []
+
+        field_ids = [field_model.id for field_model in field_models]
+        field_values = list(
+            self.session.scalars(
+                select(FieldValue)
+                .join(CardBlockInstance, CardBlockInstance.id == FieldValue.block_instance_id)
+                .where(
+                    FieldValue.card_id == card.id,
+                    FieldValue.field_id.in_(field_ids),
+                    CardBlockInstance.archived_at.is_(None),
+                )
+                .order_by(FieldValue.field_id, CardBlockInstance.ordinal, FieldValue.id)
+            ).all()
+        )
+        item_ids_by_value_id = self._multi_select_item_ids(field_values)
+        values_by_field_id: dict[UUID, FieldValue] = {}
+        for field_value in field_values:
+            values_by_field_id.setdefault(field_value.field_id, field_value)
+
+        return [
+            CardListFieldRead(
+                field_id=field_model.id,
+                code=field_model.code,
+                label=field_model.label,
+                field_type=field_model.field_type,
+                value=self._read_field_value(
+                    field_model,
+                    values_by_field_id.get(field_model.id),
+                    item_ids_by_value_id,
+                ),
+            )
+            for field_model in field_models
+        ]
 
     def _filtered_organization_scope(
         self,

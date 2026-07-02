@@ -83,6 +83,7 @@ type FieldFormState = {
   requiredMode: string;
   optionsSourceId: string;
   isActive: boolean;
+  isListDisplay: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
 };
@@ -564,6 +565,7 @@ function SchemaVisualEditor({
       required_mode: string;
       options_source_type: string | null;
       options_source_id: string | null;
+      is_list_display: boolean;
       public_visible: boolean;
       public_editable: boolean;
     }) =>
@@ -576,6 +578,7 @@ function SchemaVisualEditor({
         required_mode: payload.required_mode,
         options_source_type: payload.options_source_type,
         options_source_id: payload.options_source_id,
+        is_list_display: payload.is_list_display,
         public_visible: payload.public_visible,
         public_editable: payload.public_editable,
       }),
@@ -593,6 +596,7 @@ function SchemaVisualEditor({
       position: number;
       required_mode: string;
       is_active: boolean;
+      is_list_display: boolean;
     }) =>
       updateFormField(token, payload.fieldId, {
         label: payload.label,
@@ -600,9 +604,24 @@ function SchemaVisualEditor({
         position: payload.position,
         required_mode: payload.required_mode,
         is_active: payload.is_active,
+        is_list_display: payload.is_list_display,
       }),
     onSuccess: async () => {
       setFieldFormState(null);
+      setSuccessMessage(uiText.formFieldUpdated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const reorderFieldMutation = useMutation({
+    mutationFn: (updates: { fieldId: string; position: number }[]) =>
+      Promise.all(
+        updates.map((update) =>
+          updateFormField(token, update.fieldId, {
+            position: update.position,
+          }),
+        ),
+      ),
+    onSuccess: async () => {
       setSuccessMessage(uiText.formFieldUpdated);
       await invalidateRegistryData(queryClient, token);
     },
@@ -622,6 +641,7 @@ function SchemaVisualEditor({
       archiveBlockMutation.error ??
       createFieldMutation.error ??
       updateFieldMutation.error ??
+      reorderFieldMutation.error ??
       archiveFieldMutation.error);
   const isBlockFormSubmitting = createBlockMutation.isPending || updateBlockMutation.isPending;
   const isFieldFormSubmitting = createFieldMutation.isPending || updateFieldMutation.isPending;
@@ -681,6 +701,7 @@ function SchemaVisualEditor({
       requiredMode: "not_required",
       optionsSourceId: "",
       isActive: true,
+      isListDisplay: false,
       publicVisible: true,
       publicEditable: false,
     });
@@ -703,6 +724,7 @@ function SchemaVisualEditor({
       optionsSourceId:
         field.options_source_type === "reference_list" ? (field.options_source_id ?? "") : "",
       isActive: field.is_active,
+      isListDisplay: field.is_list_display,
       publicVisible: field.public_visible,
       publicEditable: field.public_editable,
     });
@@ -787,6 +809,7 @@ function SchemaVisualEditor({
         required_mode: fieldFormState.requiredMode,
         options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
         options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
+        is_list_display: fieldFormState.isListDisplay,
         public_visible: fieldFormState.publicVisible,
         public_editable: fieldFormState.publicEditable,
       });
@@ -801,8 +824,176 @@ function SchemaVisualEditor({
         position: positionNumber(fieldFormState.position),
         required_mode: fieldFormState.requiredMode,
         is_active: fieldFormState.isActive,
+        is_list_display: fieldFormState.isListDisplay,
       });
     }
+  }
+
+  function moveField(blockFields: FormFieldRead[], fieldId: string, direction: "up" | "down") {
+    const fieldIndex = blockFields.findIndex((field) => field.id === fieldId);
+    const targetIndex = direction === "up" ? fieldIndex - 1 : fieldIndex + 1;
+    if (fieldIndex < 0 || targetIndex < 0 || targetIndex >= blockFields.length) {
+      return;
+    }
+    const field = blockFields[fieldIndex];
+    const target = blockFields[targetIndex];
+    setLocalError(null);
+    setSuccessMessage(null);
+    reorderFieldMutation.mutate([
+      { fieldId: field.id, position: target.position },
+      { fieldId: target.id, position: field.position },
+    ]);
+  }
+
+  function renderFieldForm() {
+    if (!fieldFormState) {
+      return null;
+    }
+
+    return (
+      <AdminMutationForm
+        title={fieldFormState.mode === "create" ? uiText.createFormField : uiText.editFormField}
+        submitLabel={fieldFormState.mode === "create" ? uiText.create : uiText.save}
+        isSubmitting={isFieldFormSubmitting}
+        error={mutationError}
+        successMessage={null}
+        onCancel={closeFieldForm}
+        onSubmit={handleFieldFormSubmit}
+      >
+        <div className="schema-field-form-grid">
+          {fieldFormState.mode === "create" && (
+            <label>
+              {uiText.formFieldType}
+              <select
+                value={fieldFormState.fieldType}
+                onChange={(event) =>
+                  setFieldFormState({
+                    ...fieldFormState,
+                    fieldType: event.currentTarget.value,
+                    optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
+                      ? fieldFormState.optionsSourceId
+                      : "",
+                  })
+                }
+              >
+                {supportedFieldTypes.map((fieldType) => (
+                  <option key={fieldType} value={fieldType}>
+                    {fieldTypeLabel(fieldType)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            {uiText.formFieldLabel}
+            <input
+              value={fieldFormState.label}
+              onChange={(event) =>
+                setFieldFormState({ ...fieldFormState, label: event.currentTarget.value })
+              }
+            />
+          </label>
+          <label>
+            {uiText.formFieldRequiredMode}
+            <select
+              value={fieldFormState.requiredMode}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  requiredMode: event.currentTarget.value,
+                })
+              }
+            >
+              <option value="not_required">{uiText.notRequiredField}</option>
+              <option value="required">{uiText.requiredField}</option>
+              <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
+            </select>
+          </label>
+          {fieldFormState.mode === "create" &&
+            referenceBackedFieldTypes.has(fieldFormState.fieldType) && (
+              <label>
+                {uiText.referenceListForField}
+                <select
+                  value={fieldFormState.optionsSourceId}
+                  onChange={(event) =>
+                    setFieldFormState({
+                      ...fieldFormState,
+                      optionsSourceId: event.currentTarget.value,
+                    })
+                  }
+                >
+                  <option value="">{uiText.noReferenceList}</option>
+                  {referenceLists.map((referenceList) => (
+                    <option key={referenceList.id} value={referenceList.id}>
+                      {referenceList.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+        </div>
+        <div className="schema-field-options">
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={fieldFormState.isListDisplay}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  isListDisplay: event.currentTarget.checked,
+                })
+              }
+            />
+            {uiText.listDisplayField}
+          </label>
+          {fieldFormState.mode === "create" && (
+            <>
+              <label className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={fieldFormState.publicVisible}
+                  onChange={(event) =>
+                    setFieldFormState({
+                      ...fieldFormState,
+                      publicVisible: event.currentTarget.checked,
+                    })
+                  }
+                />
+                {uiText.publicVisibleField}
+              </label>
+              <label className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={fieldFormState.publicEditable}
+                  onChange={(event) =>
+                    setFieldFormState({
+                      ...fieldFormState,
+                      publicEditable: event.currentTarget.checked,
+                    })
+                  }
+                />
+                {uiText.publicEditableField}
+              </label>
+            </>
+          )}
+          {fieldFormState.mode === "edit" && (
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={fieldFormState.isActive}
+                onChange={(event) =>
+                  setFieldFormState({
+                    ...fieldFormState,
+                    isActive: event.currentTarget.checked,
+                  })
+                }
+              />
+              {uiText.activeFormField}
+            </label>
+          )}
+        </div>
+      </AdminMutationForm>
+    );
   }
 
   return (
@@ -884,134 +1075,6 @@ function SchemaVisualEditor({
           </AdminMutationForm>
         </div>
       )}
-      {fieldFormState && (
-        <div className="panel-form">
-          <AdminMutationForm
-            title={fieldFormState.mode === "create" ? uiText.createFormField : uiText.editFormField}
-            submitLabel={fieldFormState.mode === "create" ? uiText.create : uiText.save}
-            isSubmitting={isFieldFormSubmitting}
-            error={mutationError}
-            successMessage={null}
-            onCancel={closeFieldForm}
-            onSubmit={handleFieldFormSubmit}
-          >
-            {fieldFormState.mode === "create" && (
-              <label>
-                {uiText.formFieldType}
-                <select
-                  value={fieldFormState.fieldType}
-                  onChange={(event) =>
-                    setFieldFormState({
-                      ...fieldFormState,
-                      fieldType: event.currentTarget.value,
-                      optionsSourceId: referenceBackedFieldTypes.has(event.currentTarget.value)
-                        ? fieldFormState.optionsSourceId
-                        : "",
-                    })
-                  }
-                >
-                  {supportedFieldTypes.map((fieldType) => (
-                    <option key={fieldType} value={fieldType}>
-                      {fieldTypeLabel(fieldType)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label>
-              {uiText.formFieldLabel}
-              <input
-                value={fieldFormState.label}
-                onChange={(event) =>
-                  setFieldFormState({ ...fieldFormState, label: event.currentTarget.value })
-                }
-              />
-            </label>
-            <label>
-              {uiText.formFieldRequiredMode}
-              <select
-                value={fieldFormState.requiredMode}
-                onChange={(event) =>
-                  setFieldFormState({
-                    ...fieldFormState,
-                    requiredMode: event.currentTarget.value,
-                  })
-                }
-              >
-                <option value="not_required">{uiText.notRequiredField}</option>
-                <option value="required">{uiText.requiredField}</option>
-                <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
-              </select>
-            </label>
-            {fieldFormState.mode === "create" && (
-              <>
-                {referenceBackedFieldTypes.has(fieldFormState.fieldType) && (
-                  <label>
-                    {uiText.referenceListForField}
-                    <select
-                      value={fieldFormState.optionsSourceId}
-                      onChange={(event) =>
-                        setFieldFormState({
-                          ...fieldFormState,
-                          optionsSourceId: event.currentTarget.value,
-                        })
-                      }
-                    >
-                      <option value="">{uiText.noReferenceList}</option>
-                      {referenceLists.map((referenceList) => (
-                        <option key={referenceList.id} value={referenceList.id}>
-                          {referenceList.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={fieldFormState.publicVisible}
-                    onChange={(event) =>
-                      setFieldFormState({
-                        ...fieldFormState,
-                        publicVisible: event.currentTarget.checked,
-                      })
-                    }
-                  />
-                  {uiText.publicVisibleField}
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={fieldFormState.publicEditable}
-                    onChange={(event) =>
-                      setFieldFormState({
-                        ...fieldFormState,
-                        publicEditable: event.currentTarget.checked,
-                      })
-                    }
-                  />
-                  {uiText.publicEditableField}
-                </label>
-              </>
-            )}
-            {fieldFormState.mode === "edit" && (
-              <label>
-                <input
-                  type="checkbox"
-                  checked={fieldFormState.isActive}
-                  onChange={(event) =>
-                    setFieldFormState({
-                      ...fieldFormState,
-                      isActive: event.currentTarget.checked,
-                    })
-                  }
-                />
-                {uiText.activeFormField}
-              </label>
-            )}
-          </AdminMutationForm>
-        </div>
-      )}
       {blockArchiveTarget && (
         <AdminMutationDialog title={uiText.archiveFormBlock}>
           <ArchiveConfirmation
@@ -1067,9 +1130,12 @@ function SchemaVisualEditor({
                   </button>
                 </div>
               </header>
+              {fieldFormState?.blockId === block.id && (
+                <div className="panel-form schema-field-form-panel">{renderFieldForm()}</div>
+              )}
               <div className="schema-field-list">
                 {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-                {blockFields.map((field) => (
+                {blockFields.map((field, fieldIndex) => (
                   <div key={field.id} className="schema-field-row">
                     <div className="schema-field-main">
                       <strong>{field.label}</strong>
@@ -1080,6 +1146,30 @@ function SchemaVisualEditor({
                         {" / "}
                         {activityLabel(field.is_active)}
                       </span>
+                    </div>
+                    <div className="schema-field-order-actions" aria-label="Порядок поля">
+                      <button
+                        type="button"
+                        className="ghost-button icon-button"
+                        aria-label={`Переместить поле ${field.label} выше`}
+                        title={`Переместить поле ${field.label} выше`}
+                        disabled={fieldIndex === 0 || reorderFieldMutation.isPending}
+                        onClick={() => moveField(blockFields, field.id, "up")}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button icon-button"
+                        aria-label={`Переместить поле ${field.label} ниже`}
+                        title={`Переместить поле ${field.label} ниже`}
+                        disabled={
+                          fieldIndex === blockFields.length - 1 || reorderFieldMutation.isPending
+                        }
+                        onClick={() => moveField(blockFields, field.id, "down")}
+                      >
+                        ↓
+                      </button>
                     </div>
                     <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
                     <div className="row-actions">
@@ -1136,6 +1226,7 @@ async function invalidateRegistryData(queryClient: QueryClient, token: string) {
   await queryClient.invalidateQueries({ queryKey: ["registries", token] });
   await queryClient.invalidateQueries({ queryKey: ["registry-schema", token] });
   await queryClient.invalidateQueries({ queryKey: ["cards", token] });
+  await queryClient.invalidateQueries({ queryKey: ["organization-cards", token] });
   await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
 }
 

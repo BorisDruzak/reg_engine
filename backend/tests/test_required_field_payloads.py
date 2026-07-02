@@ -15,6 +15,19 @@ def test_form_field_payloads_expose_required_mode() -> None:
     assert update_payload.required_mode == "required_on_publish"
 
 
+def test_form_field_payloads_expose_list_display_flag() -> None:
+    create_payload = FormFieldCreate(
+        code="list_text",
+        label="List text",
+        field_type="text",
+        is_list_display=True,
+    )
+    update_payload = FormFieldUpdate(is_list_display=False)
+
+    assert create_payload.is_list_display is True
+    assert update_payload.is_list_display is False
+
+
 def test_card_update_accepts_lifecycle_status() -> None:
     payload = CardUpdate(lifecycle_status="active")
 

@@ -777,7 +777,12 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
     text_field = _post_json(
         api_client,
         f"/api/v1/blocks/{block['id']}/fields",
-        {"code": "person", "label": "Person", "field_type": "text"},
+        {
+            "code": "person",
+            "label": "Person",
+            "field_type": "text",
+            "is_list_display": True,
+        },
         actor_id=system_admin.id,
     )
     reference_list = _post_json(
@@ -842,6 +847,17 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
     )
     assert text_query_response.status_code == 200, text_query_response.text
     assert {item["id"] for item in text_query_response.json()["items"]} == {matching_card["id"]}
+    matching_summary = text_query_response.json()["items"][0]
+    assert matching_summary["list_fields"] == [
+        {
+            "field_id": text_field["id"],
+            "code": "person",
+            "label": "Person",
+            "field_type": "text",
+            "value": matching_summary["list_fields"][0]["value"],
+        }
+    ]
+    assert matching_summary["list_fields"][0]["value"]
 
     field_filters = json.dumps(
         [

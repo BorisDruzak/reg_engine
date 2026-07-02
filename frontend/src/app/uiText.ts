@@ -151,6 +151,7 @@ export const uiText = {
   requiredField: "Обязательное",
   requiredOnPublishField: "Обязательное при активации",
   activeFormField: "Активное поле",
+  listDisplayField: "Отображать поле в списке карточек",
   publicVisibleField: "Показывать поле в публичной ссылке",
   publicEditableField: "Редактировать поле в публичной ссылке",
   referenceListId: "ID справочника",

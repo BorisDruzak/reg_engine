@@ -14,6 +14,7 @@ from app.schemas.cards import (
     CardBlockRead,
     CardCreate,
     CardFieldRead,
+    CardListFieldValueRead,
     CardListRead,
     CardRead,
     CardSummaryRead,
@@ -34,6 +35,7 @@ from app.services.cards import (
     FileRefValueRead,
 )
 from app.services.cards import CardFieldRead as ServiceCardFieldRead
+from app.services.cards import CardListFieldRead as ServiceCardListFieldRead
 from app.services.cards import CardRead as ServiceCardRead
 
 router = APIRouter(tags=["cards"])
@@ -51,7 +53,8 @@ def create_card(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardSummaryRead:
     try:
-        card = CardService(session).create_card_for_actor(
+        card_service = CardService(session)
+        card = card_service.create_card_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             organization_id=payload.organization_id,
@@ -62,7 +65,7 @@ def create_card(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _card_to_summary(card)
+    return _card_to_summary(card, card_service)
 
 
 @router.post(
@@ -77,7 +80,8 @@ def create_organization_card(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardSummaryRead:
     try:
-        card = CardService(session).create_card_for_organization_for_actor(
+        card_service = CardService(session)
+        card = card_service.create_card_for_organization_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
             display_name=payload.display_name,
@@ -86,7 +90,7 @@ def create_organization_card(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _card_to_summary(card)
+    return _card_to_summary(card, card_service)
 
 
 @router.get("/registries/{registry_id}/cards", response_model=CardListRead)
@@ -103,7 +107,8 @@ def list_cards(
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
-        cards = CardService(session).list_visible_cards(
+        card_service = CardService(session)
+        cards = card_service.list_visible_cards(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             organization_id=organization_id,
@@ -115,7 +120,7 @@ def list_cards(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return CardListRead(items=[_card_to_summary(card) for card in cards])
+    return CardListRead(items=[_card_to_summary(card, card_service) for card in cards])
 
 
 @router.get("/organizations/{organization_id}/cards", response_model=CardListRead)
@@ -132,7 +137,8 @@ def list_organization_cards(
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
-        cards = CardService(session).list_visible_cards_for_organization_for_actor(
+        card_service = CardService(session)
+        cards = card_service.list_visible_cards_for_organization_for_actor(
             actor_user_id=actor_user_id,
             resolver_organization_id=organization_id,
             organization_id=scope_organization_id,
@@ -144,7 +150,7 @@ def list_organization_cards(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return CardListRead(items=[_card_to_summary(card) for card in cards])
+    return CardListRead(items=[_card_to_summary(card, card_service) for card in cards])
 
 
 @router.get("/cards/{card_id}", response_model=CardRead)
@@ -283,7 +289,8 @@ def update_card(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardSummaryRead:
     try:
-        card = CardService(session).update_card_for_actor(
+        card_service = CardService(session)
+        card = card_service.update_card_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
             display_name=payload.display_name,
@@ -295,7 +302,7 @@ def update_card(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _card_to_summary(card)
+    return _card_to_summary(card, card_service)
 
 
 @router.delete("/cards/{card_id}", response_model=CardSummaryRead)
@@ -305,13 +312,14 @@ def archive_card(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardSummaryRead:
     try:
-        card = CardService(session).archive_card_for_actor(
+        card_service = CardService(session)
+        card = card_service.archive_card_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _card_to_summary(card)
+    return _card_to_summary(card, card_service)
 
 
 @router.post(
@@ -376,14 +384,15 @@ def transfer_card(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardSummaryRead:
     try:
-        card = CardService(session).transfer_card_for_actor(
+        card_service = CardService(session)
+        card = card_service.transfer_card_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
             target_organization_id=payload.target_organization_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _card_to_summary(card)
+    return _card_to_summary(card, card_service)
 
 
 def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
@@ -440,7 +449,7 @@ def _serialize_field_value(value: object | None) -> object | None:
     return value
 
 
-def _card_to_summary(card: Card) -> CardSummaryRead:
+def _card_to_summary(card: Card, card_service: CardService) -> CardSummaryRead:
     return CardSummaryRead(
         id=card.id,
         registry_id=card.registry_id,
@@ -450,4 +459,18 @@ def _card_to_summary(card: Card) -> CardSummaryRead:
         lifecycle_status=card.lifecycle_status,
         public_view_enabled=card.public_view_enabled,
         public_edit_enabled=card.public_edit_enabled,
+        list_fields=[
+            _card_list_field_to_schema(list_field)
+            for list_field in card_service.list_display_fields_for_card(card)
+        ],
+    )
+
+
+def _card_list_field_to_schema(list_field: ServiceCardListFieldRead) -> CardListFieldValueRead:
+    return CardListFieldValueRead(
+        field_id=list_field.field_id,
+        code=list_field.code,
+        label=list_field.label,
+        field_type=list_field.field_type,
+        value=_serialize_field_value(list_field.value),
     )

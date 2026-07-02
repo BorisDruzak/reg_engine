@@ -146,6 +146,7 @@ export type FormFieldRead = {
   options_source_id: string | null;
   options_config_json: Record<string, unknown> | null;
   is_active: boolean;
+  is_list_display: boolean;
   public_visible: boolean;
   public_editable: boolean;
 };
@@ -160,6 +161,7 @@ export type FormFieldCreatePayload = {
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
+  is_list_display?: boolean;
   public_visible?: boolean;
   public_editable?: boolean;
 };
@@ -170,6 +172,7 @@ export type FormFieldUpdatePayload = {
   position?: number | null;
   required_mode?: string | null;
   is_active?: boolean | null;
+  is_list_display?: boolean | null;
 };
 
 export type ReferenceListRead = {
@@ -239,6 +242,14 @@ export type RegistrySchemaRead = {
   fields: FormFieldRead[];
 };
 
+export type CardListFieldValueRead = {
+  field_id: string;
+  code: string;
+  label: string;
+  field_type: string;
+  value: unknown;
+};
+
 export type CardSummaryRead = {
   id: string;
   registry_id: string;
@@ -248,6 +259,7 @@ export type CardSummaryRead = {
   lifecycle_status: string;
   public_view_enabled: boolean;
   public_edit_enabled: boolean;
+  list_fields: CardListFieldValueRead[];
 };
 
 export type CardListRead = {

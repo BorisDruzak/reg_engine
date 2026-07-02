@@ -10,8 +10,8 @@ not a hardcoded employee registry.
 - Completed baseline: backend, frontend, attachments, generated documents,
   import/export, reports, MCP phases through Phase 5R, live verification, and
   production follow-up fixes are implemented on `main`.
-- Current active checkpoint: **Phase 6: Organization-Centered Card Workflow
-  Cleanup** is implemented and verified.
+- Phase 6 organization-centered card workflow cleanup is implemented and
+  verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
 - Phase 6C and Phase 6D are completed, including migration
   `0016_default_registry_tree`, organization-centered card creation, and
@@ -66,8 +66,9 @@ not a hardcoded employee registry.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Next checkpoint after Phase 7F is visual field/block arrangement polish only
-  if live use shows a missing layout control.
+- Current active checkpoint: **Phase 7G: Visual Schema Polish And Card List
+  Display Fields** is implemented and locally verified; push, deploy, and live
+  smoke are next.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1291,3 +1292,57 @@ Verification completed so far:
   карточки`, visible `Добавить блок формы`, two `Добавить поле в блок` actions,
   no manual `Код блока формы` create field, visible `Редактор справочника`,
   visible `Создать элемент справочника`, and no browser console warnings/errors.
+## Phase 7G: Visual Schema Polish And Card List Display Fields
+
+Status: implemented and locally verified; push, deploy, and live smoke are
+next.
+
+Purpose:
+
+Close the first live-use gaps in the visual schema editor and ordinary card
+list without adding new business-specific registry behavior.
+
+Implemented scope:
+
+1. Field create/edit forms are rendered inside the selected visual block instead
+   of above the whole schema canvas.
+2. Field create/edit forms are compact:
+   - user-facing technical code, position, and description inputs remain hidden
+     from create forms;
+   - public-link checkboxes are inline with their labels;
+   - the form uses a bounded two-column layout on desktop and one column on
+     narrow screens.
+3. Visual field rows now support ordering through above/below controls that
+   update neighboring field positions through the existing field PATCH API.
+4. `form_fields.is_list_display` is exposed through API schemas and service
+   methods.
+5. Schema admins can mark a field as `Отображать поле в списке карточек`.
+6. Backend card-list responses include selected `list_fields` values from typed
+   dynamic values, so the frontend does not derive list-display values by
+   bypassing backend card RBAC.
+7. The ordinary card list appends selected field values to each card row detail,
+   for example `Статус: drafted`.
+8. Registry/schema changes invalidate organization-card list queries because
+   list-display field settings affect card rows.
+
+Non-goals:
+
+- No database migration; `form_fields.is_list_display` already exists in Core
+  Schema v1.
+- No hardcoded employee or HR-specific field labels.
+- No drag-and-drop layout persistence.
+- No new import/export, reports, generated documents, attachments, MCP, auth,
+  or public-link workflows.
+
+Verification completed so far:
+
+- `backend\.venv\Scripts\python.exe -m pytest
+  backend\tests\test_required_field_payloads.py -q`: passed.
+- `pnpm -C frontend test:run src/App.test.tsx -t "field form compact|changes
+  field order|display in the card list"`: passed.
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 129 passed, 162
+  skipped, 1 warning.
+- `pnpm -C frontend test:run`: passed, 65 passed.
+- `pnpm -C frontend e2e`: passed, 3 passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed.
