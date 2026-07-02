@@ -66,8 +66,10 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0011_mcp_audit_source" in sql
     assert "0015_audit_created_at_default" in sql
     assert "0016_default_registry_tree" in sql
+    assert "0017_registry_card_title_label" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
+    assert "card_title_label VARCHAR DEFAULT" in sql
     assert "ck_registries_default_owner_requires_owner" in sql
     assert "ck_registries_ck_registries_default_owner_requires_owner" not in sql
     assert (
