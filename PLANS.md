@@ -93,6 +93,11 @@ not a hardcoded employee registry.
   template when old callers omit `card_template_id`, cards require
   `card_template_id`, and the card UI now shows `Шаблон карточки` instead of a
   separate user-facing `Название карточки`.
+- Phase 7I.2 template-list-first schema editor polish is implemented and
+  locally verified: the schema tab opens with the card-template list only,
+  selecting a template opens the visual block/field editor, and the separate
+  checkbox/default-value template editor is removed from the ordinary UI. No
+  database migration or backend API change is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1801,6 +1806,11 @@ Verification completed:
 - `npm --prefix frontend run typecheck`: passed.
 - `npm --prefix frontend run format:check`: passed.
 - `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed locally; includes backend ruff, backend format check, backend mypy,
+  backend pytest, frontend lint, frontend typecheck, frontend unit tests,
+  frontend build, and project-map check.
 - `npm --prefix frontend run e2e`: passed, 3 tests.
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed.
@@ -1845,3 +1855,48 @@ Known limitations / next work:
 - `display_name` remains in the API and export/document compatibility surface
   for older integrations, but the ordinary Russian UI no longer exposes it as a
   separate card-title field.
+
+## Phase 7I.2: Template-List-First Schema Editor Polish
+
+Status: implemented locally. No database migration is required.
+
+Purpose:
+
+Remove the confusing second template editor from `Реестры -> Схема карточки`
+and make the card-template list the single entry point into visual block/field
+editing.
+
+Implemented scope:
+
+1. The schema tab now opens with only `Шаблоны карточек` visible.
+2. The visual block/field editor appears only after opening a concrete
+   template.
+3. The old card-template edit form with field checkboxes and default-value
+   inputs is no longer rendered in the ordinary schema screen.
+4. Creating a template asks only for the template name, generates the technical
+   code, creates an empty `field_ids` template, and then opens that template for
+   visual editing.
+5. Existing block/field create, edit, archive, required-mode, list-display, and
+   drag/drop ordering workflows are preserved inside the selected template
+   editor.
+
+Non-goals:
+
+- No backend schema change.
+- No Alembic migration.
+- No hardcoded employee or HR-specific schema.
+- No import/export, reports, documents, attachments, MCP, auth-flow, or
+  public-link workflow change.
+- No true per-template block/field storage migration in this slice; current
+  Core Schema v1 fields still belong to the registry, while the UI workflow is
+  template-centered.
+
+Verification completed locally:
+
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "visual card schema editor|card templates from the template list|creates form fields with required mode|creates fields from the visual block|keeps the field form compact|opens field edit|opens the block create|changes field order|marks schema fields|creates edits and archives schema blocks|wires select fields|localized locked schema"`:
+  passed, 12 tests.
+- `npm --prefix frontend test -- --run`: passed, 73 tests.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run format:check`: passed.
+- `npm --prefix frontend run build`: passed.

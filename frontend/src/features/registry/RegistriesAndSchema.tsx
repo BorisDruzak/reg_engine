@@ -93,15 +93,11 @@ type FieldFormState = {
 };
 
 type CardTemplateFormState = {
-  mode: "create" | "edit";
-  templateId: string | null;
+  mode: "create";
   code: string;
   name: string;
   description: string;
   position: string;
-  fieldIds: string[];
-  defaultValues: Record<string, string>;
-  isActive: boolean;
 };
 
 type ReferenceListFormState = {
@@ -513,6 +509,7 @@ function SchemaVisualEditor({
   const [blockFormState, setBlockFormState] = useState<BlockFormState | null>(null);
   const [fieldFormState, setFieldFormState] = useState<FieldFormState | null>(null);
   const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [blockArchiveTarget, setBlockArchiveTarget] = useState<FormBlockRead | null>(null);
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
@@ -523,9 +520,23 @@ function SchemaVisualEditor({
     () => [...blocks].sort((left, right) => left.position - right.position),
     [blocks],
   );
+  const sortedTemplates = useMemo(
+    () => [...templates].sort((left, right) => left.position - right.position),
+    [templates],
+  );
+  const selectedTemplate =
+    sortedTemplates.find((template) => template.id === selectedTemplateId) ?? null;
+  const selectedTemplateFieldIds = useMemo(
+    () => (selectedTemplate ? templateFieldIds(selectedTemplate) : []),
+    [selectedTemplate],
+  );
   const fieldsByBlockId = useMemo(() => {
     const grouped = new Map<string, FormFieldRead[]>();
+    const selectedFieldIds = new Set(selectedTemplateFieldIds);
     for (const field of fields) {
+      if (selectedTemplate && !selectedFieldIds.has(field.id)) {
+        continue;
+      }
       const blockFields = grouped.get(field.block_id) ?? [];
       blockFields.push(field);
       grouped.set(field.block_id, blockFields);
@@ -534,11 +545,7 @@ function SchemaVisualEditor({
       blockFields.sort((left, right) => left.position - right.position);
     }
     return grouped;
-  }, [fields]);
-  const sortedTemplates = useMemo(
-    () => [...templates].sort((left, right) => left.position - right.position),
-    [templates],
-  );
+  }, [fields, selectedTemplate, selectedTemplateFieldIds]);
   const createBlockMutation = useMutation({
     mutationFn: (payload: {
       code: string;
@@ -609,7 +616,16 @@ function SchemaVisualEditor({
         public_visible: payload.public_visible,
         public_editable: payload.public_editable,
       }),
-    onSuccess: async () => {
+    onSuccess: async (createdField) => {
+      if (selectedTemplate && selectedTemplate.code !== "base_template") {
+        const fieldIds = templateFieldIds(selectedTemplate);
+        if (!fieldIds.includes(createdField.id)) {
+          await updateCardTemplate(token, selectedTemplate.id, {
+            field_schema_json: { field_ids: [...fieldIds, createdField.id] },
+            default_values_json: selectedTemplate.default_values_json,
+          });
+        }
+      }
       setFieldFormState(null);
       setSuccessMessage(uiText.formFieldCreated);
       await invalidateRegistryData(queryClient, token);
@@ -648,33 +664,10 @@ function SchemaVisualEditor({
       field_schema_json: { field_ids: string[] };
       default_values_json: { field_id: string; value: unknown }[];
     }) => createCardTemplate(token, selectedRegistryId, payload),
-    onSuccess: async () => {
+    onSuccess: async (createdTemplate) => {
       setTemplateFormState(null);
+      setSelectedTemplateId(createdTemplate.id);
       setSuccessMessage(uiText.cardTemplateCreated);
-      await invalidateRegistryData(queryClient, token);
-    },
-  });
-  const updateTemplateMutation = useMutation({
-    mutationFn: (payload: {
-      templateId: string;
-      name: string;
-      description: string | null;
-      position: number;
-      field_schema_json: { field_ids: string[] };
-      default_values_json: { field_id: string; value: unknown }[];
-      is_active: boolean;
-    }) =>
-      updateCardTemplate(token, payload.templateId, {
-        name: payload.name,
-        description: payload.description,
-        position: payload.position,
-        field_schema_json: payload.field_schema_json,
-        default_values_json: payload.default_values_json,
-        is_active: payload.is_active,
-      }),
-    onSuccess: async () => {
-      setTemplateFormState(null);
-      setSuccessMessage(uiText.cardTemplateUpdated);
       await invalidateRegistryData(queryClient, token);
     },
   });
@@ -716,14 +709,12 @@ function SchemaVisualEditor({
       createFieldMutation.error ??
       updateFieldMutation.error ??
       createTemplateMutation.error ??
-      updateTemplateMutation.error ??
       archiveTemplateMutation.error ??
       reorderFieldMutation.error ??
       archiveFieldMutation.error);
   const isBlockFormSubmitting = createBlockMutation.isPending || updateBlockMutation.isPending;
   const isFieldFormSubmitting = createFieldMutation.isPending || updateFieldMutation.isPending;
-  const isTemplateFormSubmitting =
-    createTemplateMutation.isPending || updateTemplateMutation.isPending;
+  const isTemplateFormSubmitting = createTemplateMutation.isPending;
 
   function openCreateBlockForm() {
     setLocalError(null);
@@ -817,42 +808,25 @@ function SchemaVisualEditor({
   function openCreateTemplateForm() {
     setLocalError(null);
     setSuccessMessage(null);
+    setSelectedTemplateId(null);
     setBlockFormState(null);
     setFieldFormState(null);
     setTemplateFormState({
       mode: "create",
-      templateId: null,
       code: "",
       name: "",
       description: "",
       position: String(nextPosition(templates)),
-      fieldIds: [],
-      defaultValues: {},
-      isActive: true,
     });
   }
 
-  function openEditTemplateForm(template: CardTemplateRead) {
-    const fieldIds = templateFieldIds(template);
+  function openTemplateEditor(template: CardTemplateRead) {
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
     setFieldFormState(null);
-    setTemplateFormState({
-      mode: "edit",
-      templateId: template.id,
-      code: template.code,
-      name: template.name,
-      description: template.description ?? "",
-      position: String(template.position),
-      fieldIds,
-      defaultValues: Object.fromEntries(
-        template.default_values_json
-          .filter((item) => typeof item.field_id === "string")
-          .map((item) => [item.field_id, String(item.value ?? "")]),
-      ),
-      isActive: template.is_active,
-    });
+    setTemplateFormState(null);
+    setSelectedTemplateId(template.id);
   }
 
   function closeTemplateForm() {
@@ -860,30 +834,11 @@ function SchemaVisualEditor({
     setLocalError(null);
   }
 
-  function toggleTemplateField(fieldId: string) {
-    if (!templateFormState) {
-      return;
-    }
-    const isSelected = templateFormState.fieldIds.includes(fieldId);
-    setTemplateFormState({
-      ...templateFormState,
-      fieldIds: isSelected
-        ? templateFormState.fieldIds.filter((selectedId) => selectedId !== fieldId)
-        : [...templateFormState.fieldIds, fieldId],
-    });
-  }
-
-  function updateTemplateDefaultValue(fieldId: string, value: string) {
-    if (!templateFormState) {
-      return;
-    }
-    setTemplateFormState({
-      ...templateFormState,
-      defaultValues: {
-        ...templateFormState.defaultValues,
-        [fieldId]: value,
-      },
-    });
+  function closeTemplateEditor() {
+    setSelectedTemplateId(null);
+    setBlockFormState(null);
+    setFieldFormState(null);
+    setLocalError(null);
   }
 
   function handleBlockFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -986,7 +941,7 @@ function SchemaVisualEditor({
       return;
     }
     const name = templateFormState.name.trim();
-    if (!name || templateFormState.fieldIds.length === 0) {
+    if (!name) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -996,36 +951,21 @@ function SchemaVisualEditor({
       description: description || null,
       position: positionNumber(templateFormState.position),
       field_schema_json: {
-        field_ids: templateFormState.fieldIds,
+        field_ids: [],
       },
-      default_values_json: templateFormState.fieldIds
-        .map((fieldId) => ({
-          field_id: fieldId,
-          value: templateFormState.defaultValues[fieldId]?.trim() ?? "",
-        }))
-        .filter((item) => item.value !== ""),
+      default_values_json: [],
     };
 
     setLocalError(null);
     setSuccessMessage(null);
-    if (templateFormState.mode === "create") {
-      createTemplateMutation.mutate({
-        ...payload,
-        code: generateTechnicalCode(
-          name,
-          "template",
-          templates.map((template) => template.code),
-        ),
-      });
-      return;
-    }
-    if (templateFormState.templateId) {
-      updateTemplateMutation.mutate({
-        ...payload,
-        templateId: templateFormState.templateId,
-        is_active: templateFormState.isActive,
-      });
-    }
+    createTemplateMutation.mutate({
+      ...payload,
+      code: generateTechnicalCode(
+        name,
+        "template",
+        templates.map((template) => template.code),
+      ),
+    });
   }
 
   function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
@@ -1292,10 +1232,8 @@ function SchemaVisualEditor({
 
     return (
       <AdminMutationForm
-        title={
-          templateFormState.mode === "create" ? uiText.createCardTemplate : uiText.editCardTemplate
-        }
-        submitLabel={templateFormState.mode === "create" ? uiText.create : uiText.save}
+        title={uiText.createCardTemplate}
+        submitLabel={uiText.create}
         isSubmitting={isTemplateFormSubmitting}
         error={mutationError}
         successMessage={null}
@@ -1316,61 +1254,6 @@ function SchemaVisualEditor({
               }
             />
           </label>
-          {templateFormState.mode === "edit" && (
-            <label>
-              <span>{uiText.status}</span>
-              <select
-                value={templateFormState.isActive ? "active" : "archived"}
-                onChange={(event) =>
-                  setTemplateFormState({
-                    ...templateFormState,
-                    isActive: event.currentTarget.value === "active",
-                  })
-                }
-              >
-                <option value="active">{activityLabel(true)}</option>
-                <option value="archived">{activityLabel(false)}</option>
-              </select>
-            </label>
-          )}
-        </div>
-        <div className="card-template-field-list" role="group" aria-label={uiText.templateFields}>
-          {[...fields]
-            .filter((field) => field.is_active)
-            .sort(
-              (left, right) =>
-                left.position - right.position || left.label.localeCompare(right.label),
-            )
-            .map((field) => {
-              const isSelected = templateFormState.fieldIds.includes(field.id);
-              return (
-                <div className="card-template-field-row" key={field.id}>
-                  <label className="checkbox-control">
-                    <input
-                      type="checkbox"
-                      aria-label={`${uiText.templateField} ${field.label}`}
-                      checked={isSelected}
-                      onChange={() => toggleTemplateField(field.id)}
-                    />
-                    <span>{field.label}</span>
-                  </label>
-                  {isSelected && (
-                    <label>
-                      <span>
-                        {uiText.templateDefaultValue}: {field.label}
-                      </span>
-                      <input
-                        aria-label={`${uiText.templateDefaultValue}: ${field.label}`}
-                        value={templateFormState.defaultValues[field.id] ?? ""}
-                        onChange={(event) =>
-                          updateTemplateDefaultValue(field.id, event.currentTarget.value)
-                        }
-                      />
-                    </label>
-                  )}
-                </div>
-              );
-            })}
         </div>
       </AdminMutationForm>
     );
@@ -1411,14 +1294,13 @@ function SchemaVisualEditor({
               const selectedFields = templateFieldIds(template)
                 .map((fieldId) => fields.find((field) => field.id === fieldId)?.label)
                 .filter(Boolean);
-              const isEditingTemplate =
-                templateFormState?.mode === "edit" && templateFormState.templateId === template.id;
+              const isSelectedTemplate = selectedTemplateId === template.id;
               return (
                 <article
                   key={template.id}
                   className={[
                     "card-template-card",
-                    isEditingTemplate ? "is-expanded" : "",
+                    isSelectedTemplate ? "is-selected" : "",
                     !template.is_active ? "is-archived" : "",
                   ]
                     .filter(Boolean)
@@ -1434,10 +1316,10 @@ function SchemaVisualEditor({
                       <button
                         type="button"
                         className="ghost-button"
-                        aria-label={`${uiText.editCardTemplate} ${template.name}`}
-                        onClick={() => openEditTemplateForm(template)}
+                        aria-label={`${uiText.openCardTemplate} ${template.name}`}
+                        onClick={() => openTemplateEditor(template)}
                       >
-                        {uiText.edit}
+                        {uiText.open}
                       </button>
                       <button
                         type="button"
@@ -1449,11 +1331,6 @@ function SchemaVisualEditor({
                       </button>
                     </div>
                   </header>
-                  {isEditingTemplate && (
-                    <div className="panel-form card-template-form-panel">
-                      {renderTemplateForm()}
-                    </div>
-                  )}
                 </article>
               );
             })
@@ -1493,152 +1370,173 @@ function SchemaVisualEditor({
           />
         </AdminMutationDialog>
       )}
-      <div className="schema-canvas">
-        {sortedBlocks.map((block) => {
-          const blockFields = fieldsByBlockId.get(block.id) ?? [];
-          return (
-            <article key={block.id} className="schema-block-card">
-              <header className="schema-block-header">
-                <div>
-                  <h3>{block.title}</h3>
-                  <span>{`${uiText.technicalCode}: ${block.code}`}</span>
-                </div>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.editFormBlock} ${block.title}`}
-                    onClick={() => openEditBlockForm(block)}
-                  >
-                    {uiText.edit}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`${uiText.archiveFormBlock} ${block.title}`}
-                    onClick={() => {
-                      setLocalError(null);
-                      setSuccessMessage(null);
-                      setBlockArchiveTarget(block);
-                    }}
-                  >
-                    {uiText.moveToArchive}
-                  </button>
-                </div>
-              </header>
-              {blockFormState?.mode === "edit" && blockFormState.blockId === block.id && (
-                <div className="panel-form schema-block-inline-form">{renderBlockForm()}</div>
-              )}
-              <div className="schema-field-list">
-                {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-                {blockFields.map((field) => {
-                  const isEditingField =
-                    fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
-                  return (
-                    <div
-                      key={field.id}
-                      className={[
-                        "schema-field-row",
-                        draggedFieldId === field.id ? "is-dragging" : "",
-                        isEditingField ? "is-expanded" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => handleFieldDrop(blockFields, field.id)}
-                    >
+      {selectedTemplate && (
+        <section
+          className="schema-template-editor"
+          role="region"
+          aria-label={`${uiText.cardTemplateEditor} ${selectedTemplate.name}`}
+        >
+          <header className="schema-template-editor-header">
+            <div>
+              <h3>
+                {uiText.cardTemplateEditor}: {selectedTemplate.name}
+              </h3>
+              <span>{`${uiText.technicalCode}: ${selectedTemplate.code}`}</span>
+            </div>
+            <button type="button" className="ghost-button" onClick={closeTemplateEditor}>
+              {uiText.cancel}
+            </button>
+          </header>
+          <div className="schema-canvas">
+            {sortedBlocks.map((block) => {
+              const blockFields = fieldsByBlockId.get(block.id) ?? [];
+              return (
+                <article key={block.id} className="schema-block-card">
+                  <header className="schema-block-header">
+                    <div>
+                      <h3>{block.title}</h3>
+                      <span>{`${uiText.technicalCode}: ${block.code}`}</span>
+                    </div>
+                    <div className="row-actions">
                       <button
                         type="button"
-                        className="drag-handle schema-drag-handle"
-                        aria-label={`Перетащить поле ${field.label}`}
-                        draggable
-                        onDragStart={(event) => {
-                          if (event.dataTransfer) {
-                            event.dataTransfer.effectAllowed = "move";
-                          }
-                          setDraggedFieldId(field.id);
-                        }}
-                        onDragEnd={() => setDraggedFieldId(null)}
+                        className="ghost-button"
+                        aria-label={`${uiText.editFormBlock} ${block.title}`}
+                        onClick={() => openEditBlockForm(block)}
                       >
-                        ::
+                        {uiText.edit}
                       </button>
-                      <div className="schema-field-main">
-                        <strong>{field.label}</strong>
-                        <span>
-                          {fieldTypeLabel(field.field_type)}
-                          {" / "}
-                          {requiredModeLabel(field.required_mode)}
-                          {" / "}
-                          {activityLabel(field.is_active)}
-                        </span>
-                      </div>
-                      <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          aria-label={`${uiText.editFormField} ${field.label}`}
-                          onClick={() => openEditFieldForm(field)}
-                        >
-                          {uiText.edit}
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          aria-label={`${uiText.archiveFormField} ${field.label}`}
-                          onClick={() => {
-                            setLocalError(null);
-                            setSuccessMessage(null);
-                            setFieldArchiveTarget(field);
-                          }}
-                        >
-                          {uiText.moveToArchive}
-                        </button>
-                      </div>
-                      {isEditingField && (
-                        <div className="schema-field-inline-form">
-                          <div className="panel-form schema-field-form-panel">
-                            {renderFieldForm()}
-                          </div>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        aria-label={`${uiText.archiveFormBlock} ${block.title}`}
+                        onClick={() => {
+                          setLocalError(null);
+                          setSuccessMessage(null);
+                          setBlockArchiveTarget(block);
+                        }}
+                      >
+                        {uiText.moveToArchive}
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
-              <div className="schema-add-field-slot">
-                {fieldFormState?.mode === "create" && fieldFormState.blockId === block.id ? (
-                  <div className="panel-form schema-field-form-panel">{renderFieldForm()}</div>
-                ) : (
-                  <button
-                    type="button"
-                    className="ghost-button schema-add-field-button"
-                    aria-label={`${uiText.addFieldToBlock} ${block.title}`}
-                    onClick={() => openCreateFieldForm(block.id)}
-                  >
-                    + {uiText.addField}
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-      <div className="schema-add-block-slot">
-        {blockFormState?.mode === "create" ? (
-          <div className="panel-form schema-block-inline-form">{renderBlockForm()}</div>
-        ) : (
-          <button
-            type="button"
-            className="ghost-button schema-add-block-button"
-            aria-label={uiText.addFormBlock}
-            disabled={!selectedRegistryId}
-            onClick={openCreateBlockForm}
-          >
-            + {uiText.addFormBlock}
-          </button>
-        )}
-      </div>
+                  </header>
+                  {blockFormState?.mode === "edit" && blockFormState.blockId === block.id && (
+                    <div className="panel-form schema-block-inline-form">{renderBlockForm()}</div>
+                  )}
+                  <div className="schema-field-list">
+                    {blockFields.length === 0 && (
+                      <p className="data-empty">{uiText.noFieldsInBlock}</p>
+                    )}
+                    {blockFields.map((field) => {
+                      const isEditingField =
+                        fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
+                      return (
+                        <div
+                          key={field.id}
+                          className={[
+                            "schema-field-row",
+                            draggedFieldId === field.id ? "is-dragging" : "",
+                            isEditingField ? "is-expanded" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => handleFieldDrop(blockFields, field.id)}
+                        >
+                          <button
+                            type="button"
+                            className="drag-handle schema-drag-handle"
+                            aria-label={`Перетащить поле ${field.label}`}
+                            draggable
+                            onDragStart={(event) => {
+                              if (event.dataTransfer) {
+                                event.dataTransfer.effectAllowed = "move";
+                              }
+                              setDraggedFieldId(field.id);
+                            }}
+                            onDragEnd={() => setDraggedFieldId(null)}
+                          >
+                            ::
+                          </button>
+                          <div className="schema-field-main">
+                            <strong>{field.label}</strong>
+                            <span>
+                              {fieldTypeLabel(field.field_type)}
+                              {" / "}
+                              {requiredModeLabel(field.required_mode)}
+                              {" / "}
+                              {activityLabel(field.is_active)}
+                            </span>
+                          </div>
+                          <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
+                          <div className="row-actions">
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              aria-label={`${uiText.editFormField} ${field.label}`}
+                              onClick={() => openEditFieldForm(field)}
+                            >
+                              {uiText.edit}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              aria-label={`${uiText.archiveFormField} ${field.label}`}
+                              onClick={() => {
+                                setLocalError(null);
+                                setSuccessMessage(null);
+                                setFieldArchiveTarget(field);
+                              }}
+                            >
+                              {uiText.moveToArchive}
+                            </button>
+                          </div>
+                          {isEditingField && (
+                            <div className="schema-field-inline-form">
+                              <div className="panel-form schema-field-form-panel">
+                                {renderFieldForm()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="schema-add-field-slot">
+                    {fieldFormState?.mode === "create" && fieldFormState.blockId === block.id ? (
+                      <div className="panel-form schema-field-form-panel">{renderFieldForm()}</div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ghost-button schema-add-field-button"
+                        aria-label={`${uiText.addFieldToBlock} ${block.title}`}
+                        onClick={() => openCreateFieldForm(block.id)}
+                      >
+                        + {uiText.addField}
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="schema-add-block-slot">
+            {blockFormState?.mode === "create" ? (
+              <div className="panel-form schema-block-inline-form">{renderBlockForm()}</div>
+            ) : (
+              <button
+                type="button"
+                className="ghost-button schema-add-block-button"
+                aria-label={uiText.addFormBlock}
+                disabled={!selectedRegistryId}
+                onClick={openCreateBlockForm}
+              >
+                + {uiText.addFormBlock}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
     </section>
   );
 }

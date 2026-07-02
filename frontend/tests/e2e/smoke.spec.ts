@@ -1701,6 +1701,68 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       });
       return;
     }
+    const setupCardTemplateMatch = url.pathname.match(/^\/api\/v1\/card-templates\/([^/]+)$/);
+    if (setupCardTemplateMatch) {
+      const templateId = setupCardTemplateMatch[1];
+      const current = cardTemplates.find((template) => template.id === templateId);
+      if (!current) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Not Found" }),
+        });
+        return;
+      }
+      if (request.method() === "PATCH") {
+        const body = request.postDataJSON() as Partial<SetupCardTemplate>;
+        const updated = {
+          ...current,
+          name: body.name ?? current.name,
+          description: Object.hasOwn(body, "description")
+            ? (body.description ?? null)
+            : current.description,
+          position: body.position ?? current.position,
+          field_schema_json: Object.hasOwn(body, "field_schema_json")
+            ? (body.field_schema_json ?? null)
+            : current.field_schema_json,
+          default_values_json: body.default_values_json ?? current.default_values_json,
+          is_active: body.is_active ?? current.is_active,
+        };
+        cardTemplates = cardTemplates.map((template) =>
+          template.id === templateId ? updated : template,
+        );
+        appendAuditEvent("update", "card_template", templateId);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(updated),
+        });
+        return;
+      }
+      if (request.method() === "DELETE") {
+        const archived = {
+          ...current,
+          is_active: false,
+          archived_at: "2026-06-28T12:30:00Z",
+        };
+        cardTemplates = cardTemplates.map((template) =>
+          template.id === templateId ? archived : template,
+        );
+        appendAuditEvent("archive", "card_template", templateId);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(archived),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Method Not Allowed" }),
+      });
+      return;
+    }
     if (url.pathname === `/api/v1/registries/${ids.registry}/blocks`) {
       const body = request.postDataJSON() as {
         code: string;
@@ -2223,6 +2285,13 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("tab", { name: "Схема карточки" }).click();
+  await page.getByRole("button", { name: "Создать шаблон карточки" }).click();
+  await page.getByLabel("Название шаблона карточки").fill("Карточка проверки");
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("Шаблон карточки создан")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Редактор шаблона Карточка проверки" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Добавить блок формы" }).click();
   await expect(page.getByLabel("Код блока формы")).toHaveCount(0);
   await expect(page.getByLabel("Описание блока формы")).toHaveCount(0);
@@ -2252,6 +2321,10 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Принято").first()).toBeVisible();
 
   await page.getByRole("tab", { name: "Схема карточки" }).click();
+  await page.getByRole("button", { name: "Открыть шаблон Карточка проверки" }).click();
+  await expect(
+    page.getByRole("region", { name: "Редактор шаблона Карточка проверки" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Добавить поле в блок Основные сведения" }).click();
   await expect(page.getByLabel("Код поля формы", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Блок формы", { exact: true })).toHaveCount(0);
@@ -2269,13 +2342,6 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByLabel("Название поля формы").fill("Файл проверки");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Поле формы создано")).toBeVisible();
-
-  await page.getByRole("button", { name: "Создать шаблон карточки" }).click();
-  await page.getByLabel("Название шаблона карточки").fill("Карточка проверки");
-  await page.getByLabel("Поле шаблона Статус проверки").check();
-  await page.getByLabel("Поле шаблона Файл проверки").check();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Шаблон карточки создан")).toBeVisible();
 
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();

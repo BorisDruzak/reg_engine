@@ -2253,6 +2253,18 @@ async function openExistingCardEditor(user: ReturnType<typeof userEvent.setup>) 
   await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
 }
 
+async function openDefaultSchemaTemplateEditor(user: ReturnType<typeof userEvent.setup>) {
+  const templateSection = await screen.findByRole("region", { name: "Шаблоны карточек" });
+  await user.click(
+    within(templateSection).getByRole("button", {
+      name: "Открыть шаблон Муниципальная карточка",
+    }),
+  );
+  return screen.findByRole("region", {
+    name: "Редактор шаблона Муниципальная карточка",
+  });
+}
+
 type TestOrganizationTreeNode = OrganizationRead & {
   children: TestOrganizationTreeNode[];
 };
@@ -2438,6 +2450,7 @@ test("logs in and renders authenticated admin workspace", async () => {
   await user.click(screen.getByRole("button", { name: "Реестры" }));
   expect((await screen.findAllByText("Реестр активов")).length).toBeGreaterThan(0);
   await user.click(screen.getByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
   expect(screen.getAllByText("Основной блок").length).toBeGreaterThan(0);
   expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
   await openExistingCardEditor(user);
@@ -2684,6 +2697,7 @@ test("creates form fields with required mode from Russian UI", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
   await user.click(
     await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
   );
@@ -2753,9 +2767,24 @@ test("renders a visual card schema editor with fields inside blocks", async () =
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
 
+  const templateSection = await screen.findByRole("region", { name: "Шаблоны карточек" });
+  expect(within(templateSection).getByText("Муниципальная карточка")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Основной блок" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Добавить блок формы" })).not.toBeInTheDocument();
+
+  await user.click(
+    within(templateSection).getByRole("button", {
+      name: "Открыть шаблон Муниципальная карточка",
+    }),
+  );
+
   const visualEditor = await screen.findByRole("region", {
-    name: "Визуальный редактор схемы карточки",
+    name: "Редактор шаблона Муниципальная карточка",
   });
+  expect(
+    screen.queryByRole("form", { name: "Редактировать шаблон карточки" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Значение по умолчанию: Статус")).not.toBeInTheDocument();
   expect(within(visualEditor).queryByLabelText("Название карточки")).not.toBeInTheDocument();
   expect(within(visualEditor).getByRole("heading", { name: "Основной блок" })).toBeInTheDocument();
   expect(within(visualEditor).getAllByText("Статус").length).toBeGreaterThan(0);
@@ -2777,6 +2806,7 @@ test("creates fields from the visual block without description or manual positio
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   await user.click(
     await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
@@ -2814,7 +2844,7 @@ test("creates fields from the visual block without description or manual positio
   });
 });
 
-test("creates card templates with selected schema fields and default values", async () => {
+test("creates card templates from the template list without a separate field picker", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -2837,11 +2867,10 @@ test("creates card templates with selected schema fields and default values", as
     within(templateForm).getByLabelText("Название шаблона карточки"),
     "Типовая карточка",
   );
-  await user.click(within(templateForm).getByLabelText("Поле шаблона Статус"));
-  await user.type(
-    within(templateForm).getByLabelText("Значение по умолчанию: Статус"),
-    "Новый статус",
-  );
+  expect(within(templateForm).queryByLabelText("Поле шаблона Статус")).not.toBeInTheDocument();
+  expect(
+    within(templateForm).queryByLabelText("Значение по умолчанию: Статус"),
+  ).not.toBeInTheDocument();
   await user.click(within(templateForm).getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Шаблон карточки создан")).toBeInTheDocument();
@@ -2863,14 +2892,9 @@ test("creates card templates with selected schema fields and default values", as
       code: "tipovaya_kartochka",
       name: "Типовая карточка",
       field_schema_json: {
-        field_ids: ["99999999-9999-4999-8999-999999999999"],
+        field_ids: [],
       },
-      default_values_json: [
-        {
-          field_id: "99999999-9999-4999-8999-999999999999",
-          value: "Новый статус",
-        },
-      ],
+      default_values_json: [],
     });
   });
 });
@@ -2884,6 +2908,7 @@ test("keeps the field form compact inside the selected visual block", async () =
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   await user.click(
     await screen.findByRole("button", { name: "Добавить поле в блок Основной блок" }),
@@ -2926,6 +2951,7 @@ test("opens field edit and create forms inline at the acted row", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
     "article",
@@ -2972,6 +2998,7 @@ test("opens the block create form at the bottom add-block slot", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   const addBlockButton = await screen.findByRole("button", { name: "Добавить блок формы" });
   const addBlockSlot = addBlockButton.closest(".schema-add-block-slot");
@@ -2994,6 +3021,7 @@ test("changes field order from the visual schema editor by drag and drop", async
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
     "article",
@@ -3047,6 +3075,7 @@ test("marks schema fields for display in the card list", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   await user.click(await screen.findByRole("button", { name: "Редактировать поле формы Статус" }));
   await user.click(await screen.findByLabelText("Отображать поле в списке карточек"));
@@ -4638,6 +4667,7 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   const blockPostCount = () =>
     vi
@@ -5082,6 +5112,7 @@ test("wires select fields to reference lists without hardcoded options", async (
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   await user.click(screen.getByRole("button", { name: "Добавить поле в блок Основной блок" }));
   expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
@@ -5158,6 +5189,7 @@ test("shows localized locked schema field denial text", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
 
   denyNextFieldArchive = true;
   await user.click(screen.getByRole("button", { name: "Архивировать поле формы Статус" }));
