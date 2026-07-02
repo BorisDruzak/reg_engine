@@ -692,20 +692,13 @@ function CardListFilters({
         organizations={organizations}
         selectedOrganizationIds={organizationIds}
         includeDescendantOrganizations={includeDescendantOrganizations}
+        includeArchive={includeArchive}
         onTextQueryChange={onSearchChange}
         onFieldFiltersChange={onFieldFiltersChange}
         onSelectedOrganizationIdsChange={onOrganizationIdsChange}
         onIncludeDescendantOrganizationsChange={onIncludeDescendantOrganizationsChange}
+        onIncludeArchiveChange={onIncludeArchiveChange}
       />
-      <label className="checkbox-control">
-        <input
-          aria-label={uiText.showArchivedCards}
-          checked={includeArchive}
-          type="checkbox"
-          onChange={(event) => onIncludeArchiveChange(event.currentTarget.checked)}
-        />
-        <span>{uiText.showArchivedCards}</span>
-      </label>
     </div>
   );
 }

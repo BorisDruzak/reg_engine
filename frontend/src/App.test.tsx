@@ -147,6 +147,7 @@ const apiPayloads = {
         code: "assets",
         name: "Реестр активов",
         description: "Учет активов",
+        card_title_label: "Название карточки",
         lifecycle_status: "active",
         schema_version: 1,
         owner_organization_id: "22222222-2222-4222-8222-222222222222",
@@ -160,6 +161,7 @@ const apiPayloads = {
       code: "assets",
       name: "Реестр активов",
       description: "Учет активов",
+      card_title_label: "Название карточки",
       lifecycle_status: "active",
       schema_version: 1,
       owner_organization_id: "22222222-2222-4222-8222-222222222222",
@@ -1414,12 +1416,14 @@ beforeEach(() => {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             name?: string | null;
             description?: string | null;
+            card_title_label?: string | null;
             lifecycle_status?: string | null;
           };
           const updated: RegistryRead = {
             ...current,
             name: payload.name ?? current.name,
             description: payload.description ?? current.description,
+            card_title_label: payload.card_title_label ?? current.card_title_label,
             lifecycle_status: payload.lifecycle_status ?? current.lifecycle_status,
           };
           registryItems = registryItems.map((item) => (item.id === registryId ? updated : item));
@@ -1440,12 +1444,14 @@ beforeEach(() => {
             code: string;
             name: string;
             description?: string | null;
+            card_title_label?: string;
           };
           const created: RegistryRead = {
             id: "25252525-2525-4252-8252-252525252525",
             code: payload.code,
             name: payload.name,
             description: payload.description ?? null,
+            card_title_label: payload.card_title_label ?? "Название карточки",
             lifecycle_status: "draft",
             schema_version: 1,
             owner_organization_id: null,
@@ -2683,6 +2689,109 @@ test("keeps the field form compact inside the selected visual block", async () =
   ).toHaveClass("checkbox-inline");
 });
 
+test("edits the card title label inline in the visual schema editor", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const titleInput = await screen.findByRole("textbox", { name: "Название карточки" });
+  expect(titleInput).toHaveValue("Название карточки");
+
+  await user.clear(titleInput);
+  await user.type(titleInput, "Наименование карточки{Enter}");
+
+  expect(await screen.findByText("Реестр обновлен")).toBeInTheDocument();
+  await waitFor(() => {
+    const updateRegistryCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777") &&
+          init?.method === "PATCH" &&
+          String(init.body ?? "").includes("card_title_label"),
+      );
+    expect(updateRegistryCall).toBeTruthy();
+    const body = JSON.parse(String(updateRegistryCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({ card_title_label: "Наименование карточки" });
+  });
+});
+
+test("opens field edit and create forms inline at the acted row", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const statusRow = within(blockCard as HTMLElement)
+    .getByRole("button", { name: "Редактировать поле формы Статус" })
+    .closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+
+  await user.click(
+    within(statusRow as HTMLElement).getByRole("button", {
+      name: "Редактировать поле формы Статус",
+    }),
+  );
+
+  const editForm = await within(statusRow as HTMLElement).findByRole("form", {
+    name: "Редактировать поле формы",
+  });
+  expect(editForm.closest(".schema-field-row")).toBe(statusRow);
+  expect((blockCard as HTMLElement).querySelector(":scope > .schema-field-form-panel")).toBeNull();
+
+  await user.click(within(editForm).getByRole("button", { name: "Отмена" }));
+  const addFieldButton = within(blockCard as HTMLElement).getByRole("button", {
+    name: "Добавить поле в блок Основной блок",
+  });
+  const addFieldSlot = addFieldButton.closest(".schema-add-field-slot");
+  expect(addFieldSlot).not.toBeNull();
+
+  await user.click(addFieldButton);
+
+  const createForm = await within(addFieldSlot as HTMLElement).findByRole("form", {
+    name: "Создать поле формы",
+  });
+  expect(createForm.closest(".schema-add-field-slot")).toBe(addFieldSlot);
+});
+
+test("opens the block create form at the bottom add-block slot", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const addBlockButton = await screen.findByRole("button", { name: "Добавить блок формы" });
+  const addBlockSlot = addBlockButton.closest(".schema-add-block-slot");
+  expect(addBlockSlot).not.toBeNull();
+
+  await user.click(addBlockButton);
+
+  const blockForm = await within(addBlockSlot as HTMLElement).findByRole("form", {
+    name: "Создать блок формы",
+  });
+  expect(blockForm.closest(".schema-add-block-slot")).toBe(addBlockSlot);
+});
+
 test("changes field order from the visual schema editor", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -2760,7 +2869,7 @@ test("marks schema fields for display in the card list", async () => {
   expect(await screen.findByText((text) => text.includes("Статус: drafted"))).toBeInTheDocument();
 });
 
-test("renders reference list details and items in one editor", async () => {
+test("renders reference lists as one expandable editor list", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -2770,18 +2879,33 @@ test("renders reference list details and items in one editor", async () => {
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
   await user.click(await screen.findByRole("tab", { name: "Справочники" }));
 
-  const referenceEditor = await screen.findByRole("region", {
-    name: "Редактор справочника Статусы актива",
+  const referenceWorkspace = await screen.findByRole("region", {
+    name: "Список справочников",
   });
+  const referenceCard = within(referenceWorkspace)
+    .getByRole("button", { name: "Статусы актива" })
+    .closest(".reference-list-card");
+  expect(referenceCard).not.toBeNull();
+  expect(referenceCard).toHaveClass("is-expanded");
+  expect(within(referenceCard as HTMLElement).getByText("Активен")).toBeInTheDocument();
   expect(
-    within(referenceEditor).getByRole("heading", { name: "Статусы актива" }),
+    within(referenceCard as HTMLElement).getByRole("button", {
+      name: "Создать элемент справочника",
+    }),
   ).toBeInTheDocument();
-  expect(within(referenceEditor).getByText("Активен")).toBeInTheDocument();
   expect(
-    within(referenceEditor).getByRole("button", { name: "Создать элемент справочника" }),
+    within(referenceCard as HTMLElement).getByRole("button", {
+      name: "Редактировать справочник Статусы актива",
+    }),
   ).toBeInTheDocument();
+
+  await user.click(
+    within(referenceCard as HTMLElement).getByRole("button", {
+      name: "Редактировать справочник Статусы актива",
+    }),
+  );
   expect(
-    screen.getByRole("button", { name: "Редактировать справочник Статусы актива" }),
+    within(referenceCard as HTMLElement).getByRole("form", { name: "Редактировать справочник" }),
   ).toBeInTheDocument();
 });
 
@@ -2877,6 +3001,9 @@ test("filters cards by search organization and archive visibility", async () => 
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
   expect(within(tagMenu).getByRole("button", { name: /^Организации/ })).toBeInTheDocument();
+  expect(
+    within(tagMenu).getByRole("button", { name: "Показывать архивные и замененные карточки" }),
+  ).toBeInTheDocument();
   expect(within(tagMenu).getByRole("button", { name: "Статус" })).toBeInTheDocument();
   await user.click(screen.getByRole("heading", { level: 2, name: "Карточки" }));
   await waitFor(() => {
@@ -2884,14 +3011,23 @@ test("filters cards by search organization and archive visibility", async () => 
       screen.queryByRole("listbox", { name: "Доступные теги поиска" }),
     ).not.toBeInTheDocument();
   });
-  expect(screen.getByLabelText("Показывать архивные и замененные карточки")).toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("Показывать архивные и замененные карточки"),
+  ).not.toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
   await user.type(within(searchBar).getByLabelText("Поиск карточек"), "Архивная{enter}");
   expect(within(searchBar).getByText("Текст: Архивная")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
-  await user.click(screen.getByLabelText("Показывать архивные и замененные карточки"));
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  await user.click(
+    within(await screen.findByRole("listbox", { name: "Доступные теги поиска" })).getByRole(
+      "button",
+      { name: "Показывать архивные и замененные карточки" },
+    ),
+  );
+  expect(within(searchBar).getByText("Архивные и замененные карточки")).toBeInTheDocument();
   expect(await screen.findByText("Архивная карточка")).toBeInTheDocument();
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   await user.click(

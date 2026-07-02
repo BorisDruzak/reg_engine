@@ -32,10 +32,12 @@ export function CardTagSearchBar({
   organizations,
   selectedOrganizationIds,
   includeDescendantOrganizations,
+  includeArchive,
   onTextQueryChange,
   onFieldFiltersChange,
   onSelectedOrganizationIdsChange,
   onIncludeDescendantOrganizationsChange,
+  onIncludeArchiveChange,
 }: {
   token: string;
   textQuery: string;
@@ -44,10 +46,12 @@ export function CardTagSearchBar({
   organizations: OrganizationRead[];
   selectedOrganizationIds: string[];
   includeDescendantOrganizations: boolean;
+  includeArchive: boolean;
   onTextQueryChange: (value: string) => void;
   onFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onSelectedOrganizationIdsChange: (value: string[]) => void;
   onIncludeDescendantOrganizationsChange: (value: boolean) => void;
+  onIncludeArchiveChange: (value: boolean) => void;
 }) {
   const searchRootRef = useRef<HTMLDivElement | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -231,6 +235,18 @@ export function CardTagSearchBar({
             </button>
           </span>
         ))}
+        {includeArchive && (
+          <span className="search-chip">
+            <span>{uiText.archivedCardsTag}</span>
+            <button
+              type="button"
+              aria-label={`${uiText.removeFilter} ${uiText.archivedCardsTag}`}
+              onClick={() => onIncludeArchiveChange(false)}
+            >
+              x
+            </button>
+          </span>
+        )}
         <form className="card-tag-input-form" onSubmit={submitSearch}>
           <label>
             <span>{uiText.cardSearch}</span>
@@ -296,6 +312,12 @@ export function CardTagSearchBar({
                     setIsOrganizationFilterOpen(false);
                   }
                 }}
+                onClick={() => {
+                  if (!draftFilter) {
+                    setIsTagMenuOpen(true);
+                    setIsOrganizationFilterOpen(false);
+                  }
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     setIsTagMenuOpen(false);
@@ -315,6 +337,17 @@ export function CardTagSearchBar({
             <button type="button" className="search-tag-option" onClick={openOrganizationFilter}>
               <span>{uiText.organizations}</span>
               <small>{organizationFilterSummary}</small>
+            </button>
+            <button
+              type="button"
+              className="search-tag-option"
+              disabled={includeArchive}
+              onClick={() => {
+                onIncludeArchiveChange(true);
+                setIsTagMenuOpen(false);
+              }}
+            >
+              <span>{uiText.showArchivedCards}</span>
             </button>
           </div>
           <div className="search-tag-section">

@@ -44,6 +44,7 @@ def create_registry(
             code=payload.code,
             name=payload.name,
             description=payload.description,
+            card_title_label=payload.card_title_label,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -99,6 +100,7 @@ def update_registry(
             registry_id=registry_id,
             name=payload.name,
             description=payload.description,
+            card_title_label=payload.card_title_label,
             lifecycle_status=payload.lifecycle_status,
         )
     except Exception as exc:

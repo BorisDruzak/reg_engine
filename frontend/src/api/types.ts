@@ -82,6 +82,7 @@ export type RegistryRead = {
   code: string;
   name: string;
   description: string | null;
+  card_title_label: string;
   lifecycle_status: string;
   schema_version: number;
   owner_organization_id: string | null;
@@ -96,11 +97,13 @@ export type RegistryCreatePayload = {
   code: string;
   name: string;
   description?: string | null;
+  card_title_label?: string;
 };
 
 export type RegistryUpdatePayload = {
   name?: string | null;
   description?: string | null;
+  card_title_label?: string | null;
   lifecycle_status?: string | null;
 };
 

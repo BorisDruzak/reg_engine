@@ -29,7 +29,7 @@ export function AdminMutationForm({
   onSubmit: FormEventHandler<HTMLFormElement>;
 }) {
   return (
-    <form className="admin-mutation-form" onSubmit={onSubmit}>
+    <form className="admin-mutation-form" aria-label={title} onSubmit={onSubmit}>
       <header className="admin-mutation-header">
         <h3>{title}</h3>
         {description && <p>{description}</p>}

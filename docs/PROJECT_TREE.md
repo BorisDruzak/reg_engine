@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-02 15:07:01 +05:00
+- Generated: 2026-07-02 15:57:27 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -119,6 +119,7 @@
 - `backend/migrations/versions/0014_report_pdf_output.py`
 - `backend/migrations/versions/0015_audit_created_at_default.py`
 - `backend/migrations/versions/0016_default_registry_for_organization_tree.py`
+- `backend/migrations/versions/0017_registry_card_title_label.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`

@@ -19,6 +19,8 @@ from app.domain.constants import FIELD_TYPES, REGISTRY_STATUSES, REQUIRED_MODES
 from app.models.base import ArchiveMixin, Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.identity import quoted
 
+DEFAULT_CARD_TITLE_LABEL = "Название карточки"
+
 
 class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "registries"
@@ -42,6 +44,12 @@ class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    card_title_label: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default=DEFAULT_CARD_TITLE_LABEL,
+        server_default=DEFAULT_CARD_TITLE_LABEL,
+    )
     lifecycle_status: Mapped[str] = mapped_column(String, nullable=False, server_default="active")
     schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     owner_organization_id: Mapped[UUID | None] = mapped_column(

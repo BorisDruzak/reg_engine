@@ -66,9 +66,11 @@ not a hardcoded employee registry.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Current active checkpoint: **Phase 7G: Visual Schema Polish And Card List
-  Display Fields** is implemented, pushed to `main`, deployed to the server,
-  and live-smoke verified.
+- Current active checkpoint: **Phase 7H: Inline Visual Editor Polish And
+  Reference List Workspace** is implemented locally and pending GitHub/server
+  synchronization. It adds migration `0017_registry_card_title_label`; production
+  migration must use the approved backup, preflight, disposable DB, upgrade, and
+  post-check flow before the deployed backend uses this revision.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1357,3 +1359,82 @@ Verification completed so far:
   checkbox layout, visible field order controls, `Имя` marked as
   `is_list_display`, ordinary card list showing `Имя: Игорь`, and no browser
   console warnings/errors.
+
+## Phase 7H: Inline Visual Editor Polish And Reference List Workspace
+
+Status: implemented locally, pending GitHub push, server sync, production
+migration, frontend deploy, and live browser verification.
+
+Purpose:
+
+Close the next live-use gaps in the registry/card UI without adding
+business-specific fields or new product modules.
+
+Implemented scope:
+
+1. Registry schema editor:
+   - card title label is editable inline as plain text in the visual editor;
+   - `registries.card_title_label` stores the label through migration
+     `0017_registry_card_title_label`;
+   - field edit forms expand inside the clicked field row;
+   - field create forms expand in the clicked `+ Add field` slot inside the
+     selected block;
+   - block create forms expand at the bottom `+ Add form block` slot;
+   - block edit forms render inline in the selected block.
+2. Card list search:
+   - the archived/superseded visibility control moved into the unified tag
+     search workflow;
+   - enabling it creates an archive/superseded tag inside the search bar;
+   - the old separate archive checkbox is removed from the ordinary card list
+     filter area.
+3. Reference lists:
+   - `Registries -> Reference lists` now uses one expandable list workspace;
+   - the selected reference list expands in place and shows properties, items,
+     edit actions, and item create/edit/archive actions;
+   - reference-list metadata and item editing remain on the existing backend
+     API contract.
+4. Accessibility:
+   - shared admin mutation forms now expose `aria-label` from their visible
+     Russian title so inline forms can be identified by tests and assistive
+     technologies.
+
+Non-goals:
+
+- No hardcoded employee or HR-specific fields.
+- No drag-and-drop block or field layout persistence.
+- No new card CRUD behavior beyond UI placement.
+- No import/export, reports, generated documents, attachments, MCP, auth, or
+  public-link workflow changes.
+- No production migration until the standard approved migration flow is run.
+
+Verification completed so far:
+
+- `backend\.venv\Scripts\python.exe -m pytest
+  backend\tests\test_required_field_payloads.py -q`: passed.
+- `pnpm -C frontend test:run src/App.test.tsx -t "card title label|acted
+  row|bottom add-block|search organization and archive|expandable editor"`:
+  passed, 5 tests.
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 130 passed, 162
+  skipped, 1 warning.
+- `backend\.venv\Scripts\ruff.exe check backend`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check backend`: passed after
+  formatting `backend/app/models/registry_schema.py`.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed after Prettier formatting.
+- `pnpm -C frontend test:run`: passed, 68 tests.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: passed, 3 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\project-map.ps1`: updated
+  and checked `docs/PROJECT_TREE.md`.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check.
+
+Remaining work:
+
+- Verify migration `0017_registry_card_title_label` against a disposable
+  PostgreSQL `_test` database before production.
+- Commit, push `main`, update the server checkout, run production migration
+  flow, deploy frontend, and live-smoke verify the UI.

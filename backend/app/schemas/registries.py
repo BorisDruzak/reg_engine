@@ -8,6 +8,7 @@ class RegistryCreate(BaseModel):
     code: str
     name: str
     description: str | None = None
+    card_title_label: str = "Название карточки"
 
 
 class RegistryRead(BaseModel):
@@ -17,6 +18,7 @@ class RegistryRead(BaseModel):
     code: str
     name: str
     description: str | None
+    card_title_label: str
     lifecycle_status: str
     schema_version: int
     owner_organization_id: UUID | None
@@ -30,6 +32,7 @@ class RegistryListRead(BaseModel):
 class RegistryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    card_title_label: str | None = None
     lifecycle_status: str | None = None
 
 
