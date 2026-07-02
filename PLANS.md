@@ -32,10 +32,11 @@ not a hardcoded employee registry.
 - Phase 7C card editor tabs, draft-state persistence, required field mode, and
   required-field validation are implemented and locally verified. No database
   migration is required because `form_fields.required_mode` already exists.
-- Phase 7D organization tag search for the card list is implemented locally:
-  users can filter cards by one or many RBAC-visible organizations, selected
-  parent organizations include descendants by default, and the descendants mode
-  is controlled by a visible tag toggle.
+- Phase 7D organization tag search for the card list is implemented on `main`,
+  pushed to GitHub, deployed to the server, and browser-smoke verified: users
+  can filter cards by one or many RBAC-visible organizations, selected parent
+  organizations include descendants by default, and the descendants mode is
+  controlled by a visible tag toggle.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
@@ -912,7 +913,7 @@ Known limitations:
 
 ## Phase 7D: Organization Tag Search In Card List
 
-Status: implemented and locally verified.
+Status: completed, pushed to `main`, deployed, and live browser-smoke verified.
 
 Purpose:
 
@@ -978,6 +979,20 @@ Verification completed:
   `frontend/test-results` directory race.
 - `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
   and checked `docs/PROJECT_TREE.md`.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
+  "Implement organization tag card filtering" -SkipCheck`: committed and pushed
+  implementation commit `ee68e9b` to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
+  fast-forwarded to `ee68e9b`, backend editable package installed, and
+  server-check passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`: built
+  and uploaded `frontend/dist`, restarted `reg-engine.service`, and passed
+  same-origin frontend/API smoke.
+- Browser live smoke on `http://192.168.100.12:8000/` verified the card list
+  tag `Организации: все доступные`, the popover action `Все доступные`, the
+  checked default toggle `Включать подведомственные`, selecting the accessible
+  organization, the resulting tag with `+ подведомственные`, and no browser
+  console errors.
 
 Known limitations:
 
