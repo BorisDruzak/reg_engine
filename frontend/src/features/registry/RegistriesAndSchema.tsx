@@ -4,11 +4,13 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   archiveFormBlock,
   archiveFormField,
+  archiveCardTemplate,
   archiveReferenceItem,
   archiveReferenceList,
   archiveRegistry,
   createFormBlock,
   createFormField,
+  createCardTemplate,
   createReferenceItem,
   createReferenceList,
   createRegistry,
@@ -16,6 +18,7 @@ import {
   listReferenceLists,
   updateReferenceItem,
   updateReferenceList,
+  updateCardTemplate,
   updateFormBlock,
   updateFormField,
   updateRegistry,
@@ -23,6 +26,7 @@ import {
 import type {
   FormBlockRead,
   FormFieldRead,
+  CardTemplateRead,
   OrganizationRead,
   ReferenceItemRead,
   ReferenceListRead,
@@ -86,6 +90,18 @@ type FieldFormState = {
   isListDisplay: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
+};
+
+type CardTemplateFormState = {
+  mode: "create" | "edit";
+  templateId: string | null;
+  code: string;
+  name: string;
+  description: string;
+  position: string;
+  fieldIds: string[];
+  defaultValues: Record<string, string>;
+  isActive: boolean;
 };
 
 type ReferenceListFormState = {
@@ -391,6 +407,7 @@ export function RegistriesAndSchema({
                 key={`${selectedRegistryId}:${schema?.registry.card_title_label ?? ""}`}
                 blocks={schema?.blocks ?? []}
                 fields={schema?.fields ?? []}
+                templates={schema?.templates ?? []}
                 referenceLists={referenceLists}
                 registry={
                   schema?.registry ??
@@ -485,6 +502,7 @@ function RegistriesTable({
 function SchemaVisualEditor({
   blocks,
   fields,
+  templates,
   referenceLists,
   registry,
   selectedRegistryId,
@@ -492,6 +510,7 @@ function SchemaVisualEditor({
 }: {
   blocks: FormBlockRead[];
   fields: FormFieldRead[];
+  templates: CardTemplateRead[];
   referenceLists: ReferenceListRead[];
   registry: RegistryRead | null;
   selectedRegistryId: string;
@@ -500,11 +519,14 @@ function SchemaVisualEditor({
   const queryClient = useQueryClient();
   const [blockFormState, setBlockFormState] = useState<BlockFormState | null>(null);
   const [fieldFormState, setFieldFormState] = useState<FieldFormState | null>(null);
+  const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
   const [cardTitleDraft, setCardTitleDraft] = useState(
     registry?.card_title_label ?? uiText.cardDisplayName,
   );
   const [blockArchiveTarget, setBlockArchiveTarget] = useState<FormBlockRead | null>(null);
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
+  const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
+  const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const sortedBlocks = useMemo(
@@ -523,6 +545,10 @@ function SchemaVisualEditor({
     }
     return grouped;
   }, [fields]);
+  const sortedTemplates = useMemo(
+    () => [...templates].sort((left, right) => left.position - right.position),
+    [templates],
+  );
   const updateRegistryTitleMutation = useMutation({
     mutationFn: (cardTitleLabel: string) =>
       updateRegistry(token, selectedRegistryId, { card_title_label: cardTitleLabel }),
@@ -632,6 +658,53 @@ function SchemaVisualEditor({
       await invalidateRegistryData(queryClient, token);
     },
   });
+  const createTemplateMutation = useMutation({
+    mutationFn: (payload: {
+      code: string;
+      name: string;
+      description: string | null;
+      position: number;
+      field_schema_json: { field_ids: string[] };
+      default_values_json: { field_id: string; value: unknown }[];
+    }) => createCardTemplate(token, selectedRegistryId, payload),
+    onSuccess: async () => {
+      setTemplateFormState(null);
+      setSuccessMessage(uiText.cardTemplateCreated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const updateTemplateMutation = useMutation({
+    mutationFn: (payload: {
+      templateId: string;
+      name: string;
+      description: string | null;
+      position: number;
+      field_schema_json: { field_ids: string[] };
+      default_values_json: { field_id: string; value: unknown }[];
+      is_active: boolean;
+    }) =>
+      updateCardTemplate(token, payload.templateId, {
+        name: payload.name,
+        description: payload.description,
+        position: payload.position,
+        field_schema_json: payload.field_schema_json,
+        default_values_json: payload.default_values_json,
+        is_active: payload.is_active,
+      }),
+    onSuccess: async () => {
+      setTemplateFormState(null);
+      setSuccessMessage(uiText.cardTemplateUpdated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
+  const archiveTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => archiveCardTemplate(token, templateId),
+    onSuccess: async () => {
+      setTemplateArchiveTarget(null);
+      setSuccessMessage(uiText.cardTemplateArchived);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
   const reorderFieldMutation = useMutation({
     mutationFn: (updates: { fieldId: string; position: number }[]) =>
       Promise.all(
@@ -662,10 +735,15 @@ function SchemaVisualEditor({
       archiveBlockMutation.error ??
       createFieldMutation.error ??
       updateFieldMutation.error ??
+      createTemplateMutation.error ??
+      updateTemplateMutation.error ??
+      archiveTemplateMutation.error ??
       reorderFieldMutation.error ??
       archiveFieldMutation.error);
   const isBlockFormSubmitting = createBlockMutation.isPending || updateBlockMutation.isPending;
   const isFieldFormSubmitting = createFieldMutation.isPending || updateFieldMutation.isPending;
+  const isTemplateFormSubmitting =
+    createTemplateMutation.isPending || updateTemplateMutation.isPending;
 
   function openCreateBlockForm() {
     setLocalError(null);
@@ -754,6 +832,78 @@ function SchemaVisualEditor({
   function closeFieldForm() {
     setFieldFormState(null);
     setLocalError(null);
+  }
+
+  function openCreateTemplateForm() {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setBlockFormState(null);
+    setFieldFormState(null);
+    setTemplateFormState({
+      mode: "create",
+      templateId: null,
+      code: "",
+      name: "",
+      description: "",
+      position: String(nextPosition(templates)),
+      fieldIds: [],
+      defaultValues: {},
+      isActive: true,
+    });
+  }
+
+  function openEditTemplateForm(template: CardTemplateRead) {
+    const fieldIds = templateFieldIds(template);
+    setLocalError(null);
+    setSuccessMessage(null);
+    setBlockFormState(null);
+    setFieldFormState(null);
+    setTemplateFormState({
+      mode: "edit",
+      templateId: template.id,
+      code: template.code,
+      name: template.name,
+      description: template.description ?? "",
+      position: String(template.position),
+      fieldIds,
+      defaultValues: Object.fromEntries(
+        template.default_values_json
+          .filter((item) => typeof item.field_id === "string")
+          .map((item) => [item.field_id, String(item.value ?? "")]),
+      ),
+      isActive: template.is_active,
+    });
+  }
+
+  function closeTemplateForm() {
+    setTemplateFormState(null);
+    setLocalError(null);
+  }
+
+  function toggleTemplateField(fieldId: string) {
+    if (!templateFormState) {
+      return;
+    }
+    const isSelected = templateFormState.fieldIds.includes(fieldId);
+    setTemplateFormState({
+      ...templateFormState,
+      fieldIds: isSelected
+        ? templateFormState.fieldIds.filter((selectedId) => selectedId !== fieldId)
+        : [...templateFormState.fieldIds, fieldId],
+    });
+  }
+
+  function updateTemplateDefaultValue(fieldId: string, value: string) {
+    if (!templateFormState) {
+      return;
+    }
+    setTemplateFormState({
+      ...templateFormState,
+      defaultValues: {
+        ...templateFormState.defaultValues,
+        [fieldId]: value,
+      },
+    });
   }
 
   function submitCardTitleLabel() {
@@ -872,20 +1022,87 @@ function SchemaVisualEditor({
     }
   }
 
-  function moveField(blockFields: FormFieldRead[], fieldId: string, direction: "up" | "down") {
-    const fieldIndex = blockFields.findIndex((field) => field.id === fieldId);
-    const targetIndex = direction === "up" ? fieldIndex - 1 : fieldIndex + 1;
-    if (fieldIndex < 0 || targetIndex < 0 || targetIndex >= blockFields.length) {
+  function handleTemplateFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!templateFormState) {
       return;
     }
-    const field = blockFields[fieldIndex];
-    const target = blockFields[targetIndex];
+    const name = templateFormState.name.trim();
+    if (!name || templateFormState.fieldIds.length === 0) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+    const description = templateFormState.description.trim();
+    const payload = {
+      name,
+      description: description || null,
+      position: positionNumber(templateFormState.position),
+      field_schema_json: {
+        field_ids: templateFormState.fieldIds,
+      },
+      default_values_json: templateFormState.fieldIds
+        .map((fieldId) => ({
+          field_id: fieldId,
+          value: templateFormState.defaultValues[fieldId]?.trim() ?? "",
+        }))
+        .filter((item) => item.value !== ""),
+    };
+
     setLocalError(null);
     setSuccessMessage(null);
-    reorderFieldMutation.mutate([
-      { fieldId: field.id, position: target.position },
-      { fieldId: target.id, position: field.position },
-    ]);
+    if (templateFormState.mode === "create") {
+      createTemplateMutation.mutate({
+        ...payload,
+        code: generateTechnicalCode(
+          name,
+          "template",
+          templates.map((template) => template.code),
+        ),
+      });
+      return;
+    }
+    if (templateFormState.templateId) {
+      updateTemplateMutation.mutate({
+        ...payload,
+        templateId: templateFormState.templateId,
+        is_active: templateFormState.isActive,
+      });
+    }
+  }
+
+  function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
+    if (!draggedFieldId || draggedFieldId === targetFieldId) {
+      setDraggedFieldId(null);
+      return;
+    }
+    const draggedIndex = blockFields.findIndex((field) => field.id === draggedFieldId);
+    const targetIndex = blockFields.findIndex((field) => field.id === targetFieldId);
+    if (draggedIndex < 0 || targetIndex < 0) {
+      setDraggedFieldId(null);
+      return;
+    }
+    const orderedFields = [...blockFields];
+    const [draggedField] = orderedFields.splice(draggedIndex, 1);
+    orderedFields.splice(targetIndex, 0, draggedField);
+    const sortedPositions = [...blockFields.map((field) => field.position)].sort(
+      (left, right) => left - right,
+    );
+    const updates = orderedFields
+      .map((field, index) => ({
+        fieldId: field.id,
+        position: sortedPositions[index] ?? index,
+      }))
+      .filter(
+        (update) =>
+          blockFields.find((field) => field.id === update.fieldId)?.position !== update.position,
+      );
+    setDraggedFieldId(null);
+    if (updates.length === 0) {
+      return;
+    }
+    setLocalError(null);
+    setSuccessMessage(null);
+    reorderFieldMutation.mutate(updates);
   }
 
   function renderBlockForm() {
@@ -1110,6 +1327,97 @@ function SchemaVisualEditor({
     );
   }
 
+  function renderTemplateForm() {
+    if (!templateFormState) {
+      return null;
+    }
+
+    return (
+      <AdminMutationForm
+        title={
+          templateFormState.mode === "create" ? uiText.createCardTemplate : uiText.editCardTemplate
+        }
+        submitLabel={templateFormState.mode === "create" ? uiText.create : uiText.save}
+        isSubmitting={isTemplateFormSubmitting}
+        error={mutationError}
+        successMessage={null}
+        onCancel={closeTemplateForm}
+        onSubmit={handleTemplateFormSubmit}
+      >
+        <div className="card-template-form-grid">
+          <label>
+            <span>{uiText.cardTemplateName}</span>
+            <input
+              aria-label={uiText.cardTemplateName}
+              value={templateFormState.name}
+              onChange={(event) =>
+                setTemplateFormState({
+                  ...templateFormState,
+                  name: event.currentTarget.value,
+                })
+              }
+            />
+          </label>
+          {templateFormState.mode === "edit" && (
+            <label>
+              <span>{uiText.status}</span>
+              <select
+                value={templateFormState.isActive ? "active" : "archived"}
+                onChange={(event) =>
+                  setTemplateFormState({
+                    ...templateFormState,
+                    isActive: event.currentTarget.value === "active",
+                  })
+                }
+              >
+                <option value="active">{activityLabel(true)}</option>
+                <option value="archived">{activityLabel(false)}</option>
+              </select>
+            </label>
+          )}
+        </div>
+        <div className="card-template-field-list" role="group" aria-label={uiText.templateFields}>
+          {[...fields]
+            .filter((field) => field.is_active)
+            .sort(
+              (left, right) =>
+                left.position - right.position || left.label.localeCompare(right.label),
+            )
+            .map((field) => {
+              const isSelected = templateFormState.fieldIds.includes(field.id);
+              return (
+                <div className="card-template-field-row" key={field.id}>
+                  <label className="checkbox-control">
+                    <input
+                      type="checkbox"
+                      aria-label={`${uiText.templateField} ${field.label}`}
+                      checked={isSelected}
+                      onChange={() => toggleTemplateField(field.id)}
+                    />
+                    <span>{field.label}</span>
+                  </label>
+                  {isSelected && (
+                    <label>
+                      <span>
+                        {uiText.templateDefaultValue}: {field.label}
+                      </span>
+                      <input
+                        aria-label={`${uiText.templateDefaultValue}: ${field.label}`}
+                        value={templateFormState.defaultValues[field.id] ?? ""}
+                        onChange={(event) =>
+                          updateTemplateDefaultValue(field.id, event.currentTarget.value)
+                        }
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      </AdminMutationForm>
+    );
+  }
+
   return (
     <section
       className="schema-visual-editor"
@@ -1134,6 +1442,78 @@ function SchemaVisualEditor({
           />
         </label>
       </form>
+      <section className="card-template-section" role="region" aria-label={uiText.cardTemplates}>
+        <header className="card-template-section-header">
+          <h3>{uiText.cardTemplates}</h3>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!selectedRegistryId}
+            onClick={openCreateTemplateForm}
+          >
+            {uiText.createCardTemplate}
+          </button>
+        </header>
+        {templateFormState?.mode === "create" && (
+          <div className="panel-form card-template-form-panel">{renderTemplateForm()}</div>
+        )}
+        <div className="card-template-list">
+          {sortedTemplates.length === 0 ? (
+            <p className="data-empty">{uiText.noData}</p>
+          ) : (
+            sortedTemplates.map((template) => {
+              const selectedFields = templateFieldIds(template)
+                .map((fieldId) => fields.find((field) => field.id === fieldId)?.label)
+                .filter(Boolean);
+              const isEditingTemplate =
+                templateFormState?.mode === "edit" && templateFormState.templateId === template.id;
+              return (
+                <article
+                  key={template.id}
+                  className={[
+                    "card-template-card",
+                    isEditingTemplate ? "is-expanded" : "",
+                    !template.is_active ? "is-archived" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <header className="card-template-card-header">
+                    <div>
+                      <h4>{template.name}</h4>
+                      <span>{`${uiText.technicalCode}: ${template.code}`}</span>
+                      {selectedFields.length > 0 && <small>{selectedFields.join(", ")}</small>}
+                    </div>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        aria-label={`${uiText.editCardTemplate} ${template.name}`}
+                        onClick={() => openEditTemplateForm(template)}
+                      >
+                        {uiText.edit}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        aria-label={`${uiText.archiveCardTemplate} ${template.name}`}
+                        onClick={() => setTemplateArchiveTarget(template)}
+                      >
+                        {uiText.moveToArchive}
+                      </button>
+                    </div>
+                  </header>
+                  {isEditingTemplate && (
+                    <div className="panel-form card-template-form-panel">
+                      {renderTemplateForm()}
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
       {blockArchiveTarget && (
         <AdminMutationDialog title={uiText.archiveFormBlock}>
           <ArchiveConfirmation
@@ -1153,6 +1533,17 @@ function SchemaVisualEditor({
             isPending={archiveFieldMutation.isPending}
             onCancel={() => setFieldArchiveTarget(null)}
             onConfirm={() => archiveFieldMutation.mutate(fieldArchiveTarget.id)}
+          />
+        </AdminMutationDialog>
+      )}
+      {templateArchiveTarget && (
+        <AdminMutationDialog title={uiText.archiveCardTemplate}>
+          <ArchiveConfirmation
+            entityLabel={uiText.cardTemplate}
+            itemLabel={templateArchiveTarget.name}
+            isPending={archiveTemplateMutation.isPending}
+            onCancel={() => setTemplateArchiveTarget(null)}
+            onConfirm={() => archiveTemplateMutation.mutate(templateArchiveTarget.id)}
           />
         </AdminMutationDialog>
       )}
@@ -1194,16 +1585,37 @@ function SchemaVisualEditor({
               )}
               <div className="schema-field-list">
                 {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-                {blockFields.map((field, fieldIndex) => {
+                {blockFields.map((field) => {
                   const isEditingField =
                     fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
                   return (
                     <div
                       key={field.id}
-                      className={["schema-field-row", isEditingField ? "is-expanded" : ""]
+                      className={[
+                        "schema-field-row",
+                        draggedFieldId === field.id ? "is-dragging" : "",
+                        isEditingField ? "is-expanded" : "",
+                      ]
                         .filter(Boolean)
                         .join(" ")}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => handleFieldDrop(blockFields, field.id)}
                     >
+                      <button
+                        type="button"
+                        className="drag-handle schema-drag-handle"
+                        aria-label={`Перетащить поле ${field.label}`}
+                        draggable
+                        onDragStart={(event) => {
+                          if (event.dataTransfer) {
+                            event.dataTransfer.effectAllowed = "move";
+                          }
+                          setDraggedFieldId(field.id);
+                        }}
+                        onDragEnd={() => setDraggedFieldId(null)}
+                      >
+                        ::
+                      </button>
                       <div className="schema-field-main">
                         <strong>{field.label}</strong>
                         <span>
@@ -1213,30 +1625,6 @@ function SchemaVisualEditor({
                           {" / "}
                           {activityLabel(field.is_active)}
                         </span>
-                      </div>
-                      <div className="schema-field-order-actions" aria-label="Порядок поля">
-                        <button
-                          type="button"
-                          className="ghost-button icon-button"
-                          aria-label={`Переместить поле ${field.label} выше`}
-                          title={`Переместить поле ${field.label} выше`}
-                          disabled={fieldIndex === 0 || reorderFieldMutation.isPending}
-                          onClick={() => moveField(blockFields, field.id, "up")}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button icon-button"
-                          aria-label={`Переместить поле ${field.label} ниже`}
-                          title={`Переместить поле ${field.label} ниже`}
-                          disabled={
-                            fieldIndex === blockFields.length - 1 || reorderFieldMutation.isPending
-                          }
-                          onClick={() => moveField(blockFields, field.id, "down")}
-                        >
-                          ↓
-                        </button>
                       </div>
                       <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
                       <div className="row-actions">
@@ -2083,6 +2471,14 @@ async function invalidateReferenceData(
   await queryClient.invalidateQueries({ queryKey: ["reference-lists", token, registryId] });
   await queryClient.invalidateQueries({ queryKey: ["reference-items", token, referenceListId] });
   await invalidateRegistryData(queryClient, token);
+}
+
+function templateFieldIds(template: CardTemplateRead) {
+  const fieldIds = template.field_schema_json?.field_ids;
+  if (!Array.isArray(fieldIds)) {
+    return [];
+  }
+  return fieldIds.filter((fieldId): fieldId is string => typeof fieldId === "string");
 }
 
 function positionNumber(value: string) {

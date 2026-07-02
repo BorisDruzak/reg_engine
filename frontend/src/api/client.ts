@@ -6,6 +6,10 @@ import type {
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
+  CardTemplateCreatePayload,
+  CardTemplateListRead,
+  CardTemplateRead,
+  CardTemplateUpdatePayload,
   CardCreatePayload,
   CardFieldFilterPayload,
   CardImportCommitPayload,
@@ -222,6 +226,45 @@ export async function getRegistrySchema(token: string, registryId: string) {
   return apiRequest<RegistrySchemaRead>(`/api/v1/registries/${registryId}/schema`, { token });
 }
 
+export async function listCardTemplates(token: string, registryId: string, includeArchive = false) {
+  const archiveQuery = includeArchive ? "?include_archive=true" : "";
+  return apiRequest<CardTemplateListRead>(
+    `/api/v1/registries/${registryId}/card-templates${archiveQuery}`,
+    { token },
+  );
+}
+
+export async function createCardTemplate(
+  token: string,
+  registryId: string,
+  payload: CardTemplateCreatePayload,
+) {
+  return apiRequest<CardTemplateRead>(`/api/v1/registries/${registryId}/card-templates`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function updateCardTemplate(
+  token: string,
+  templateId: string,
+  payload: CardTemplateUpdatePayload,
+) {
+  return apiRequest<CardTemplateRead>(`/api/v1/card-templates/${templateId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveCardTemplate(token: string, templateId: string) {
+  return apiRequest<CardTemplateRead>(`/api/v1/card-templates/${templateId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function createFormBlock(
   token: string,
   registryId: string,
@@ -287,6 +330,7 @@ export async function archiveFormField(token: string, fieldId: string) {
 export type CardListOptions = {
   organizationId?: string;
   organizationIds?: string[];
+  cardTemplateIds?: string[];
   includeDescendantOrganizations?: boolean;
   includeArchive?: boolean;
   q?: string;
@@ -322,6 +366,9 @@ function cardListSearchParams(options: CardListOptions) {
   }
   for (const organizationId of options.organizationIds ?? []) {
     params.append("organization_ids", organizationId);
+  }
+  for (const cardTemplateId of options.cardTemplateIds ?? []) {
+    params.append("card_template_ids", cardTemplateId);
   }
   if (options.includeDescendantOrganizations !== undefined) {
     params.set(

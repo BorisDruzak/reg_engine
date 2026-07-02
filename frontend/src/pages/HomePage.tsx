@@ -42,6 +42,7 @@ type WorkspaceUiState = {
   cardSearch: string;
   cardOrganizationIds: string[];
   cardIncludeDescendantOrganizations: boolean;
+  cardTemplateIds: string[];
   cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
 };
@@ -61,6 +62,7 @@ export function HomePage() {
     cardSearch,
     cardOrganizationIds,
     cardIncludeDescendantOrganizations,
+    cardTemplateIds,
     cardFieldFilters,
     includeArchivedCards,
   } = workspaceUiState;
@@ -109,6 +111,7 @@ export function HomePage() {
       cardIncludeDescendantOrganizations,
       includeArchivedCards,
       cardSearch,
+      cardTemplateIds.join("|"),
       JSON.stringify(cardFieldFilters),
     ],
     queryFn: () =>
@@ -117,6 +120,7 @@ export function HomePage() {
         includeDescendantOrganizations: cardIncludeDescendantOrganizations,
         includeArchive: includeArchivedCards,
         q: cardSearch || undefined,
+        cardTemplateIds,
         fieldFilters: cardFieldFilters,
       }),
     enabled: Boolean(token && cardListOrganizationId && needsCards),
@@ -222,6 +226,10 @@ export function HomePage() {
     setWorkspaceUiState((current) => ({ ...current, cardFieldFilters: value }));
   }
 
+  function setCardTemplateIds(value: string[]) {
+    setWorkspaceUiState((current) => ({ ...current, cardTemplateIds: value }));
+  }
+
   function setIncludeArchivedCards(value: boolean) {
     setWorkspaceUiState((current) => ({ ...current, includeArchivedCards: value }));
   }
@@ -257,6 +265,11 @@ export function HomePage() {
 
   function handleCardFieldFiltersChange(value: CardFieldFilterPayload[]) {
     setCardFieldFilters(value);
+    setSelectedCardId(null);
+  }
+
+  function handleCardTemplateIdsChange(value: string[]) {
+    setCardTemplateIds(value);
     setSelectedCardId(null);
   }
 
@@ -373,6 +386,7 @@ export function HomePage() {
             cardSearch={cardSearch}
             cardOrganizationIds={cardOrganizationIds}
             cardIncludeDescendantOrganizations={cardIncludeDescendantOrganizations}
+            cardTemplateIds={cardTemplateIds}
             cardFieldFilters={cardFieldFilters}
             includeArchivedCards={includeArchivedCards}
             onSelectCard={setSelectedCardId}
@@ -381,6 +395,7 @@ export function HomePage() {
             onCardIncludeDescendantOrganizationsChange={
               handleCardIncludeDescendantOrganizationsChange
             }
+            onCardTemplateIdsChange={handleCardTemplateIdsChange}
             onCardFieldFiltersChange={handleCardFieldFiltersChange}
             onIncludeArchivedCardsChange={handleIncludeArchivedCardsChange}
           />
@@ -441,6 +456,7 @@ function defaultWorkspaceUiState(): WorkspaceUiState {
     cardSearch: "",
     cardOrganizationIds: [],
     cardIncludeDescendantOrganizations: true,
+    cardTemplateIds: [],
     cardFieldFilters: [],
     includeArchivedCards: false,
   };
@@ -464,6 +480,7 @@ function loadWorkspaceUiState(): WorkspaceUiState {
         typeof parsed.cardIncludeDescendantOrganizations === "boolean"
           ? parsed.cardIncludeDescendantOrganizations
           : true,
+      cardTemplateIds: normalizeStringList(parsed.cardTemplateIds),
       cardFieldFilters: normalizeCardFieldFilters(parsed.cardFieldFilters),
       includeArchivedCards:
         typeof parsed.includeArchivedCards === "boolean" ? parsed.includeArchivedCards : false,
@@ -475,6 +492,12 @@ function loadWorkspaceUiState(): WorkspaceUiState {
 
 function saveWorkspaceUiState(state: WorkspaceUiState) {
   localStorage.setItem(workspaceUiStateKey, JSON.stringify(state));
+}
+
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function normalizeCardFieldFilters(value: unknown): CardFieldFilterPayload[] {

@@ -59,6 +59,7 @@ def create_card(
             registry_id=registry_id,
             organization_id=payload.organization_id,
             display_name=payload.display_name,
+            card_template_id=payload.card_template_id,
             org_unit_id=payload.org_unit_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
@@ -85,6 +86,7 @@ def create_organization_card(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
             display_name=payload.display_name,
+            card_template_id=payload.card_template_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
         )
@@ -104,6 +106,7 @@ def list_cards(
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
     filters: Annotated[str | None, Query()] = None,
+    card_template_ids: Annotated[list[UUID] | None, Query()] = None,
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -117,6 +120,7 @@ def list_cards(
             include_archive=include_archive,
             query=q,
             field_filters=field_filters,
+            card_template_ids=card_template_ids,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -134,6 +138,7 @@ def list_organization_cards(
     include_archive: Annotated[bool, Query()] = False,
     q: Annotated[str | None, Query()] = None,
     filters: Annotated[str | None, Query()] = None,
+    card_template_ids: Annotated[list[UUID] | None, Query()] = None,
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -147,6 +152,7 @@ def list_organization_cards(
             include_archive=include_archive,
             query=q,
             field_filters=field_filters,
+            card_template_ids=card_template_ids,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -399,6 +405,8 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
     return CardRead(
         id=card_read.card_id,
         registry_id=card_read.registry_id,
+        card_template_id=card_read.card_template_id,
+        card_template_name=card_read.card_template_name,
         organization_id=card_read.organization_id,
         display_name=card_read.display_name,
         blocks={
@@ -453,6 +461,8 @@ def _card_to_summary(card: Card, card_service: CardService) -> CardSummaryRead:
     return CardSummaryRead(
         id=card.id,
         registry_id=card.registry_id,
+        card_template_id=card.card_template_id,
+        card_template_name=card_service._card_template_name(card),
         organization_id=card.organization_id,
         org_unit_id=card.org_unit_id,
         display_name=card.display_name,

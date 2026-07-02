@@ -1,11 +1,20 @@
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
-from app.models import Card, FormBlock, FormField, Organization, OrganizationClosure, Registry
+from app.models import (
+    Card,
+    CardTemplate,
+    FormBlock,
+    FormField,
+    Organization,
+    OrganizationClosure,
+    Registry,
+)
 from app.models.registry_schema import DEFAULT_CARD_TITLE_LABEL
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
@@ -325,7 +334,7 @@ class RegistrySchemaService:
         *,
         actor_user_id: UUID,
         registry_id: UUID,
-    ) -> tuple[Registry, list[FormBlock], list[FormField]]:
+    ) -> tuple[Registry, list[FormBlock], list[FormField], list[CardTemplate]]:
         registry = self.read_registry_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
@@ -355,7 +364,18 @@ class RegistrySchemaService:
                     .order_by(FormField.position, FormField.code, FormField.id)
                 ).all()
             )
-        return registry, blocks, fields
+        templates = list(
+            self.session.scalars(
+                select(CardTemplate)
+                .where(
+                    CardTemplate.registry_id == registry.id,
+                    CardTemplate.archived_at.is_(None),
+                    CardTemplate.is_active.is_(True),
+                )
+                .order_by(CardTemplate.position, CardTemplate.name, CardTemplate.id)
+            ).all()
+        )
+        return registry, blocks, fields, templates
 
     def create_block_for_actor(
         self,
@@ -609,6 +629,170 @@ class RegistrySchemaService:
         )
         return field
 
+    def list_card_templates_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        include_archive: bool = False,
+    ) -> list[CardTemplate]:
+        self.read_registry_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            include_archive=False,
+        )
+        criteria = [CardTemplate.registry_id == registry_id]
+        if not include_archive:
+            criteria.extend(
+                [
+                    CardTemplate.archived_at.is_(None),
+                    CardTemplate.is_active.is_(True),
+                ]
+            )
+        return list(
+            self.session.scalars(
+                select(CardTemplate)
+                .where(*criteria)
+                .order_by(CardTemplate.position, CardTemplate.name, CardTemplate.id)
+            ).all()
+        )
+
+    def create_card_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        code: str,
+        name: str,
+        description: str | None = None,
+        position: int = 0,
+        field_schema_json: dict[str, Any] | None = None,
+        default_values_json: list[dict[str, Any]] | None = None,
+        is_active: bool = True,
+    ) -> CardTemplate:
+        self._require_schema_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        normalized_schema, normalized_defaults = self._normalize_card_template_payload(
+            registry_id=registry_id,
+            field_schema_json=field_schema_json,
+            default_values_json=default_values_json,
+        )
+
+        template = CardTemplate(
+            registry_id=registry_id,
+            code=code,
+            name=name,
+            description=description,
+            position=position,
+            field_schema_json=normalized_schema,
+            default_values_json=normalized_defaults,
+            is_active=is_active,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+        )
+        self.session.add(template)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="card_template",
+            object_id=template.id,
+            new_data_json={
+                "registry_id": str(registry_id),
+                "code": code,
+                "name": name,
+                "field_schema_json": normalized_schema,
+            },
+        )
+        return template
+
+    def update_card_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        name: str | None = None,
+        description: str | None = None,
+        position: int | None = None,
+        field_schema_json: dict[str, Any] | None = None,
+        default_values_json: list[dict[str, Any]] | None = None,
+        is_active: bool | None = None,
+    ) -> CardTemplate:
+        template = self._get_card_template(template_id, include_archive=False)
+        self._require_schema_permission(actor_user_id, template.registry_id)
+        old_data = {
+            "name": template.name,
+            "description": template.description,
+            "position": template.position,
+            "field_schema_json": template.field_schema_json,
+            "default_values_json": template.default_values_json,
+            "is_active": template.is_active,
+        }
+
+        if field_schema_json is not None or default_values_json is not None:
+            normalized_schema, normalized_defaults = self._normalize_card_template_payload(
+                registry_id=template.registry_id,
+                field_schema_json=(
+                    field_schema_json
+                    if field_schema_json is not None
+                    else template.field_schema_json
+                ),
+                default_values_json=(
+                    default_values_json
+                    if default_values_json is not None
+                    else template.default_values_json
+                ),
+            )
+            template.field_schema_json = normalized_schema
+            template.default_values_json = normalized_defaults
+        if name is not None:
+            template.name = name
+        if description is not None:
+            template.description = description
+        if position is not None:
+            template.position = position
+        if is_active is not None:
+            template.is_active = is_active
+        template.updated_by = actor_user_id
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="card_template",
+            object_id=template.id,
+            old_data_json=old_data,
+            new_data_json={
+                "name": template.name,
+                "description": template.description,
+                "position": template.position,
+                "field_schema_json": template.field_schema_json,
+                "default_values_json": template.default_values_json,
+                "is_active": template.is_active,
+            },
+        )
+        return template
+
+    def archive_card_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+    ) -> CardTemplate:
+        template = self._get_card_template(template_id, include_archive=False)
+        self._require_schema_permission(actor_user_id, template.registry_id)
+        template.archived_at = datetime.now(UTC)
+        template.archived_by = actor_user_id
+        template.is_active = False
+        template.updated_by = actor_user_id
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="archive",
+            object_type="card_template",
+            object_id=template.id,
+        )
+        return template
+
     def _require_schema_permission(self, actor_user_id: UUID, registry_id: UUID) -> None:
         permissions = PermissionService(self.session)
         if not permissions.has_permission(
@@ -645,6 +829,19 @@ class RegistrySchemaService:
             raise RegistrySchemaError("Registry was not found.")
         return registry
 
+    def _get_card_template(
+        self,
+        template_id: UUID,
+        *,
+        include_archive: bool,
+    ) -> CardTemplate:
+        template = self.session.get(CardTemplate, template_id)
+        if template is None or (
+            not include_archive and (template.archived_at is not None or not template.is_active)
+        ):
+            raise RegistrySchemaError("Card template was not found.")
+        return template
+
     def _get_active_block(self, block_id: UUID) -> FormBlock:
         block = self.session.get(FormBlock, block_id)
         if block is None or block.archived_at is not None or not block.is_active:
@@ -664,6 +861,72 @@ class RegistrySchemaService:
     def _ensure_mutable_field(self, field: FormField) -> None:
         if field.is_locked or field.is_system:
             raise RegistrySchemaError("Locked or system form fields cannot be changed here.")
+
+    def _normalize_card_template_payload(
+        self,
+        *,
+        registry_id: UUID,
+        field_schema_json: dict[str, Any] | None,
+        default_values_json: list[dict[str, Any]] | None,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        raw_schema = field_schema_json or {}
+        raw_field_ids = raw_schema.get("field_ids", [])
+        if not isinstance(raw_field_ids, list):
+            raise RegistrySchemaError("Card template field schema must contain a field_ids list.")
+
+        field_ids: list[UUID] = []
+        for raw_field_id in raw_field_ids:
+            try:
+                field_ids.append(UUID(str(raw_field_id)))
+            except (TypeError, ValueError) as exc:
+                raise RegistrySchemaError("Card template field ids must be UUID values.") from exc
+
+        known_field_ids = self._active_field_ids_for_registry(registry_id)
+        unknown_field_ids = [field_id for field_id in field_ids if field_id not in known_field_ids]
+        if unknown_field_ids:
+            raise RegistrySchemaError("Card template fields must belong to the registry schema.")
+
+        normalized_field_ids = [str(field_id) for field_id in field_ids]
+        allowed_field_ids = set(normalized_field_ids)
+        normalized_schema = {**raw_schema, "field_ids": normalized_field_ids}
+
+        normalized_defaults: list[dict[str, Any]] = []
+        for raw_default in default_values_json or []:
+            if not isinstance(raw_default, dict):
+                raise RegistrySchemaError("Card template defaults must be objects.")
+            try:
+                default_field_id = str(UUID(str(raw_default["field_id"])))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise RegistrySchemaError("Card template defaults require field_id UUID.") from exc
+            if default_field_id not in allowed_field_ids:
+                raise RegistrySchemaError(
+                    "Card template default fields must be included in the template field schema."
+                )
+            if "value" not in raw_default:
+                raise RegistrySchemaError("Card template defaults require value.")
+            normalized_defaults.append(
+                {
+                    "field_id": default_field_id,
+                    "value": raw_default["value"],
+                }
+            )
+
+        return normalized_schema, normalized_defaults
+
+    def _active_field_ids_for_registry(self, registry_id: UUID) -> set[UUID]:
+        return set(
+            self.session.scalars(
+                select(FormField.id)
+                .join(FormBlock, FormBlock.id == FormField.block_id)
+                .where(
+                    FormBlock.registry_id == registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                )
+            ).all()
+        )
 
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:

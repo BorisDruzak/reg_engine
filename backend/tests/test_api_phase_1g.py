@@ -268,6 +268,8 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
         "/api/v1/organizations/{organization_id}",
         "/api/v1/registries/{registry_id}",
         "/api/v1/registries/{registry_id}/schema",
+        "/api/v1/registries/{registry_id}/card-templates",
+        "/api/v1/card-templates/{template_id}",
         "/api/v1/blocks/{block_id}",
         "/api/v1/fields/{field_id}",
         "/api/v1/registries/{registry_id}/reference-lists",

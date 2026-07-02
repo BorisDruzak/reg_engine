@@ -17,6 +17,7 @@ from app.models import (
     AccessGrant,
     AuditEvent,
     Card,
+    CardTemplate,
     FieldValue,
     FieldValueItem,
     FormBlock,
@@ -589,6 +590,115 @@ def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visi
 
     assert child_card.registry_id == sibling_card.registry_id == context["registry"].id
     assert {card.id for card in visible_cards} == {child_card.id}
+
+
+def test_card_template_creates_card_name_and_default_values(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="template-main",
+        title="Template main",
+    )
+    text_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="template_text",
+        label="Template text",
+        field_type="text",
+    )
+    bool_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="template_bool",
+        label="Template bool",
+        field_type="bool",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="template-card",
+        name="Template card",
+        field_schema_json={"field_ids": [str(text_field.id), str(bool_field.id)]},
+        default_values_json=[
+            {"field_id": str(text_field.id), "value": "prefilled"},
+            {"field_id": str(bool_field.id), "value": True},
+        ],
+    )
+
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        card_template_id=template.id,
+    )
+
+    assert db_session.get(CardTemplate, template.id) is not None
+    assert card.display_name == "Template card"
+    assert card.card_template_id == template.id
+    values = {
+        value.field_id: value
+        for value in db_session.scalars(select(FieldValue).where(FieldValue.card_id == card.id))
+    }
+    assert values[text_field.id].value_text == "prefilled"
+    assert values[bool_field.id].value_bool is True
+
+
+def test_card_template_filter_is_backend_enforced(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="template-filter",
+        title="Template filter",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="filter_text",
+        label="Filter text",
+        field_type="text",
+    )
+    first_template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="first-template",
+        name="First template",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+    second_template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="second-template",
+        name="Second template",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+    first_card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        card_template_id=first_template.id,
+    )
+    card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        card_template_id=second_template.id,
+    )
+
+    visible_cards = card_service.list_visible_cards(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        card_template_ids=[first_template.id],
+    )
+
+    assert [card.id for card in visible_cards] == [first_card.id]
 
 
 def test_existing_card_org_unit_can_be_corrected_inside_same_organization(

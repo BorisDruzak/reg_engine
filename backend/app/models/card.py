@@ -32,6 +32,7 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
             name="lifecycle_status",
         ),
         Index("ix_cards_registry_id", "registry_id"),
+        Index("ix_cards_card_template_id", "card_template_id"),
         Index("ix_cards_organization_id", "organization_id"),
         Index("ix_cards_org_unit_id", "org_unit_id"),
         Index("ix_cards_lifecycle_status", "lifecycle_status"),
@@ -45,6 +46,9 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     )
 
     registry_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("registries.id"))
+    card_template_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("card_templates.id")
+    )
     organization_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("organizations.id")
     )

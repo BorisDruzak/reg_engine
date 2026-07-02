@@ -7,7 +7,7 @@ from app.models.identity import Permission, Role, User, role_permissions
 from app.models.organization import AccessGrant, Organization, OrganizationClosure, OrgUnit
 from app.models.public_link import CardPublicLink
 from app.models.reference import ReferenceItem, ReferenceList
-from app.models.registry_schema import FormBlock, FormField, Registry
+from app.models.registry_schema import CardTemplate, FormBlock, FormField, Registry
 from app.models.report import ReportRun, ReportTemplate
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "CardBlockInstance",
     "CardPublicLink",
     "CardRelation",
+    "CardTemplate",
     "DocumentTemplate",
     "DocumentTemplateVersion",
     "FieldValue",

@@ -178,6 +178,46 @@ export type FormFieldUpdatePayload = {
   is_list_display?: boolean | null;
 };
 
+export type CardTemplateDefaultValue = {
+  field_id: string;
+  value: unknown;
+};
+
+export type CardTemplateRead = {
+  id: string;
+  registry_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  position: number;
+  field_schema_json: Record<string, unknown>;
+  default_values_json: CardTemplateDefaultValue[];
+  is_active: boolean;
+};
+
+export type CardTemplateListRead = {
+  items: CardTemplateRead[];
+};
+
+export type CardTemplateCreatePayload = {
+  code: string;
+  name: string;
+  description?: string | null;
+  position?: number;
+  field_schema_json?: Record<string, unknown>;
+  default_values_json?: CardTemplateDefaultValue[];
+  is_active?: boolean;
+};
+
+export type CardTemplateUpdatePayload = {
+  name?: string | null;
+  description?: string | null;
+  position?: number | null;
+  field_schema_json?: Record<string, unknown> | null;
+  default_values_json?: CardTemplateDefaultValue[] | null;
+  is_active?: boolean | null;
+};
+
 export type ReferenceListRead = {
   id: string;
   registry_id: string | null;
@@ -247,6 +287,7 @@ export type RegistrySchemaRead = {
   registry: RegistryRead;
   blocks: FormBlockRead[];
   fields: FormFieldRead[];
+  templates: CardTemplateRead[];
 };
 
 export type CardListFieldValueRead = {
@@ -260,6 +301,8 @@ export type CardListFieldValueRead = {
 export type CardSummaryRead = {
   id: string;
   registry_id: string;
+  card_template_id?: string | null;
+  card_template_name?: string | null;
   organization_id: string;
   org_unit_id: string | null;
   display_name: string;
@@ -283,14 +326,16 @@ export type CardFieldFilterPayload = {
 
 export type CardCreatePayload = {
   organization_id: string;
-  display_name: string;
+  display_name?: string | null;
+  card_template_id?: string | null;
   org_unit_id?: string | null;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
 };
 
 export type OrganizationCardCreatePayload = {
-  display_name: string;
+  display_name?: string | null;
+  card_template_id?: string | null;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
 };
@@ -387,6 +432,8 @@ export type CardBlockRead = {
 export type CardRead = {
   id: string;
   registry_id: string;
+  card_template_id?: string | null;
+  card_template_name?: string | null;
   organization_id: string;
   display_name: string;
   blocks: Record<string, CardBlockRead>;

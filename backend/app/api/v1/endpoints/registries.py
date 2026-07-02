@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
 from app.schemas.registries import (
+    CardTemplateCreate,
+    CardTemplateListRead,
+    CardTemplateRead,
+    CardTemplateUpdate,
     FormBlockCreate,
     FormBlockRead,
     FormBlockUpdate,
@@ -131,7 +135,7 @@ def read_registry_schema(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> RegistrySchemaRead:
     try:
-        registry, blocks, fields = RegistrySchemaService(session).read_schema_for_actor(
+        registry, blocks, fields, templates = RegistrySchemaService(session).read_schema_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
         )
@@ -141,7 +145,98 @@ def read_registry_schema(
         registry=RegistryRead.model_validate(registry),
         blocks=[FormBlockRead.model_validate(block) for block in blocks],
         fields=[FormFieldRead.model_validate(field) for field in fields],
+        templates=[CardTemplateRead.model_validate(template) for template in templates],
     )
+
+
+@router.post(
+    "/registries/{registry_id}/card-templates",
+    response_model=CardTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_template(
+    registry_id: UUID,
+    payload: CardTemplateCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardTemplateRead:
+    try:
+        template = RegistrySchemaService(session).create_card_template_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            code=payload.code,
+            name=payload.name,
+            description=payload.description,
+            position=payload.position,
+            field_schema_json=payload.field_schema_json,
+            default_values_json=payload.default_values_json,
+            is_active=payload.is_active,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardTemplateRead.model_validate(template)
+
+
+@router.get(
+    "/registries/{registry_id}/card-templates",
+    response_model=CardTemplateListRead,
+)
+def list_card_templates(
+    registry_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    include_archive: Annotated[bool, Query()] = False,
+) -> CardTemplateListRead:
+    try:
+        templates = RegistrySchemaService(session).list_card_templates_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            include_archive=include_archive,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardTemplateListRead(
+        items=[CardTemplateRead.model_validate(template) for template in templates]
+    )
+
+
+@router.patch("/card-templates/{template_id}", response_model=CardTemplateRead)
+def update_card_template(
+    template_id: UUID,
+    payload: CardTemplateUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardTemplateRead:
+    try:
+        template = RegistrySchemaService(session).update_card_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            name=payload.name,
+            description=payload.description,
+            position=payload.position,
+            field_schema_json=payload.field_schema_json,
+            default_values_json=payload.default_values_json,
+            is_active=payload.is_active,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardTemplateRead.model_validate(template)
+
+
+@router.delete("/card-templates/{template_id}", response_model=CardTemplateRead)
+def archive_card_template(
+    template_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardTemplateRead:
+    try:
+        template = RegistrySchemaService(session).archive_card_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardTemplateRead.model_validate(template)
 
 
 @router.post(

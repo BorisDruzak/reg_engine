@@ -19,6 +19,7 @@ EXPECTED_TABLES = {
     "card_attachments",
     "card_public_links",
     "card_relations",
+    "card_templates",
     "cards",
     "document_templates",
     "document_template_versions",
@@ -179,7 +180,7 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0017_registry_card_title_label"
+    assert version == "0018_card_templates"
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:
@@ -344,11 +345,25 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             field_type="file_ref",
             created_by=user_id,
         )
+        card_template_id = _insert_returning_id(
+            connection,
+            "card_templates",
+            registry_id=registry_id,
+            code="asset_card",
+            name="Asset card",
+            field_schema_json={"field_ids": [str(text_field_id), str(multi_select_field_id)]},
+            default_values_json=[
+                {"field_id": str(text_field_id), "value": "SN-TEMPLATE"},
+            ],
+            created_by=user_id,
+            updated_by=user_id,
+        )
 
         card_id = _insert_returning_id(
             connection,
             "cards",
             registry_id=registry_id,
+            card_template_id=card_template_id,
             organization_id=organization_id,
             org_unit_id=org_unit_id,
             display_name="Asset 1",

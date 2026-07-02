@@ -33,6 +33,20 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
   });
 }
 
+type TestCardTemplateRead = {
+  id: string;
+  registry_id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  position: number;
+  field_schema_json: { field_ids?: string[] } | null;
+  default_values_json: { field_id: string; value: unknown }[];
+  is_active: boolean;
+  created_at: string;
+  archived_at: string | null;
+};
+
 const apiPayloads = {
   login: {
     access_token: "test-token",
@@ -217,6 +231,28 @@ const apiPayloads = {
         public_editable: false,
       },
     ],
+    templates: [
+      {
+        id: "71717171-7171-4171-8171-717171717171",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "municipal_card",
+        name: "Муниципальная карточка",
+        description: null,
+        position: 0,
+        field_schema_json: {
+          field_ids: ["99999999-9999-4999-8999-999999999999"],
+        },
+        default_values_json: [
+          {
+            field_id: "99999999-9999-4999-8999-999999999999",
+            value: "Предзаполнено шаблоном",
+          },
+        ],
+        is_active: true,
+        created_at: "2026-06-28T12:00:00Z",
+        archived_at: null,
+      },
+    ] as TestCardTemplateRead[],
   },
   repeatableBlock: {
     id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
@@ -486,6 +522,7 @@ let registryItems: RegistryRead[];
 let denyNextRegistryUpdate = false;
 let schemaBlockItems: FormBlockRead[];
 let schemaFieldItems: FormFieldRead[];
+let cardTemplateItems: TestCardTemplateRead[];
 let denyNextFieldArchive = false;
 let referenceListItems: ReferenceListRead[];
 let referenceItemItems: ReferenceItemRead[];
@@ -540,6 +577,7 @@ beforeEach(() => {
   denyNextRegistryUpdate = false;
   schemaBlockItems = [...apiPayloads.schema.blocks];
   schemaFieldItems = [...apiPayloads.schema.fields];
+  cardTemplateItems = [...apiPayloads.schema.templates];
   denyNextFieldArchive = false;
   referenceListItems = [...apiPayloads.referenceLists.items];
   referenceItemItems = [...apiPayloads.referenceItems.items];
@@ -653,16 +691,18 @@ beforeEach(() => {
       if (organizationCardMatch) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
-            display_name: string;
+            display_name?: string;
+            card_template_id?: string | null;
             public_view_enabled?: boolean;
             public_edit_enabled?: boolean;
           };
+          const template = cardTemplateItems.find((item) => item.id === payload.card_template_id);
           const created: CardSummaryRead = {
             id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
             registry_id: "77777777-7777-4777-8777-777777777777",
             organization_id: organizationCardMatch[1],
             org_unit_id: null,
-            display_name: payload.display_name,
+            display_name: payload.display_name ?? template?.name ?? "Новая карточка",
             lifecycle_status: "draft",
             public_view_enabled: payload.public_view_enabled ?? false,
             public_edit_enabled: payload.public_edit_enabled ?? false,
@@ -670,7 +710,7 @@ beforeEach(() => {
           };
           cardItems = [...cardItems, created];
           cardValueStateById[created.id] = {
-            status: "",
+            status: String(template?.default_values_json[0]?.value ?? ""),
             approved: false,
             repeatableNotes: [],
             fileRef: null,
@@ -1413,6 +1453,7 @@ beforeEach(() => {
         url.includes("/api/v1/registries/") &&
         !url.endsWith("/schema") &&
         !url.includes("/cards") &&
+        !url.includes("/card-templates") &&
         !url.includes("/document-templates") &&
         !url.includes("/report-templates") &&
         !url.includes("/report-runs")
@@ -1479,21 +1520,83 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
         return jsonResponse(currentRegistrySchema());
       }
+      if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/card-templates")) {
+        if (init?.method === "POST") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as {
+            code: string;
+            name: string;
+            description?: string | null;
+            position?: number;
+            field_schema_json?: { field_ids?: string[] } | null;
+            default_values_json?: { field_id: string; value: unknown }[];
+          };
+          const created: TestCardTemplateRead = {
+            id: "72727272-7272-4272-8272-727272727272",
+            registry_id: "77777777-7777-4777-8777-777777777777",
+            code: payload.code,
+            name: payload.name,
+            description: payload.description ?? null,
+            position: payload.position ?? cardTemplateItems.length,
+            field_schema_json: payload.field_schema_json ?? null,
+            default_values_json: payload.default_values_json ?? [],
+            is_active: true,
+            created_at: "2026-06-28T12:20:00Z",
+            archived_at: null,
+          };
+          cardTemplateItems = [...cardTemplateItems, created];
+          return jsonResponse(created, { status: 201 });
+        }
+        return jsonResponse({ items: cardTemplateItems });
+      }
+      if (url.includes("/api/v1/card-templates/")) {
+        const templateId = url.split("/api/v1/card-templates/")[1];
+        const current = cardTemplateItems.find((item) => item.id === templateId);
+        if (!current) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        if (init?.method === "PATCH") {
+          const payload = JSON.parse(String(init.body ?? "{}")) as Partial<TestCardTemplateRead>;
+          const updated: TestCardTemplateRead = {
+            ...current,
+            name: payload.name ?? current.name,
+            description: Object.hasOwn(payload, "description")
+              ? (payload.description ?? null)
+              : current.description,
+            position: payload.position ?? current.position,
+            field_schema_json: Object.hasOwn(payload, "field_schema_json")
+              ? (payload.field_schema_json ?? null)
+              : current.field_schema_json,
+            default_values_json: payload.default_values_json ?? current.default_values_json,
+            is_active: payload.is_active ?? current.is_active,
+          };
+          cardTemplateItems = cardTemplateItems.map((item) =>
+            item.id === updated.id ? updated : item,
+          );
+          return jsonResponse(updated);
+        }
+        if (init?.method === "DELETE") {
+          const archived = { ...current, is_active: false, archived_at: "2026-06-28T12:21:00Z" };
+          cardTemplateItems = cardTemplateItems.filter((item) => item.id !== templateId);
+          return jsonResponse(archived);
+        }
+      }
       if (pathname.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/cards")) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             organization_id: string;
-            display_name: string;
+            display_name?: string;
+            card_template_id?: string | null;
             org_unit_id?: string | null;
             public_view_enabled?: boolean;
             public_edit_enabled?: boolean;
           };
+          const template = cardTemplateItems.find((item) => item.id === payload.card_template_id);
           const created: CardSummaryRead = {
             id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
             registry_id: "77777777-7777-4777-8777-777777777777",
             organization_id: payload.organization_id,
             org_unit_id: payload.org_unit_id ?? null,
-            display_name: payload.display_name,
+            display_name: payload.display_name ?? template?.name ?? "Новая карточка",
             lifecycle_status: "draft",
             public_view_enabled: payload.public_view_enabled ?? false,
             public_edit_enabled: payload.public_edit_enabled ?? false,
@@ -1501,7 +1604,7 @@ beforeEach(() => {
           };
           cardItems = [...cardItems, created];
           cardValueStateById[created.id] = {
-            status: "",
+            status: String(template?.default_values_json[0]?.value ?? ""),
             approved: false,
             repeatableNotes: [],
             fileRef: null,
@@ -2193,11 +2296,20 @@ function cardFieldFilters(requestUrl: URL) {
 
 function cardMatchesListFilters(item: CardSummaryRead, requestUrl: URL) {
   const organizationFilterIds = cardOrganizationFilterIds(requestUrl);
+  const templateFilterIds = requestUrl.searchParams.getAll("card_template_ids");
   const query = requestUrl.searchParams.get("q")?.trim().toLowerCase() ?? "";
   const includeArchive = requestUrl.searchParams.get("include_archive") === "true";
   const filters = cardFieldFilters(requestUrl);
 
   if (organizationFilterIds && !organizationFilterIds.has(item.organization_id)) {
+    return false;
+  }
+  if (
+    templateFilterIds.length > 0 &&
+    !templateFilterIds.includes(
+      (item as CardSummaryRead & { card_template_id?: string | null }).card_template_id ?? "",
+    )
+  ) {
     return false;
   }
   if (!includeArchive && ["archived", "superseded"].includes(item.lifecycle_status)) {
@@ -2245,6 +2357,7 @@ function currentRegistrySchema() {
     ...apiPayloads.schema,
     blocks: schemaBlockItems,
     fields: schemaFieldItems,
+    templates: cardTemplateItems,
   };
 }
 
@@ -2619,7 +2732,7 @@ test("renders a visual card schema editor with fields inside blocks", async () =
   });
   expect(within(visualEditor).getByText("Название карточки")).toBeInTheDocument();
   expect(within(visualEditor).getByRole("heading", { name: "Основной блок" })).toBeInTheDocument();
-  expect(within(visualEditor).getByText("Статус")).toBeInTheDocument();
+  expect(within(visualEditor).getAllByText("Статус").length).toBeGreaterThan(0);
   expect(within(visualEditor).getByText("Подтверждено")).toBeInTheDocument();
   expect(
     within(visualEditor).getByRole("button", { name: "Добавить поле в блок Основной блок" }),
@@ -2671,6 +2784,67 @@ test("creates fields from the visual block without description or manual positio
       field_type: "number",
       description: null,
       position: 2,
+    });
+  });
+});
+
+test("creates card templates with selected schema fields and default values", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+
+  const templateSection = await screen.findByRole("region", { name: "Шаблоны карточек" });
+  expect(within(templateSection).getByText("Муниципальная карточка")).toBeInTheDocument();
+
+  await user.click(
+    within(templateSection).getByRole("button", { name: "Создать шаблон карточки" }),
+  );
+  const templateForm = await within(templateSection).findByRole("form", {
+    name: "Создать шаблон карточки",
+  });
+  await user.type(
+    within(templateForm).getByLabelText("Название шаблона карточки"),
+    "Типовая карточка",
+  );
+  await user.click(within(templateForm).getByLabelText("Поле шаблона Статус"));
+  await user.type(
+    within(templateForm).getByLabelText("Значение по умолчанию: Статус"),
+    "Новый статус",
+  );
+  await user.click(within(templateForm).getByRole("button", { name: "Создать" }));
+
+  expect(await screen.findByText("Шаблон карточки создан")).toBeInTheDocument();
+  await waitFor(() => {
+    const createTemplateCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/card-templates",
+          ) && init?.method === "POST",
+      );
+    expect(createTemplateCall).toBeTruthy();
+    const body = JSON.parse(String(createTemplateCall?.[1]?.body ?? "{}")) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({
+      code: "tipovaya_kartochka",
+      name: "Типовая карточка",
+      field_schema_json: {
+        field_ids: ["99999999-9999-4999-8999-999999999999"],
+      },
+      default_values_json: [
+        {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          value: "Новый статус",
+        },
+      ],
     });
   });
 });
@@ -2806,7 +2980,7 @@ test("opens the block create form at the bottom add-block slot", async () => {
   expect(blockForm.closest(".schema-add-block-slot")).toBe(addBlockSlot);
 });
 
-test("changes field order from the visual schema editor", async () => {
+test("changes field order from the visual schema editor by drag and drop", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -2821,11 +2995,20 @@ test("changes field order from the visual schema editor", async () => {
   );
   expect(blockCard).not.toBeNull();
 
-  await user.click(
-    within(blockCard as HTMLElement).getByRole("button", {
-      name: "Переместить поле Подтверждено выше",
-    }),
+  const statusRow = within(blockCard as HTMLElement)
+    .getByText("Статус")
+    .closest(".schema-field-row");
+  const approvedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+  expect(approvedRow).not.toBeNull();
+
+  fireEvent.dragStart(
+    within(statusRow as HTMLElement).getByRole("button", { name: "Перетащить поле Статус" }),
   );
+  fireEvent.dragOver(approvedRow as HTMLElement);
+  fireEvent.drop(approvedRow as HTMLElement);
 
   await waitFor(() => {
     const fieldLabels = Array.from(
@@ -3248,8 +3431,19 @@ test("adds dynamic field filters from the unified card search bar", async () => 
 
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
-  await user.click(within(tagMenu).getByRole("button", { name: "Статус" }));
-  await user.type(within(searchBar).getByLabelText("Поиск карточек"), "drafted{enter}");
+  const statusButton = within(tagMenu).getByRole("button", { name: "Статус" });
+  const statusOption = statusButton.closest(".search-field-option");
+  expect(statusOption).not.toBeNull();
+  await user.click(statusButton);
+  await user.type(
+    await within(statusOption as HTMLElement).findByLabelText("Значение фильтра Статус"),
+    "drafted",
+  );
+  await user.click(
+    within(statusOption as HTMLElement).getByRole("button", {
+      name: "Добавить фильтр Статус",
+    }),
+  );
 
   expect(within(searchBar).getByText("Статус: drafted")).toBeInTheDocument();
   await waitFor(() => {
@@ -3319,9 +3513,16 @@ test("adds reference field filters with readable chips from the card search bar"
   const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
   await user.click(within(searchBar).getByLabelText("Поиск карточек"));
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
-  await user.click(within(tagMenu).getByRole("button", { name: "tst" }));
-  await user.click(await within(tagMenu).findByRole("button", { name: "Активен" }));
-  await user.click(within(tagMenu).getByRole("button", { name: "Приостановлен" }));
+  const fieldButton = within(tagMenu).getByRole("button", { name: "tst" });
+  const fieldOption = fieldButton.closest(".search-field-option");
+  expect(fieldOption).not.toBeNull();
+  await user.click(fieldButton);
+  await user.click(
+    await within(fieldOption as HTMLElement).findByRole("button", { name: "Активен" }),
+  );
+  await user.click(
+    within(fieldOption as HTMLElement).getByRole("button", { name: "Приостановлен" }),
+  );
 
   expect(within(searchBar).getByText("tst: Активен")).toBeInTheDocument();
   expect(within(searchBar).getByText("tst: Приостановлен")).toBeInTheDocument();
@@ -3360,6 +3561,118 @@ test("adds reference field filters with readable chips from the card search bar"
   });
 });
 
+test("adds template bool and date filters from inline search tag choices", async () => {
+  schemaFieldItems = [
+    ...schemaFieldItems,
+    {
+      id: "98989898-9898-4989-8989-989898989898",
+      block_id: "88888888-8888-4888-8888-888888888888",
+      code: "record_date",
+      label: "Дата регистрации",
+      description: null,
+      field_type: "date",
+      position: 2,
+      required_mode: "not_required",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: null,
+      is_active: true,
+      is_list_display: false,
+      public_visible: true,
+      public_editable: false,
+    },
+  ];
+  cardItems = cardItems.map(
+    (item) =>
+      ({
+        ...item,
+        card_template_id: "71717171-7171-4171-8171-717171717171",
+      }) as CardSummaryRead,
+  );
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+
+  const searchBar = screen.getByRole("group", { name: "Поисковая строка карточек" });
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
+
+  const templateButton = within(tagMenu).getByRole("button", { name: "Шаблон карточки" });
+  const templateOption = templateButton.closest(".search-filter-option");
+  expect(templateOption).not.toBeNull();
+  await user.click(templateButton);
+  await user.click(
+    await within(templateOption as HTMLElement).findByRole("button", {
+      name: "Муниципальная карточка",
+    }),
+  );
+
+  const boolButton = within(tagMenu).getByRole("button", { name: "Подтверждено" });
+  const boolOption = boolButton.closest(".search-field-option");
+  expect(boolOption).not.toBeNull();
+  await user.click(boolButton);
+  await user.click(await within(boolOption as HTMLElement).findByRole("button", { name: "Да" }));
+
+  const dateButton = within(tagMenu).getByRole("button", { name: "Дата регистрации" });
+  const dateOption = dateButton.closest(".search-field-option");
+  expect(dateOption).not.toBeNull();
+  await user.click(dateButton);
+  await user.type(
+    await within(dateOption as HTMLElement).findByLabelText("Значение фильтра Дата регистрации"),
+    "2026-07-02",
+  );
+  await user.click(
+    within(dateOption as HTMLElement).getByRole("button", {
+      name: "Добавить фильтр Дата регистрации",
+    }),
+  );
+
+  expect(
+    within(searchBar).getByText("Шаблон карточки: Муниципальная карточка"),
+  ).toBeInTheDocument();
+  expect(within(searchBar).getByText("Подтверждено: Да")).toBeInTheDocument();
+  expect(within(searchBar).getByText("Дата регистрации: 2026-07-02")).toBeInTheDocument();
+  await waitFor(() => {
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input, init]) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (
+          !url.includes("/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards?") ||
+          init?.method !== "GET"
+        ) {
+          return false;
+        }
+        const requestUrl = new URL(url, "http://localhost");
+        const filters = cardFieldFilters(requestUrl);
+        return (
+          requestUrl.searchParams
+            .getAll("card_template_ids")
+            .includes("71717171-7171-4171-8171-717171717171") &&
+          filters.some(
+            (filter) =>
+              filter.field_id === "99999999-9999-4999-8999-999999999998" &&
+              filter.field_type === "bool" &&
+              filter.operator === "is" &&
+              filter.value === true,
+          ) &&
+          filters.some(
+            (filter) =>
+              filter.field_id === "98989898-9898-4989-8989-989898989898" &&
+              filter.field_type === "date" &&
+              filter.operator === "is" &&
+              filter.value === "2026-07-02",
+          )
+        );
+      }),
+    ).toBe(true);
+  });
+});
+
 test("creates archives cards and manages repeatable blocks with bulk save", async () => {
   enableRepeatableDetailsSchema();
   const user = userEvent.setup();
@@ -3383,13 +3696,16 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
   await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
   expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Реестр карточки")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Название карточки")).not.toBeInTheDocument();
   const postCountBeforeValidation = cardPostCount();
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(cardPostCount()).toBe(postCountBeforeValidation);
 
-  await user.type(screen.getByLabelText("Название карточки"), "Новая карточка");
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки"), [
+    "71717171-7171-4171-8171-717171717171",
+  ]);
   await user.selectOptions(screen.getByLabelText("Организация карточки"), [
     "22222222-2222-4222-8222-222222222222",
   ]);
@@ -3399,9 +3715,9 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   expect(await screen.findByText("Карточка создана")).toBeInTheDocument();
-  expect((await screen.findAllByText("Новая карточка")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("Муниципальная карточка")).length).toBeGreaterThan(0);
   expect(
-    screen.queryByRole("button", { name: "Редактировать карточку Новая карточка" }),
+    screen.queryByRole("button", { name: "Редактировать карточку Муниципальная карточка" }),
   ).not.toBeInTheDocument();
 
   await user.click(
@@ -3425,7 +3741,9 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
   );
   expect(await screen.findByText("Экземпляр блока архивирован")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Архивировать карточку Новая карточка" }));
+  await user.click(
+    screen.getByRole("button", { name: "Архивировать карточку Муниципальная карточка" }),
+  );
   expect(await screen.findByRole("dialog", { name: "Архивировать карточку" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Архивировать" }));
 
@@ -3442,12 +3760,13 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
     expect(createBody).toEqual({
-      display_name: "Новая карточка",
+      card_template_id: "71717171-7171-4171-8171-717171717171",
       public_view_enabled: true,
       public_edit_enabled: true,
     });
     expect(createBody).not.toHaveProperty("organization_id");
     expect(createBody).not.toHaveProperty("org_unit_id");
+    expect(createBody).not.toHaveProperty("display_name");
     expect(createBody).not.toHaveProperty("employees");
     expect(createBody).not.toHaveProperty("full_name");
     expect(
@@ -3729,6 +4048,7 @@ test("manages public links from authenticated card workspace", async () => {
 
   expect(await screen.findByText("Публичная ссылка создана")).toBeInTheDocument();
   expect(screen.getByText("created-public-token")).toBeInTheDocument();
+  expect(screen.getByDisplayValue(/\/public\/edit\/created-public-token$/)).toBeInTheDocument();
   expect(screen.getAllByText("Загрузки вложений: 0 из 2").length).toBeGreaterThan(0);
 
   await user.click(

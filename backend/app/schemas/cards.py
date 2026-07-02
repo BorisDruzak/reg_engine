@@ -6,14 +6,16 @@ from pydantic import BaseModel, Field
 
 class CardCreate(BaseModel):
     organization_id: UUID
-    display_name: str
+    display_name: str | None = None
+    card_template_id: UUID | None = None
     org_unit_id: UUID | None = None
     public_view_enabled: bool = False
     public_edit_enabled: bool = False
 
 
 class OrganizationCardCreate(BaseModel):
-    display_name: str
+    display_name: str | None = None
+    card_template_id: UUID | None = None
     public_view_enabled: bool = False
     public_edit_enabled: bool = False
 
@@ -29,6 +31,8 @@ class CardListFieldValueRead(BaseModel):
 class CardSummaryRead(BaseModel):
     id: UUID
     registry_id: UUID
+    card_template_id: UUID | None = None
+    card_template_name: str | None = None
     organization_id: UUID
     org_unit_id: UUID | None
     display_name: str
@@ -106,6 +110,8 @@ class CardBlockRead(BaseModel):
 class CardRead(BaseModel):
     id: UUID
     registry_id: UUID
+    card_template_id: UUID | None = None
+    card_template_name: str | None = None
     organization_id: UUID
     display_name: str
     blocks: dict[str, CardBlockRead]

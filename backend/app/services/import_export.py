@@ -403,7 +403,7 @@ class CardImportPreviewService:
         registry_id: UUID,
         rows: list[tuple[int, dict[str, str]]],
     ) -> dict[str, Any]:
-        _, blocks, fields = RegistrySchemaService(self.session).read_schema_for_actor(
+        _, blocks, fields, _ = RegistrySchemaService(self.session).read_schema_for_actor(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
         )

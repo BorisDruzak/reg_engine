@@ -14,6 +14,7 @@ from app.models import (
     CardAttachment,
     CardBlockInstance,
     CardRelation,
+    CardTemplate,
     FieldValue,
     FieldValueItem,
     FormBlock,
@@ -88,6 +89,8 @@ class CardRead:
     registry_id: UUID
     organization_id: UUID
     display_name: str
+    card_template_id: UUID | None = None
+    card_template_name: str | None = None
     blocks: dict[str, CardBlockRead] = field(default_factory=dict)
     fields: dict[str, CardFieldRead] = field(default_factory=dict)
 
@@ -147,7 +150,8 @@ class CardService:
         actor_user_id: UUID,
         registry_id: UUID,
         organization_id: UUID,
-        display_name: str,
+        display_name: str | None = None,
+        card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
         public_view_enabled: bool = False,
         public_edit_enabled: bool = False,
@@ -157,6 +161,7 @@ class CardService:
             registry_id=registry_id,
             organization_id=organization_id,
             display_name=display_name,
+            card_template_id=card_template_id,
             org_unit_id=org_unit_id,
             public_view_enabled=public_view_enabled,
             public_edit_enabled=public_edit_enabled,
@@ -170,6 +175,9 @@ class CardService:
             new_data_json={
                 "registry_id": str(registry_id),
                 "organization_id": str(organization_id),
+                "card_template_id": str(card.card_template_id)
+                if card.card_template_id is not None
+                else None,
             },
         )
         return card
@@ -179,7 +187,8 @@ class CardService:
         *,
         actor_user_id: UUID,
         organization_id: UUID,
-        display_name: str,
+        display_name: str | None = None,
+        card_template_id: UUID | None = None,
         public_view_enabled: bool = False,
         public_edit_enabled: bool = False,
     ) -> Card:
@@ -191,6 +200,7 @@ class CardService:
             registry_id=registry.id,
             organization_id=organization_id,
             display_name=display_name,
+            card_template_id=card_template_id,
             public_view_enabled=public_view_enabled,
             public_edit_enabled=public_edit_enabled,
         )
@@ -200,18 +210,29 @@ class CardService:
         *,
         registry_id: UUID,
         organization_id: UUID,
-        display_name: str,
+        display_name: str | None = None,
+        card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
         public_view_enabled: bool = False,
         public_edit_enabled: bool = False,
         created_by: UUID | None = None,
+        apply_template_defaults: bool = True,
     ) -> Card:
         self._validate_org_unit_for_organization(org_unit_id, organization_id)
+        template = self._get_active_card_template_for_registry(
+            card_template_id,
+            registry_id=registry_id,
+        )
+        resolved_display_name = self._card_display_name_from_input(
+            display_name=display_name,
+            template=template,
+        )
         card = Card(
             registry_id=registry_id,
+            card_template_id=template.id if template is not None else None,
             organization_id=organization_id,
             org_unit_id=org_unit_id,
-            display_name=display_name,
+            display_name=resolved_display_name,
             lifecycle_status="draft",
             public_view_enabled=public_view_enabled,
             public_edit_enabled=public_edit_enabled,
@@ -220,6 +241,8 @@ class CardService:
         )
         self.session.add(card)
         self.session.flush()
+        if template is not None and apply_template_defaults:
+            self._apply_card_template_defaults(card, template, actor_user_id=created_by)
         return card
 
     def list_visible_cards(
@@ -233,6 +256,7 @@ class CardService:
         include_archive: bool = False,
         query: str | None = None,
         field_filters: Sequence[CardFieldFilterInput] | None = None,
+        card_template_ids: Sequence[UUID] | None = None,
     ) -> list[Card]:
         scope_ids = PermissionService(self.session).get_organization_scope_ids(
             actor_user_id,
@@ -259,6 +283,8 @@ class CardService:
             criteria.append(Card.archived_at.is_(None))
         if query:
             criteria.append(self._card_text_search_criterion(query))
+        if card_template_ids:
+            criteria.append(Card.card_template_id.in_(set(card_template_ids)))
         for field_filter in field_filters or ():
             criteria.append(self._field_filter_criterion(field_filter, registry_id=registry_id))
 
@@ -279,6 +305,7 @@ class CardService:
         include_archive: bool = False,
         query: str | None = None,
         field_filters: Sequence[CardFieldFilterInput] | None = None,
+        card_template_ids: Sequence[UUID] | None = None,
     ) -> list[Card]:
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             resolver_organization_id
@@ -299,6 +326,7 @@ class CardService:
             include_archive=include_archive,
             query=query,
             field_filters=field_filters,
+            card_template_ids=card_template_ids,
         )
 
     def list_display_fields_for_card(self, card: Card) -> list[CardListFieldRead]:
@@ -855,6 +883,8 @@ class CardService:
         return CardRead(
             card_id=card.id,
             registry_id=card.registry_id,
+            card_template_id=card.card_template_id,
+            card_template_name=self._card_template_name(card),
             organization_id=card.organization_id,
             display_name=card.display_name,
             blocks=read_blocks,
@@ -935,10 +965,12 @@ class CardService:
             registry_id=old_card.registry_id,
             organization_id=target_organization_id,
             display_name=old_card.display_name,
+            card_template_id=old_card.card_template_id,
             org_unit_id=None,
             public_view_enabled=old_card.public_view_enabled,
             public_edit_enabled=old_card.public_edit_enabled,
             created_by=actor_user_id,
+            apply_template_defaults=False,
         )
         old_card.lifecycle_status = "superseded"
         old_card.updated_by = actor_user_id
@@ -1105,6 +1137,168 @@ class CardService:
         if field_model is None or field_model.archived_at is not None or not field_model.is_active:
             raise CardServiceError("Form field was not found.")
         return field_model
+
+    def _get_active_card_template_for_registry(
+        self,
+        template_id: UUID | None,
+        *,
+        registry_id: UUID,
+    ) -> CardTemplate | None:
+        if template_id is None:
+            return None
+        template = self.session.get(CardTemplate, template_id)
+        if (
+            template is None
+            or template.registry_id != registry_id
+            or template.archived_at is not None
+            or not template.is_active
+        ):
+            raise CardServiceError("Card template was not found.")
+        return template
+
+    def _card_display_name_from_input(
+        self,
+        *,
+        display_name: str | None,
+        template: CardTemplate | None,
+    ) -> str:
+        cleaned_display_name = display_name.strip() if display_name is not None else ""
+        if cleaned_display_name:
+            return cleaned_display_name
+        if template is not None and template.name.strip():
+            return template.name.strip()
+        raise CardServiceError("Card display name or card template is required.")
+
+    def _card_template_name(self, card: Card) -> str | None:
+        if card.card_template_id is None:
+            return None
+        template = self.session.get(CardTemplate, card.card_template_id)
+        return template.name if template is not None else None
+
+    def _apply_card_template_defaults(
+        self,
+        card: Card,
+        template: CardTemplate,
+        *,
+        actor_user_id: UUID | None,
+    ) -> None:
+        if not template.default_values_json:
+            return
+        field_ids = self._template_field_ids(template)
+        field_models = {
+            field_model.id: field_model
+            for field_model in self.session.scalars(
+                select(FormField)
+                .join(FormBlock, FormBlock.id == FormField.block_id)
+                .where(
+                    FormBlock.registry_id == card.registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                    FormField.id.in_(field_ids),
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                )
+            ).all()
+        }
+        blocks_by_id = {
+            block.id: block
+            for block in self.session.scalars(
+                select(FormBlock).where(
+                    FormBlock.registry_id == card.registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                )
+            ).all()
+        }
+
+        for default_value in template.default_values_json:
+            try:
+                field_id = UUID(str(default_value["field_id"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise CardServiceError("Card template default field id is invalid.") from exc
+            if field_id not in field_ids:
+                raise CardServiceError("Card template default does not belong to the template.")
+            value = default_value.get("value")
+            if value is None:
+                continue
+            field_model = field_models.get(field_id)
+            if field_model is None:
+                raise CardServiceError("Card template default field was not found.")
+            block = blocks_by_id.get(field_model.block_id)
+            if block is None:
+                raise CardServiceError("Card template default block was not found.")
+            assignment = self._coerce_field_assignment(
+                field_model,
+                self._coerce_card_template_default_value(field_model, value),
+                card_id=card.id,
+                registry_id=card.registry_id,
+                organization_id=card.organization_id,
+                actor_user_id=actor_user_id,
+            )
+            if self._field_assignment_is_empty(assignment):
+                continue
+            block_instance = self._resolve_block_instance_for_value(
+                card=card,
+                block=block,
+                block_instance_id=None,
+                actor_user_id=actor_user_id,
+            )
+            field_value = self._get_or_create_field_value(
+                card_id=card.id,
+                block_instance_id=block_instance.id,
+                field_id=field_model.id,
+                actor_user_id=actor_user_id,
+            )
+            self._apply_assignment(field_value, assignment, actor_user_id=actor_user_id)
+        self.session.flush()
+
+    def _template_field_ids(self, template: CardTemplate) -> set[UUID]:
+        raw_field_ids = (template.field_schema_json or {}).get("field_ids", [])
+        if not isinstance(raw_field_ids, Sequence) or isinstance(raw_field_ids, str | bytes):
+            raise CardServiceError("Card template field schema is invalid.")
+        try:
+            return {UUID(str(field_id)) for field_id in raw_field_ids}
+        except (TypeError, ValueError) as exc:
+            raise CardServiceError(
+                "Card template field schema contains invalid field ids."
+            ) from exc
+
+    def _coerce_card_template_default_value(
+        self,
+        field_model: FormField,
+        value: object,
+    ) -> object:
+        if field_model.field_type == "date" and isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError as exc:
+                raise InvalidFieldValueError("Date fields require a date value.") from exc
+        if field_model.field_type == "datetime" and isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise InvalidFieldValueError("Datetime fields require a datetime value.") from exc
+        if field_model.field_type in {
+            "select",
+            "organization_ref",
+            "org_unit_ref",
+            "user_ref",
+            "card_ref",
+            "registry_ref",
+            "file_ref",
+        }:
+            try:
+                return UUID(str(value))
+            except (TypeError, ValueError) as exc:
+                raise InvalidFieldValueError("Reference fields require an object id.") from exc
+        if field_model.field_type == "multi_select":
+            if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+                raise InvalidFieldValueError("Multi-select fields require a list of ids.")
+            try:
+                return [UUID(str(item_id)) for item_id in value]
+            except (TypeError, ValueError) as exc:
+                raise InvalidFieldValueError("Multi-select fields require a list of ids.") from exc
+        return value
 
     def _get_or_create_block_instance(
         self,

@@ -135,3 +135,36 @@ class FormField(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("form_fields.id")
     )
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+
+
+class CardTemplate(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
+    __tablename__ = "card_templates"
+    __table_args__ = (
+        UniqueConstraint("registry_id", "code", name="uq_card_templates_registry_id_code"),
+        CheckConstraint("position >= 0", name="position_non_negative"),
+        Index("ix_card_templates_registry_id", "registry_id"),
+        Index("ix_card_templates_active_order", "registry_id", "is_active", "position"),
+    )
+
+    registry_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("registries.id"))
+    code: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    field_schema_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    default_values_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    updated_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    archived_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    archive_reason: Mapped[str | None] = mapped_column(String, nullable=True)

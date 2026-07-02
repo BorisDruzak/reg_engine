@@ -10,6 +10,7 @@ EXPECTED_TABLES = {
     "card_attachments",
     "card_public_links",
     "card_relations",
+    "card_templates",
     "cards",
     "document_templates",
     "document_template_versions",
@@ -57,6 +58,33 @@ def test_no_hardcoded_employee_table_or_hr_columns() -> None:
     }
 
     assert actual_columns.isdisjoint(FORBIDDEN_HR_COLUMNS)
+
+
+def test_card_template_metadata_is_registered() -> None:
+    card_templates = Base.metadata.tables["card_templates"]
+    cards = Base.metadata.tables["cards"]
+
+    for column_name in {
+        "registry_id",
+        "code",
+        "name",
+        "description",
+        "position",
+        "field_schema_json",
+        "default_values_json",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "archived_at",
+        "archived_by",
+    }:
+        assert column_name in card_templates.c
+
+    assert "card_template_id" in cards.c
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in cards.c.card_template_id.foreign_keys
+    } == {("card_templates", "id")}
 
 
 def test_dynamic_values_use_typed_columns() -> None:

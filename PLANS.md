@@ -66,8 +66,8 @@ not a hardcoded employee registry.
 - Production migration `0016_default_registry_tree` was applied on 2026-07-01
   after disposable PostgreSQL verification, a fresh server-side backup stored
   outside Git, preflight checks, and post-migration schema checks.
-- Current active checkpoint: **Phase 7H: Inline Visual Editor Polish And
-  Reference List Workspace** is implemented on `main`, pushed to GitHub,
+- Phase 7H: Inline Visual Editor Polish And Reference List Workspace is
+  implemented on `main`, pushed to GitHub,
   deployed to the server, migrated to Alembic head
   `0017_registry_card_title_label`, and live-verified against
   `http://192.168.100.12:8000/`.
@@ -79,6 +79,13 @@ not a hardcoded employee registry.
 - Phase 7H.2 card tag search/reference-filter and organization-parent bugfix
   is completed on `main`, pushed to GitHub, deployed to the server frontend,
   and browser live-verified. No database migration is required.
+- Current active checkpoint: **Phase 7I: Card Templates And Inline Search
+  Completion** is implemented locally and awaiting synchronization. It adds
+  card templates, migration `0018_card_templates`, template-based card
+  creation, template search tags, inline typed tag choices for select,
+  multi-select, bool, date, number, and text fields, readable public-link URLs,
+  and mouse drag/drop field ordering in the visual schema editor. Production
+  deployment requires the standard migration flow for `0018_card_templates`.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -1617,3 +1624,79 @@ Synchronization and live verification:
   panel, and the create-organization form initializes its only available parent
   organization as the selected value without showing the parent-required error.
   No browser console errors were present.
+
+## Phase 7I: Card Templates And Inline Search Completion
+
+Status: implemented locally; pending GitHub/server synchronization and
+production migration flow for `0018_card_templates`.
+
+Purpose:
+
+Complete the user-facing card workflow shift from manual card names to reusable
+schema-driven card templates while finishing the inline tag-search behavior
+requested during live UI review.
+
+Implemented scope:
+
+1. Card templates:
+   - added `card_templates` model/table through migration
+     `0018_card_templates`;
+   - a template stores a Russian user-facing name, generated technical code,
+     selected schema field ids, optional default field values, ordering, active
+     state, and archive metadata;
+   - registry schema reads now include templates;
+   - registry admins can create, edit, list, and archive templates through the
+     existing registry/schema admin boundary;
+   - ordinary card creation selects a template instead of asking for a manual
+     card title;
+   - cards store `card_template_id` and use the template name as the default
+     display name;
+   - active template default values are applied when a new card is created.
+2. Card search:
+   - the unified card search bar has a template tag;
+   - select and multi-select field choices expand inline under the selected
+     field row and render readable chips, not raw UUIDs;
+   - bool fields expose inline `Да` / `Нет` choices;
+   - date, datetime, number, and text fields expose inline value entry inside
+     the selected field row;
+   - archive/superseded and organization filters remain part of the same
+     search bar workflow.
+3. Visual schema editor:
+   - field ordering now supports mouse drag/drop through row drag handles;
+   - existing backend position updates are preserved, with no new reorder API;
+   - public-link creation now shows a browser-openable URL in a readonly
+     Russian-labeled field.
+
+Non-goals:
+
+- No hardcoded employee or HR-specific fields.
+- No one-registry-per-organization behavior.
+- No public API removal; existing registry-based card APIs remain compatible.
+- No import/export, reports, generated documents, attachments, MCP, auth-flow,
+  or public attachment workflow changes.
+- No production migration has been run yet in this checkpoint.
+
+Verification completed locally:
+
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 132 passed, 165
+  skipped, 1 warning.
+- `backend\.venv\Scripts\ruff.exe check backend`: passed.
+- `backend\.venv\Scripts\ruff.exe format --check backend`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend test:run`: passed, 73 tests.
+- `pnpm -C frontend build`: passed.
+- `pnpm -C frontend e2e`: passed, 3 tests.
+
+Migration and deployment notes:
+
+- `TEST_DATABASE_URL` was not set in the local shell during implementation, so
+  disposable PostgreSQL verification for `0018_card_templates` was not run
+  locally.
+- Before deploying backend code that expects `card_templates` and
+  `cards.card_template_id`, run the standard migration flow: disposable
+  PostgreSQL verification against a database ending with `_test`, production
+  backup outside Git, preflight, `alembic upgrade head`, post-check, then
+  frontend/server smoke verification.

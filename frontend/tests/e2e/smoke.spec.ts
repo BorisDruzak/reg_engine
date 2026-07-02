@@ -198,6 +198,32 @@ const apiPayloads = {
         public_editable: false,
       },
     ],
+    templates: [
+      {
+        id: "71717171-7171-4171-8171-717171717171",
+        registry_id: "77777777-7777-4777-8777-777777777777",
+        code: "default_card",
+        name: "Типовая карточка",
+        description: null,
+        position: 0,
+        field_schema_json: {
+          field_ids: [
+            "99999999-9999-4999-8999-999999999999",
+            "99999999-9999-4999-8999-999999999998",
+            "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+          ],
+        },
+        default_values_json: [
+          {
+            field_id: "99999999-9999-4999-8999-999999999999",
+            value: "drafted",
+          },
+        ],
+        is_active: true,
+        created_at: "2026-06-28T12:00:00Z",
+        archived_at: null,
+      },
+    ],
   },
   cards: {
     items: [
@@ -363,6 +389,8 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     registry_id: string;
     organization_id: string;
     org_unit_id: string | null;
+    card_template_id?: string | null;
+    card_template_name?: string | null;
     display_name: string;
     lifecycle_status: string;
     public_view_enabled: boolean;
@@ -475,20 +503,27 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     if (organizationCardsMatch) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
-          display_name: string;
+          display_name?: string | null;
+          card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
+        const template = apiPayloads.schema.templates.find(
+          (item) => item.id === body.card_template_id,
+        );
         createdCard = {
           id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
           registry_id: "77777777-7777-4777-8777-777777777777",
           organization_id: organizationCardsMatch[1],
           org_unit_id: null,
-          display_name: body.display_name,
+          card_template_id: template?.id ?? null,
+          card_template_name: template?.name ?? null,
+          display_name: body.display_name ?? template?.name ?? "Новая карточка",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
         };
+        newCardStatusValue = String(template?.default_values_json[0]?.value ?? "");
         cardItems = [...cardItems, createdCard];
         appendAuditEvent("create", "card", createdCard.id);
         await route.fulfill({
@@ -510,20 +545,27 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
         const body = request.postDataJSON() as {
           organization_id: string;
           org_unit_id?: string | null;
-          display_name: string;
+          display_name?: string | null;
+          card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
+        const template = apiPayloads.schema.templates.find(
+          (item) => item.id === body.card_template_id,
+        );
         createdCard = {
           id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
           registry_id: "77777777-7777-4777-8777-777777777777",
           organization_id: body.organization_id,
           org_unit_id: body.org_unit_id ?? null,
-          display_name: body.display_name,
+          card_template_id: template?.id ?? null,
+          card_template_name: template?.name ?? null,
+          display_name: body.display_name ?? template?.name ?? "Новая карточка",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
         };
+        newCardStatusValue = String(template?.default_values_json[0]?.value ?? "");
         cardItems = [...cardItems, createdCard];
         appendAuditEvent("create", "card", createdCard.id);
         await route.fulfill({
@@ -1037,7 +1079,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Заполните обязательные поля")).toBeVisible();
-  await page.getByLabel("Название карточки").fill("Новая карточка");
+  await page.getByLabel("Шаблон карточки").selectOption("71717171-7171-4171-8171-717171717171");
   await page
     .getByLabel("Организация карточки")
     .selectOption("22222222-2222-4222-8222-222222222222");
@@ -1046,10 +1088,10 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByLabel("Публичное редактирование карточки").check();
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Карточка создана")).toBeVisible();
-  await expect(page.getByText("Новая карточка").first()).toBeVisible();
+  await expect(page.getByText("Типовая карточка").first()).toBeVisible();
 
   await expect(
-    page.getByRole("button", { name: "Редактировать карточку Новая карточка" }),
+    page.getByRole("button", { name: "Редактировать карточку Типовая карточка" }),
   ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
@@ -1067,7 +1109,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     .click();
   await expect(page.getByText("Экземпляр блока архивирован")).toBeVisible();
 
-  await page.getByRole("button", { name: "Архивировать карточку Новая карточка" }).click();
+  await page.getByRole("button", { name: "Архивировать карточку Типовая карточка" }).click();
   const archiveCardDialog = page.getByRole("dialog", { name: "Архивировать карточку" });
   await expect(archiveCardDialog).toBeVisible();
   await archiveCardDialog.getByRole("button", { name: "Архивировать", exact: true }).click();
@@ -1198,6 +1240,19 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     public_visible: boolean;
     public_editable: boolean;
   };
+  type SetupCardTemplate = {
+    id: string;
+    registry_id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    position: number;
+    field_schema_json: { field_ids?: string[] } | null;
+    default_values_json: { field_id: string; value: unknown }[];
+    is_active: boolean;
+    created_at: string;
+    archived_at: string | null;
+  };
   type SetupReferenceList = {
     id: string;
     registry_id: string | null;
@@ -1223,6 +1278,8 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   type SetupCard = {
     id: string;
     registry_id: string;
+    card_template_id?: string | null;
+    card_template_name?: string | null;
     organization_id: string;
     org_unit_id: string | null;
     display_name: string;
@@ -1251,6 +1308,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   let grants: SetupAccessGrant[] = [];
   let blocks: SetupBlock[] = [];
   let fields: SetupField[] = [];
+  let cardTemplates: SetupCardTemplate[] = [];
   let referenceLists: SetupReferenceList[] = [];
   let referenceItems: SetupReferenceItem[] = [];
   let cards: SetupCard[] = [];
@@ -1594,7 +1652,47 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           registry: registries.find((registry) => registry.id === ids.registry),
           blocks,
           fields,
+          templates: cardTemplates,
         }),
+      });
+      return;
+    }
+    if (url.pathname === `/api/v1/registries/${ids.registry}/card-templates`) {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as {
+          code: string;
+          name: string;
+          description?: string | null;
+          position?: number;
+          field_schema_json?: { field_ids?: string[] } | null;
+          default_values_json?: { field_id: string; value: unknown }[];
+        };
+        const created = {
+          id: "16161616-aaaa-4616-8616-161616161616",
+          registry_id: ids.registry,
+          code: body.code,
+          name: body.name,
+          description: body.description ?? null,
+          position: body.position ?? cardTemplates.length,
+          field_schema_json: body.field_schema_json ?? null,
+          default_values_json: body.default_values_json ?? [],
+          is_active: true,
+          created_at: "2026-06-28T12:20:00Z",
+          archived_at: null,
+        };
+        cardTemplates = [...cardTemplates, created];
+        appendAuditEvent("create", "card_template", created.id);
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify(created),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: cardTemplates }),
       });
       return;
     }
@@ -1752,16 +1850,20 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     if (setupOrganizationCardsMatch) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
-          display_name: string;
+          display_name?: string | null;
+          card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
+        const template = cardTemplates.find((item) => item.id === body.card_template_id);
         const created = {
           id: ids.card,
           registry_id: ids.registry,
+          card_template_id: template?.id ?? null,
+          card_template_name: template?.name ?? null,
           organization_id: setupOrganizationCardsMatch[1],
           org_unit_id: null,
-          display_name: body.display_name,
+          display_name: body.display_name ?? template?.name ?? "Карточка проверки",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
@@ -1787,16 +1889,20 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
         const body = request.postDataJSON() as {
           organization_id: string;
           org_unit_id?: string | null;
-          display_name: string;
+          display_name?: string | null;
+          card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
         };
+        const template = cardTemplates.find((item) => item.id === body.card_template_id);
         const created = {
           id: ids.card,
           registry_id: ids.registry,
+          card_template_id: template?.id ?? null,
+          card_template_name: template?.name ?? null,
           organization_id: body.organization_id,
           org_unit_id: body.org_unit_id ?? null,
-          display_name: body.display_name,
+          display_name: body.display_name ?? template?.name ?? "Карточка проверки",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
@@ -2157,9 +2263,16 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Поле формы создано")).toBeVisible();
 
+  await page.getByRole("button", { name: "Создать шаблон карточки" }).click();
+  await page.getByLabel("Название шаблона карточки").fill("Карточка проверки");
+  await page.getByLabel("Поле шаблона Статус проверки").check();
+  await page.getByLabel("Поле шаблона Файл проверки").check();
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("Шаблон карточки создан")).toBeVisible();
+
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
   await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
-  await page.getByLabel("Название карточки").fill("Карточка проверки");
+  await page.getByLabel("Шаблон карточки").selectOption("16161616-aaaa-4616-8616-161616161616");
   await page
     .getByLabel("Организация карточки")
     .selectOption("81818181-8181-4818-8818-818181818181");
@@ -2204,7 +2317,9 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByLabel("Лимит загрузок вложений").fill("2");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Публичная ссылка создана")).toBeVisible();
-  await expect(page.getByText("/public/edit/setup-token")).toBeVisible();
+  await expect(page.getByLabel("Адрес публичной ссылки")).toHaveValue(
+    /\/public\/edit\/setup-token$/,
+  );
 
   await page.getByRole("button", { name: "Аудит", exact: true }).click();
   await expect(page.getByText("Создание").first()).toBeVisible();

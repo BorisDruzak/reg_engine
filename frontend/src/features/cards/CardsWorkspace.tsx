@@ -19,6 +19,7 @@ import type {
   CardFieldFilterPayload,
   CardRead,
   CardSummaryRead,
+  CardTemplateRead,
   FormBlockRead,
   FormFieldRead,
   OrganizationRead,
@@ -89,12 +90,14 @@ export function CardsWorkspace({
   cardSearch,
   cardOrganizationIds,
   cardIncludeDescendantOrganizations,
+  cardTemplateIds,
   cardFieldFilters,
   includeArchivedCards,
   onSelectCard,
   onCardSearchChange,
   onCardOrganizationIdsChange,
   onCardIncludeDescendantOrganizationsChange,
+  onCardTemplateIdsChange,
   onCardFieldFiltersChange,
   onIncludeArchivedCardsChange,
 }: {
@@ -108,12 +111,14 @@ export function CardsWorkspace({
   cardSearch: string;
   cardOrganizationIds: string[];
   cardIncludeDescendantOrganizations: boolean;
+  cardTemplateIds: string[];
   cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
   onSelectCard: (cardId: string) => void;
   onCardSearchChange: (value: string) => void;
   onCardOrganizationIdsChange: (value: string[]) => void;
   onCardIncludeDescendantOrganizationsChange: (value: boolean) => void;
+  onCardTemplateIdsChange: (value: string[]) => void;
   onCardFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onIncludeArchivedCardsChange: (value: boolean) => void;
 }) {
@@ -184,7 +189,7 @@ export function CardsWorkspace({
   const createCardMutation = useMutation({
     mutationFn: () =>
       createOrganizationCard(token, cardForm.organizationId, {
-        display_name: cardForm.displayName.trim(),
+        card_template_id: cardForm.cardTemplateId,
         public_view_enabled: cardForm.publicViewEnabled,
         public_edit_enabled: cardForm.publicEditEnabled,
       }),
@@ -278,7 +283,7 @@ export function CardsWorkspace({
       setLocalError(uiText.requiredFields);
       return;
     }
-    if (!cardForm.displayName.trim()) {
+    if (!cardForm.cardTemplateId) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -407,11 +412,14 @@ export function CardsWorkspace({
             includeArchive={includeArchivedCards}
             fieldFilters={cardFieldFilters}
             fields={schema?.fields ?? []}
+            templates={schema?.templates ?? []}
+            templateIds={cardTemplateIds}
             token={token}
             organizations={organizations}
             onSearchChange={onCardSearchChange}
             onOrganizationIdsChange={onCardOrganizationIdsChange}
             onIncludeDescendantOrganizationsChange={onCardIncludeDescendantOrganizationsChange}
+            onTemplateIdsChange={onCardTemplateIdsChange}
             onFieldFiltersChange={onCardFieldFiltersChange}
             onIncludeArchiveChange={onIncludeArchivedCardsChange}
           />
@@ -431,6 +439,7 @@ export function CardsWorkspace({
               <CardMutationForm
                 form={cardForm}
                 organizations={organizations}
+                templates={schema?.templates ?? []}
                 isSubmitting={createCardMutation.isPending}
                 error={localError ? new Error(localError) : createCardMutation.error}
                 onCancel={() => setCardFormMode(null)}
@@ -573,8 +582,7 @@ export function CardsWorkspace({
 
 type CardFormState = {
   organizationId: string;
-  orgUnitId: string;
-  displayName: string;
+  cardTemplateId: string;
   publicViewEnabled: boolean;
   publicEditEnabled: boolean;
 };
@@ -660,11 +668,14 @@ function CardListFilters({
   includeArchive,
   fieldFilters,
   fields,
+  templates,
+  templateIds,
   token,
   organizations,
   onSearchChange,
   onOrganizationIdsChange,
   onIncludeDescendantOrganizationsChange,
+  onTemplateIdsChange,
   onFieldFiltersChange,
   onIncludeArchiveChange,
 }: {
@@ -674,11 +685,14 @@ function CardListFilters({
   includeArchive: boolean;
   fieldFilters: CardFieldFilterPayload[];
   fields: FormFieldRead[];
+  templates: CardTemplateRead[];
+  templateIds: string[];
   token: string;
   organizations: OrganizationRead[];
   onSearchChange: (value: string) => void;
   onOrganizationIdsChange: (value: string[]) => void;
   onIncludeDescendantOrganizationsChange: (value: boolean) => void;
+  onTemplateIdsChange: (value: string[]) => void;
   onFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onIncludeArchiveChange: (value: boolean) => void;
 }) {
@@ -693,10 +707,13 @@ function CardListFilters({
         selectedOrganizationIds={organizationIds}
         includeDescendantOrganizations={includeDescendantOrganizations}
         includeArchive={includeArchive}
+        cardTemplates={templates}
+        selectedCardTemplateIds={templateIds}
         onTextQueryChange={onSearchChange}
         onFieldFiltersChange={onFieldFiltersChange}
         onSelectedOrganizationIdsChange={onOrganizationIdsChange}
         onIncludeDescendantOrganizationsChange={onIncludeDescendantOrganizationsChange}
+        onSelectedCardTemplateIdsChange={onTemplateIdsChange}
         onIncludeArchiveChange={onIncludeArchiveChange}
       />
     </div>
@@ -706,6 +723,7 @@ function CardListFilters({
 function CardMutationForm({
   form,
   organizations,
+  templates,
   isSubmitting,
   error,
   onCancel,
@@ -714,6 +732,7 @@ function CardMutationForm({
 }: {
   form: CardFormState;
   organizations: OrganizationRead[];
+  templates: CardTemplateRead[];
   isSubmitting: boolean;
   error?: unknown;
   onCancel: () => void;
@@ -744,11 +763,25 @@ function CardMutationForm({
         </select>
       </label>
       <label>
-        <span>{uiText.cardDisplayName}</span>
-        <input
-          value={form.displayName}
-          onChange={(event) => onChange({ ...form, displayName: event.currentTarget.value })}
-        />
+        <span>{uiText.cardTemplate}</span>
+        <select
+          aria-label={uiText.cardTemplate}
+          value={form.cardTemplateId}
+          onChange={(event) => onChange({ ...form, cardTemplateId: event.currentTarget.value })}
+        >
+          <option value="">{uiText.noData}</option>
+          {templates
+            .filter((template) => template.is_active)
+            .sort(
+              (left, right) =>
+                left.position - right.position || left.name.localeCompare(right.name),
+            )
+            .map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+        </select>
       </label>
       <label className="checkbox-control">
         <input
@@ -900,9 +933,14 @@ function PublicLinksPanel({ cardId, token }: { cardId: string; token: string }) 
         <div className="public-link-token" aria-label={uiText.publicLinkToken}>
           <span>{uiText.publicLinkToken}</span>
           <code>{createdToken.raw_token}</code>
-          <span>
-            {uiText.publicLinkUrl}: /public/edit/{createdToken.raw_token}
-          </span>
+          <label className="public-link-url-control">
+            <span>{uiText.publicLinkUrl}</span>
+            <input
+              aria-label={uiText.publicLinkUrl}
+              readOnly
+              value={publicLinkEditUrl(createdToken.raw_token)}
+            />
+          </label>
         </div>
       )}
       {items.length > 0 ? (
@@ -1209,8 +1247,7 @@ function BulkFieldEditor({
 function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
   return {
     organizationId: organizations[0]?.id ?? "",
-    orgUnitId: "",
-    displayName: "",
+    cardTemplateId: "",
     publicViewEnabled: false,
     publicEditEnabled: false,
   };
@@ -1357,6 +1394,12 @@ function publicLinkStatusLabel(publicLink: PublicLinkRead) {
     return "Активна";
   }
   return publicLink.status;
+}
+
+function publicLinkEditUrl(rawToken: string) {
+  const origin =
+    typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+  return `${origin}/public/edit/${rawToken}`;
 }
 
 function publicLinkFieldEditUsageLabel(publicLink: PublicLinkRead) {
@@ -1536,22 +1579,37 @@ function buildEditableCardFields(
 
   const fieldsById = new Map((schema?.fields ?? []).map((field) => [field.id, field]));
   const blocksById = new Map((schema?.blocks ?? []).map((block) => [block.id, block]));
+  const templateFieldIds = card.card_template_id
+    ? templateFieldIdSet(
+        schema?.templates.find((template) => template.id === card.card_template_id),
+      )
+    : null;
 
   return Object.values(card.blocks).flatMap((block) =>
     block.instances.flatMap((instance) =>
-      Object.values(instance.fields).map((field) => {
-        const fieldSchema = fieldsById.get(field.field_id) ?? null;
-        const blockSchema = blocksById.get(block.block_id);
-        return {
-          key: `${card.id}:${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
-          blockLabel: blockSchema?.title ?? block.code,
-          instanceLabel: instanceLabel(instance.ordinal),
-          label: fieldSchema?.label ?? field.code,
-          field,
-          schema: fieldSchema,
-          blockInstanceId: instance.block_instance_id,
-        };
-      }),
+      Object.values(instance.fields)
+        .filter((field) => !templateFieldIds || templateFieldIds.has(field.field_id))
+        .map((field) => {
+          const fieldSchema = fieldsById.get(field.field_id) ?? null;
+          const blockSchema = blocksById.get(block.block_id);
+          return {
+            key: `${card.id}:${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
+            blockLabel: blockSchema?.title ?? block.code,
+            instanceLabel: instanceLabel(instance.ordinal),
+            label: fieldSchema?.label ?? field.code,
+            field,
+            schema: fieldSchema,
+            blockInstanceId: instance.block_instance_id,
+          };
+        }),
     ),
   );
+}
+
+function templateFieldIdSet(template: CardTemplateRead | undefined) {
+  const fieldIds = template?.field_schema_json?.field_ids;
+  if (!Array.isArray(fieldIds) || fieldIds.some((item) => typeof item !== "string")) {
+    return null;
+  }
+  return new Set(fieldIds);
 }
