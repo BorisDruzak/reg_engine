@@ -118,13 +118,12 @@ not a hardcoded employee registry.
   are removed from the ordinary field edit form, label-position and separator
   settings are visual choices, and field width is changed through the visual
   resize handle. No database migration is required.
-- Phase 7J.3 schema placement grid usability is completed locally, deployed to
-  the server frontend, and live-verified: the visual placement grid is now a
-  separate 10-row by 5-column panel, the current field cell is highlighted and
-  disabled, the grid closes on repeated handle click/Escape/drop/outside click,
-  and mouse drag/drop is applied through grid cells. No database migration is
-  required. GitHub synchronization is pending only because the current Windows
-  DNS session cannot resolve `github.com`.
+- Phase 7J.3 schema placement grid usability is completed on `main`, pushed to
+  GitHub, deployed to the server frontend, and live-verified: the visual
+  placement grid is now a separate 10-row by 5-column panel, the current field
+  cell is highlighted and disabled, the grid closes on repeated handle
+  click/Escape/drop/outside click, and mouse drag/drop is applied through grid
+  cells. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2203,9 +2202,8 @@ Deployment and live evidence:
 
 ## Phase 7J.3: Schema Placement Grid Usability
 
-Status: completed locally, deployed to the server frontend, and live browser
-verified. GitHub synchronization is pending while the current Windows DNS
-session cannot resolve `github.com`.
+Status: completed on `main`, pushed to GitHub, deployed to the server frontend,
+and live browser verified.
 
 Purpose:
 
@@ -2258,6 +2256,4 @@ Verification completed:
 Synchronization note:
 
 - Current local `main` HEAD contains the latest Phase 7J.3 code fix.
-- GitHub push is pending because `Resolve-DnsName github.com` timed out and
-  `ssh -T git@github.com` failed with hostname resolution failure in the current
-  Windows session.
+- `git push origin main`: passed after DNS resolution recovered.
