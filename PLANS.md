@@ -146,13 +146,16 @@ not a hardcoded employee registry.
   dragging opens the grid only after real pointer movement. No backend,
   database, or migration change is required.
 - Phase 7J.7 block title placement and compact field-reference editing is
-  implemented locally: form blocks now persist `display_config_json`, Alembic
+  completed on `main`, pushed to GitHub, deployed to the server, and production
+  migrated to `0021_block_display_config`: form blocks now persist
+  `display_config_json`, Alembic
   migration `0021_block_display_config` adds the backend column, block edit
   forms include a visual `Расположение названия блока` preview, field
   label/separator visual settings are collapsed by default, required fields use
   one checkbox in the ordinary UI, and reference-backed field creation includes
-  a compact inline reference-list/item editor. Server deployment and production
-  migration are pending the standard migration flow.
+  a compact inline reference-list/item editor. Authenticated browser live-click
+  verification is blocked until a current UI admin session/password is
+  available; server smoke and API health checks pass.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2475,8 +2478,8 @@ Verification completed locally so far:
 
 ## Phase 7J.7: Block Title Placement And Compact Reference Field Editor
 
-Status: implemented locally; server synchronization and production migration
-pending standard migration flow.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+production migrated to `0021_block_display_config`.
 
 Purpose:
 
@@ -2513,10 +2516,10 @@ Non-goals:
 - No hardcoded employee/HR schema.
 - No one-registry-per-organization behavior.
 - No import/export, report, document, attachment, MCP, auth, or RBAC change.
-- No production migration until disposable PostgreSQL verification, backup,
-  preflight, Alembic upgrade, and post-checks are completed.
+- No additional production migration beyond `0021_block_display_config` in this
+  slice.
 
-Verification completed locally so far:
+Verification completed:
 
 - `backend\.venv\Scripts\python.exe -m pytest`: passed, 135 passed and 171
   skipped.
@@ -2536,3 +2539,27 @@ Verification completed locally so far:
 - `pnpm -C frontend format:check`: passed after formatting
   `frontend/src/features/registry/RegistriesAndSchema.tsx`.
 - `pnpm -C frontend build`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  backend and frontend checks passed; the first run failed only because a
+  temporary browser snapshot file made `docs/PROJECT_TREE.md` stale, and
+  `scripts/project-map.ps1 -Check` passed after removing that temporary file.
+- Server checkout was updated to `2860289` on `/opt/reg_engine`.
+- Disposable PostgreSQL verification passed on `reg_engine_0021_test`:
+  `tests/test_database_smoke.py`, `tests/test_models_smoke.py`,
+  `tests/test_migrations.py`, and `tests/test_registry_card_services.py`
+  reported 44 passed.
+- Production preflight passed: Alembic was
+  `0020_schema_layout_static_text`, `form_blocks.display_config_json` did not
+  yet exist, and `form_blocks_count=3`.
+- Production backup was created before migration:
+  `/var/backups/reg_engine/reg_engine_before_0021_20260703_124002.dump`.
+- Production Alembic migration completed:
+  `0021_block_display_config (head)` and
+  `form_blocks.display_config_json` exists.
+- `scripts/deploy-frontend.ps1` built and uploaded `frontend/dist`, restarted
+  `reg-engine.service`, and same-origin frontend/API smoke checks passed.
+- `scripts/server-check.ps1`: passed.
+- Browser reload verified the deployed shell at
+  `http://192.168.100.12:8000/`, but authenticated schema-editor click
+  verification is blocked because the current UI session expired and the
+  checked dev/e2e password `secret-pass` is not valid on this server.
