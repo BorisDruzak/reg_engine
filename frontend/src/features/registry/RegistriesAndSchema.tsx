@@ -3,6 +3,7 @@ import {
   Fragment,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -569,6 +570,7 @@ function SchemaVisualEditor({
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const suppressNextHandleClickRef = useRef<string | null>(null);
   const sortedBlocks = useMemo(
     () => [...blocks].sort((left, right) => left.position - right.position),
     [blocks],
@@ -1115,6 +1117,39 @@ function SchemaVisualEditor({
     setDraggedFieldId((currentFieldId) => (currentFieldId === fieldId ? null : fieldId));
   }
 
+  function handleFieldLayoutPointerDown(
+    event: ReactPointerEvent<HTMLElement>,
+    blockFields: FormFieldRead[],
+    field: FormFieldRead,
+  ) {
+    event.stopPropagation();
+    const wasOpen = draggedFieldId === field.id;
+    if (!wasOpen) {
+      suppressNextHandleClickRef.current = field.id;
+      setDraggedFieldId(field.id);
+    }
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      window.removeEventListener("pointerup", handlePointerUp);
+      if (typeof document.elementFromPoint !== "function") {
+        return;
+      }
+      const target = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+      const dropSlot = target?.closest(".schema-layout-drop-slot");
+      if (!(dropSlot instanceof HTMLElement) || dropSlot.hasAttribute("disabled")) {
+        return;
+      }
+      const row = Number(dropSlot.dataset.layoutRow);
+      const column = Number(dropSlot.dataset.layoutColumn);
+      if (!Number.isInteger(row) || !Number.isInteger(column)) {
+        return;
+      }
+      handleFieldLayoutDrop(blockFields, row, column, field.id);
+    };
+
+    window.addEventListener("pointerup", handlePointerUp);
+  }
+
   function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
     if (!draggedFieldId || draggedFieldId === targetFieldId) {
       setDraggedFieldId(null);
@@ -1150,11 +1185,16 @@ function SchemaVisualEditor({
     reorderFieldMutation.mutate(updates);
   }
 
-  function handleFieldLayoutDrop(blockFields: FormFieldRead[], row: number, column: number) {
-    if (!draggedFieldId) {
+  function handleFieldLayoutDrop(
+    blockFields: FormFieldRead[],
+    row: number,
+    column: number,
+    draggedFieldIdOverride = draggedFieldId,
+  ) {
+    if (!draggedFieldIdOverride) {
       return;
     }
-    const draggedField = blockFields.find((field) => field.id === draggedFieldId);
+    const draggedField = blockFields.find((field) => field.id === draggedFieldIdOverride);
     if (!draggedField) {
       setDraggedFieldId(null);
       return;
@@ -1329,10 +1369,14 @@ function SchemaVisualEditor({
                       draggable
                       onClick={(event) => {
                         event.stopPropagation();
+                        if (suppressNextHandleClickRef.current === field.id) {
+                          suppressNextHandleClickRef.current = null;
+                          return;
+                        }
                         toggleFieldLayoutGrid(field.id);
                       }}
                       onPointerDown={(event) => {
-                        event.stopPropagation();
+                        handleFieldLayoutPointerDown(event, blockFields, field);
                       }}
                       onDragStart={(event) => {
                         if (event.dataTransfer) {
@@ -1465,6 +1509,8 @@ function SchemaVisualEditor({
               ? `Текущее положение поля ${draggedField.label}: строка ${row} колонка ${column}`
               : `Поместить поле в строку ${row} колонку ${column}`
           }
+          data-layout-row={row}
+          data-layout-column={column}
           disabled={isCurrent}
           onClick={() => {
             if (!isCurrent) {

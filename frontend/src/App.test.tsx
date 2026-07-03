@@ -3415,7 +3415,7 @@ test("opens and closes the schema layout grid from the field drag handle", async
   });
 });
 
-test("moves a schema field through the layout grid by mouse drop", async () => {
+test("moves a schema field through the layout grid by pointer mouse drop", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -3438,12 +3438,20 @@ test("moves a schema field through the layout grid by mouse drop", async () => {
   const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
     name: "Перетащить поле Подтверждено",
   });
-  fireEvent.dragStart(dragHandle);
+  fireEvent.pointerDown(dragHandle, { clientX: 12, clientY: 12 });
   const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
     name: "Поместить поле в строку 1 колонку 5",
   });
-  fireEvent.dragOver(targetSlot);
-  fireEvent.drop(targetSlot);
+  const originalElementFromPoint = document.elementFromPoint;
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn(() => targetSlot),
+  });
+  fireEvent.pointerUp(window, { clientX: 140, clientY: 140 });
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: originalElementFromPoint,
+  });
 
   await waitFor(() => {
     const patchBodies = vi
