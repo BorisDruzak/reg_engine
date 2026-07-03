@@ -570,6 +570,7 @@ function SchemaVisualEditor({
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const draggedFieldIdRef = useRef<string | null>(null);
   const suppressNextHandleClickRef = useRef<string | null>(null);
   const sortedBlocks = useMemo(
     () => [...blocks].sort((left, right) => left.position - right.position),
@@ -602,6 +603,11 @@ function SchemaVisualEditor({
     return grouped;
   }, [fields, selectedTemplate, selectedTemplateFieldIds]);
 
+  function setActiveDraggedFieldId(fieldId: string | null) {
+    draggedFieldIdRef.current = fieldId;
+    setDraggedFieldId(fieldId);
+  }
+
   useEffect(() => {
     if (!draggedFieldId) {
       return undefined;
@@ -609,7 +615,7 @@ function SchemaVisualEditor({
 
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setDraggedFieldId(null);
+        setActiveDraggedFieldId(null);
       }
     };
     const handleDocumentPointerDown = (event: PointerEvent) => {
@@ -620,7 +626,7 @@ function SchemaVisualEditor({
       if (target.closest(".schema-layout-panel") || target.closest(".schema-drag-handle")) {
         return;
       }
-      setDraggedFieldId(null);
+      setActiveDraggedFieldId(null);
     };
 
     document.addEventListener("keydown", handleDocumentKeyDown);
@@ -1114,7 +1120,11 @@ function SchemaVisualEditor({
   }
 
   function toggleFieldLayoutGrid(fieldId: string) {
-    setDraggedFieldId((currentFieldId) => (currentFieldId === fieldId ? null : fieldId));
+    setDraggedFieldId((currentFieldId) => {
+      const nextFieldId = currentFieldId === fieldId ? null : fieldId;
+      draggedFieldIdRef.current = nextFieldId;
+      return nextFieldId;
+    });
   }
 
   function handleFieldLayoutPointerDown(
@@ -1123,10 +1133,10 @@ function SchemaVisualEditor({
     field: FormFieldRead,
   ) {
     event.stopPropagation();
-    const wasOpen = draggedFieldId === field.id;
+    const wasOpen = draggedFieldIdRef.current === field.id;
     if (!wasOpen) {
       suppressNextHandleClickRef.current = field.id;
-      setDraggedFieldId(field.id);
+      setActiveDraggedFieldId(field.id);
     }
 
     const handlePointerUp = (upEvent: PointerEvent) => {
@@ -1152,13 +1162,13 @@ function SchemaVisualEditor({
 
   function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
     if (!draggedFieldId || draggedFieldId === targetFieldId) {
-      setDraggedFieldId(null);
+      setActiveDraggedFieldId(null);
       return;
     }
     const draggedIndex = blockFields.findIndex((field) => field.id === draggedFieldId);
     const targetIndex = blockFields.findIndex((field) => field.id === targetFieldId);
     if (draggedIndex < 0 || targetIndex < 0) {
-      setDraggedFieldId(null);
+      setActiveDraggedFieldId(null);
       return;
     }
     const orderedFields = [...blockFields];
@@ -1176,7 +1186,7 @@ function SchemaVisualEditor({
         (update) =>
           blockFields.find((field) => field.id === update.fieldId)?.position !== update.position,
       );
-    setDraggedFieldId(null);
+    setActiveDraggedFieldId(null);
     if (updates.length === 0) {
       return;
     }
@@ -1196,7 +1206,7 @@ function SchemaVisualEditor({
     }
     const draggedField = blockFields.find((field) => field.id === draggedFieldIdOverride);
     if (!draggedField) {
-      setDraggedFieldId(null);
+      setActiveDraggedFieldId(null);
       return;
     }
 
@@ -1230,7 +1240,7 @@ function SchemaVisualEditor({
         );
       });
 
-    setDraggedFieldId(null);
+    setActiveDraggedFieldId(null);
     if (updates.length === 0) {
       return;
     }
@@ -1383,9 +1393,9 @@ function SchemaVisualEditor({
                           event.dataTransfer.effectAllowed = "move";
                           event.dataTransfer.setData("text/plain", field.id);
                         }
-                        setDraggedFieldId(field.id);
+                        setActiveDraggedFieldId(field.id);
                       }}
-                      onDragEnd={() => setDraggedFieldId(null)}
+                      onDragEnd={() => setActiveDraggedFieldId(null)}
                     >
                       ::
                     </button>
@@ -1457,7 +1467,11 @@ function SchemaVisualEditor({
               {maxVisualRows} строк и {maxVisualColumns} колонок
             </span>
           </div>
-          <button type="button" className="ghost-button" onClick={() => setDraggedFieldId(null)}>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setActiveDraggedFieldId(null)}
+          >
             Закрыть сетку
           </button>
         </div>

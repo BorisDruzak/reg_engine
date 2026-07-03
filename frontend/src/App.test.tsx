@@ -3392,7 +3392,8 @@ test("opens and closes the schema layout grid from the field drag handle", async
     }),
   ).not.toBeInTheDocument();
 
-  await user.click(dragHandle);
+  fireEvent.pointerDown(dragHandle);
+  fireEvent.click(dragHandle);
   expect(
     within(blockCard as HTMLElement).queryByRole("group", {
       name: "Сетка перемещения поля Подтверждено",
