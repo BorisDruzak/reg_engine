@@ -584,7 +584,9 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
         required_mode="required",
         options_config_json={"static_text": "Read this before editing."},
         display_config_json={
-            "column_span": 3,
+            "column_span": 5,
+            "layout_row": 2,
+            "layout_column": 5,
             "label_position": "top",
             "separator_style": "line",
         },
@@ -602,7 +604,9 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
         field_id=field.id,
         options_config_json={"static_text": "Updated read-only text."},
         display_config_json={
-            "column_span": 2,
+            "column_span": 4,
+            "layout_row": 3,
+            "layout_column": 2,
             "label_position": "left",
             "separator_style": "muted",
         },
@@ -614,7 +618,9 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
     assert field.public_editable is False
     assert updated_field.options_config_json == {"static_text": "Updated read-only text."}
     assert updated_field.display_config_json == {
-        "column_span": 2,
+        "column_span": 4,
+        "layout_row": 3,
+        "layout_column": 2,
         "label_position": "left",
         "separator_style": "muted",
     }

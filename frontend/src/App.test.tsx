@@ -2290,6 +2290,8 @@ function enableStaticTextSchema() {
       options_config_json: { static_text: "Текст подсказки для карточки" },
       display_config_json: {
         column_span: 3,
+        layout_row: 3,
+        layout_column: 1,
         label_position: "top",
         separator_style: "line",
       },
@@ -3105,6 +3107,8 @@ test("creates static text fields with visual layout settings", async () => {
       options_config_json: { static_text: "Показывается в шаблоне карточки" },
       display_config_json: {
         column_span: 3,
+        layout_row: 3,
+        layout_column: 1,
         label_position: "left",
         separator_style: "line",
       },
@@ -3177,6 +3181,45 @@ test("opens field edit and create forms inline at the acted row", async () => {
   expect(createForm.closest(".schema-add-field-slot")).toBe(addFieldSlot);
 });
 
+test("closes field edit by clicking the expanded field summary and hides field technical codes", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const statusRow = within(blockCard as HTMLElement)
+    .getByText("Статус")
+    .closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+  expect(within(statusRow as HTMLElement).queryByText(/Технический код/)).not.toBeInTheDocument();
+
+  await user.click(statusRow as HTMLElement);
+  expect(
+    await within(statusRow as HTMLElement).findByRole("form", {
+      name: "Редактировать поле формы",
+    }),
+  ).toBeInTheDocument();
+
+  await user.click(within(statusRow as HTMLElement).getByText("Статус"));
+
+  await waitFor(() =>
+    expect(
+      within(statusRow as HTMLElement).queryByRole("form", {
+        name: "Редактировать поле формы",
+      }),
+    ).not.toBeInTheDocument(),
+  );
+});
+
 test("opens the block create form at the bottom add-block slot", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -3198,6 +3241,70 @@ test("opens the block create form at the bottom add-block slot", async () => {
     name: "Создать блок формы",
   });
   expect(blockForm.closest(".schema-add-block-slot")).toBe(addBlockSlot);
+});
+
+test("moves schema fields to an explicit visual row and column", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+
+  await user.click(
+    within(blockCard as HTMLElement).getByRole("heading", { name: "Основной блок" }),
+  );
+  expect(screen.queryByLabelText("Колонки блока")).not.toBeInTheDocument();
+  const blockForm = within(blockCard as HTMLElement)
+    .getByRole("heading", { name: "Редактировать блок формы" })
+    .closest("form");
+  expect(blockForm).not.toBeNull();
+  await user.click(within(blockForm as HTMLElement).getByRole("button", { name: "Отмена" }));
+
+  const statusRow = within(blockCard as HTMLElement)
+    .getByText("Статус")
+    .closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+
+  fireEvent.dragStart(
+    within(statusRow as HTMLElement).getByRole("button", { name: "Перетащить поле Статус" }),
+  );
+  const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
+    name: "Поместить поле в строку 2 колонку 3",
+  });
+  fireEvent.dragOver(targetSlot);
+  fireEvent.drop(targetSlot);
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/99999999-9999-4999-8999-999999999999") &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          position: expect.any(Number),
+          display_config_json: expect.objectContaining({
+            column_span: 1,
+            layout_row: 2,
+            layout_column: 3,
+          }),
+        }),
+      ]),
+    );
+  });
 });
 
 test("changes field order from the visual schema editor by drag and drop", async () => {
@@ -4882,7 +4989,6 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
   fireEvent.change(screen.getByLabelText("Название блока формы"), {
     target: { value: "Детали карточки" },
   });
-  await user.selectOptions(screen.getByLabelText("Колонки блока"), ["3"]);
   await user.click(screen.getByLabelText("Повторяемый блок"));
   await user.click(screen.getByLabelText("Редактировать блок в публичной ссылке"));
   await user.click(screen.getByRole("button", { name: "Создать" }));
@@ -4984,7 +5090,6 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       is_repeatable: true,
       public_visible: true,
       public_editable: true,
-      layout_columns: 3,
     });
 
     const createFieldCall = fetchMock.mock.calls.find(
@@ -5009,6 +5114,8 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       options_config_json: null,
       display_config_json: {
         column_span: 1,
+        layout_row: 1,
+        layout_column: 1,
         label_position: "top",
         separator_style: "none",
       },

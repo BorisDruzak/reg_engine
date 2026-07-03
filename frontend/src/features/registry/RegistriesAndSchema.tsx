@@ -73,7 +73,6 @@ type BlockFormState = {
   isRepeatable: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
-  layoutColumns: string;
 };
 
 type FieldFormState = {
@@ -89,6 +88,8 @@ type FieldFormState = {
   optionsSourceId: string;
   staticText: string;
   columnSpan: string;
+  layoutRow: string;
+  layoutColumn: string;
   labelPosition: string;
   separatorStyle: string;
   isActive: boolean;
@@ -148,6 +149,8 @@ const supportedFieldTypes = [
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
 const fieldLabelPositions = ["top", "left", "right", "bottom"];
 const fieldSeparatorStyles = ["none", "line", "space", "muted"];
+const maxVisualColumns = 5;
+const maxVisualRows = 50;
 
 type RegistryWorkspaceTab = "registries" | "schema" | "references" | "importExport" | "reports";
 
@@ -578,7 +581,6 @@ function SchemaVisualEditor({
       is_repeatable: boolean;
       public_visible: boolean;
       public_editable: boolean;
-      layout_columns: number;
     }) => createFormBlock(token, selectedRegistryId, payload),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -592,13 +594,11 @@ function SchemaVisualEditor({
       title: string;
       description: string | null;
       position: number;
-      layout_columns: number;
     }) =>
       updateFormBlock(token, payload.blockId, {
         title: payload.title,
         description: payload.description,
         position: payload.position,
-        layout_columns: payload.layout_columns,
       }),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -714,11 +714,20 @@ function SchemaVisualEditor({
     },
   });
   const reorderFieldMutation = useMutation({
-    mutationFn: (updates: { fieldId: string; position: number }[]) =>
+    mutationFn: (
+      updates: {
+        fieldId: string;
+        position: number;
+        display_config_json?: Record<string, unknown> | null;
+      }[],
+    ) =>
       Promise.all(
         updates.map((update) =>
           updateFormField(token, update.fieldId, {
             position: update.position,
+            ...("display_config_json" in update
+              ? { display_config_json: update.display_config_json ?? null }
+              : {}),
           }),
         ),
       ),
@@ -764,7 +773,6 @@ function SchemaVisualEditor({
       isRepeatable: false,
       publicVisible: true,
       publicEditable: false,
-      layoutColumns: "1",
     });
   }
 
@@ -782,7 +790,6 @@ function SchemaVisualEditor({
       isRepeatable: block.is_repeatable,
       publicVisible: block.public_visible,
       publicEditable: block.public_editable,
-      layoutColumns: String(block.layout_columns || 1),
     });
   }
 
@@ -792,6 +799,9 @@ function SchemaVisualEditor({
   }
 
   function openCreateFieldForm(blockId: string) {
+    const blockFields =
+      fieldsByBlockId.get(blockId) ?? fields.filter((field) => field.block_id === blockId);
+    const placement = nextFieldPlacement(blockFields);
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
@@ -808,6 +818,8 @@ function SchemaVisualEditor({
       optionsSourceId: "",
       staticText: "",
       columnSpan: "1",
+      layoutRow: String(placement.row),
+      layoutColumn: String(placement.column),
       labelPosition: "top",
       separatorStyle: "none",
       isActive: true,
@@ -835,6 +847,8 @@ function SchemaVisualEditor({
         field.options_source_type === "reference_list" ? (field.options_source_id ?? "") : "",
       staticText: staticTextValue(field),
       columnSpan: String(displayConfigNumber(field, "column_span", 1)),
+      layoutRow: String(fieldLayoutRow(field, field.position + 1)),
+      layoutColumn: String(fieldLayoutColumn(field, 1)),
       labelPosition: displayConfigValue(field, "label_position", "top"),
       separatorStyle: displayConfigValue(field, "separator_style", "none"),
       isActive: field.is_active,
@@ -842,6 +856,14 @@ function SchemaVisualEditor({
       publicVisible: field.public_visible,
       publicEditable: field.public_editable,
     });
+  }
+
+  function toggleFieldForm(field: FormFieldRead) {
+    if (fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id) {
+      closeFieldForm();
+      return;
+    }
+    openEditFieldForm(field);
   }
 
   function closeFieldForm() {
@@ -913,7 +935,6 @@ function SchemaVisualEditor({
         is_repeatable: blockFormState.isRepeatable,
         public_visible: blockFormState.publicVisible,
         public_editable: blockFormState.publicEditable,
-        layout_columns: layoutNumber(blockFormState.layoutColumns),
       });
       return;
     }
@@ -924,7 +945,6 @@ function SchemaVisualEditor({
         title,
         description: description || null,
         position: positionNumber(blockFormState.position),
-        layout_columns: layoutNumber(blockFormState.layoutColumns),
       });
     }
   }
@@ -1061,6 +1081,180 @@ function SchemaVisualEditor({
     reorderFieldMutation.mutate(updates);
   }
 
+  function handleFieldLayoutDrop(blockFields: FormFieldRead[], row: number, column: number) {
+    if (!draggedFieldId) {
+      return;
+    }
+    const draggedField = blockFields.find((field) => field.id === draggedFieldId);
+    if (!draggedField) {
+      setDraggedFieldId(null);
+      return;
+    }
+
+    const nextFields = blockFields.map((field) =>
+      field.id === draggedField.id
+        ? {
+            ...field,
+            display_config_json: fieldDisplayConfigWithPlacement(field, row, column),
+          }
+        : field,
+    );
+    const orderedFields = sortFieldsByVisualPlacement(nextFields);
+    const sortedPositions = [...blockFields.map((field) => field.position)].sort(
+      (left, right) => left - right,
+    );
+    const updates = orderedFields
+      .map((field, index) => ({
+        fieldId: field.id,
+        position: sortedPositions[index] ?? index,
+        ...(field.id === draggedField.id
+          ? {
+              display_config_json: fieldDisplayConfigWithPlacement(draggedField, row, column),
+            }
+          : {}),
+      }))
+      .filter((update) => {
+        const currentField = blockFields.find((field) => field.id === update.fieldId);
+        return (
+          currentField?.position !== update.position ||
+          ("display_config_json" in update && update.fieldId === draggedField.id)
+        );
+      });
+
+    setDraggedFieldId(null);
+    if (updates.length === 0) {
+      return;
+    }
+    setLocalError(null);
+    setSuccessMessage(null);
+    reorderFieldMutation.mutate(updates);
+  }
+
+  function renderSchemaFieldGrid(blockFields: FormFieldRead[]) {
+    const rows = visualFieldRows(blockFields);
+    const isDraggingInThisBlock = blockFields.some((field) => field.id === draggedFieldId);
+    const nextRow = rows.length > 0 ? Math.max(...rows.map((row) => row.row)) + 1 : 1;
+
+    return (
+      <>
+        {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+        {rows.map((row) => (
+          <div
+            key={row.row}
+            className="schema-field-layout-row"
+            style={
+              {
+                "--schema-row-columns": String(
+                  isDraggingInThisBlock ? maxVisualColumns : row.columns,
+                ),
+              } as CSSProperties
+            }
+          >
+            {row.fields.map(({ field, column, columnSpan }) => {
+              const isEditingField =
+                fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
+              const isStaticText = field.field_type === "static_text";
+              return (
+                <div
+                  key={field.id}
+                  className={[
+                    "schema-field-row",
+                    isStaticText ? "is-static-text" : "",
+                    draggedFieldId === field.id ? "is-dragging" : "",
+                    isEditingField ? "is-expanded" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  role="button"
+                  tabIndex={0}
+                  style={
+                    {
+                      "--schema-field-column": `${column} / span ${columnSpan}`,
+                    } as CSSProperties
+                  }
+                  onClick={() => toggleFieldForm(field)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleFieldForm(field);
+                    }
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => handleFieldDrop(blockFields, field.id)}
+                >
+                  <button
+                    type="button"
+                    className="drag-handle schema-drag-handle"
+                    aria-label={`Перетащить поле ${field.label}`}
+                    draggable
+                    onClick={(event) => event.stopPropagation()}
+                    onDragStart={(event) => {
+                      if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = "move";
+                      }
+                      setDraggedFieldId(field.id);
+                    }}
+                    onDragEnd={() => setDraggedFieldId(null)}
+                  >
+                    ::
+                  </button>
+                  <div className="schema-field-main">
+                    <strong>{field.label}</strong>
+                    <span>
+                      {fieldTypeLabel(field.field_type)}
+                      {" / "}
+                      {requiredModeLabel(field.required_mode)}
+                      {" / "}
+                      {activityLabel(field.is_active)}
+                    </span>
+                  </div>
+                  {isStaticText && (
+                    <small className="schema-static-text-preview">{staticTextValue(field)}</small>
+                  )}
+                  {isEditingField && (
+                    <div
+                      className="schema-field-inline-form"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="panel-form schema-field-form-panel">{renderFieldForm()}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {isDraggingInThisBlock && renderLayoutDropSlots(blockFields, row.row)}
+          </div>
+        ))}
+        {isDraggingInThisBlock && (
+          <div
+            className="schema-field-layout-row schema-field-drop-row"
+            style={{ "--schema-row-columns": String(maxVisualColumns) } as CSSProperties}
+          >
+            {renderLayoutDropSlots(blockFields, nextRow)}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function renderLayoutDropSlots(blockFields: FormFieldRead[], row: number) {
+    return Array.from({ length: maxVisualColumns }, (_, index) => {
+      const column = index + 1;
+      return (
+        <button
+          key={`${row}:${column}`}
+          type="button"
+          className="schema-layout-drop-slot"
+          aria-label={`Поместить поле в строку ${row} колонку ${column}`}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={() => handleFieldLayoutDrop(blockFields, row, column)}
+        >
+          {row}.{column}
+        </button>
+      );
+    });
+  }
+
   function renderBlockForm() {
     if (!blockFormState) {
       return null;
@@ -1084,22 +1278,6 @@ function SchemaVisualEditor({
               setBlockFormState({ ...blockFormState, title: event.currentTarget.value })
             }
           />
-        </label>
-        <label>
-          {uiText.formBlockColumns}
-          <select
-            value={blockFormState.layoutColumns}
-            onChange={(event) =>
-              setBlockFormState({
-                ...blockFormState,
-                layoutColumns: event.currentTarget.value,
-              })
-            }
-          >
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-          </select>
         </label>
         {blockFormState.mode === "create" && (
           <div className="schema-field-options">
@@ -1290,6 +1468,41 @@ function SchemaVisualEditor({
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <label>
+            {uiText.fieldLayoutRow}
+            <input
+              type="number"
+              min="1"
+              max={maxVisualRows}
+              value={fieldFormState.layoutRow}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  layoutRow: event.currentTarget.value,
+                })
+              }
+            />
+          </label>
+          <label>
+            {uiText.fieldLayoutColumn}
+            <select
+              value={fieldFormState.layoutColumn}
+              onChange={(event) =>
+                setFieldFormState({
+                  ...fieldFormState,
+                  layoutColumn: event.currentTarget.value,
+                })
+              }
+            >
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
             </select>
           </label>
           <label>
@@ -1582,15 +1795,7 @@ function SchemaVisualEditor({
             {sortedBlocks.map((block) => {
               const blockFields = fieldsByBlockId.get(block.id) ?? [];
               return (
-                <article
-                  key={block.id}
-                  className="schema-block-card"
-                  style={
-                    {
-                      "--schema-block-columns": String(block.layout_columns || 1),
-                    } as CSSProperties
-                  }
-                >
+                <article key={block.id} className="schema-block-card">
                   <header
                     className="schema-block-header schema-clickable-header"
                     role="button"
@@ -1616,92 +1821,7 @@ function SchemaVisualEditor({
                       {renderBlockForm()}
                     </div>
                   )}
-                  <div className="schema-field-list">
-                    {blockFields.length === 0 && (
-                      <p className="data-empty">{uiText.noFieldsInBlock}</p>
-                    )}
-                    {blockFields.map((field) => {
-                      const isEditingField =
-                        fieldFormState?.mode === "edit" && fieldFormState.fieldId === field.id;
-                      const fieldColumnSpan = Math.min(
-                        block.layout_columns || 1,
-                        displayConfigNumber(field, "column_span", 1),
-                      );
-                      const isStaticText = field.field_type === "static_text";
-                      return (
-                        <div
-                          key={field.id}
-                          className={[
-                            "schema-field-row",
-                            isStaticText ? "is-static-text" : "",
-                            draggedFieldId === field.id ? "is-dragging" : "",
-                            isEditingField ? "is-expanded" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          role="button"
-                          tabIndex={0}
-                          style={
-                            {
-                              "--schema-field-span": String(fieldColumnSpan),
-                            } as CSSProperties
-                          }
-                          onClick={() => openEditFieldForm(field)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              openEditFieldForm(field);
-                            }
-                          }}
-                          onDragOver={(event) => event.preventDefault()}
-                          onDrop={() => handleFieldDrop(blockFields, field.id)}
-                        >
-                          <button
-                            type="button"
-                            className="drag-handle schema-drag-handle"
-                            aria-label={`Перетащить поле ${field.label}`}
-                            draggable
-                            onClick={(event) => event.stopPropagation()}
-                            onDragStart={(event) => {
-                              if (event.dataTransfer) {
-                                event.dataTransfer.effectAllowed = "move";
-                              }
-                              setDraggedFieldId(field.id);
-                            }}
-                            onDragEnd={() => setDraggedFieldId(null)}
-                          >
-                            ::
-                          </button>
-                          <div className="schema-field-main">
-                            <strong>{field.label}</strong>
-                            <span>
-                              {fieldTypeLabel(field.field_type)}
-                              {" / "}
-                              {requiredModeLabel(field.required_mode)}
-                              {" / "}
-                              {activityLabel(field.is_active)}
-                            </span>
-                          </div>
-                          <span className="schema-field-code">{`${uiText.technicalCode}: ${field.code}`}</span>
-                          {isStaticText && (
-                            <small className="schema-static-text-preview">
-                              {staticTextValue(field)}
-                            </small>
-                          )}
-                          {isEditingField && (
-                            <div
-                              className="schema-field-inline-form"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <div className="panel-form schema-field-form-panel">
-                                {renderFieldForm()}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <div className="schema-field-list">{renderSchemaFieldGrid(blockFields)}</div>
                   <div className="schema-add-field-slot">
                     {fieldFormState?.mode === "create" && fieldFormState.blockId === block.id ? (
                       <div className="panel-form schema-field-form-panel">{renderFieldForm()}</div>
@@ -2535,12 +2655,31 @@ function layoutNumber(value: string) {
   if (!Number.isFinite(parsed)) {
     return 1;
   }
-  return Math.min(3, Math.max(1, parsed));
+  return Math.min(maxVisualColumns, Math.max(1, parsed));
+}
+
+function layoutRowNumber(value: string) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+  return Math.min(maxVisualRows, Math.max(1, parsed));
+}
+
+function layoutColumnNumber(value: string) {
+  return layoutNumber(value);
 }
 
 function fieldDisplayConfig(fieldFormState: FieldFormState) {
+  const layoutColumn = layoutColumnNumber(fieldFormState.layoutColumn);
+  const columnSpan = Math.min(
+    layoutNumber(fieldFormState.columnSpan),
+    maxVisualColumns - layoutColumn + 1,
+  );
   return {
-    column_span: layoutNumber(fieldFormState.columnSpan),
+    column_span: columnSpan,
+    layout_row: layoutRowNumber(fieldFormState.layoutRow),
+    layout_column: layoutColumn,
     label_position: fieldLabelPositions.includes(fieldFormState.labelPosition)
       ? fieldFormState.labelPosition
       : "top",
@@ -2548,6 +2687,98 @@ function fieldDisplayConfig(fieldFormState: FieldFormState) {
       ? fieldFormState.separatorStyle
       : "none",
   };
+}
+
+function fieldColumnSpan(field: FormFieldRead) {
+  return Math.min(maxVisualColumns, Math.max(1, displayConfigNumber(field, "column_span", 1)));
+}
+
+function fieldLayoutRow(field: FormFieldRead, fallback: number) {
+  return Math.min(maxVisualRows, Math.max(1, displayConfigNumber(field, "layout_row", fallback)));
+}
+
+function fieldLayoutColumn(field: FormFieldRead, fallback: number) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, displayConfigNumber(field, "layout_column", fallback)),
+  );
+}
+
+type VisualFieldItem = {
+  field: FormFieldRead;
+  row: number;
+  column: number;
+  columnSpan: number;
+};
+
+function visualFieldItems(fields: FormFieldRead[]) {
+  return [...fields]
+    .sort((left, right) => left.position - right.position)
+    .map((field, index): VisualFieldItem => {
+      const row = fieldLayoutRow(field, index + 1);
+      const column = fieldLayoutColumn(field, 1);
+      const columnSpan = Math.min(fieldColumnSpan(field), maxVisualColumns - column + 1);
+      return { field, row, column, columnSpan };
+    });
+}
+
+function visualFieldRows(fields: FormFieldRead[]) {
+  const rows = new Map<
+    number,
+    {
+      row: number;
+      columns: number;
+      fields: VisualFieldItem[];
+    }
+  >();
+  for (const item of visualFieldItems(fields)) {
+    const row = rows.get(item.row) ?? { row: item.row, columns: 1, fields: [] };
+    row.fields.push(item);
+    row.columns = Math.min(
+      maxVisualColumns,
+      Math.max(row.columns, item.column + item.columnSpan - 1),
+    );
+    rows.set(item.row, row);
+  }
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      fields: row.fields.sort(
+        (left, right) => left.column - right.column || left.field.position - right.field.position,
+      ),
+    }))
+    .sort((left, right) => left.row - right.row);
+}
+
+function sortFieldsByVisualPlacement(fields: FormFieldRead[]) {
+  return visualFieldItems(fields)
+    .sort(
+      (left, right) =>
+        left.row - right.row ||
+        left.column - right.column ||
+        left.field.position - right.field.position,
+    )
+    .map((item) => item.field);
+}
+
+function fieldDisplayConfigWithPlacement(field: FormFieldRead, row: number, column: number) {
+  const safeColumn = Math.min(maxVisualColumns, Math.max(1, column));
+  const safeSpan = Math.min(fieldColumnSpan(field), maxVisualColumns - safeColumn + 1);
+  return {
+    column_span: safeSpan,
+    layout_row: Math.min(maxVisualRows, Math.max(1, row)),
+    layout_column: safeColumn,
+    label_position: displayConfigValue(field, "label_position", "top"),
+    separator_style: displayConfigValue(field, "separator_style", "none"),
+  };
+}
+
+function nextFieldPlacement(fields: FormFieldRead[]) {
+  const rows = visualFieldRows(fields);
+  if (rows.length === 0) {
+    return { row: 1, column: 1 };
+  }
+  return { row: Math.min(maxVisualRows, Math.max(...rows.map((row) => row.row)) + 1), column: 1 };
 }
 
 function nextPosition(items: { position: number }[]) {

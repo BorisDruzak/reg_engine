@@ -9,7 +9,11 @@ import {
   updatePublicLinkFieldValue,
   uploadPublicLinkAttachment,
 } from "@/api/client";
-import type { PublicLinkAttachmentRead, PublicLinkPreviewFieldRead } from "@/api/types";
+import type {
+  PublicLinkAttachmentRead,
+  PublicLinkPreviewBlockInstanceRead,
+  PublicLinkPreviewFieldRead,
+} from "@/api/types";
 import {
   fieldTypeLabel,
   formatUiDateTime,
@@ -72,29 +76,32 @@ export function PublicLinkEditPage() {
                   <header>
                     <h3>{block.title}</h3>
                   </header>
-                  <div
-                    className="field-editor-list"
-                    style={publicFieldColumnsStyle(block.layout_columns)}
-                  >
-                    {block.instances.flatMap((instance) =>
-                      instance.fields.map((field) =>
-                        field.field_type === "static_text" ? (
-                          <PublicStaticField
-                            key={`${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`}
-                            field={field}
-                            instanceOrdinal={instance.ordinal}
-                          />
-                        ) : (
-                          <PublicFieldEditor
-                            key={`${block.block_id}:${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`}
-                            blockInstanceId={instance.block_instance_id}
-                            field={field}
-                            instanceOrdinal={instance.ordinal}
-                            rawToken={rawToken}
-                          />
-                        ),
-                      ),
-                    )}
+                  <div className="field-editor-list">
+                    {publicFieldRows(block.instances).map((row) => (
+                      <div
+                        key={row.row}
+                        className="field-editor-layout-row"
+                        style={publicFieldColumnsStyle(row.columns)}
+                      >
+                        {row.fields.map(({ field, instanceOrdinal, blockInstanceId, key }) =>
+                          field.field_type === "static_text" ? (
+                            <PublicStaticField
+                              key={key}
+                              field={field}
+                              instanceOrdinal={instanceOrdinal}
+                            />
+                          ) : (
+                            <PublicFieldEditor
+                              key={key}
+                              blockInstanceId={blockInstanceId}
+                              field={field}
+                              instanceOrdinal={instanceOrdinal}
+                              rawToken={rawToken}
+                            />
+                          ),
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </section>
               ))
@@ -362,13 +369,52 @@ function PublicStaticField({
   );
 }
 
+type PublicFieldLayoutItem = {
+  key: string;
+  field: PublicLinkPreviewFieldRead;
+  instanceOrdinal: number;
+  blockInstanceId: string | null;
+};
+
+function publicFieldRows(instances: PublicLinkPreviewBlockInstanceRead[]) {
+  const rows = new Map<number, { row: number; columns: number; fields: PublicFieldLayoutItem[] }>();
+  for (const instance of instances) {
+    instance.fields.forEach((field, index) => {
+      const rowNumber = publicFieldLayoutRow(field, index + 1);
+      const column = publicFieldLayoutColumn(field, 1);
+      const span = Math.min(publicFieldColumnSpan(field), maxVisualColumns - column + 1);
+      const row = rows.get(rowNumber) ?? { row: rowNumber, columns: 1, fields: [] };
+      row.fields.push({
+        key: `${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
+        field,
+        instanceOrdinal: instance.ordinal,
+        blockInstanceId: instance.block_instance_id,
+      });
+      row.columns = Math.max(row.columns, column + span - 1);
+      rows.set(rowNumber, row);
+    });
+  }
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      columns: clampColumns(row.columns),
+      fields: row.fields.sort(
+        (left, right) =>
+          publicFieldLayoutColumn(left.field, 1) - publicFieldLayoutColumn(right.field, 1),
+      ),
+    }))
+    .sort((left, right) => left.row - right.row);
+}
+
 function publicFieldColumnsStyle(columns: number | null | undefined): CSSProperties {
   return { "--field-editor-columns": String(clampColumns(columns)) } as CSSProperties;
 }
 
 function publicFieldSpanStyle(field: PublicLinkPreviewFieldRead): CSSProperties {
+  const column = publicFieldLayoutColumn(field, 1);
+  const span = Math.min(publicFieldColumnSpan(field), maxVisualColumns - column + 1);
   return {
-    "--field-editor-span": String(displayConfigNumber(field, "column_span", 1)),
+    "--field-editor-column": `${column} / span ${span}`,
   } as CSSProperties;
 }
 
@@ -395,14 +441,32 @@ function displayConfigString(field: PublicLinkPreviewFieldRead, key: string, fal
 
 function displayConfigNumber(field: PublicLinkPreviewFieldRead, key: string, fallback: number) {
   const value = field.display_config_json?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? clampColumns(value) : fallback;
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+const maxVisualColumns = 5;
+const maxVisualRows = 50;
+
+function publicFieldLayoutRow(field: PublicLinkPreviewFieldRead, fallback: number) {
+  return Math.min(maxVisualRows, Math.max(1, displayConfigNumber(field, "layout_row", fallback)));
+}
+
+function publicFieldLayoutColumn(field: PublicLinkPreviewFieldRead, fallback: number) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, displayConfigNumber(field, "layout_column", fallback)),
+  );
+}
+
+function publicFieldColumnSpan(field: PublicLinkPreviewFieldRead) {
+  return Math.min(maxVisualColumns, Math.max(1, displayConfigNumber(field, "column_span", 1)));
 }
 
 function clampColumns(value: number | null | undefined) {
   if (!Number.isFinite(value)) {
     return 1;
   }
-  return Math.min(3, Math.max(1, Number(value)));
+  return Math.min(maxVisualColumns, Math.max(1, Number(value)));
 }
 
 function formatBytes(value: number) {

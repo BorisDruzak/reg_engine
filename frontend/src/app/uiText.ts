@@ -2,6 +2,8 @@ export const uiText = {
   formBlockColumns: "Колонки блока",
   staticTextContent: "Текст",
   fieldColumnSpan: "Ширина поля",
+  fieldLayoutRow: "Строка поля",
+  fieldLayoutColumn: "Колонка поля",
   fieldLabelPosition: "Расположение подписи",
   fieldSeparatorStyle: "Разделитель",
   labelPositionTop: "Сверху",

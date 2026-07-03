@@ -1196,28 +1196,26 @@ function BulkCardValuesForm({
       </header>
       <div className="bulk-field-blocks">
         {fieldGroups.map((group) => (
-          <section
-            key={group.blockId}
-            className="bulk-field-block"
-            style={fieldColumnsStyle(group.columns)}
-          >
+          <section key={group.blockId} className="bulk-field-block">
             <h5>{group.blockLabel}</h5>
-            <div className="bulk-field-grid">
-              {group.fields.map((field) => (
-                <BulkFieldEditor
-                  key={field.key}
-                  cardId={card.id}
-                  field={field}
-                  token={token}
-                  value={currentBulkValue(field, draftValues)}
-                  onChange={(value) => {
-                    setDraftValues((current) => ({ ...current, [field.key]: value }));
-                    setSaved(false);
-                    setLocalError(null);
-                  }}
-                />
-              ))}
-            </div>
+            {group.rows.map((row) => (
+              <div key={row.row} className="bulk-field-grid" style={fieldColumnsStyle(row.columns)}>
+                {row.fields.map((field) => (
+                  <BulkFieldEditor
+                    key={field.key}
+                    cardId={card.id}
+                    field={field}
+                    token={token}
+                    value={currentBulkValue(field, draftValues)}
+                    onChange={(value) => {
+                      setDraftValues((current) => ({ ...current, [field.key]: value }));
+                      setSaved(false);
+                      setLocalError(null);
+                    }}
+                  />
+                ))}
+              </div>
+            ))}
           </section>
         ))}
       </div>
@@ -1297,8 +1295,11 @@ function groupedEditableFields(fields: EditableCardField[]) {
   const groups: {
     blockId: string;
     blockLabel: string;
-    columns: number;
-    fields: EditableCardField[];
+    rows: {
+      row: number;
+      columns: number;
+      fields: EditableCardField[];
+    }[];
   }[] = [];
   for (const field of fields) {
     let group = groups.find((item) => item.blockId === field.blockId);
@@ -1306,12 +1307,29 @@ function groupedEditableFields(fields: EditableCardField[]) {
       group = {
         blockId: field.blockId,
         blockLabel: field.blockLabel,
-        columns: clampColumns(field.blockLayoutColumns),
-        fields: [],
+        rows: [],
       };
       groups.push(group);
     }
-    group.fields.push(field);
+    const rowNumber = fieldLayoutRow(field, group.rows.length + 1);
+    let row = group.rows.find((item) => item.row === rowNumber);
+    if (!row) {
+      row = { row: rowNumber, columns: 1, fields: [] };
+      group.rows.push(row);
+    }
+    row.fields.push(field);
+    row.columns = Math.max(row.columns, fieldLayoutColumn(field, 1) + fieldColumnSpan(field) - 1);
+  }
+  for (const group of groups) {
+    group.rows.sort((left, right) => left.row - right.row);
+    for (const row of group.rows) {
+      row.columns = clampColumns(row.columns);
+      row.fields.sort(
+        (left, right) =>
+          fieldLayoutColumn(left, 1) - fieldLayoutColumn(right, 1) ||
+          (left.schema?.position ?? 0) - (right.schema?.position ?? 0),
+      );
+    }
   }
   return groups;
 }
@@ -1321,11 +1339,9 @@ function fieldColumnsStyle(columns: number): CSSProperties {
 }
 
 function fieldGridSpanStyle(field: EditableCardField): CSSProperties {
-  const span = Math.min(
-    clampColumns(field.blockLayoutColumns),
-    displayConfigNumber(field.schema, "column_span", 1),
-  );
-  return { "--field-editor-span": String(span) } as CSSProperties;
+  const column = fieldLayoutColumn(field, 1);
+  const span = Math.min(fieldColumnSpan(field), maxVisualColumns - column + 1);
+  return { "--field-editor-column": `${column} / span ${span}` } as CSSProperties;
 }
 
 function fieldEditorLayoutClassName(field: EditableCardField) {
@@ -1354,11 +1370,35 @@ function displayConfigNumber(schema: FormFieldRead | null, key: string, fallback
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+const maxVisualColumns = 5;
+const maxVisualRows = 50;
+
+function fieldLayoutRow(field: EditableCardField, fallback: number) {
+  return Math.min(
+    maxVisualRows,
+    Math.max(1, displayConfigNumber(field.schema, "layout_row", fallback)),
+  );
+}
+
+function fieldLayoutColumn(field: EditableCardField, fallback: number) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, displayConfigNumber(field.schema, "layout_column", fallback)),
+  );
+}
+
+function fieldColumnSpan(field: EditableCardField) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, displayConfigNumber(field.schema, "column_span", 1)),
+  );
+}
+
 function clampColumns(value: number | null | undefined) {
   if (!Number.isFinite(value)) {
     return 1;
   }
-  return Math.min(3, Math.max(1, Number(value)));
+  return Math.min(maxVisualColumns, Math.max(1, Number(value)));
 }
 
 function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {

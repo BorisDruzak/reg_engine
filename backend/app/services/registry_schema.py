@@ -1144,10 +1144,26 @@ class RegistrySchemaService:
         column_span = display_config_json.get("column_span")
         if column_span is not None:
             if isinstance(column_span, bool) or not isinstance(column_span, int):
-                raise RegistrySchemaError("Field column span must be a number from 1 to 3.")
-            if column_span < 1 or column_span > 3:
-                raise RegistrySchemaError("Field column span must be a number from 1 to 3.")
+                raise RegistrySchemaError("Field column span must be a number from 1 to 5.")
+            if column_span < 1 or column_span > 5:
+                raise RegistrySchemaError("Field column span must be a number from 1 to 5.")
             normalized["column_span"] = column_span
+
+        layout_row = display_config_json.get("layout_row")
+        if layout_row is not None:
+            if isinstance(layout_row, bool) or not isinstance(layout_row, int):
+                raise RegistrySchemaError("Field layout row must be a number from 1 to 50.")
+            if layout_row < 1 or layout_row > 50:
+                raise RegistrySchemaError("Field layout row must be a number from 1 to 50.")
+            normalized["layout_row"] = layout_row
+
+        layout_column = display_config_json.get("layout_column")
+        if layout_column is not None:
+            if isinstance(layout_column, bool) or not isinstance(layout_column, int):
+                raise RegistrySchemaError("Field layout column must be a number from 1 to 5.")
+            if layout_column < 1 or layout_column > 5:
+                raise RegistrySchemaError("Field layout column must be a number from 1 to 5.")
+            normalized["layout_column"] = layout_column
 
         label_position = display_config_json.get("label_position")
         if label_position is not None:

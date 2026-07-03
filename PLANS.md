@@ -104,6 +104,12 @@ not a hardcoded employee registry.
   template text, schema editing opens by clicking templates/blocks/fields, and
   the admin navigation can be collapsed. Production migration
   `0020_schema_layout_static_text` is applied.
+- Phase 7J.1 schema grid hardening is in implementation: the user-facing block
+  column-count setting is removed, field technical codes are hidden in the
+  visual field rows, expanded field edit rows can be collapsed by clicking the
+  field summary again, and field grid placement is stored per field through
+  `display_config_json.layout_row`, `layout_column`, and `column_span` without a
+  new migration.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2025,8 +2031,61 @@ Migration, deployment, and live evidence:
 
 Known limitations / next work:
 
-- Current layout support stores block column count plus per-field column span,
-  label position, separator style, and static text content. Richer visual grid
-  placement can be planned separately if needed.
+- Existing `form_blocks.layout_columns` remains in the database/API for
+  backward compatibility with migration `0020_schema_layout_static_text`, but
+  the ordinary visual schema UI no longer exposes block-wide column count as a
+  user setting.
+- Current layout support stores per-field row, column, column span, label
+  position, separator style, and static text content in `display_config_json`.
+  Row/column placement is registry-field metadata, not a separate physical
+  per-template schema.
 - No per-template physical schema separation was introduced; current Core
   Schema fields remain registry-scoped in this slice.
+
+## Phase 7J.1: Schema Grid Hardening
+
+Status: implementation in progress.
+
+Purpose:
+
+Close the first usability gaps in the visual schema editor after Phase 7J by
+making field placement explicit and removing user-facing block-wide column
+configuration.
+
+Implemented scope:
+
+1. Visual schema editor:
+   - hide technical codes in ordinary field rows while keeping block/template
+     technical codes visible for diagnostics;
+   - clicking an already-expanded field summary closes the inline edit form;
+   - remove the `Колонки блока` control from create/edit block forms;
+   - keep block archive inside the inline block edit form;
+   - add per-field row, column, and width settings;
+   - add drag/drop drop-zones for moving a field to an explicit row and column;
+   - render rows independently so different rows can occupy different numbers
+     of columns up to 5.
+2. Backend:
+   - keep `form_blocks.layout_columns` unchanged for compatibility;
+   - allow `form_fields.display_config_json` to store `layout_row`,
+     `layout_column`, and `column_span` up to 5 columns;
+   - no new migration is required because the data is stored in the existing
+     JSON column from Phase 7J.
+3. Card/public editors:
+   - render ordinary card fields using the same per-row layout metadata;
+   - render public-link editable fields with the same row/column layout.
+
+Non-goals:
+
+- No new business-specific fields or employee schema.
+- No new database table or Alembic migration.
+- No import/export, report, document, attachment, MCP, auth, or RBAC changes.
+- No per-template physical schema separation.
+
+Verification completed locally so far:
+
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "closes field edit|moves schema fields|creates edits and archives schema blocks and fields|creates static text fields"`:
+  passed, 4 targeted tests.
+- `npm --prefix frontend test -- --run src/App.test.tsx`: passed, 66 tests.
+- `npm --prefix frontend run typecheck`: passed.
+- `backend\.venv\Scripts\python.exe -m pytest` from `backend`: passed, 133
+  passed, 170 skipped.
