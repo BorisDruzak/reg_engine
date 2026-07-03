@@ -104,10 +104,11 @@ not a hardcoded employee registry.
   template text, schema editing opens by clicking templates/blocks/fields, and
   the admin navigation can be collapsed. Production migration
   `0020_schema_layout_static_text` is applied.
-- Phase 7J.1 schema grid hardening is in implementation: the user-facing block
-  column-count setting is removed, field technical codes are hidden in the
-  visual field rows, expanded field edit rows can be collapsed by clicking the
-  field summary again, and field grid placement is stored per field through
+- Phase 7J.1 schema grid hardening is completed on `main`, pushed to GitHub,
+  deployed to the server, and live-verified: the user-facing block
+  column-count setting is removed, field technical codes are hidden in visual
+  field rows, expanded field edit rows collapse by clicking the field summary
+  again, and field grid placement is stored per field through
   `display_config_json.layout_row`, `layout_column`, and `column_span` without a
   new migration.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
@@ -2044,7 +2045,8 @@ Known limitations / next work:
 
 ## Phase 7J.1: Schema Grid Hardening
 
-Status: implementation in progress.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+browser-live verified.
 
 Purpose:
 
@@ -2081,7 +2083,7 @@ Non-goals:
 - No import/export, report, document, attachment, MCP, auth, or RBAC changes.
 - No per-template physical schema separation.
 
-Verification completed locally so far:
+Verification completed:
 
 - `npm --prefix frontend test -- --run src/App.test.tsx -t "closes field edit|moves schema fields|creates edits and archives schema blocks and fields|creates static text fields"`:
   passed, 4 targeted tests.
@@ -2089,3 +2091,29 @@ Verification completed locally so far:
 - `npm --prefix frontend run typecheck`: passed.
 - `backend\.venv\Scripts\python.exe -m pytest` from `backend`: passed, 133
   passed, 170 skipped.
+- `backend\.venv\Scripts\python.exe -m ruff check .`: passed.
+- `backend\.venv\Scripts\python.exe -m ruff format --check .`: passed.
+- `backend\.venv\Scripts\mypy.exe backend\app`: passed.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run format:check`: passed.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+
+Deployment and live evidence:
+
+- Commit `75a33717` was pushed to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
+  server checkout fast-forwarded to `75a33717` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed; frontend build/upload, service restart, API healthcheck, and
+  same-origin frontend smoke passed.
+- Browser live check against `http://192.168.100.12:8000/` passed with a
+  Playwright fallback after the in-app browser control API timed out on tab
+  access: the schema tab shows the template editor, the block-wide column
+  setting is absent, ordinary field rows do not display technical codes, a
+  field row opens and then closes its inline editor on repeated clicks, row and
+  column field settings are visible, independent visual rows render, and
+  browser console errors are empty.
