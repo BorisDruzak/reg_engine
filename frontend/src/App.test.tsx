@@ -3497,6 +3497,60 @@ test("moves a schema field through the layout grid by pointer mouse drop", async
   });
 });
 
+test("keeps schema field rows mounted while mouse-dragging into the layout grid", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const approvedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(approvedRow).not.toBeNull();
+
+  const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
+    name: "Перетащить поле Подтверждено",
+  });
+  fireEvent.pointerDown(dragHandle, { clientX: 12, clientY: 12 });
+  fireEvent.pointerMove(window, { clientX: 40, clientY: 40 });
+
+  const layoutGrid = await within(blockCard as HTMLElement).findByRole("group", {
+    name: "Сетка перемещения поля Подтверждено",
+  });
+  expect((blockCard as HTMLElement).querySelectorAll(".schema-field-row")).not.toHaveLength(0);
+
+  const targetSlot = within(layoutGrid).getByRole("button", {
+    name: "Поместить поле в строку 1 колонку 5",
+  });
+  const originalElementFromPoint = document.elementFromPoint;
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn(() => targetSlot),
+  });
+  fireEvent.pointerUp(window, { clientX: 140, clientY: 140 });
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: originalElementFromPoint,
+  });
+
+  await waitFor(() => {
+    expect(
+      within(blockCard as HTMLElement).queryByRole("group", {
+        name: "Сетка перемещения поля Подтверждено",
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 test("resizes schema field width with the visual edge handle", async () => {
   const user = userEvent.setup();
   render(<App />);

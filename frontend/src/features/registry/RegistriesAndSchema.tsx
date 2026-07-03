@@ -568,6 +568,7 @@ function SchemaVisualEditor({
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
+  const [layoutPointerDragFieldId, setLayoutPointerDragFieldId] = useState<string | null>(null);
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -608,6 +609,9 @@ function SchemaVisualEditor({
   function setActiveDraggedFieldId(fieldId: string | null) {
     draggedFieldIdRef.current = fieldId;
     setDraggedFieldId(fieldId);
+    if (fieldId == null) {
+      setLayoutPointerDragFieldId(null);
+    }
   }
 
   useEffect(() => {
@@ -1122,11 +1126,9 @@ function SchemaVisualEditor({
   }
 
   function toggleFieldLayoutGrid(fieldId: string) {
-    setDraggedFieldId((currentFieldId) => {
-      const nextFieldId = currentFieldId === fieldId ? null : fieldId;
-      draggedFieldIdRef.current = nextFieldId;
-      return nextFieldId;
-    });
+    const nextFieldId = draggedFieldIdRef.current === fieldId ? null : fieldId;
+    setLayoutPointerDragFieldId(null);
+    setActiveDraggedFieldId(nextFieldId);
   }
 
   function handleFieldLayoutPointerDown(
@@ -1140,6 +1142,7 @@ function SchemaVisualEditor({
     const startY = event.clientY;
     let didMove = false;
     suppressNextHandleClickRef.current = field.id;
+    setLayoutPointerDragFieldId(field.id);
     if (!wasOpen) {
       setActiveDraggedFieldId(field.id);
     }
@@ -1161,17 +1164,24 @@ function SchemaVisualEditor({
         setActiveDraggedFieldId(null);
         return;
       }
+      if (!didDrag) {
+        setLayoutPointerDragFieldId(null);
+        return;
+      }
       if (typeof document.elementFromPoint !== "function") {
+        setLayoutPointerDragFieldId(null);
         return;
       }
       const target = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
       const dropSlot = target?.closest(".schema-layout-drop-slot");
       if (!(dropSlot instanceof HTMLElement) || dropSlot.hasAttribute("disabled")) {
+        setLayoutPointerDragFieldId(null);
         return;
       }
       const row = Number(dropSlot.dataset.layoutRow);
       const column = Number(dropSlot.dataset.layoutColumn);
       if (!Number.isInteger(row) || !Number.isInteger(column)) {
+        setLayoutPointerDragFieldId(null);
         return;
       }
       handleFieldLayoutDrop(blockFields, row, column, field.id);
@@ -1375,10 +1385,12 @@ function SchemaVisualEditor({
   function renderSchemaFieldGrid(blockFields: FormFieldRead[]) {
     const rows = visualFieldRows(blockFields);
     const layoutField = blockFields.find((field) => field.id === draggedFieldId) ?? null;
+    const isPointerDraggingInThisBlock =
+      layoutField != null && layoutPointerDragFieldId === layoutField.id;
     const isDraggingInThisBlock = false;
     const nextRow = rows.length > 0 ? Math.max(...rows.map((row) => row.row)) + 1 : 1;
 
-    if (layoutField) {
+    if (layoutField && !isPointerDraggingInThisBlock) {
       return (
         <>
           {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
@@ -1390,6 +1402,7 @@ function SchemaVisualEditor({
     return (
       <>
         {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+        {layoutField && renderLayoutDropPanel(blockFields, layoutField)}
         {rows.map((row) => (
           <Fragment key={row.row}>
             {isDraggingInThisBlock && (

@@ -130,6 +130,11 @@ not a hardcoded employee registry.
   cells, occupied cells are disabled drop targets, and the ordinary field list
   is hidden to avoid duplicate placement surfaces. No database migration is
   required.
+- Phase 7J.5 schema placement mouse-drag regression fix is completed locally
+  and deployed to the server frontend: click-opened placement grids still hide
+  ordinary field rows, but active mouse-drag keeps the dragged field source row
+  mounted until pointer release so browser drag can complete. No backend,
+  database, or migration change is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2319,3 +2324,57 @@ Verification completed:
   occupied-field labels, restored field rows after `Закрыть сетку`, zero
   browser console warnings/errors, and 200 responses for the visible registry
   API reads. Screenshot: `C:/Temp/reg-engine-schema-grid-occupied-cells.png`.
+
+## Phase 7J.5: Schema Placement Mouse-Drag Regression Fix
+
+Status: completed locally and deployed to the server frontend.
+
+Purpose:
+
+Fix the regression introduced by the Phase 7J.4 active-grid rendering cleanup:
+clicking a field drag handle should still open a clean grid-only placement
+surface, but holding the mouse and dragging must not remove the source field row
+from the DOM before the browser drag completes.
+
+Implemented scope:
+
+1. Visual schema editor:
+   - separate click-opened grid state from active pointer-drag state;
+   - keep ordinary field rows mounted only while a mouse drag is actively held;
+   - return to the clean grid-only view after a non-drag click opens the grid;
+   - clear active pointer-drag state on successful drop, invalid drop, Escape,
+     outside click, and explicit grid close.
+2. Tests:
+   - added a regression test proving field rows remain mounted during
+     mouse-drag into the placement grid;
+   - preserved existing coverage proving click-opened grids hide ordinary field
+     rows and occupied cells remain disabled.
+
+Non-goals:
+
+- No backend model, API, service, or Alembic migration change.
+- No business-specific or employee-specific schema.
+- No import/export, report, document, attachment, MCP, auth, RBAC, or database
+  workflow change.
+
+Verification completed:
+
+- New regression test was first run against the existing code and failed
+  because `.schema-field-row` was removed during pointer-drag.
+- `pnpm -C frontend test -- --run src/App.test.tsx -t "keeps schema field rows"`:
+  passed after the fix.
+- `pnpm -C frontend test -- --run src/App.test.tsx -t "schema layout grid|layout grid|field order|keeps schema field rows"`:
+  passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  passed; built `frontend/dist`, uploaded it to the server, restarted
+  `reg-engine.service`, and passed backend healthcheck plus frontend smoke.
+- In-app browser live check against `http://192.168.100.12:8000/`: passed;
+  verified real mouse drag from a schema field handle to a free placement grid
+  cell, field position update, closed grid after drop, restored ordinary field
+  rows, and zero browser console warnings/errors.
