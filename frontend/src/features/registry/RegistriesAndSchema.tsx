@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -571,6 +572,7 @@ function SchemaVisualEditor({
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const draggedFieldIdRef = useRef<string | null>(null);
+  const layoutDragTargetRef = useRef<{ fieldId: string; row: number; column: number } | null>(null);
   const suppressNextHandleClickRef = useRef<string | null>(null);
   const sortedBlocks = useMemo(
     () => [...blocks].sort((left, right) => left.position - right.position),
@@ -1153,7 +1155,9 @@ function SchemaVisualEditor({
 
     const handlePointerUp = (upEvent: PointerEvent) => {
       cleanupPointerListeners();
-      if (wasOpen && !didMove) {
+      const didDrag =
+        didMove || Math.abs(upEvent.clientX - startX) > 3 || Math.abs(upEvent.clientY - startY) > 3;
+      if (wasOpen && !didDrag) {
         setActiveDraggedFieldId(null);
         return;
       }
@@ -1175,6 +1179,40 @@ function SchemaVisualEditor({
 
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
+  }
+
+  function findLayoutDropSlotAt(clientX: number, clientY: number) {
+    if (typeof document.elementFromPoint !== "function") {
+      return null;
+    }
+    const target = document.elementFromPoint(clientX, clientY);
+    const dropSlot = target?.closest(".schema-layout-drop-slot");
+    if (!(dropSlot instanceof HTMLElement) || dropSlot.hasAttribute("disabled")) {
+      return null;
+    }
+    const row = Number(dropSlot.dataset.layoutRow);
+    const column = Number(dropSlot.dataset.layoutColumn);
+    if (!Number.isInteger(row) || !Number.isInteger(column)) {
+      return null;
+    }
+    return { row, column };
+  }
+
+  function handleFieldLayoutNativeDragEnd(
+    event: ReactDragEvent<HTMLElement>,
+    blockFields: FormFieldRead[],
+    fieldId: string,
+  ) {
+    const coordinateTarget = findLayoutDropSlotAt(event.clientX, event.clientY);
+    const rememberedTarget =
+      layoutDragTargetRef.current?.fieldId === fieldId ? layoutDragTargetRef.current : null;
+    const dropTarget = coordinateTarget ?? rememberedTarget;
+    layoutDragTargetRef.current = null;
+    if (!dropTarget) {
+      setActiveDraggedFieldId(null);
+      return;
+    }
+    handleFieldLayoutDrop(blockFields, dropTarget.row, dropTarget.column, fieldId);
   }
 
   function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
@@ -1410,9 +1448,12 @@ function SchemaVisualEditor({
                           event.dataTransfer.effectAllowed = "move";
                           event.dataTransfer.setData("text/plain", field.id);
                         }
+                        layoutDragTargetRef.current = null;
                         setActiveDraggedFieldId(field.id);
                       }}
-                      onDragEnd={() => setActiveDraggedFieldId(null)}
+                      onDragEnd={(event) =>
+                        handleFieldLayoutNativeDragEnd(event, blockFields, field.id)
+                      }
                     >
                       ::
                     </button>
@@ -1554,12 +1595,17 @@ function SchemaVisualEditor({
               if (event.dataTransfer) {
                 event.dataTransfer.dropEffect = "move";
               }
+              if (draggedField) {
+                layoutDragTargetRef.current = { fieldId: draggedField.id, row, column };
+              }
             }
           }}
           onDrop={(event) => {
             event.preventDefault();
             if (!isCurrent) {
-              handleFieldLayoutDrop(blockFields, row, column);
+              const droppedFieldId = event.dataTransfer?.getData("text/plain") || draggedField?.id;
+              layoutDragTargetRef.current = null;
+              handleFieldLayoutDrop(blockFields, row, column, droppedFieldId);
             }
           }}
         >
