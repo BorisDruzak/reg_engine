@@ -365,6 +365,54 @@ def test_ref_field_types_save_to_dedicated_columns(db_session: Session) -> None:
     assert values["registry_ref"].value_registry_id == context["registry"].id
 
 
+def test_optional_ref_field_types_can_be_cleared(db_session: Session) -> None:
+    context = _hardening_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="clear_refs",
+        title="Clear refs",
+    )
+    card_ref_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="card_ref_clear",
+        label="Card ref clear",
+        field_type="card_ref",
+    )
+    target_card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Target card",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Optional ref card",
+    )
+
+    saved = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=card_ref_field.id,
+        value=target_card.id,
+    )
+    assert saved.value_card_id == target_card.id
+
+    cleared = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=card_ref_field.id,
+        value=None,
+    )
+
+    assert cleared.value_card_id is None
+
+
 def test_repeatable_blocks_allow_multiple_instances_but_non_repeatable_stays_single(
     db_session: Session,
 ) -> None:

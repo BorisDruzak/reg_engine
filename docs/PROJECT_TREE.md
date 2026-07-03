@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-03 09:36:04 +05:00
+- Generated: 2026-07-03 15:49:58 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -143,6 +143,7 @@
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
 - `backend/tests/test_document_generation_services.py`
+- `backend/tests/test_field_value_coercion.py`
 - `backend/tests/test_frontend_static.py`
 - `backend/tests/test_healthcheck.py`
 - `backend/tests/test_integrity_error_mapping.py`
@@ -223,6 +224,7 @@
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/CardTagSearchBar.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
+- `frontend/src/features/cards/fieldEditorUtils.test.ts`
 - `frontend/src/features/cards/fieldEditorUtils.ts`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
 - `frontend/src/features/organizations/.gitkeep`

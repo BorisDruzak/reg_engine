@@ -266,6 +266,8 @@ button {
 
 .workspace-main {
   min-width: 0;
+  width: min(100%, 1920px);
+  margin: 0 auto;
   padding: 22px;
 }
 
@@ -950,13 +952,17 @@ tr:last-child td {
 }
 
 .schema-visual-option-button {
-  min-height: 38px;
+  display: grid;
+  gap: 8px;
+  min-height: 92px;
+  padding: 9px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
   color: #17324d;
   font-weight: 800;
   cursor: pointer;
+  text-align: left;
 }
 
 .schema-visual-option-button:hover,
@@ -972,6 +978,74 @@ tr:last-child td {
   background: #e6f5f2;
   color: #0f766e;
   box-shadow: inset 0 0 0 1px #0f766e;
+}
+
+.schema-preview-title {
+  color: #17324d;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.schema-label-preview,
+.schema-separator-preview {
+  display: grid;
+  min-height: 46px;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.schema-label-preview--left,
+.schema-label-preview--right {
+  grid-template-columns: minmax(48px, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+}
+
+.schema-label-preview--right .schema-preview-label {
+  grid-column: 2;
+}
+
+.schema-label-preview--right .schema-preview-field {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.schema-label-preview--bottom .schema-preview-label {
+  order: 2;
+}
+
+.schema-label-preview--bottom .schema-preview-field {
+  order: 1;
+}
+
+.schema-preview-label {
+  color: #52677f;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.schema-preview-field {
+  display: block;
+  min-height: 18px;
+  border: 1px solid #cbd5df;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.schema-separator-preview--line {
+  border-top: 3px solid #94a3b8;
+}
+
+.schema-separator-preview--space {
+  padding-top: 18px;
+}
+
+.schema-separator-preview--muted {
+  border-left: 5px solid #cbd5e1;
+  background: #f1f5f9;
 }
 
 .schema-field-options {
@@ -1780,6 +1854,7 @@ tr:last-child td {
 }
 
 .bulk-field-form {
+  gap: 14px;
   border-bottom: 1px solid #edf0f4;
 }
 
@@ -1792,18 +1867,31 @@ tr:last-child td {
 
 .bulk-field-blocks {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .bulk-field-block {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 4px 0 0 #0f766e;
+}
+
+.bulk-field-block-header {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  border-bottom: 1px solid #edf0f4;
+  padding-bottom: 8px;
 }
 
 .bulk-field-block h5 {
   margin: 0;
   color: #101828;
-  font-size: 0.9rem;
+  font-size: 1rem;
   line-height: 1.35;
 }
 

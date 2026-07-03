@@ -3,7 +3,6 @@ import {
   Fragment,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type DragEvent as ReactDragEvent,
@@ -568,13 +567,11 @@ function SchemaVisualEditor({
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
-  const [layoutPointerDragFieldId, setLayoutPointerDragFieldId] = useState<string | null>(null);
+  const [layoutNativeDragFieldId, setLayoutNativeDragFieldId] = useState<string | null>(null);
+  const [suppressHandleClickFieldId, setSuppressHandleClickFieldId] = useState<string | null>(null);
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const draggedFieldIdRef = useRef<string | null>(null);
-  const layoutDragTargetRef = useRef<{ fieldId: string; row: number; column: number } | null>(null);
-  const suppressNextHandleClickRef = useRef<string | null>(null);
   const sortedBlocks = useMemo(
     () => [...blocks].sort((left, right) => left.position - right.position),
     [blocks],
@@ -607,10 +604,9 @@ function SchemaVisualEditor({
   }, [fields, selectedTemplate, selectedTemplateFieldIds]);
 
   function setActiveDraggedFieldId(fieldId: string | null) {
-    draggedFieldIdRef.current = fieldId;
     setDraggedFieldId(fieldId);
     if (fieldId == null) {
-      setLayoutPointerDragFieldId(null);
+      setLayoutNativeDragFieldId(null);
     }
   }
 
@@ -1126,69 +1122,8 @@ function SchemaVisualEditor({
   }
 
   function toggleFieldLayoutGrid(fieldId: string) {
-    const nextFieldId = draggedFieldIdRef.current === fieldId ? null : fieldId;
-    setLayoutPointerDragFieldId(null);
+    const nextFieldId = draggedFieldId === fieldId ? null : fieldId;
     setActiveDraggedFieldId(nextFieldId);
-  }
-
-  function handleFieldLayoutPointerDown(
-    event: ReactPointerEvent<HTMLElement>,
-    blockFields: FormFieldRead[],
-    field: FormFieldRead,
-  ) {
-    event.stopPropagation();
-    const wasOpen = draggedFieldIdRef.current === field.id;
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let didMove = false;
-    suppressNextHandleClickRef.current = field.id;
-    setLayoutPointerDragFieldId(field.id);
-    if (!wasOpen) {
-      setActiveDraggedFieldId(field.id);
-    }
-
-    const cleanupPointerListeners = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      didMove ||=
-        Math.abs(moveEvent.clientX - startX) > 3 || Math.abs(moveEvent.clientY - startY) > 3;
-    };
-
-    const handlePointerUp = (upEvent: PointerEvent) => {
-      cleanupPointerListeners();
-      const didDrag =
-        didMove || Math.abs(upEvent.clientX - startX) > 3 || Math.abs(upEvent.clientY - startY) > 3;
-      if (wasOpen && !didDrag) {
-        setActiveDraggedFieldId(null);
-        return;
-      }
-      if (!didDrag) {
-        setLayoutPointerDragFieldId(null);
-        return;
-      }
-      if (typeof document.elementFromPoint !== "function") {
-        setLayoutPointerDragFieldId(null);
-        return;
-      }
-      const target = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
-      const dropSlot = target?.closest(".schema-layout-drop-slot");
-      if (!(dropSlot instanceof HTMLElement) || dropSlot.hasAttribute("disabled")) {
-        setLayoutPointerDragFieldId(null);
-        return;
-      }
-      const row = Number(dropSlot.dataset.layoutRow);
-      const column = Number(dropSlot.dataset.layoutColumn);
-      if (!Number.isInteger(row) || !Number.isInteger(column)) {
-        setLayoutPointerDragFieldId(null);
-        return;
-      }
-      handleFieldLayoutDrop(blockFields, row, column, field.id);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
   }
 
   function findLayoutDropSlotAt(clientX: number, clientY: number) {
@@ -1217,11 +1152,7 @@ function SchemaVisualEditor({
     fieldId: string,
   ) {
     const coordinateTarget = findLayoutDropSlotAt(event.clientX, event.clientY);
-    const rememberedTarget =
-      layoutDragTargetRef.current?.fieldId === fieldId ? layoutDragTargetRef.current : null;
-    const dropTarget =
-      coordinateTarget?.isBlocked === true ? null : (coordinateTarget ?? rememberedTarget);
-    layoutDragTargetRef.current = null;
+    const dropTarget = coordinateTarget?.isBlocked === true ? null : coordinateTarget;
     if (!dropTarget) {
       setActiveDraggedFieldId(null);
       return;
@@ -1385,34 +1316,11 @@ function SchemaVisualEditor({
   function renderSchemaFieldGrid(blockFields: FormFieldRead[]) {
     const rows = visualFieldRows(blockFields);
     const layoutField = blockFields.find((field) => field.id === draggedFieldId) ?? null;
-    const isPointerDraggingInThisBlock =
-      layoutField != null && layoutPointerDragFieldId === layoutField.id;
-    const isDraggingInThisBlock = false;
-    const nextRow = rows.length > 0 ? Math.max(...rows.map((row) => row.row)) + 1 : 1;
-
-    if (layoutField && !isPointerDraggingInThisBlock) {
-      return (
-        <>
-          {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-          {renderLayoutDropPanel(blockFields, layoutField)}
-        </>
-      );
-    }
-
-    return (
+    const renderRows = () => (
       <>
         {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-        {layoutField && renderLayoutDropPanel(blockFields, layoutField)}
         {rows.map((row) => (
           <Fragment key={row.row}>
-            {isDraggingInThisBlock && (
-              <div
-                className="schema-field-layout-row schema-field-drop-row"
-                style={{ "--schema-row-columns": String(maxVisualColumns) } as CSSProperties}
-              >
-                {renderLayoutDropSlots(blockFields, row.row)}
-              </div>
-            )}
             <div
               className="schema-field-layout-row"
               style={{ "--schema-row-columns": String(row.columns) } as CSSProperties}
@@ -1459,26 +1367,29 @@ function SchemaVisualEditor({
                       draggable
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (suppressNextHandleClickRef.current === field.id) {
-                          suppressNextHandleClickRef.current = null;
+                        if (suppressHandleClickFieldId === field.id) {
+                          setSuppressHandleClickFieldId(null);
                           return;
                         }
                         toggleFieldLayoutGrid(field.id);
-                      }}
-                      onPointerDown={(event) => {
-                        handleFieldLayoutPointerDown(event, blockFields, field);
                       }}
                       onDragStart={(event) => {
                         if (event.dataTransfer) {
                           event.dataTransfer.effectAllowed = "move";
                           event.dataTransfer.setData("text/plain", field.id);
                         }
-                        layoutDragTargetRef.current = null;
+                        setSuppressHandleClickFieldId(field.id);
+                        setLayoutNativeDragFieldId(field.id);
                         setActiveDraggedFieldId(field.id);
                       }}
-                      onDragEnd={(event) =>
-                        handleFieldLayoutNativeDragEnd(event, blockFields, field.id)
-                      }
+                      onDragEnd={(event) => {
+                        handleFieldLayoutNativeDragEnd(event, blockFields, field.id);
+                        window.setTimeout(() => {
+                          setSuppressHandleClickFieldId((current) =>
+                            current === field.id ? null : current,
+                          );
+                        }, 250);
+                      }}
                     >
                       ::
                     </button>
@@ -1524,16 +1435,20 @@ function SchemaVisualEditor({
             </div>
           </Fragment>
         ))}
-        {isDraggingInThisBlock && (
-          <div
-            className="schema-field-layout-row schema-field-drop-row"
-            style={{ "--schema-row-columns": String(maxVisualColumns) } as CSSProperties}
-          >
-            {renderLayoutDropSlots(blockFields, nextRow)}
-          </div>
-        )}
       </>
     );
+
+    if (layoutField) {
+      return (
+        <>
+          {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+          {renderLayoutDropPanel(blockFields, layoutField)}
+          {layoutNativeDragFieldId === layoutField.id && renderRows()}
+        </>
+      );
+    }
+
+    return renderRows();
   }
 
   function renderLayoutDropPanel(blockFields: FormFieldRead[], layoutField: FormFieldRead) {
@@ -1624,16 +1539,12 @@ function SchemaVisualEditor({
               if (event.dataTransfer) {
                 event.dataTransfer.dropEffect = "move";
               }
-              if (draggedField) {
-                layoutDragTargetRef.current = { fieldId: draggedField.id, row, column };
-              }
             }
           }}
           onDrop={(event) => {
             event.preventDefault();
             if (!isUnavailable) {
               const droppedFieldId = event.dataTransfer?.getData("text/plain") || draggedField?.id;
-              layoutDragTargetRef.current = null;
               handleFieldLayoutDrop(blockFields, row, column, droppedFieldId);
             }
           }}
@@ -1745,6 +1656,10 @@ function SchemaVisualEditor({
     options: { value: string; label: string }[];
     onChange: (value: string) => void;
   }) {
+    const isLabelPositionGroup = options.every((option) =>
+      fieldLabelPositions.includes(option.value),
+    );
+    const isSeparatorGroup = options.every((option) => fieldSeparatorStyles.includes(option.value));
     return (
       <div className="schema-visual-option-group" role="group" aria-label={label}>
         <span className="schema-visual-option-label">{label}</span>
@@ -1760,13 +1675,40 @@ function SchemaVisualEditor({
                 .filter(Boolean)
                 .join(" ")}
               aria-pressed={option.value === value}
+              aria-label={option.label}
               onClick={() => onChange(option.value)}
             >
-              {option.label}
+              {isLabelPositionGroup && renderLabelPositionPreview(option.value, option.label)}
+              {isSeparatorGroup && renderSeparatorPreview(option.value, option.label)}
+              {!isLabelPositionGroup && !isSeparatorGroup && option.label}
             </button>
           ))}
         </div>
       </div>
+    );
+  }
+
+  function renderLabelPositionPreview(value: string, label: string) {
+    return (
+      <>
+        <span className="schema-preview-title">{label}</span>
+        <span className={`schema-label-preview schema-label-preview--${value}`}>
+          <span className="schema-preview-label">{uiText.formFieldLabel}</span>
+          <span className="schema-preview-field" aria-hidden="true" />
+        </span>
+      </>
+    );
+  }
+
+  function renderSeparatorPreview(value: string, label: string) {
+    return (
+      <>
+        <span className="schema-preview-title">{label}</span>
+        <span className={`schema-separator-preview schema-separator-preview--${value}`}>
+          <span className="schema-preview-label">{uiText.formFieldLabel}</span>
+          <span className="schema-preview-field" aria-hidden="true" />
+        </span>
+      </>
     );
   }
 

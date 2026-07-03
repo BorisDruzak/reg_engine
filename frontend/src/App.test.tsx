@@ -2595,6 +2595,25 @@ test("collapses and restores the admin navigation while keeping sections accessi
   expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-collapsed");
 });
 
+test("auto-collapses the navigation in registry work and expands from sidebar interaction", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+
+  await waitFor(() => {
+    expect(container.querySelector(".workspace-shell")).toHaveClass("is-sidebar-collapsed");
+  });
+
+  const sidebar = screen.getByLabelText("Основная навигация");
+  fireEvent.click(sidebar);
+
+  expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-collapsed");
+});
+
 test("renders refactored card workspace with focused tabs and simple metadata", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -3429,7 +3448,7 @@ test("opens and closes the schema layout grid from the field drag handle", async
   });
 });
 
-test("moves a schema field through the layout grid by pointer mouse drop", async () => {
+test("moves a schema field through the layout grid by native mouse drag", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -3452,20 +3471,18 @@ test("moves a schema field through the layout grid by pointer mouse drop", async
   const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
     name: "Перетащить поле Подтверждено",
   });
-  fireEvent.pointerDown(dragHandle, { clientX: 12, clientY: 12 });
+  fireEvent.dragStart(dragHandle);
+  await within(blockCard as HTMLElement).findByRole("group", {
+    name: "Сетка перемещения поля Подтверждено",
+  });
+  expect((blockCard as HTMLElement).querySelectorAll(".schema-field-row").length).toBeGreaterThan(
+    0,
+  );
   const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
     name: "Поместить поле в строку 1 колонку 5",
   });
-  const originalElementFromPoint = document.elementFromPoint;
-  Object.defineProperty(document, "elementFromPoint", {
-    configurable: true,
-    value: vi.fn(() => targetSlot),
-  });
-  fireEvent.pointerUp(window, { clientX: 140, clientY: 140 });
-  Object.defineProperty(document, "elementFromPoint", {
-    configurable: true,
-    value: originalElementFromPoint,
-  });
+  fireEvent.dragOver(targetSlot);
+  fireEvent.drop(targetSlot);
 
   await waitFor(() => {
     const patchBodies = vi
@@ -3497,7 +3514,7 @@ test("moves a schema field through the layout grid by pointer mouse drop", async
   });
 });
 
-test("keeps schema field rows mounted while mouse-dragging into the layout grid", async () => {
+test("shows occupied field cells while the layout grid is active", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -3520,27 +3537,24 @@ test("keeps schema field rows mounted while mouse-dragging into the layout grid"
   const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
     name: "Перетащить поле Подтверждено",
   });
-  fireEvent.pointerDown(dragHandle, { clientX: 12, clientY: 12 });
-  fireEvent.pointerMove(window, { clientX: 40, clientY: 40 });
+  await user.click(dragHandle);
 
   const layoutGrid = await within(blockCard as HTMLElement).findByRole("group", {
     name: "Сетка перемещения поля Подтверждено",
   });
-  expect((blockCard as HTMLElement).querySelectorAll(".schema-field-row")).not.toHaveLength(0);
+  expect((blockCard as HTMLElement).querySelectorAll(".schema-field-row")).toHaveLength(0);
+  const currentSlot = within(layoutGrid).getByRole("button", {
+    name: "Текущее положение поля Подтверждено: строка 2 колонка 1",
+  });
+  expect(currentSlot).toBeDisabled();
+  expect(within(currentSlot).getByText("Подтверждено")).toBeInTheDocument();
+  const occupiedSlot = within(layoutGrid).getByRole("button", {
+    name: "Занято полем Статус: строка 1 колонка 1",
+  });
+  expect(occupiedSlot).toBeDisabled();
+  expect(within(occupiedSlot).getByText("Статус")).toBeInTheDocument();
 
-  const targetSlot = within(layoutGrid).getByRole("button", {
-    name: "Поместить поле в строку 1 колонку 5",
-  });
-  const originalElementFromPoint = document.elementFromPoint;
-  Object.defineProperty(document, "elementFromPoint", {
-    configurable: true,
-    value: vi.fn(() => targetSlot),
-  });
-  fireEvent.pointerUp(window, { clientX: 140, clientY: 140 });
-  Object.defineProperty(document, "elementFromPoint", {
-    configurable: true,
-    value: originalElementFromPoint,
-  });
+  await user.click(within(layoutGrid).getByRole("button", { name: "Закрыть сетку" }));
 
   await waitFor(() => {
     expect(

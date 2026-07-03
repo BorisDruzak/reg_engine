@@ -300,6 +300,7 @@ export const uiText = {
   expires: "Действует до",
   noEditablePublicFields: "В этой публичной ссылке нет редактируемых полей.",
   requestFailed: "Запрос не выполнен",
+  referenceFieldValueInvalid: "Ссылочное поле должно содержать выбранный объект или быть пустым.",
   requiredFields: "Заполните обязательные поля",
   noData: "Нет данных",
   invalidEmailOrPassword: "Неверная электронная почта или пароль.",
@@ -669,6 +670,13 @@ export function apiErrorMessageLabel(message: string) {
   };
   if (message.startsWith("Unsupported field type:")) {
     return "Неподдерживаемый тип поля.";
+  }
+  if (
+    /^(select|card_ref|user_ref|organization_ref|org_unit_ref|registry_ref|file_ref) fields require a UUID string\.$/.test(
+      message,
+    )
+  ) {
+    return uiText.referenceFieldValueInvalid;
   }
   return labels[message] ?? uiText.requestFailed;
 }

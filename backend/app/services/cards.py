@@ -1539,6 +1539,8 @@ class CardService:
             return _FieldAssignment(value_json=value)
 
         if field_model.field_type == "select":
+            if value is None:
+                return _FieldAssignment()
             item_id = self._ensure_uuid(value, "Select fields require a reference item id.")
             self._ensure_reference_item_for_field(
                 field_model,
@@ -1563,6 +1565,8 @@ class CardService:
             return _FieldAssignment(item_ids=item_ids)
 
         if field_model.field_type == "organization_ref":
+            if value is None:
+                return _FieldAssignment()
             organization_id = self._ensure_uuid(
                 value,
                 "Organization reference fields require an organization id.",
@@ -1571,6 +1575,8 @@ class CardService:
             return _FieldAssignment(value_organization_id=organization_id)
 
         if field_model.field_type == "org_unit_ref":
+            if value is None:
+                return _FieldAssignment()
             org_unit_id = self._ensure_uuid(
                 value,
                 "Org unit reference fields require an org unit id.",
@@ -1579,11 +1585,15 @@ class CardService:
             return _FieldAssignment(value_org_unit_id=org_unit_id)
 
         if field_model.field_type == "user_ref":
+            if value is None:
+                return _FieldAssignment()
             user_id = self._ensure_uuid(value, "User reference fields require a user id.")
             self._ensure_active_user_reference(user_id)
             return _FieldAssignment(value_user_id=user_id)
 
         if field_model.field_type == "card_ref":
+            if value is None:
+                return _FieldAssignment()
             card_id = self._ensure_uuid(value, "Card reference fields require a card id.")
             self._ensure_active_card_reference(
                 card_id,
@@ -1593,6 +1603,8 @@ class CardService:
             return _FieldAssignment(value_card_id=card_id)
 
         if field_model.field_type == "registry_ref":
+            if value is None:
+                return _FieldAssignment()
             registry_id = self._ensure_uuid(
                 value,
                 "Registry reference fields require a registry id.",

@@ -1196,8 +1196,14 @@ function BulkCardValuesForm({
       </header>
       <div className="bulk-field-blocks">
         {fieldGroups.map((group) => (
-          <section key={group.blockId} className="bulk-field-block">
-            <h5>{group.blockLabel}</h5>
+          <section
+            key={group.blockId}
+            className="bulk-field-block"
+            aria-label={`${uiText.formBlock}: ${group.blockLabel}`}
+          >
+            <header className="bulk-field-block-header">
+              <h5>{group.blockLabel}</h5>
+            </header>
             {group.rows.map((row) => (
               <div key={row.row} className="bulk-field-grid" style={fieldColumnsStyle(row.columns)}>
                 {row.fields.map((field) => (

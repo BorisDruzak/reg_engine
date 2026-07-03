@@ -12,6 +12,15 @@ export type FieldEditorOption = {
   label: string;
 };
 
+const nullableSingleReferenceTypes = new Set([
+  "select",
+  "card_ref",
+  "user_ref",
+  "organization_ref",
+  "org_unit_ref",
+  "registry_ref",
+]);
+
 export type FileRefValue = {
   attachment_id: string;
   title: string;
@@ -53,6 +62,9 @@ export function coerceEditorValue(fieldType: string, value: FieldEditorState): u
     return Array.isArray(value) ? value : [];
   }
   if (fieldType === "file_ref") {
+    return typeof value === "string" && value.trim() ? value : null;
+  }
+  if (nullableSingleReferenceTypes.has(fieldType)) {
     return typeof value === "string" && value.trim() ? value : null;
   }
   if (fieldType === "json") {

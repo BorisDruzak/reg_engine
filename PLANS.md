@@ -135,6 +135,13 @@ not a hardcoded employee registry.
   ordinary field rows, but active mouse-drag keeps the dragged field source row
   mounted until pointer release so browser drag can complete. No backend,
   database, or migration change is required.
+- Phase 7J.6 schema/card editor UX hardening is completed locally: registry
+  work auto-collapses the navigation until the user manually expands or uses
+  it, workspace content is centered, label/separator schema choices use visual
+  previews, the card editor renders fields through the schema row/column
+  layout with clearer block separation, empty optional reference fields save as
+  null instead of failing with a UUID validation error, and native mouse drag
+  keeps field rows mounted while the placement grid is active.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2378,3 +2385,72 @@ Verification completed:
   verified real mouse drag from a schema field handle to a free placement grid
   cell, field position update, closed grid after drop, restored ordinary field
   rows, and zero browser console warnings/errors.
+
+## Phase 7J.6: Schema And Card Editor UX Hardening
+
+Status: completed locally; server synchronization pending final verification.
+
+Purpose:
+
+Close the UI issues found during schema/card editor live review without adding
+business-specific schema, new product modules, or a database migration.
+
+Implemented scope:
+
+1. Workspace layout and navigation:
+   - registry work auto-collapses the left navigation to increase usable
+     workspace width;
+   - manual expand or sidebar navigation interaction restores the navigation;
+   - main workspace content is centered while form/input text remains
+     left-aligned.
+2. Schema visual editor:
+   - label-position choices render as visual previews instead of plain buttons;
+   - separator choices render as visual previews instead of plain buttons;
+   - native mouse drag keeps source field rows mounted while the placement grid
+     is active so browser drag/drop can complete;
+   - click-opened placement grids still hide duplicate ordinary field rows and
+     show occupied/current cells inside the grid.
+3. Card editor:
+   - bulk card field editing now renders block sections with clearer block
+     headings and separators;
+   - ordinary card fields use the schema row/column/span, label-position, and
+     separator metadata when rendering.
+4. Empty optional reference field save bug:
+   - frontend bulk/single field editors coerce empty single-reference values to
+     null;
+   - backend API/service coercion accepts null for optional select and
+     reference field types;
+   - Russian UI error mapping is added for invalid reference UUID payloads.
+
+Non-goals:
+
+- No hardcoded employee/HR fields.
+- No backend model/table redesign.
+- No Alembic migration.
+- No import/export, report, document, attachment, MCP, auth, or RBAC change.
+- Block title-position configuration is not persisted in this slice because
+  `form_blocks` currently has no exposed block display-config JSON API. Add a
+  later explicit backend/API slice before making block title placement a saved
+  setting.
+
+Verification completed locally so far:
+
+- `npm test -- --run src/App.test.tsx -t "layout grid|native mouse drag|occupied field cells|resizes schema field width|changes field order|auto-collapses|creates static text fields|collapses and restores"`:
+  passed, 8 targeted tests.
+- `npm test -- --run src/features/cards/fieldEditorUtils.test.ts src/app/uiText.test.ts`:
+  passed, 5 tests.
+- `backend\.venv\Scripts\python.exe -m pytest tests/test_field_value_coercion.py -q`:
+  passed, 2 tests.
+- `backend\.venv\Scripts\python.exe -m pytest tests/test_core_service_hardening.py -k optional_ref_field_types_can_be_cleared -rs`:
+  skipped because local `TEST_DATABASE_URL` is not set.
+- `npm test -- --run`: passed, 86 tests.
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 135 passed and 171
+  skipped.
+- `npm run lint`, `npm run typecheck`, and `npm run format:check`: passed.
+- `backend\.venv\Scripts\python.exe -m ruff check .`,
+  `backend\.venv\Scripts\python.exe -m ruff format --check .`, and
+  `backend\.venv\Scripts\python.exe -m mypy app`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+- `npm run e2e`: passed, 3 Playwright smoke tests.

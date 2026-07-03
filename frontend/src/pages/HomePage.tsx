@@ -56,6 +56,7 @@ export function HomePage() {
   const [workspaceUiState, setWorkspaceUiState] = useState<WorkspaceUiState>(() =>
     loadWorkspaceUiState(),
   );
+  const [sidebarPinnedExpanded, setSidebarPinnedExpanded] = useState(false);
   const {
     activeSection,
     isSidebarCollapsed,
@@ -197,12 +198,32 @@ export function HomePage() {
     saveWorkspaceUiState(workspaceUiState);
   }, [workspaceUiState]);
 
+  useEffect(() => {
+    if (activeSection === "registries" && !sidebarPinnedExpanded && !isSidebarCollapsed) {
+      setSidebarCollapsed(true);
+    }
+  }, [activeSection, isSidebarCollapsed, sidebarPinnedExpanded]);
+
   function setActiveSection(value: VisibleSection) {
     setWorkspaceUiState((current) => ({ ...current, activeSection: value }));
   }
 
   function setSidebarCollapsed(value: boolean) {
     setWorkspaceUiState((current) => ({ ...current, isSidebarCollapsed: value }));
+  }
+
+  function handleSidebarToggle() {
+    const nextCollapsed = !isSidebarCollapsed;
+    setSidebarPinnedExpanded(!nextCollapsed);
+    setSidebarCollapsed(nextCollapsed);
+  }
+
+  function handleSidebarInteraction() {
+    if (!isSidebarCollapsed) {
+      return;
+    }
+    setSidebarPinnedExpanded(true);
+    setSidebarCollapsed(false);
   }
 
   function setSelectedRegistryId(value: string | null) {
@@ -292,7 +313,11 @@ export function HomePage() {
     <main
       className={isSidebarCollapsed ? "workspace-shell is-sidebar-collapsed" : "workspace-shell"}
     >
-      <aside className="workspace-sidebar" aria-label={uiText.primaryNavigation}>
+      <aside
+        className="workspace-sidebar"
+        aria-label={uiText.primaryNavigation}
+        onClick={handleSidebarInteraction}
+      >
         <div className="sidebar-header">
           <div className="brand-lockup">
             <span className="brand-mark" aria-hidden="true" />
@@ -306,7 +331,10 @@ export function HomePage() {
             className="ghost-button icon-button sidebar-toggle"
             aria-label={isSidebarCollapsed ? uiText.expandNavigation : uiText.collapseNavigation}
             title={isSidebarCollapsed ? uiText.expandNavigation : uiText.collapseNavigation}
-            onClick={() => setSidebarCollapsed(!isSidebarCollapsed)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleSidebarToggle();
+            }}
           >
             <span aria-hidden="true">{isSidebarCollapsed ? ">" : "<"}</span>
           </button>

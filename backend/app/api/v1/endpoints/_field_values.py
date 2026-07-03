@@ -67,6 +67,8 @@ def coerce_api_field_value(session: Session, field_id: UUID, value: Any) -> obje
         "org_unit_ref",
         "registry_ref",
     }:
+        if value is None:
+            return None
         return _coerce_uuid(value, f"{field.field_type} fields require a UUID string.")
     if field.field_type == "file_ref":
         if value is None:

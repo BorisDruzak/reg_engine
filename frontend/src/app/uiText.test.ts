@@ -28,6 +28,12 @@ describe("uiText", () => {
     expect(runtimeErrorMessageLabel(uiText.jsonObjectRequired)).toBe(uiText.jsonObjectRequired);
   });
 
+  test("explains known invalid reference field values in Russian", () => {
+    expect(apiErrorMessageLabel("card_ref fields require a UUID string.")).toBe(
+      "Ссылочное поле должно содержать выбранный объект или быть пустым.",
+    );
+  });
+
   test("localizes known built-in user display names", () => {
     expect(userDisplayNameLabel("System Admin")).toBe("Системный администратор");
     expect(userDisplayNameLabel("Пользователь")).toBe("Пользователь");
