@@ -111,6 +111,12 @@ not a hardcoded employee registry.
   again, and field grid placement is stored per field through
   `display_config_json.layout_row`, `layout_column`, and `column_span` without a
   new migration.
+- Phase 7J.2 schema grid interaction polish is implemented and locally
+  verified: expanded block edit forms now collapse on repeated block-header
+  click, mouse-holding any field drag handle opens per-row placement slots,
+  row/column/width controls are removed from the ordinary field edit form,
+  label-position and separator settings are visual choices, and field width is
+  changed through the visual resize handle. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2117,3 +2123,52 @@ Deployment and live evidence:
   field row opens and then closes its inline editor on repeated clicks, row and
   column field settings are visible, independent visual rows render, and
   browser console errors are empty.
+
+## Phase 7J.2: Schema Grid Interaction Polish
+
+Status: completed locally; ready for main/GitHub/server synchronization.
+
+Purpose:
+
+Close the second usability pass in the visual schema editor without adding new
+product features or changing backend schema.
+
+Implemented scope:
+
+1. Block editor interaction:
+   - clicking an already-expanded block header closes the inline block editor;
+   - Enter/Space on the focused block header uses the same toggle behavior.
+2. Field placement interaction:
+   - pressing/focusing any field drag handle opens placement slots for each
+     visual row, not only after a full browser drag starts;
+   - placement slots are clickable and still support drag/drop;
+   - field placement remains stored in `display_config_json.layout_row` and
+     `display_config_json.layout_column`.
+3. Field width interaction:
+   - row/column/width form controls were removed from the ordinary field form;
+   - field width remains supported through `display_config_json.column_span`;
+   - users change field width from the visual field edge resize handle.
+4. Field display settings:
+   - label-position settings are now visual choices instead of a select;
+   - separator settings are now visual choices instead of a select.
+
+Non-goals:
+
+- No backend model, API, or Alembic migration change.
+- No business-specific or employee-specific field schema.
+- No import/export, report, document, attachment, MCP, auth, or RBAC change.
+- No per-template physical schema split.
+
+Verification completed:
+
+- `npm --prefix frontend test -- --run src/App.test.tsx -t "toggles block edit|opens layout drop grid|resizes schema field width|creates static text fields"`:
+  passed, 4 targeted regression tests.
+- `npm --prefix frontend test -- --run src/App.test.tsx`: passed, 69 tests.
+- `npm --prefix frontend run lint`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run format:check`: passed after formatting.
+- `npm --prefix frontend run build`: passed.
+- `npm --prefix frontend run e2e`: passed, 3 Playwright smoke tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.

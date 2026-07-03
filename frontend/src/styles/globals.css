@@ -726,7 +726,7 @@ tr:last-child td {
 .schema-field-row {
   display: grid;
   grid-column: var(--schema-field-column, auto);
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
@@ -743,6 +743,11 @@ tr:last-child td {
 
 .schema-field-row.is-dragging {
   opacity: 0.65;
+}
+
+.schema-field-row.is-resizing {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
 .schema-field-row.is-expanded {
@@ -775,6 +780,31 @@ tr:last-child td {
 
 .schema-field-code {
   overflow-wrap: anywhere;
+}
+
+.schema-field-resize-handle {
+  width: 12px;
+  min-height: 34px;
+  border-radius: 999px;
+  cursor: ew-resize;
+  position: relative;
+}
+
+.schema-field-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 6px 4px;
+  border-right: 2px solid #9aa8bd;
+}
+
+.schema-field-resize-handle:hover::before,
+.schema-field-resize-handle:focus::before {
+  border-color: #0f766e;
+}
+
+.schema-field-resize-handle:focus {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
 }
 
 .schema-static-text-preview {
@@ -821,6 +851,48 @@ tr:last-child td {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.schema-visual-option-group {
+  display: grid;
+  gap: 8px;
+}
+
+.schema-visual-option-label {
+  color: #344054;
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.schema-visual-option-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.schema-visual-option-button {
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17324d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.schema-visual-option-button:hover,
+.schema-visual-option-button:focus {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  outline: 0;
+}
+
+.schema-visual-option-button.is-selected,
+.schema-visual-option-button[aria-pressed="true"] {
+  border-color: #0f766e;
+  background: #e6f5f2;
+  color: #0f766e;
+  box-shadow: inset 0 0 0 1px #0f766e;
 }
 
 .schema-field-options {

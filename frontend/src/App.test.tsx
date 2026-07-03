@@ -3080,9 +3080,19 @@ test("creates static text fields with visual layout settings", async () => {
   await user.selectOptions(screen.getByLabelText("Тип поля формы"), ["static_text"]);
   await user.type(screen.getByLabelText("Название поля формы"), "Пояснение");
   await user.type(screen.getByLabelText("Текст"), "Показывается в шаблоне карточки");
-  await user.selectOptions(screen.getByLabelText("Ширина поля"), ["3"]);
-  await user.selectOptions(screen.getByLabelText("Расположение подписи"), ["left"]);
-  await user.selectOptions(screen.getByLabelText("Разделитель"), ["line"]);
+  expect(screen.queryByLabelText("Ширина поля")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Строка поля")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Колонка поля")).not.toBeInTheDocument();
+  await user.click(
+    within(screen.getByRole("group", { name: "Расположение подписи" })).getByRole("button", {
+      name: "Слева",
+    }),
+  );
+  await user.click(
+    within(screen.getByRole("group", { name: "Разделитель" })).getByRole("button", {
+      name: "Линия",
+    }),
+  );
   expect(screen.queryByLabelText("Отображать поле в списке карточек")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Редактировать поле в публичной ссылке")).not.toBeInTheDocument();
 
@@ -3106,7 +3116,7 @@ test("creates static text fields with visual layout settings", async () => {
       required_mode: "not_required",
       options_config_json: { static_text: "Показывается в шаблоне карточки" },
       display_config_json: {
-        column_span: 3,
+        column_span: 1,
         layout_row: 3,
         layout_column: 1,
         label_position: "left",
@@ -3220,6 +3230,41 @@ test("closes field edit by clicking the expanded field summary and hides field t
   );
 });
 
+test("toggles block edit by clicking the expanded block header", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const blockHeader = (blockCard as HTMLElement).querySelector(".schema-block-header");
+  expect(blockHeader).not.toBeNull();
+
+  await user.click(blockHeader as HTMLElement);
+  expect(
+    await within(blockCard as HTMLElement).findByRole("form", {
+      name: "Редактировать блок формы",
+    }),
+  ).toBeInTheDocument();
+
+  await user.click(blockHeader as HTMLElement);
+  await waitFor(() =>
+    expect(
+      within(blockCard as HTMLElement).queryByRole("form", {
+        name: "Редактировать блок формы",
+      }),
+    ).not.toBeInTheDocument(),
+  );
+});
+
 test("opens the block create form at the bottom add-block slot", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -3300,6 +3345,107 @@ test("moves schema fields to an explicit visual row and column", async () => {
             column_span: 1,
             layout_row: 2,
             layout_column: 3,
+          }),
+        }),
+      ]),
+    );
+  });
+});
+
+test("opens layout drop grid from the field drag handle before dragging", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const approvedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(approvedRow).not.toBeNull();
+
+  fireEvent.pointerDown(
+    within(approvedRow as HTMLElement).getByRole("button", {
+      name: "Перетащить поле Подтверждено",
+    }),
+  );
+
+  const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
+    name: "Поместить поле в строку 1 колонку 5",
+  });
+  await user.click(targetSlot);
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/99999999-9999-4999-8999-999999999998") &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          display_config_json: expect.objectContaining({
+            layout_row: 1,
+            layout_column: 5,
+          }),
+        }),
+      ]),
+    );
+  });
+});
+
+test("resizes schema field width with the visual edge handle", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const statusRow = within(blockCard as HTMLElement)
+    .getByText("Статус")
+    .closest(".schema-field-row");
+  expect(statusRow).not.toBeNull();
+
+  const resizeHandle = within(statusRow as HTMLElement).getByRole("separator", {
+    name: "Изменить ширину поля Статус",
+  });
+  fireEvent.pointerDown(resizeHandle, { clientX: 100 });
+  fireEvent.pointerMove(window, { clientX: 260 });
+  fireEvent.pointerUp(window, { clientX: 260 });
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/99999999-9999-4999-8999-999999999999") &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          display_config_json: expect.objectContaining({
+            column_span: 2,
           }),
         }),
       ]),
