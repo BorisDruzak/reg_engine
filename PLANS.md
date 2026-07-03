@@ -111,12 +111,13 @@ not a hardcoded employee registry.
   again, and field grid placement is stored per field through
   `display_config_json.layout_row`, `layout_column`, and `column_span` without a
   new migration.
-- Phase 7J.2 schema grid interaction polish is implemented and locally
-  verified: expanded block edit forms now collapse on repeated block-header
-  click, mouse-holding any field drag handle opens per-row placement slots,
-  row/column/width controls are removed from the ordinary field edit form,
-  label-position and separator settings are visual choices, and field width is
-  changed through the visual resize handle. No database migration is required.
+- Phase 7J.2 schema grid interaction polish is completed on `main`, pushed to
+  GitHub, deployed to the server frontend, and live-verified: expanded block
+  edit forms now collapse on repeated block-header click, mouse-holding any
+  field drag handle opens per-row placement slots, row/column/width controls
+  are removed from the ordinary field edit form, label-position and separator
+  settings are visual choices, and field width is changed through the visual
+  resize handle. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2126,7 +2127,8 @@ Deployment and live evidence:
 
 ## Phase 7J.2: Schema Grid Interaction Polish
 
-Status: completed locally; ready for main/GitHub/server synchronization.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-verified.
 
 Purpose:
 
@@ -2172,3 +2174,22 @@ Verification completed:
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
   unit tests/build, and project-map check.
+
+Deployment and live evidence:
+
+- Commit `01929819` was pushed to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
+  server checkout fast-forwarded to `0192981` and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed; frontend build/upload, service restart, API healthcheck, and
+  same-origin frontend smoke passed.
+- Browser live verification against `http://192.168.100.12:8000/` passed with a
+  fresh Playwright context after the in-app Browser runtime timed out on
+  reload/new-tab control: page title is `Реестровая система`, repeated
+  block-header click closes the block edit form, mouse-holding a second field
+  drag handle opened 15 placement slots, mouse-holding a later block's field
+  drag handle opened 20 placement slots, row/column/width form controls are not
+  rendered, label-position and separator settings are visual controls, repeated
+  field-summary click closes the field edit form, field rows render no
+  technical-code spans, resize handles are present, and browser console
+  warnings/errors were empty.
