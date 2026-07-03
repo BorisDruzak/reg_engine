@@ -1134,15 +1134,29 @@ function SchemaVisualEditor({
   ) {
     event.stopPropagation();
     const wasOpen = draggedFieldIdRef.current === field.id;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let didMove = false;
     suppressNextHandleClickRef.current = field.id;
-    if (wasOpen) {
-      setActiveDraggedFieldId(null);
-      return;
+    if (!wasOpen) {
+      setActiveDraggedFieldId(field.id);
     }
-    setActiveDraggedFieldId(field.id);
+
+    const cleanupPointerListeners = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      didMove ||=
+        Math.abs(moveEvent.clientX - startX) > 3 || Math.abs(moveEvent.clientY - startY) > 3;
+    };
 
     const handlePointerUp = (upEvent: PointerEvent) => {
-      window.removeEventListener("pointerup", handlePointerUp);
+      cleanupPointerListeners();
+      if (wasOpen && !didMove) {
+        setActiveDraggedFieldId(null);
+        return;
+      }
       if (typeof document.elementFromPoint !== "function") {
         return;
       }
@@ -1159,6 +1173,7 @@ function SchemaVisualEditor({
       handleFieldLayoutDrop(blockFields, row, column, field.id);
     };
 
+    window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
   }
 

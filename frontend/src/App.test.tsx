@@ -3393,6 +3393,7 @@ test("opens and closes the schema layout grid from the field drag handle", async
   ).not.toBeInTheDocument();
 
   fireEvent.pointerDown(dragHandle);
+  fireEvent.pointerUp(window);
   fireEvent.click(dragHandle);
   expect(
     within(blockCard as HTMLElement).queryByRole("group", {
