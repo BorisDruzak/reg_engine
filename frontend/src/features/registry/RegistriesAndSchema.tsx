@@ -1134,10 +1134,12 @@ function SchemaVisualEditor({
   ) {
     event.stopPropagation();
     const wasOpen = draggedFieldIdRef.current === field.id;
-    if (!wasOpen) {
-      suppressNextHandleClickRef.current = field.id;
-      setActiveDraggedFieldId(field.id);
+    suppressNextHandleClickRef.current = field.id;
+    if (wasOpen) {
+      setActiveDraggedFieldId(null);
+      return;
     }
+    setActiveDraggedFieldId(field.id);
 
     const handlePointerUp = (upEvent: PointerEvent) => {
       window.removeEventListener("pointerup", handlePointerUp);
