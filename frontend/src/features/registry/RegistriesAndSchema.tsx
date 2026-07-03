@@ -1126,6 +1126,65 @@ function SchemaVisualEditor({
     setActiveDraggedFieldId(nextFieldId);
   }
 
+  function handleFieldLayoutPointerDown(
+    event: ReactPointerEvent<HTMLElement>,
+    blockFields: FormFieldRead[],
+    field: FormFieldRead,
+  ) {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const wasOpen = draggedFieldId === field.id;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let didMove = false;
+    const hasMoved = (pointerEvent: PointerEvent) =>
+      Math.abs(pointerEvent.clientX - startX) > 3 || Math.abs(pointerEvent.clientY - startY) > 3;
+
+    setSuppressHandleClickFieldId(field.id);
+    if (!wasOpen) {
+      setActiveDraggedFieldId(field.id);
+    }
+
+    function cleanupPointerListeners() {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      if (didMove || !hasMoved(moveEvent)) {
+        return;
+      }
+      didMove = true;
+      setLayoutNativeDragFieldId(field.id);
+    }
+
+    function handlePointerUp(upEvent: PointerEvent) {
+      cleanupPointerListeners();
+      const didDrag = didMove || hasMoved(upEvent);
+      if (!didDrag) {
+        if (wasOpen) {
+          setActiveDraggedFieldId(null);
+        }
+        setLayoutNativeDragFieldId(null);
+        return;
+      }
+
+      const target = findLayoutDropSlotAt(upEvent.clientX, upEvent.clientY);
+      if (target?.isBlocked === false) {
+        handleFieldLayoutDrop(blockFields, target.row, target.column, field.id);
+        return;
+      }
+      setLayoutNativeDragFieldId(null);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }
+
   function findLayoutDropSlotAt(clientX: number, clientY: number) {
     if (typeof document.elementFromPoint !== "function") {
       return null;
@@ -1365,6 +1424,9 @@ function SchemaVisualEditor({
                       className="drag-handle schema-drag-handle"
                       aria-label={`Перетащить поле ${field.label}`}
                       draggable
+                      onPointerDown={(event) => {
+                        handleFieldLayoutPointerDown(event, blockFields, field);
+                      }}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (suppressHandleClickFieldId === field.id) {

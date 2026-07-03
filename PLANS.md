@@ -135,13 +135,15 @@ not a hardcoded employee registry.
   ordinary field rows, but active mouse-drag keeps the dragged field source row
   mounted until pointer release so browser drag can complete. No backend,
   database, or migration change is required.
-- Phase 7J.6 schema/card editor UX hardening is completed locally: registry
-  work auto-collapses the navigation until the user manually expands or uses
-  it, workspace content is centered, label/separator schema choices use visual
-  previews, the card editor renders fields through the schema row/column
-  layout with clearer block separation, empty optional reference fields save as
-  null instead of failing with a UUID validation error, and native mouse drag
-  keeps field rows mounted while the placement grid is active.
+- Phase 7J.6 schema/card editor UX hardening is completed locally and awaiting
+  final server/browser verification: registry work auto-collapses the
+  navigation until the user manually expands or uses it, workspace content is
+  centered, label/separator schema choices use visual previews, the card editor
+  renders fields through the schema row/column layout with clearer block
+  separation, empty optional reference fields save as null instead of failing
+  with a UUID validation error, native mouse drag keeps field rows mounted
+  while the placement grid is active, and pointer-based mouse dragging now
+  opens the grid only after real pointer movement.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,

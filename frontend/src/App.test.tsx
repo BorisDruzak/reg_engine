@@ -3514,6 +3514,74 @@ test("moves a schema field through the layout grid by native mouse drag", async 
   });
 });
 
+test("moves a schema field through the layout grid by pointer mouse drag", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const approvedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(approvedRow).not.toBeNull();
+
+  const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
+    name: "Перетащить поле Подтверждено",
+  });
+  fireEvent.pointerDown(dragHandle, { button: 0, clientX: 10, clientY: 10 });
+  fireEvent.pointerMove(window, { button: 0, clientX: 24, clientY: 20 });
+
+  await within(blockCard as HTMLElement).findByRole("group", {
+    name: "Сетка перемещения поля Подтверждено",
+  });
+  expect((blockCard as HTMLElement).querySelectorAll(".schema-field-row").length).toBeGreaterThan(
+    0,
+  );
+  const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
+    name: "Поместить поле в строку 1 колонку 5",
+  });
+  const previousElementFromPoint = document.elementFromPoint;
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: vi.fn(() => targetSlot),
+  });
+  fireEvent.pointerUp(window, { button: 0, clientX: 30, clientY: 22 });
+  Object.defineProperty(document, "elementFromPoint", {
+    configurable: true,
+    value: previousElementFromPoint,
+  });
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/fields/99999999-9999-4999-8999-999999999998") &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          display_config_json: expect.objectContaining({
+            layout_row: 1,
+            layout_column: 5,
+          }),
+        }),
+      ]),
+    );
+  });
+});
+
 test("shows occupied field cells while the layout grid is active", async () => {
   const user = userEvent.setup();
   render(<App />);
