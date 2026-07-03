@@ -704,19 +704,91 @@ tr:last-child td {
   padding-top: 2px;
 }
 
+.schema-layout-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #0f766e;
+  border-radius: 6px;
+  background: #ecfdf8;
+}
+
+.schema-layout-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.schema-layout-panel-header strong {
+  display: block;
+  color: #101828;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.schema-layout-panel-header span {
+  display: block;
+  margin-top: 3px;
+  color: #52677f;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.schema-layout-grid-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.schema-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--schema-row-columns, 5), minmax(92px, 1fr));
+  gap: 6px;
+}
+
 .schema-layout-drop-slot {
-  min-height: 34px;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-height: 42px;
+  padding: 7px 8px;
   border: 1px dashed #9aa8bd;
   border-radius: 6px;
   color: #52677f;
   background: #f6f8fa;
   font-size: 0.76rem;
   font-weight: 700;
+  text-align: left;
   cursor: pointer;
 }
 
-.schema-layout-drop-slot:hover,
-.schema-layout-drop-slot:focus {
+.schema-layout-drop-slot small {
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.schema-layout-drop-slot.is-occupied {
+  border-style: solid;
+  background: #ffffff;
+}
+
+.schema-layout-drop-slot.is-current {
+  border-color: #0f766e;
+  color: #0f5132;
+  background: #cdeee7;
+  cursor: not-allowed;
+}
+
+.schema-layout-drop-slot:disabled {
+  opacity: 1;
+}
+
+.schema-layout-drop-slot:not(:disabled):hover,
+.schema-layout-drop-slot:not(:disabled):focus {
   border-color: #0f766e;
   color: #0f766e;
   background: #eef3f2;
@@ -742,7 +814,9 @@ tr:last-child td {
 }
 
 .schema-field-row.is-dragging {
-  opacity: 0.65;
+  border-color: #0f766e;
+  background: #eef9f7;
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
 .schema-field-row.is-resizing {

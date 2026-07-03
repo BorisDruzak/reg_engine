@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   Fragment,
+  useEffect,
   useMemo,
   useState,
   type CSSProperties,
@@ -175,7 +176,7 @@ const fieldSeparatorOptions = [
   { value: "muted", label: uiText.separatorMuted },
 ];
 const maxVisualColumns = 5;
-const maxVisualRows = 50;
+const maxVisualRows = 10;
 
 type RegistryWorkspaceTab = "registries" | "schema" | "references" | "importExport" | "reports";
 
@@ -598,6 +599,36 @@ function SchemaVisualEditor({
     }
     return grouped;
   }, [fields, selectedTemplate, selectedTemplateFieldIds]);
+
+  useEffect(() => {
+    if (!draggedFieldId) {
+      return undefined;
+    }
+
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDraggedFieldId(null);
+      }
+    };
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest(".schema-layout-panel") || target.closest(".schema-drag-handle")) {
+        return;
+      }
+      setDraggedFieldId(null);
+    };
+
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => {
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    };
+  }, [draggedFieldId]);
+
   const createBlockMutation = useMutation({
     mutationFn: (payload: {
       code: string;
@@ -1080,6 +1111,10 @@ function SchemaVisualEditor({
     });
   }
 
+  function toggleFieldLayoutGrid(fieldId: string) {
+    setDraggedFieldId((currentFieldId) => (currentFieldId === fieldId ? null : fieldId));
+  }
+
   function handleFieldDrop(blockFields: FormFieldRead[], targetFieldId: string) {
     if (!draggedFieldId || draggedFieldId === targetFieldId) {
       setDraggedFieldId(null);
@@ -1230,12 +1265,14 @@ function SchemaVisualEditor({
 
   function renderSchemaFieldGrid(blockFields: FormFieldRead[]) {
     const rows = visualFieldRows(blockFields);
-    const isDraggingInThisBlock = blockFields.some((field) => field.id === draggedFieldId);
+    const layoutField = blockFields.find((field) => field.id === draggedFieldId) ?? null;
+    const isDraggingInThisBlock = false;
     const nextRow = rows.length > 0 ? Math.max(...rows.map((row) => row.row)) + 1 : 1;
 
     return (
       <>
         {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+        {layoutField && renderLayoutDropPanel(blockFields, layoutField)}
         {rows.map((row) => (
           <Fragment key={row.row}>
             {isDraggingInThisBlock && (
@@ -1290,15 +1327,17 @@ function SchemaVisualEditor({
                       className="drag-handle schema-drag-handle"
                       aria-label={`Перетащить поле ${field.label}`}
                       draggable
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleFieldLayoutGrid(field.id);
+                      }}
                       onPointerDown={(event) => {
                         event.stopPropagation();
-                        setDraggedFieldId(field.id);
                       }}
-                      onFocus={() => setDraggedFieldId(field.id)}
                       onDragStart={(event) => {
                         if (event.dataTransfer) {
                           event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", field.id);
                         }
                         setDraggedFieldId(field.id);
                       }}
@@ -1360,20 +1399,95 @@ function SchemaVisualEditor({
     );
   }
 
+  function renderLayoutDropPanel(blockFields: FormFieldRead[], layoutField: FormFieldRead) {
+    return (
+      <div
+        className="schema-layout-panel"
+        role="group"
+        aria-label={`Сетка перемещения поля ${layoutField.label}`}
+      >
+        <div className="schema-layout-panel-header">
+          <div>
+            <strong>Перемещение поля: {layoutField.label}</strong>
+            <span>
+              {maxVisualRows} строк и {maxVisualColumns} колонок
+            </span>
+          </div>
+          <button type="button" className="ghost-button" onClick={() => setDraggedFieldId(null)}>
+            Закрыть сетку
+          </button>
+        </div>
+        <div className="schema-layout-grid-scroll">
+          <div
+            className="schema-layout-grid"
+            style={{ "--schema-row-columns": String(maxVisualColumns) } as CSSProperties}
+          >
+            {Array.from({ length: maxVisualRows }, (_, index) => (
+              <Fragment key={index + 1}>{renderLayoutDropSlots(blockFields, index + 1)}</Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderLayoutDropSlots(blockFields: FormFieldRead[], row: number) {
+    const visualItems = visualFieldItems(blockFields);
+    const draggedField = blockFields.find((field) => field.id === draggedFieldId) ?? null;
+    const currentItem = draggedField
+      ? visualItems.find((item) => item.field.id === draggedField.id)
+      : null;
+
     return Array.from({ length: maxVisualColumns }, (_, index) => {
       const column = index + 1;
+      const occupant = visualItems.find(
+        (item) =>
+          item.row === row && column >= item.column && column < item.column + item.columnSpan,
+      );
+      const isCurrent =
+        currentItem != null &&
+        row === currentItem.row &&
+        column >= currentItem.column &&
+        column < currentItem.column + currentItem.columnSpan;
       return (
         <button
           key={`${row}:${column}`}
           type="button"
-          className="schema-layout-drop-slot"
-          aria-label={`Поместить поле в строку ${row} колонку ${column}`}
-          onClick={() => handleFieldLayoutDrop(blockFields, row, column)}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={() => handleFieldLayoutDrop(blockFields, row, column)}
+          className={[
+            "schema-layout-drop-slot",
+            occupant ? "is-occupied" : "",
+            isCurrent ? "is-current" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-label={
+            isCurrent && draggedField
+              ? `Текущее положение поля ${draggedField.label}: строка ${row} колонка ${column}`
+              : `Поместить поле в строку ${row} колонку ${column}`
+          }
+          disabled={isCurrent}
+          onClick={() => {
+            if (!isCurrent) {
+              handleFieldLayoutDrop(blockFields, row, column);
+            }
+          }}
+          onDragOver={(event) => {
+            if (!isCurrent) {
+              event.preventDefault();
+              if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = "move";
+              }
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (!isCurrent) {
+              handleFieldLayoutDrop(blockFields, row, column);
+            }
+          }}
         >
-          {row}.{column}
+          <span>{isCurrent ? "Текущее" : `${row}.${column}`}</span>
+          {occupant && <small>{occupant.field.label}</small>}
         </button>
       );
     });

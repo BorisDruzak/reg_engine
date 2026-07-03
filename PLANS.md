@@ -118,6 +118,11 @@ not a hardcoded employee registry.
   are removed from the ordinary field edit form, label-position and separator
   settings are visual choices, and field width is changed through the visual
   resize handle. No database migration is required.
+- Phase 7J.3 schema placement grid usability is implemented locally and ready
+  for synchronization: the visual placement grid is now a separate 10-row by
+  5-column panel, the current field cell is highlighted and disabled, the grid
+  closes on repeated handle click/Escape/drop/outside click, and mouse drop
+  remains supported. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2193,3 +2198,49 @@ Deployment and live evidence:
   field-summary click closes the field edit form, field rows render no
   technical-code spans, resize handles are present, and browser console
   warnings/errors were empty.
+
+## Phase 7J.3: Schema Placement Grid Usability
+
+Status: implemented locally; GitHub/server synchronization and live browser
+verification pending.
+
+Purpose:
+
+Make field placement in the visual schema editor understandable and controllable
+without adding product features or changing backend schema.
+
+Implemented scope:
+
+1. Field placement grid:
+   - the placement UI is rendered as a separate panel instead of interleaving
+     slot rows with real field rows;
+   - the grid is limited to 10 visual rows and 5 columns;
+   - the grid panel scrolls vertically when needed.
+2. Field position clarity:
+   - occupied cells show the field label;
+   - the selected field's current cell is highlighted and disabled;
+   - the selected field row remains visibly highlighted in the field list.
+3. Grid lifecycle:
+   - repeated drag-handle click closes the grid;
+   - Escape, outside click, and successful drop close the grid;
+   - native mouse drag/drop remains supported through the grid cells.
+
+Non-goals:
+
+- No backend model, API, or Alembic migration change.
+- No business-specific or employee-specific field schema.
+- No import/export, report, document, attachment, MCP, auth, or RBAC change.
+
+Verification completed:
+
+- `pnpm -C frontend test -- --run src/App.test.tsx -t "schema layout grid|layout grid"`:
+  passed, including regression coverage for open/close, disabled current cell,
+  10x5 limit, and mouse drop.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend test:run`: passed, 82 tests.
+- `pnpm -C frontend build`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.

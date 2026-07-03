@@ -3352,7 +3352,7 @@ test("moves schema fields to an explicit visual row and column", async () => {
   });
 });
 
-test("opens layout drop grid from the field drag handle before dragging", async () => {
+test("opens and closes the schema layout grid from the field drag handle", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -3372,16 +3372,78 @@ test("opens layout drop grid from the field drag handle before dragging", async 
     .closest(".schema-field-row");
   expect(approvedRow).not.toBeNull();
 
-  fireEvent.pointerDown(
-    within(approvedRow as HTMLElement).getByRole("button", {
-      name: "Перетащить поле Подтверждено",
-    }),
-  );
+  const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
+    name: "Перетащить поле Подтверждено",
+  });
+  await user.click(dragHandle);
 
+  const layoutGrid = await within(blockCard as HTMLElement).findByRole("group", {
+    name: "Сетка перемещения поля Подтверждено",
+  });
+  expect(layoutGrid.querySelectorAll(".schema-layout-drop-slot")).toHaveLength(50);
+  expect(
+    within(layoutGrid).getByRole("button", {
+      name: "Текущее положение поля Подтверждено: строка 2 колонка 1",
+    }),
+  ).toBeDisabled();
+  expect(
+    within(layoutGrid).queryByRole("button", {
+      name: "Поместить поле в строку 11 колонку 1",
+    }),
+  ).not.toBeInTheDocument();
+
+  await user.click(dragHandle);
+  expect(
+    within(blockCard as HTMLElement).queryByRole("group", {
+      name: "Сетка перемещения поля Подтверждено",
+    }),
+  ).not.toBeInTheDocument();
+
+  await user.click(dragHandle);
+  expect(
+    await within(blockCard as HTMLElement).findByRole("group", {
+      name: "Сетка перемещения поля Подтверждено",
+    }),
+  ).toBeInTheDocument();
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => {
+    expect(
+      within(blockCard as HTMLElement).queryByRole("group", {
+        name: "Сетка перемещения поля Подтверждено",
+      }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+test("moves a schema field through the layout grid by mouse drop", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+  const approvedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(approvedRow).not.toBeNull();
+
+  const dragHandle = within(approvedRow as HTMLElement).getByRole("button", {
+    name: "Перетащить поле Подтверждено",
+  });
+  fireEvent.dragStart(dragHandle);
   const targetSlot = await within(blockCard as HTMLElement).findByRole("button", {
     name: "Поместить поле в строку 1 колонку 5",
   });
-  await user.click(targetSlot);
+  fireEvent.dragOver(targetSlot);
+  fireEvent.drop(targetSlot);
 
   await waitFor(() => {
     const patchBodies = vi
@@ -3402,6 +3464,14 @@ test("opens layout drop grid from the field drag handle before dragging", async 
         }),
       ]),
     );
+  });
+
+  await waitFor(() => {
+    expect(
+      within(blockCard as HTMLElement).queryByRole("group", {
+        name: "Сетка перемещения поля Подтверждено",
+      }),
+    ).not.toBeInTheDocument();
   });
 });
 
