@@ -2507,6 +2507,23 @@ test("renders login screen before authentication", () => {
   expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
 });
 
+test("allows test login without email format", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin");
+  await user.type(screen.getByLabelText(/пароль/i), "1.Abcdef");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+
+  expect(await screen.findByText("Системный администратор")).toBeInTheDocument();
+  expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+    "/api/v1/auth/login",
+    expect.objectContaining({
+      body: JSON.stringify({ email: "admin", password: "1.Abcdef" }),
+    }),
+  );
+});
+
 test("logs in and renders authenticated admin workspace", async () => {
   const user = userEvent.setup();
   render(<App />);
@@ -6065,7 +6082,7 @@ test("shows localized login error text", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "bad-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
 
-  expect(await screen.findByText("Неверная электронная почта или пароль.")).toBeInTheDocument();
+  expect(await screen.findByText("Неверный логин или пароль.")).toBeInTheDocument();
   expect(screen.queryByText("Invalid email or password.")).not.toBeInTheDocument();
 });
 

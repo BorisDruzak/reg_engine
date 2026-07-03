@@ -156,6 +156,10 @@ not a hardcoded employee registry.
   a compact inline reference-list/item editor. Authenticated browser live-click
   verification is blocked until a current UI admin session/password is
   available; server smoke and API health checks pass.
+- Phase 7J.7 production login follow-up is completed: the server test
+  superadmin login is `admin`, its password was restored to `1.Abcdef`, the
+  login form accepts username-style identifiers without `@`, and frontend
+  regression tests cover the `admin` login path.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,

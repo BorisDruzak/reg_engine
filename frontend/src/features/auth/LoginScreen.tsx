@@ -36,9 +36,9 @@ export function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => v
           <label>
             {uiText.email}
             <input
-              autoComplete="email"
+              autoComplete="username"
               name="email"
-              type="email"
+              type="text"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
