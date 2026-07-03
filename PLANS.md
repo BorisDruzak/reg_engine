@@ -124,6 +124,12 @@ not a hardcoded employee registry.
   cell is highlighted and disabled, the grid closes on repeated handle
   click/Escape/drop/outside click, and mouse drag/drop is applied through grid
   cells. No database migration is required.
+- Phase 7J.4 schema placement occupied-cell hardening is completed on `main`,
+  deployed to the server frontend, and live browser verified: when a field
+  placement grid is active, all fields in the block are shown inside grid
+  cells, occupied cells are disabled drop targets, and the ordinary field list
+  is hidden to avoid duplicate placement surfaces. No database migration is
+  required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2221,6 +2227,8 @@ Implemented scope:
    - occupied cells show the field label;
    - the selected field's current cell is highlighted and disabled;
    - the selected field row remains visibly highlighted in the field list.
+   - Phase 7J.4 supersedes the active-grid rendering so the field list is no
+     longer duplicated while the placement grid is open.
 3. Grid lifecycle:
    - repeated drag-handle click closes the grid;
    - Escape, outside click, and successful drop close the grid;
@@ -2257,3 +2265,57 @@ Synchronization note:
 
 - Current local `main` HEAD contains the latest Phase 7J.3 code fix.
 - `git push origin main`: passed after DNS resolution recovered.
+
+## Phase 7J.4: Schema Placement Occupied-Cell Hardening
+
+Status: completed on `main`, deployed to the server frontend, and live browser
+verified.
+
+Purpose:
+
+Fix the remaining visual schema placement-grid bug where occupied cells looked
+like available targets and the active grid duplicated the ordinary field list.
+
+Implemented scope:
+
+1. Occupied placement cells:
+   - occupied cells show the occupying field label directly inside the grid;
+   - occupied cells are disabled and cannot be clicked or used as drop targets;
+   - native drag-end logic treats disabled occupied cells as blocked so a stale
+     remembered empty target is not reused.
+2. Active grid rendering:
+   - while a block placement grid is active, the block's ordinary field rows are
+     hidden;
+   - the grid becomes the single visible placement surface for all fields in
+     that block;
+   - successful placement, Escape, outside click, or the close button returns to
+     the ordinary field list.
+3. Visual clarity:
+   - occupied and current cells use stronger field-like styling;
+   - the current cell remains highlighted and disabled.
+
+Non-goals:
+
+- No backend model, API, or Alembic migration change.
+- No business-specific or employee-specific schema.
+- No import/export, report, document, attachment, MCP, auth, or RBAC change.
+
+Verification completed:
+
+- `pnpm -C frontend test -- --run src/App.test.tsx -t "schema layout grid|layout grid|field order"`:
+  passed, 82 tests.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  passed; built `frontend/dist`, uploaded it to the server, restarted
+  `reg-engine.service`, and passed backend healthcheck plus frontend smoke.
+- In-app browser live check against `http://192.168.100.12:8000/`: passed;
+  verified a 10-row by 5-column grid, no duplicated `.schema-field-row` rows
+  while the grid is active, disabled current and occupied cells, visible
+  occupied-field labels, restored field rows after `Закрыть сетку`, zero
+  browser console warnings/errors, and 200 responses for the visible registry
+  API reads. Screenshot: `C:/Temp/reg-engine-schema-grid-occupied-cells.png`.

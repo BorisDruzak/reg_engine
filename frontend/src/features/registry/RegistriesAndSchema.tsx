@@ -1187,15 +1187,18 @@ function SchemaVisualEditor({
     }
     const target = document.elementFromPoint(clientX, clientY);
     const dropSlot = target?.closest(".schema-layout-drop-slot");
-    if (!(dropSlot instanceof HTMLElement) || dropSlot.hasAttribute("disabled")) {
+    if (!(dropSlot instanceof HTMLElement)) {
       return null;
+    }
+    if (dropSlot.hasAttribute("disabled")) {
+      return { isBlocked: true as const };
     }
     const row = Number(dropSlot.dataset.layoutRow);
     const column = Number(dropSlot.dataset.layoutColumn);
     if (!Number.isInteger(row) || !Number.isInteger(column)) {
       return null;
     }
-    return { row, column };
+    return { isBlocked: false as const, row, column };
   }
 
   function handleFieldLayoutNativeDragEnd(
@@ -1206,7 +1209,8 @@ function SchemaVisualEditor({
     const coordinateTarget = findLayoutDropSlotAt(event.clientX, event.clientY);
     const rememberedTarget =
       layoutDragTargetRef.current?.fieldId === fieldId ? layoutDragTargetRef.current : null;
-    const dropTarget = coordinateTarget ?? rememberedTarget;
+    const dropTarget =
+      coordinateTarget?.isBlocked === true ? null : (coordinateTarget ?? rememberedTarget);
     layoutDragTargetRef.current = null;
     if (!dropTarget) {
       setActiveDraggedFieldId(null);
@@ -1374,10 +1378,18 @@ function SchemaVisualEditor({
     const isDraggingInThisBlock = false;
     const nextRow = rows.length > 0 ? Math.max(...rows.map((row) => row.row)) + 1 : 1;
 
+    if (layoutField) {
+      return (
+        <>
+          {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
+          {renderLayoutDropPanel(blockFields, layoutField)}
+        </>
+      );
+    }
+
     return (
       <>
         {blockFields.length === 0 && <p className="data-empty">{uiText.noFieldsInBlock}</p>}
-        {layoutField && renderLayoutDropPanel(blockFields, layoutField)}
         {rows.map((row) => (
           <Fragment key={row.row}>
             {isDraggingInThisBlock && (
@@ -1565,6 +1577,8 @@ function SchemaVisualEditor({
         row === currentItem.row &&
         column >= currentItem.column &&
         column < currentItem.column + currentItem.columnSpan;
+      const isOccupiedByAnotherField = occupant != null && !isCurrent;
+      const isUnavailable = isCurrent || isOccupiedByAnotherField;
       return (
         <button
           key={`${row}:${column}`}
@@ -1579,18 +1593,20 @@ function SchemaVisualEditor({
           aria-label={
             isCurrent && draggedField
               ? `Текущее положение поля ${draggedField.label}: строка ${row} колонка ${column}`
-              : `Поместить поле в строку ${row} колонку ${column}`
+              : isOccupiedByAnotherField && occupant
+                ? `Занято полем ${occupant.field.label}: строка ${row} колонка ${column}`
+                : `Поместить поле в строку ${row} колонку ${column}`
           }
           data-layout-row={row}
           data-layout-column={column}
-          disabled={isCurrent}
+          disabled={isUnavailable}
           onClick={() => {
-            if (!isCurrent) {
+            if (!isUnavailable) {
               handleFieldLayoutDrop(blockFields, row, column);
             }
           }}
           onDragOver={(event) => {
-            if (!isCurrent) {
+            if (!isUnavailable) {
               event.preventDefault();
               if (event.dataTransfer) {
                 event.dataTransfer.dropEffect = "move";
@@ -1602,14 +1618,16 @@ function SchemaVisualEditor({
           }}
           onDrop={(event) => {
             event.preventDefault();
-            if (!isCurrent) {
+            if (!isUnavailable) {
               const droppedFieldId = event.dataTransfer?.getData("text/plain") || draggedField?.id;
               layoutDragTargetRef.current = null;
               handleFieldLayoutDrop(blockFields, row, column, droppedFieldId);
             }
           }}
         >
-          <span>{isCurrent ? "Текущее" : `${row}.${column}`}</span>
+          <span>
+            {isCurrent ? "Текущее" : isOccupiedByAnotherField ? "Занято" : `${row}.${column}`}
+          </span>
           {occupant && <small>{occupant.field.label}</small>}
         </button>
       );

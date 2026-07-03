@@ -772,14 +772,19 @@ tr:last-child td {
 }
 
 .schema-layout-drop-slot.is-occupied {
+  border-color: #b7c3d0;
   border-style: solid;
+  color: #1d2939;
   background: #ffffff;
+  box-shadow: inset 3px 0 0 #8293aa;
+  cursor: not-allowed;
 }
 
 .schema-layout-drop-slot.is-current {
   border-color: #0f766e;
   color: #0f5132;
   background: #cdeee7;
+  box-shadow: inset 3px 0 0 #0f766e;
   cursor: not-allowed;
 }
 

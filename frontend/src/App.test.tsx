@@ -3380,28 +3380,40 @@ test("opens and closes the schema layout grid from the field drag handle", async
   const layoutGrid = await within(blockCard as HTMLElement).findByRole("group", {
     name: "Сетка перемещения поля Подтверждено",
   });
+  expect((blockCard as HTMLElement).querySelector(".schema-field-row")).toBeNull();
   expect(layoutGrid.querySelectorAll(".schema-layout-drop-slot")).toHaveLength(50);
   expect(
     within(layoutGrid).getByRole("button", {
       name: "Текущее положение поля Подтверждено: строка 2 колонка 1",
     }),
   ).toBeDisabled();
+  const occupiedStatusSlot = within(layoutGrid).getByRole("button", {
+    name: "Занято полем Статус: строка 1 колонка 1",
+  });
+  expect(occupiedStatusSlot).toBeDisabled();
+  expect(within(occupiedStatusSlot).getByText("Статус")).toBeInTheDocument();
   expect(
     within(layoutGrid).queryByRole("button", {
       name: "Поместить поле в строку 11 колонку 1",
     }),
   ).not.toBeInTheDocument();
 
-  fireEvent.pointerDown(dragHandle);
-  fireEvent.pointerUp(window);
-  fireEvent.click(dragHandle);
+  await user.click(within(layoutGrid).getByRole("button", { name: "Закрыть сетку" }));
   expect(
     within(blockCard as HTMLElement).queryByRole("group", {
       name: "Сетка перемещения поля Подтверждено",
     }),
   ).not.toBeInTheDocument();
 
-  await user.click(dragHandle);
+  const reopenedApprovedRow = within(blockCard as HTMLElement)
+    .getByText("Подтверждено")
+    .closest(".schema-field-row");
+  expect(reopenedApprovedRow).not.toBeNull();
+  const reopenedDragHandle = within(reopenedApprovedRow as HTMLElement).getByRole("button", {
+    name: "Перетащить поле Подтверждено",
+  });
+
+  await user.click(reopenedDragHandle);
   expect(
     await within(blockCard as HTMLElement).findByRole("group", {
       name: "Сетка перемещения поля Подтверждено",
@@ -3533,7 +3545,7 @@ test("resizes schema field width with the visual edge handle", async () => {
   });
 });
 
-test("changes field order from the visual schema editor by drag and drop", async () => {
+test("changes field order from the visual schema editor through the layout grid", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -3558,11 +3570,22 @@ test("changes field order from the visual schema editor by drag and drop", async
   expect(statusRow).not.toBeNull();
   expect(approvedRow).not.toBeNull();
 
-  fireEvent.dragStart(
+  await user.click(
     within(statusRow as HTMLElement).getByRole("button", { name: "Перетащить поле Статус" }),
   );
-  fireEvent.dragOver(approvedRow as HTMLElement);
-  fireEvent.drop(approvedRow as HTMLElement);
+  const layoutGrid = await within(blockCard as HTMLElement).findByRole("group", {
+    name: "Сетка перемещения поля Статус",
+  });
+  expect(
+    within(layoutGrid).getByRole("button", {
+      name: "Занято полем Подтверждено: строка 2 колонка 1",
+    }),
+  ).toBeDisabled();
+  await user.click(
+    within(layoutGrid).getByRole("button", {
+      name: "Поместить поле в строку 3 колонку 1",
+    }),
+  );
 
   await waitFor(() => {
     const fieldLabels = Array.from(
