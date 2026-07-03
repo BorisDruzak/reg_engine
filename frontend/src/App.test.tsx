@@ -1047,6 +1047,7 @@ beforeEach(() => {
             public_visible?: boolean;
             public_editable?: boolean;
             layout_columns?: number;
+            display_config_json?: Record<string, unknown> | null;
           };
           const created: FormBlockRead = {
             id: "26262626-2626-4262-8262-262626262626",
@@ -1060,6 +1061,7 @@ beforeEach(() => {
             public_visible: payload.public_visible ?? true,
             public_editable: payload.public_editable ?? false,
             layout_columns: payload.layout_columns ?? 1,
+            display_config_json: payload.display_config_json ?? null,
           };
           schemaBlockItems = [...schemaBlockItems, created];
           return jsonResponse(created, { status: 201 });
@@ -1121,6 +1123,7 @@ beforeEach(() => {
             description?: string | null;
             position?: number | null;
             layout_columns?: number | null;
+            display_config_json?: Record<string, unknown> | null;
           };
           const updated: FormBlockRead = {
             ...current,
@@ -1128,6 +1131,10 @@ beforeEach(() => {
             description: payload.description ?? current.description,
             position: payload.position ?? current.position,
             layout_columns: payload.layout_columns ?? current.layout_columns,
+            display_config_json:
+              "display_config_json" in payload
+                ? (payload.display_config_json ?? null)
+                : current.display_config_json,
           };
           schemaBlockItems = schemaBlockItems.map((item) => (item.id === blockId ? updated : item));
           return jsonResponse(updated);
@@ -2853,7 +2860,7 @@ test("creates form fields with required mode from Russian UI", async () => {
   expect(screen.queryByLabelText("Блок формы")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Код поля формы")).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название поля формы"), "Обязательное поле");
-  await user.selectOptions(screen.getByLabelText("Обязательность поля"), ["required"]);
+  await user.click(screen.getByRole("checkbox", { name: "Обязательное поле" }));
   await user.click(screen.getByRole("button", { name: "Создать" }));
 
   await waitFor(() => {
@@ -3102,11 +3109,13 @@ test("creates static text fields with visual layout settings", async () => {
   expect(screen.queryByLabelText("Ширина поля")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Строка поля")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Колонка поля")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /Расположение подписи/ }));
   await user.click(
     within(screen.getByRole("group", { name: "Расположение подписи" })).getByRole("button", {
       name: "Слева",
     }),
   );
+  await user.click(screen.getByRole("button", { name: /Разделитель/ }));
   await user.click(
     within(screen.getByRole("group", { name: "Разделитель" })).getByRole("button", {
       name: "Линия",
@@ -3282,6 +3291,56 @@ test("toggles block edit by clicking the expanded block header", async () => {
       }),
     ).not.toBeInTheDocument(),
   );
+});
+
+test("saves block title placement from the visual block editor", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  const blockCard = (await screen.findByRole("heading", { name: "Основной блок" })).closest(
+    "article",
+  );
+  expect(blockCard).not.toBeNull();
+
+  await user.click(
+    within(blockCard as HTMLElement).getByRole("heading", { name: "Основной блок" }),
+  );
+  const blockForm = await within(blockCard as HTMLElement).findByRole("form", {
+    name: "Редактировать блок формы",
+  });
+  const titlePlacement = within(blockForm).getByRole("group", {
+    name: "Расположение названия блока",
+  });
+
+  await user.click(within(titlePlacement).getByRole("button", { name: "Слева" }));
+  await user.click(within(blockForm).getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => {
+    const patchBodies = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888") &&
+          init?.method === "PATCH",
+      )
+      .map(([, init]) => JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+    expect(patchBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          display_config_json: {
+            title_position: "left",
+          },
+        }),
+      ]),
+    );
+  });
 });
 
 test("opens the block create form at the bottom add-block slot", async () => {
@@ -5475,6 +5534,9 @@ test("creates edits and archives schema blocks and fields in Russian UI", async 
       is_repeatable: true,
       public_visible: true,
       public_editable: true,
+      display_config_json: {
+        title_position: "top",
+      },
     });
 
     const createFieldCall = fetchMock.mock.calls.find(
@@ -5847,6 +5909,98 @@ test("wires select fields to reference lists without hardcoded options", async (
     });
     expect(body).not.toHaveProperty("options");
     expect(body).not.toHaveProperty("employees");
+  });
+});
+
+test("keeps advanced field display previews collapsed and saves required checkbox", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  await user.click(screen.getByRole("button", { name: "Добавить поле в блок Основной блок" }));
+  const fieldForm = await screen.findByRole("form", { name: "Создать поле формы" });
+  expect(within(fieldForm).queryByLabelText("Обязательность поля")).not.toBeInTheDocument();
+  expect(within(fieldForm).queryByRole("button", { name: "Сверху" })).not.toBeInTheDocument();
+  expect(
+    within(fieldForm).queryByRole("button", { name: "Без разделителя" }),
+  ).not.toBeInTheDocument();
+
+  await user.click(within(fieldForm).getByRole("button", { name: /Расположение подписи/ }));
+  expect(within(fieldForm).getByRole("button", { name: "Сверху" })).toBeInTheDocument();
+  await user.click(within(fieldForm).getByRole("button", { name: /Разделитель/ }));
+  expect(within(fieldForm).getByRole("button", { name: "Без разделителя" })).toBeInTheDocument();
+
+  fireEvent.change(within(fieldForm).getByLabelText("Название поля формы"), {
+    target: { value: "Контрольное поле" },
+  });
+  await user.click(within(fieldForm).getByRole("checkbox", { name: "Обязательное поле" }));
+  await user.click(within(fieldForm).getByRole("button", { name: "Создать" }));
+
+  await waitFor(() => {
+    const createFieldCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/blocks/88888888-8888-4888-8888-888888888888/fields") &&
+          init?.method === "POST",
+      );
+    expect(createFieldCall).toBeTruthy();
+    const body = JSON.parse(String(createFieldCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      label: "Контрольное поле",
+      required_mode: "required",
+    });
+  });
+});
+
+test("edits reference list items inside the reference-backed field form", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  await user.click(screen.getByRole("button", { name: "Добавить поле в блок Основной блок" }));
+  const fieldForm = await screen.findByRole("form", { name: "Создать поле формы" });
+  await user.selectOptions(within(fieldForm).getByLabelText("Тип поля формы"), ["multi_select"]);
+  await user.selectOptions(within(fieldForm).getByLabelText("Справочник для поля"), [
+    "abababab-abab-4aba-8aba-abababababab",
+  ]);
+
+  const inlineEditor = await within(fieldForm).findByRole("region", {
+    name: "Редактор справочника для поля",
+  });
+  expect(await within(inlineEditor).findByText("Активен")).toBeInTheDocument();
+
+  await user.click(within(inlineEditor).getByRole("button", { name: "Добавить элемент" }));
+  await user.type(within(inlineEditor).getByLabelText("Название элемента справочника"), "В работе");
+  await user.click(within(inlineEditor).getByRole("button", { name: "Создать элемент" }));
+
+  await waitFor(() => {
+    const createItemCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/reference-lists/abababab-abab-4aba-8aba-abababababab/items",
+          ) && init?.method === "POST",
+      );
+    expect(createItemCall).toBeTruthy();
+    const body = JSON.parse(String(createItemCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      label: "В работе",
+      description: null,
+    });
   });
 });
 

@@ -92,6 +92,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "'static_text'" in sql
     assert "layout_columns INTEGER DEFAULT '1' NOT NULL" in sql
     assert "display_config_json JSONB" in sql
+    assert "ALTER TABLE public.form_blocks ADD COLUMN display_config_json JSONB" in sql
     assert "'mcp'" in sql
     assert "ALTER TABLE public.audit_events ALTER COLUMN created_at SET DEFAULT now()" in sql
     assert "CREATE TABLE employees" not in sql

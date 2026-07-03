@@ -96,6 +96,7 @@ class FormBlock(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     public_editable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     display_mode: Mapped[str] = mapped_column(String, nullable=False, server_default="section")
     layout_columns: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    display_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
 
 

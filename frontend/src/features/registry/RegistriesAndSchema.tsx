@@ -83,6 +83,7 @@ type BlockFormState = {
   isRepeatable: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
+  titlePosition: string;
 };
 
 type FieldFormState = {
@@ -164,6 +165,7 @@ const supportedFieldTypes = [
 const referenceBackedFieldTypes = new Set(["select", "multi_select"]);
 const fieldLabelPositions = ["top", "left", "right", "bottom"];
 const fieldSeparatorStyles = ["none", "line", "space", "muted"];
+const blockTitlePositions = ["top", "left", "right", "bottom"];
 const fieldLabelPositionOptions = [
   { value: "top", label: uiText.labelPositionTop },
   { value: "left", label: uiText.labelPositionLeft },
@@ -176,6 +178,7 @@ const fieldSeparatorOptions = [
   { value: "space", label: uiText.separatorSpace },
   { value: "muted", label: uiText.separatorMuted },
 ];
+const blockTitlePositionOptions = fieldLabelPositionOptions;
 const maxVisualColumns = 5;
 const maxVisualRows = 10;
 
@@ -197,6 +200,11 @@ function displayConfigValue(field: FormFieldRead, key: string, fallback: string)
 function displayConfigNumber(field: FormFieldRead, key: string, fallback: number) {
   const value = field.display_config_json?.[key];
   return typeof value === "number" ? value : fallback;
+}
+
+function blockDisplayConfigValue(block: FormBlockRead, key: string, fallback: string) {
+  const value = block.display_config_json?.[key];
+  return typeof value === "string" ? value : fallback;
 }
 
 function staticTextValue(field: FormFieldRead) {
@@ -570,6 +578,12 @@ function SchemaVisualEditor({
   const [layoutNativeDragFieldId, setLayoutNativeDragFieldId] = useState<string | null>(null);
   const [suppressHandleClickFieldId, setSuppressHandleClickFieldId] = useState<string | null>(null);
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
+  const [expandedVisualOptionGroups, setExpandedVisualOptionGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [inlineReferenceListName, setInlineReferenceListName] = useState("");
+  const [inlineReferenceItemLabel, setInlineReferenceItemLabel] = useState("");
+  const [showInlineReferenceItemForm, setShowInlineReferenceItemForm] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const sortedBlocks = useMemo(
@@ -602,6 +616,15 @@ function SchemaVisualEditor({
     }
     return grouped;
   }, [fields, selectedTemplate, selectedTemplateFieldIds]);
+  const inlineReferenceListId =
+    fieldFormState && referenceBackedFieldTypes.has(fieldFormState.fieldType)
+      ? fieldFormState.optionsSourceId.trim()
+      : "";
+  const inlineReferenceItemsQuery = useQuery({
+    queryKey: ["reference-items", token, inlineReferenceListId],
+    queryFn: () => listReferenceItems(token, inlineReferenceListId),
+    enabled: Boolean(token && inlineReferenceListId),
+  });
 
   function setActiveDraggedFieldId(fieldId: string | null) {
     setDraggedFieldId(fieldId);
@@ -648,6 +671,7 @@ function SchemaVisualEditor({
       is_repeatable: boolean;
       public_visible: boolean;
       public_editable: boolean;
+      display_config_json: Record<string, unknown> | null;
     }) => createFormBlock(token, selectedRegistryId, payload),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -661,11 +685,13 @@ function SchemaVisualEditor({
       title: string;
       description: string | null;
       position: number;
+      display_config_json: Record<string, unknown> | null;
     }) =>
       updateFormBlock(token, payload.blockId, {
         title: payload.title,
         description: payload.description,
         position: payload.position,
+        display_config_json: payload.display_config_json,
       }),
     onSuccess: async () => {
       setBlockFormState(null);
@@ -780,6 +806,50 @@ function SchemaVisualEditor({
       await invalidateRegistryData(queryClient, token);
     },
   });
+  const createInlineReferenceListMutation = useMutation({
+    mutationFn: (payload: { code: string; name: string }) =>
+      createReferenceList(token, selectedRegistryId, {
+        code: payload.code,
+        name: payload.name,
+        owner_organization_id: null,
+        description: null,
+        inherit_to_descendants: false,
+        locked_for_descendants: false,
+        managed_by_system_only: false,
+      }),
+    onSuccess: async (createdReferenceList) => {
+      setInlineReferenceListName("");
+      setFieldFormState((current) =>
+        current ? { ...current, optionsSourceId: createdReferenceList.id } : current,
+      );
+      await invalidateReferenceData(
+        queryClient,
+        token,
+        selectedRegistryId,
+        createdReferenceList.id,
+      );
+    },
+  });
+  const createInlineReferenceItemMutation = useMutation({
+    mutationFn: (payload: { referenceListId: string; code: string; label: string }) =>
+      createReferenceItem(token, payload.referenceListId, {
+        code: payload.code,
+        label: payload.label,
+        description: null,
+        parent_id: null,
+        position: nextPosition(inlineReferenceItemsQuery.data?.items ?? []),
+      }),
+    onSuccess: async (_createdItem, variables) => {
+      setInlineReferenceItemLabel("");
+      setShowInlineReferenceItemForm(false);
+      await invalidateReferenceData(
+        queryClient,
+        token,
+        selectedRegistryId,
+        variables.referenceListId,
+      );
+    },
+  });
   const reorderFieldMutation = useMutation({
     mutationFn: (
       updates: {
@@ -820,10 +890,16 @@ function SchemaVisualEditor({
       updateFieldMutation.error ??
       createTemplateMutation.error ??
       archiveTemplateMutation.error ??
+      createInlineReferenceListMutation.error ??
+      createInlineReferenceItemMutation.error ??
       reorderFieldMutation.error ??
       archiveFieldMutation.error);
   const isBlockFormSubmitting = createBlockMutation.isPending || updateBlockMutation.isPending;
-  const isFieldFormSubmitting = createFieldMutation.isPending || updateFieldMutation.isPending;
+  const isFieldFormSubmitting =
+    createFieldMutation.isPending ||
+    updateFieldMutation.isPending ||
+    createInlineReferenceListMutation.isPending ||
+    createInlineReferenceItemMutation.isPending;
   const isTemplateFormSubmitting = createTemplateMutation.isPending;
 
   function openCreateBlockForm() {
@@ -840,6 +916,7 @@ function SchemaVisualEditor({
       isRepeatable: false,
       publicVisible: true,
       publicEditable: false,
+      titlePosition: "top",
     });
   }
 
@@ -857,6 +934,7 @@ function SchemaVisualEditor({
       isRepeatable: block.is_repeatable,
       publicVisible: block.public_visible,
       publicEditable: block.public_editable,
+      titlePosition: blockDisplayConfigValue(block, "title_position", "top"),
     });
   }
 
@@ -880,6 +958,9 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
+    setInlineReferenceListName("");
+    setInlineReferenceItemLabel("");
+    setShowInlineReferenceItemForm(false);
     setFieldFormState({
       mode: "create",
       fieldId: null,
@@ -908,6 +989,9 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
+    setInlineReferenceListName("");
+    setInlineReferenceItemLabel("");
+    setShowInlineReferenceItemForm(false);
     setFieldFormState({
       mode: "edit",
       fieldId: field.id,
@@ -943,6 +1027,9 @@ function SchemaVisualEditor({
 
   function closeFieldForm() {
     setFieldFormState(null);
+    setInlineReferenceListName("");
+    setInlineReferenceItemLabel("");
+    setShowInlineReferenceItemForm(false);
     setLocalError(null);
   }
 
@@ -1010,6 +1097,7 @@ function SchemaVisualEditor({
         is_repeatable: blockFormState.isRepeatable,
         public_visible: blockFormState.publicVisible,
         public_editable: blockFormState.publicEditable,
+        display_config_json: blockDisplayConfig(blockFormState),
       });
       return;
     }
@@ -1020,6 +1108,7 @@ function SchemaVisualEditor({
         title,
         description: description || null,
         position: positionNumber(blockFormState.position),
+        display_config_json: blockDisplayConfig(blockFormState),
       });
     }
   }
@@ -1054,7 +1143,7 @@ function SchemaVisualEditor({
         field_type: fieldFormState.fieldType,
         description: null,
         position: positionNumber(fieldFormState.position),
-        required_mode: isStaticText ? "not_required" : fieldFormState.requiredMode,
+        required_mode: isStaticText ? "not_required" : fieldRequiredMode(fieldFormState),
         options_source_type: usesReferenceList && optionsSourceId ? "reference_list" : null,
         options_source_id: usesReferenceList && optionsSourceId ? optionsSourceId : null,
         options_config_json: isStaticText
@@ -1075,7 +1164,9 @@ function SchemaVisualEditor({
         description: fieldFormState.description || null,
         position: positionNumber(fieldFormState.position),
         required_mode:
-          fieldFormState.fieldType === "static_text" ? "not_required" : fieldFormState.requiredMode,
+          fieldFormState.fieldType === "static_text"
+            ? "not_required"
+            : fieldRequiredMode(fieldFormState),
         options_config_json:
           fieldFormState.fieldType === "static_text"
             ? { static_text: fieldFormState.staticText.trim() }
@@ -1687,6 +1778,13 @@ function SchemaVisualEditor({
             </label>
           </div>
         )}
+        {renderVisualOptionGroup({
+          label: uiText.blockTitlePosition,
+          value: blockFormState.titlePosition,
+          options: blockTitlePositionOptions,
+          previewType: "block-title",
+          onChange: (value) => setBlockFormState({ ...blockFormState, titlePosition: value }),
+        })}
         {blockFormState.mode === "edit" && blockFormState.blockId && (
           <div className="schema-danger-inline">
             <button
@@ -1711,41 +1809,77 @@ function SchemaVisualEditor({
     label,
     value,
     options,
+    previewType,
+    collapsible = false,
+    groupKey,
     onChange,
   }: {
     label: string;
     value: string;
     options: { value: string; label: string }[];
+    previewType?: "field-label" | "separator" | "block-title";
+    collapsible?: boolean;
+    groupKey?: string;
     onChange: (value: string) => void;
   }) {
-    const isLabelPositionGroup = options.every((option) =>
-      fieldLabelPositions.includes(option.value),
-    );
-    const isSeparatorGroup = options.every((option) => fieldSeparatorStyles.includes(option.value));
+    const effectivePreviewType =
+      previewType ??
+      (options.every((option) => fieldLabelPositions.includes(option.value))
+        ? "field-label"
+        : options.every((option) => fieldSeparatorStyles.includes(option.value))
+          ? "separator"
+          : undefined);
+    const selectedOption = options.find((option) => option.value === value) ?? options[0];
+    const isExpanded = !collapsible || !groupKey || expandedVisualOptionGroups[groupKey] === true;
+
     return (
       <div className="schema-visual-option-group" role="group" aria-label={label}>
-        <span className="schema-visual-option-label">{label}</span>
-        <div className="schema-visual-option-buttons">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={[
-                "schema-visual-option-button",
-                option.value === value ? "is-selected" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-pressed={option.value === value}
-              aria-label={option.label}
-              onClick={() => onChange(option.value)}
-            >
-              {isLabelPositionGroup && renderLabelPositionPreview(option.value, option.label)}
-              {isSeparatorGroup && renderSeparatorPreview(option.value, option.label)}
-              {!isLabelPositionGroup && !isSeparatorGroup && option.label}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          className="schema-visual-option-toggle"
+          aria-expanded={isExpanded}
+          onClick={() => {
+            if (!collapsible || !groupKey) {
+              return;
+            }
+            setExpandedVisualOptionGroups((current) => ({
+              ...current,
+              [groupKey]: !current[groupKey],
+            }));
+          }}
+        >
+          <span className="schema-visual-option-label">{label}</span>
+          {collapsible && selectedOption && (
+            <span className="schema-visual-option-current">{selectedOption.label}</span>
+          )}
+        </button>
+        {isExpanded && (
+          <div className="schema-visual-option-buttons">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={[
+                  "schema-visual-option-button",
+                  option.value === value ? "is-selected" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-pressed={option.value === value}
+                aria-label={option.label}
+                onClick={() => onChange(option.value)}
+              >
+                {effectivePreviewType === "field-label" &&
+                  renderLabelPositionPreview(option.value, option.label)}
+                {effectivePreviewType === "separator" &&
+                  renderSeparatorPreview(option.value, option.label)}
+                {effectivePreviewType === "block-title" &&
+                  renderBlockTitlePreview(option.value, option.label)}
+                {!effectivePreviewType && option.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -1771,6 +1905,148 @@ function SchemaVisualEditor({
           <span className="schema-preview-field" aria-hidden="true" />
         </span>
       </>
+    );
+  }
+
+  function renderBlockTitlePreview(value: string, label: string) {
+    return (
+      <>
+        <span className="schema-preview-title">{label}</span>
+        <span className={`schema-block-title-preview schema-block-title-preview--${value}`}>
+          <span className="schema-preview-block-title">{uiText.formBlockTitle}</span>
+          <span className="schema-preview-block-body" aria-hidden="true" />
+        </span>
+      </>
+    );
+  }
+
+  function renderReferenceFieldInlineEditor() {
+    if (!fieldFormState || !referenceBackedFieldTypes.has(fieldFormState.fieldType)) {
+      return null;
+    }
+
+    const selectedReferenceList =
+      referenceLists.find((referenceList) => referenceList.id === inlineReferenceListId) ?? null;
+    const inlineReferenceItems = inlineReferenceItemsQuery.data?.items ?? [];
+    const referenceListName = inlineReferenceListName.trim();
+    const referenceItemLabel = inlineReferenceItemLabel.trim();
+
+    return (
+      <section
+        className="schema-reference-inline-editor"
+        role="region"
+        aria-label={uiText.referenceFieldInlineEditor}
+      >
+        <label>
+          {uiText.referenceListForField}
+          <select
+            value={fieldFormState.optionsSourceId}
+            onChange={(event) => {
+              setShowInlineReferenceItemForm(false);
+              setInlineReferenceItemLabel("");
+              setFieldFormState({
+                ...fieldFormState,
+                optionsSourceId: event.currentTarget.value,
+              });
+            }}
+          >
+            <option value="">{uiText.noReferenceList}</option>
+            {referenceLists.map((referenceList) => (
+              <option key={referenceList.id} value={referenceList.id}>
+                {referenceList.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!selectedReferenceList && (
+          <div className="schema-reference-inline-create">
+            <label>
+              {uiText.referenceListName}
+              <input
+                value={inlineReferenceListName}
+                onChange={(event) => setInlineReferenceListName(event.currentTarget.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!referenceListName || createInlineReferenceListMutation.isPending}
+              onClick={() =>
+                createInlineReferenceListMutation.mutate({
+                  name: referenceListName,
+                  code: generateTechnicalCode(
+                    referenceListName,
+                    "reference",
+                    referenceLists.map((referenceList) => referenceList.code),
+                  ),
+                })
+              }
+            >
+              {uiText.createReferenceListInline}
+            </button>
+          </div>
+        )}
+        {selectedReferenceList && (
+          <div className="schema-reference-inline-body">
+            <header>
+              <div>
+                <strong>{selectedReferenceList.name}</strong>
+                <span>
+                  {selectedReferenceList.is_active ? activityLabel(true) : activityLabel(false)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowInlineReferenceItemForm((current) => !current)}
+              >
+                {uiText.addReferenceItemCompact}
+              </button>
+            </header>
+            <div className="schema-reference-inline-list">
+              {inlineReferenceItems.length === 0 ? (
+                <p className="data-empty">{uiText.noData}</p>
+              ) : (
+                inlineReferenceItems.map((item) => (
+                  <div key={item.id} className="schema-reference-inline-item">
+                    <span>{item.label}</span>
+                    <small>{item.code}</small>
+                  </div>
+                ))
+              )}
+            </div>
+            {showInlineReferenceItemForm && (
+              <div className="schema-reference-inline-add">
+                <label>
+                  {uiText.referenceItemLabel}
+                  <input
+                    value={inlineReferenceItemLabel}
+                    onChange={(event) => setInlineReferenceItemLabel(event.currentTarget.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={!referenceItemLabel || createInlineReferenceItemMutation.isPending}
+                  onClick={() =>
+                    createInlineReferenceItemMutation.mutate({
+                      referenceListId: selectedReferenceList.id,
+                      label: referenceItemLabel,
+                      code: generateTechnicalCode(
+                        referenceItemLabel,
+                        "item",
+                        inlineReferenceItems.map((item) => item.code),
+                      ),
+                    })
+                  }
+                >
+                  {uiText.createReferenceItemCompact}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     );
   }
 
@@ -1834,22 +2110,21 @@ function SchemaVisualEditor({
               }
             />
           </label>
-          <label>
-            {uiText.formFieldRequiredMode}
-            <select
-              value={fieldFormState.requiredMode}
-              onChange={(event) =>
-                setFieldFormState({
-                  ...fieldFormState,
-                  requiredMode: event.currentTarget.value,
-                })
-              }
-            >
-              <option value="not_required">{uiText.notRequiredField}</option>
-              <option value="required">{uiText.requiredField}</option>
-              <option value="required_on_publish">{uiText.requiredOnPublishField}</option>
-            </select>
-          </label>
+          {fieldFormState.fieldType !== "static_text" && (
+            <label className="checkbox-inline schema-required-checkbox">
+              <input
+                type="checkbox"
+                checked={fieldFormState.requiredMode !== "not_required"}
+                onChange={(event) =>
+                  setFieldFormState({
+                    ...fieldFormState,
+                    requiredMode: event.currentTarget.checked ? "required" : "not_required",
+                  })
+                }
+              />
+              {uiText.requiredFieldCheckbox}
+            </label>
+          )}
           {fieldFormState.fieldType === "static_text" && (
             <label className="schema-static-text-label">
               {uiText.staticTextContent}
@@ -1865,37 +2140,24 @@ function SchemaVisualEditor({
             </label>
           )}
           {fieldFormState.mode === "create" &&
-            referenceBackedFieldTypes.has(fieldFormState.fieldType) && (
-              <label>
-                {uiText.referenceListForField}
-                <select
-                  value={fieldFormState.optionsSourceId}
-                  onChange={(event) =>
-                    setFieldFormState({
-                      ...fieldFormState,
-                      optionsSourceId: event.currentTarget.value,
-                    })
-                  }
-                >
-                  <option value="">{uiText.noReferenceList}</option>
-                  {referenceLists.map((referenceList) => (
-                    <option key={referenceList.id} value={referenceList.id}>
-                      {referenceList.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            referenceBackedFieldTypes.has(fieldFormState.fieldType) &&
+            renderReferenceFieldInlineEditor()}
           {renderVisualOptionGroup({
             label: uiText.fieldLabelPosition,
             value: fieldFormState.labelPosition,
             options: fieldLabelPositionOptions,
+            previewType: "field-label",
+            collapsible: true,
+            groupKey: `${fieldFormState.mode}:${fieldFormState.fieldId ?? fieldFormState.blockId}:label`,
             onChange: (value) => setFieldFormState({ ...fieldFormState, labelPosition: value }),
           })}
           {renderVisualOptionGroup({
             label: uiText.fieldSeparatorStyle,
             value: fieldFormState.separatorStyle,
             options: fieldSeparatorOptions,
+            previewType: "separator",
+            collapsible: true,
+            groupKey: `${fieldFormState.mode}:${fieldFormState.fieldId ?? fieldFormState.blockId}:separator`,
             onChange: (value) => setFieldFormState({ ...fieldFormState, separatorStyle: value }),
           })}
         </div>
@@ -3032,6 +3294,18 @@ function layoutColumnNumber(value: string) {
 function clampFieldColumnSpan(span: number, column: number) {
   const safeColumn = Math.min(maxVisualColumns, Math.max(1, column));
   return Math.min(maxVisualColumns - safeColumn + 1, Math.max(1, span));
+}
+
+function blockDisplayConfig(blockFormState: BlockFormState) {
+  return {
+    title_position: blockTitlePositions.includes(blockFormState.titlePosition)
+      ? blockFormState.titlePosition
+      : "top",
+  };
+}
+
+function fieldRequiredMode(fieldFormState: FieldFormState) {
+  return fieldFormState.requiredMode === "not_required" ? "not_required" : "required";
 }
 
 function fieldDisplayConfig(fieldFormState: FieldFormState) {

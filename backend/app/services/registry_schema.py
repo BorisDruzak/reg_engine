@@ -23,6 +23,7 @@ DEFAULT_CARD_REGISTRY_NAME = "Реестр карточек"
 BASE_CARD_TEMPLATE_CODE = "base_template"
 FIELD_LABEL_POSITIONS = {"top", "bottom", "left", "right"}
 FIELD_SEPARATOR_STYLES = {"none", "line", "space", "muted"}
+BLOCK_TITLE_POSITIONS = {"top", "bottom", "left", "right"}
 BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
 
 
@@ -481,10 +482,12 @@ class RegistrySchemaService:
         public_visible: bool = True,
         public_editable: bool = False,
         layout_columns: int = 1,
+        display_config_json: dict[str, object] | None = None,
     ) -> FormBlock:
         self._require_schema_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
         self._validate_layout_columns(layout_columns)
+        display_config_json = self._normalize_block_display_config(display_config_json)
 
         block = FormBlock(
             registry_id=registry_id,
@@ -498,6 +501,7 @@ class RegistrySchemaService:
             public_visible=public_visible,
             public_editable=public_editable,
             layout_columns=layout_columns,
+            display_config_json=display_config_json,
             created_by=actor_user_id,
         )
         self.session.add(block)
@@ -511,6 +515,7 @@ class RegistrySchemaService:
                 "registry_id": str(registry_id),
                 "code": code,
                 "layout_columns": layout_columns,
+                "display_config_json": display_config_json,
             },
         )
         return block
@@ -529,6 +534,7 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int | None = None,
         layout_columns: int | None = None,
+        display_config_json: dict[str, object] | None = None,
     ) -> FormBlock:
         block = self._get_active_block(block_id)
         self._ensure_mutable_block(block)
@@ -538,9 +544,12 @@ class RegistrySchemaService:
             "description": block.description,
             "position": block.position,
             "layout_columns": block.layout_columns,
+            "display_config_json": block.display_config_json,
         }
         if layout_columns is not None:
             self._validate_layout_columns(layout_columns)
+        if display_config_json is not None:
+            display_config_json = self._normalize_block_display_config(display_config_json)
 
         if title is not None:
             block.title = title
@@ -550,6 +559,8 @@ class RegistrySchemaService:
             block.position = position
         if layout_columns is not None:
             block.layout_columns = layout_columns
+        if display_config_json is not None:
+            block.display_config_json = display_config_json
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -562,6 +573,7 @@ class RegistrySchemaService:
                 "description": block.description,
                 "position": block.position,
                 "layout_columns": block.layout_columns,
+                "display_config_json": block.display_config_json,
             },
         )
         self.ensure_base_card_template_for_registry(
@@ -1130,6 +1142,24 @@ class RegistrySchemaService:
     def _validate_layout_columns(self, layout_columns: int) -> None:
         if isinstance(layout_columns, bool) or layout_columns < 1 or layout_columns > 3:
             raise RegistrySchemaError("Block layout columns must be between 1 and 3.")
+
+    def _normalize_block_display_config(
+        self,
+        display_config_json: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if display_config_json is None:
+            return None
+        if not isinstance(display_config_json, dict):
+            raise RegistrySchemaError("Block display config must be an object.")
+
+        normalized: dict[str, object] = {}
+        title_position = display_config_json.get("title_position")
+        if title_position is not None:
+            if not isinstance(title_position, str) or title_position not in BLOCK_TITLE_POSITIONS:
+                raise RegistrySchemaError("Unsupported block title position.")
+            normalized["title_position"] = title_position
+
+        return normalized or None
 
     def _normalize_field_display_config(
         self,

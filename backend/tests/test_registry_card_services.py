@@ -574,6 +574,7 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
         code="layout-block",
         title="Layout block",
         layout_columns=3,
+        display_config_json={"title_position": "left"},
     )
     field = schema_service.create_field_for_actor(
         actor_user_id=context["registry_admin"].id,
@@ -598,6 +599,7 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
         actor_user_id=context["registry_admin"].id,
         block_id=block.id,
         layout_columns=2,
+        display_config_json={"title_position": "bottom"},
     )
     updated_field = schema_service.update_field_for_actor(
         actor_user_id=context["registry_admin"].id,
@@ -613,6 +615,7 @@ def test_schema_layout_and_static_text_roundtrip(db_session: Session) -> None:
     )
 
     assert updated_block.layout_columns == 2
+    assert updated_block.display_config_json == {"title_position": "bottom"}
     assert field.required_mode == "not_required"
     assert field.is_list_display is False
     assert field.public_editable is False

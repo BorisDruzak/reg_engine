@@ -134,6 +134,7 @@ def test_schema_layout_metadata_is_registered() -> None:
     form_fields = Base.metadata.tables["form_fields"]
 
     assert "layout_columns" in form_blocks.c
+    assert "display_config_json" in form_blocks.c
     assert "display_config_json" in form_fields.c
 
     block_checks = {

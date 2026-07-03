@@ -262,6 +262,7 @@ def create_block(
             public_visible=payload.public_visible,
             public_editable=payload.public_editable,
             layout_columns=payload.layout_columns,
+            display_config_json=payload.display_config_json,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -283,6 +284,7 @@ def update_block(
             description=payload.description,
             position=payload.position,
             layout_columns=payload.layout_columns,
+            display_config_json=payload.display_config_json,
         )
     except Exception as exc:
         raise_service_http_error(exc)

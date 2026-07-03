@@ -145,6 +145,14 @@ not a hardcoded employee registry.
   rows mounted while the placement grid is active, and pointer-based mouse
   dragging opens the grid only after real pointer movement. No backend,
   database, or migration change is required.
+- Phase 7J.7 block title placement and compact field-reference editing is
+  implemented locally: form blocks now persist `display_config_json`, Alembic
+  migration `0021_block_display_config` adds the backend column, block edit
+  forms include a visual `Расположение названия блока` preview, field
+  label/separator visual settings are collapsed by default, required fields use
+  one checkbox in the ordinary UI, and reference-backed field creation includes
+  a compact inline reference-list/item editor. Server deployment and production
+  migration are pending the standard migration flow.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -861,6 +869,13 @@ Verification completed:
 - `pnpm -C frontend lint`: passed.
 - `pnpm -C frontend typecheck`: passed.
 - `pnpm -C frontend build`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  unit tests/build, and project-map check.
+- `pnpm -C frontend e2e`: passed, 3 Playwright smoke tests.
+- Local PowerShell `TEST_DATABASE_URL` is not set, so disposable PostgreSQL
+  verification for migration `0021_block_display_config` remains required
+  before production migration/server deployment.
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed after updating the
   browser scenarios to use the new tabs.
 
@@ -2457,3 +2472,67 @@ Verification completed locally so far:
   passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
   unit tests/build, and project-map check.
 - `npm run e2e`: passed, 3 Playwright smoke tests.
+
+## Phase 7J.7: Block Title Placement And Compact Reference Field Editor
+
+Status: implemented locally; server synchronization and production migration
+pending standard migration flow.
+
+Purpose:
+
+Close the schema-editor UI issues found during live review while preserving
+schema-driven cards and keeping the ordinary editor compact for non-technical
+users.
+
+Implemented scope:
+
+1. Block display configuration:
+   - `form_blocks.display_config_json` is added through migration
+     `0021_block_display_config`;
+   - block create/update API accepts and returns block display config;
+   - registry schema service validates `title_position` as one of
+     `top`, `left`, `right`, or `bottom`;
+   - block edit form has a visual `Расположение названия блока` preview.
+2. Field form simplification:
+   - `Расположение подписи` is collapsed by default and expands to visual
+     previews on demand;
+   - `Разделитель` is collapsed by default and expands to visual previews on
+     demand;
+   - `Обязательность поля` is represented as one `Обязательное поле` checkbox
+     in the ordinary UI.
+3. Reference-backed field creation:
+   - select/multi-select field creation includes a compact inline reference
+     editor;
+   - users can choose an existing reference list, create a new list when none
+     is selected, and add reference items without leaving the field form;
+   - item creation uses existing reference-list API endpoints and does not add
+     hardcoded business options.
+
+Non-goals:
+
+- No hardcoded employee/HR schema.
+- No one-registry-per-organization behavior.
+- No import/export, report, document, attachment, MCP, auth, or RBAC change.
+- No production migration until disposable PostgreSQL verification, backup,
+  preflight, Alembic upgrade, and post-checks are completed.
+
+Verification completed locally so far:
+
+- `backend\.venv\Scripts\python.exe -m pytest`: passed, 135 passed and 171
+  skipped.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_registry_card_services.py::test_schema_layout_and_static_text_roundtrip backend\tests\test_models_smoke.py::test_schema_layout_metadata_is_registered backend\tests\test_migrations.py -q`:
+  passed, with service smoke skipped because local `TEST_DATABASE_URL` is not
+  set.
+- `backend\.venv\Scripts\python.exe -m ruff check .`: passed.
+- `backend\.venv\Scripts\python.exe -m ruff format --check .`: passed after
+  formatting `backend/app/models/registry_schema.py` and
+  `backend/tests/test_migrations.py`.
+- `backend\.venv\Scripts\python.exe -m mypy app`: passed.
+- `pnpm -C frontend test:run`: passed, 90 tests.
+- `pnpm -C frontend test -- --run src/App.test.tsx -t "block title placement|advanced field display previews|reference list items inside|required mode from Russian UI|static text fields with visual layout|creates edits and archives schema"`:
+  passed, 90 tests.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend format:check`: passed after formatting
+  `frontend/src/features/registry/RegistriesAndSchema.tsx`.
+- `pnpm -C frontend build`: passed.

@@ -52,6 +52,7 @@ class FormBlockCreate(BaseModel):
     public_visible: bool = True
     public_editable: bool = False
     layout_columns: int = Field(default=1, ge=1, le=3)
+    display_config_json: dict[str, Any] | None = None
 
 
 class FormBlockRead(BaseModel):
@@ -68,6 +69,7 @@ class FormBlockRead(BaseModel):
     public_visible: bool
     public_editable: bool
     layout_columns: int
+    display_config_json: dict[str, Any] | None
 
 
 class FormBlockUpdate(BaseModel):
@@ -75,6 +77,7 @@ class FormBlockUpdate(BaseModel):
     description: str | None = None
     position: int | None = None
     layout_columns: int | None = Field(default=None, ge=1, le=3)
+    display_config_json: dict[str, Any] | None = None
 
 
 class FormFieldCreate(BaseModel):

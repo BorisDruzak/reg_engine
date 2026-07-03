@@ -119,6 +119,7 @@ export type FormBlockRead = {
   public_visible: boolean;
   public_editable: boolean;
   layout_columns?: number;
+  display_config_json?: Record<string, unknown> | null;
 };
 
 export type FormBlockCreatePayload = {
@@ -130,6 +131,7 @@ export type FormBlockCreatePayload = {
   public_visible?: boolean;
   public_editable?: boolean;
   layout_columns?: number;
+  display_config_json?: Record<string, unknown> | null;
 };
 
 export type FormBlockUpdatePayload = {
@@ -137,6 +139,7 @@ export type FormBlockUpdatePayload = {
   description?: string | null;
   position?: number | null;
   layout_columns?: number | null;
+  display_config_json?: Record<string, unknown> | null;
 };
 
 export type FormFieldRead = {

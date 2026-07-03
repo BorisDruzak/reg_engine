@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-03 15:49:58 +05:00
+- Generated: 2026-07-03 17:24:38 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -123,6 +123,7 @@
 - `backend/migrations/versions/0018_card_templates.py`
 - `backend/migrations/versions/0019_base_card_templates.py`
 - `backend/migrations/versions/0020_schema_layout_static_text.py`
+- `backend/migrations/versions/0021_block_display_config.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
