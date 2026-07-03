@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.engine import Engine, make_url
 
@@ -180,7 +181,9 @@ def test_alembic_upgrade_head_records_current_head(migrated_test_engine: Engine)
     with migrated_test_engine.connect() as connection:
         version = connection.execute(text("select version_num from alembic_version")).scalar_one()
 
-    assert version == "0020_schema_layout_static_text"
+    expected_head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+
+    assert version == expected_head
 
 
 def test_disposable_database_matches_core_schema_metadata(migrated_test_engine: Engine) -> None:
