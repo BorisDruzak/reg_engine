@@ -582,6 +582,7 @@ function SchemaVisualEditor({
     Record<string, boolean>
   >({});
   const [inlineReferenceListName, setInlineReferenceListName] = useState("");
+  const [inlineReferenceListError, setInlineReferenceListError] = useState<string | null>(null);
   const [inlineReferenceItemLabel, setInlineReferenceItemLabel] = useState("");
   const [showInlineReferenceItemForm, setShowInlineReferenceItemForm] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -819,6 +820,7 @@ function SchemaVisualEditor({
       }),
     onSuccess: async (createdReferenceList) => {
       setInlineReferenceListName("");
+      setInlineReferenceListError(null);
       setFieldFormState((current) =>
         current ? { ...current, optionsSourceId: createdReferenceList.id } : current,
       );
@@ -1943,6 +1945,7 @@ function SchemaVisualEditor({
             value={fieldFormState.optionsSourceId}
             onChange={(event) => {
               setShowInlineReferenceItemForm(false);
+              setInlineReferenceListError(null);
               setInlineReferenceItemLabel("");
               setFieldFormState({
                 ...fieldFormState,
@@ -1964,14 +1967,21 @@ function SchemaVisualEditor({
               {uiText.referenceListName}
               <input
                 value={inlineReferenceListName}
-                onChange={(event) => setInlineReferenceListName(event.currentTarget.value)}
+                onChange={(event) => {
+                  setInlineReferenceListName(event.currentTarget.value);
+                  setInlineReferenceListError(null);
+                }}
               />
             </label>
             <button
               type="button"
               className="ghost-button"
-              disabled={!referenceListName || createInlineReferenceListMutation.isPending}
-              onClick={() =>
+              disabled={createInlineReferenceListMutation.isPending}
+              onClick={() => {
+                if (!referenceListName) {
+                  setInlineReferenceListError(uiText.referenceListNameRequired);
+                  return;
+                }
                 createInlineReferenceListMutation.mutate({
                   name: referenceListName,
                   code: generateTechnicalCode(
@@ -1979,11 +1989,16 @@ function SchemaVisualEditor({
                     "reference",
                     referenceLists.map((referenceList) => referenceList.code),
                   ),
-                })
-              }
+                });
+              }}
             >
               {uiText.createReferenceListInline}
             </button>
+            {inlineReferenceListError && (
+              <p className="form-error schema-reference-inline-error" role="alert">
+                {inlineReferenceListError}
+              </p>
+            )}
           </div>
         )}
         {selectedReferenceList && (

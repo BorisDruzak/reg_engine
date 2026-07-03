@@ -5976,6 +5976,64 @@ test("keeps advanced field display previews collapsed and saves required checkbo
   });
 });
 
+test("shows validation before creating an inline reference list without a name", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await openDefaultSchemaTemplateEditor(user);
+
+  await user.click(screen.getByRole("button", { name: "Добавить поле в блок Основной блок" }));
+  const fieldForm = await screen.findByRole("form", { name: "Создать поле формы" });
+  await user.selectOptions(within(fieldForm).getByLabelText("Тип поля формы"), ["multi_select"]);
+
+  const inlineEditor = await within(fieldForm).findByRole("region", {
+    name: "Редактор справочника для поля",
+  });
+  const referenceListPostCount = () =>
+    vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists",
+          ) && init?.method === "POST",
+      ).length;
+  const postCountBeforeValidation = referenceListPostCount();
+
+  await user.click(within(inlineEditor).getByRole("button", { name: "Создать справочник здесь" }));
+
+  expect(await within(inlineEditor).findByText("Введите название справочника")).toBeInTheDocument();
+  expect(referenceListPostCount()).toBe(postCountBeforeValidation);
+
+  fireEvent.change(within(inlineEditor).getByLabelText("Название справочника"), {
+    target: { value: "Локальный справочник" },
+  });
+  expect(within(inlineEditor).queryByText("Введите название справочника")).not.toBeInTheDocument();
+  await user.click(within(inlineEditor).getByRole("button", { name: "Создать справочник здесь" }));
+
+  await waitFor(() => {
+    const createListCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/registries/77777777-7777-4777-8777-777777777777/reference-lists",
+          ) && init?.method === "POST",
+      );
+    expect(createListCall).toBeTruthy();
+    const body = JSON.parse(String(createListCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      code: "lokalnyy_spravochnik",
+      name: "Локальный справочник",
+    });
+  });
+});
+
 test("edits reference list items inside the reference-backed field form", async () => {
   const user = userEvent.setup();
   render(<App />);

@@ -118,6 +118,12 @@ not a hardcoded employee registry.
   are removed from the ordinary field edit form, label-position and separator
   settings are visual choices, and field width is changed through the visual
   resize handle. No database migration is required.
+- Phase 7J.3 inline reference-list creation bugfix is completed locally:
+  the compact reference-list editor inside schema field creation now shows a
+  Russian validation message when `Создать справочник здесь` is used without a
+  name, keeps the action available for visible feedback, and preserves the
+  existing successful create-and-select flow. No backend change or database
+  migration is required.
 - Phase 7J.3 schema placement grid usability is completed on `main`, pushed to
   GitHub, deployed to the server frontend, and live-verified: the visual
   placement grid is now a separate 10-row by 5-column panel, the current field

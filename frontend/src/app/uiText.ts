@@ -228,6 +228,7 @@ export const uiText = {
   referenceListForField: "Справочник для поля",
   referenceFieldInlineEditor: "Редактор справочника для поля",
   createReferenceListInline: "Создать справочник здесь",
+  referenceListNameRequired: "Введите название справочника",
   addReferenceItemCompact: "Добавить элемент",
   createReferenceItemCompact: "Создать элемент",
   noReferenceList: "Без справочника",

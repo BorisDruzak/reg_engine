@@ -1146,6 +1146,10 @@ tr:last-child td {
   gap: 10px;
 }
 
+.schema-reference-inline-error {
+  grid-column: 1 / -1;
+}
+
 .schema-reference-inline-body {
   display: grid;
   gap: 8px;
