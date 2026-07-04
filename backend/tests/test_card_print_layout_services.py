@@ -104,3 +104,16 @@ def test_card_print_layout_validation_rejects_mm_geometry_outside_page() -> None
     result = validate_card_print_layout(layout, allowed_field_ids={field_id})
 
     assert any("outside the A4 page width" in error for error in result.errors)
+
+
+def test_card_print_layout_validation_rejects_object_style_enum_without_crashing() -> None:
+    field_id = UUID("11111111-1111-1111-1111-111111111111")
+    layout = _valid_layout(str(field_id))
+    layout["items"][1]["style"] = {
+        "border": {"enabled": True, "color": "#000000", "width_px": 1},
+        "padding_mm": 2,
+    }
+
+    result = validate_card_print_layout(layout, allowed_field_ids={field_id})
+
+    assert any("unsupported style border" in error for error in result.errors)

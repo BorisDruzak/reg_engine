@@ -335,7 +335,7 @@ def _validate_item_style(
 ) -> None:
     for key, allowed_values in _STYLE_ALLOWED_VALUES.items():
         value = style.get(key)
-        if value is not None and value not in allowed_values:
+        if value is not None and (not isinstance(value, str) or value not in allowed_values):
             errors.append(f"Print layout item '{item_id}' has unsupported style {key}.")
     font_size = style.get("font_size")
     if font_size is not None and _positive_number(font_size, default=0) <= 0:
