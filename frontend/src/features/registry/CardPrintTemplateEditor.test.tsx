@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -13,7 +13,9 @@ test("saves an A4 card print layout through the card print template API", async 
   const user = userEvent.setup();
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")) {
+    if (
+      url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")
+    ) {
       return jsonResponse({ items: [] });
     }
     if (url.endsWith("/api/v1/registries/registry-1/card-print-templates")) {
@@ -56,7 +58,9 @@ test("saves an A4 card print layout through the card print template API", async 
   vi.stubGlobal("fetch", fetchMock);
 
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <CardPrintTemplateEditor
         token="token"
         registryId="registry-1"
@@ -124,11 +128,155 @@ test("saves an A4 card print layout through the card print template API", async 
   });
 });
 
+test("renders the A4 editor as a visual workspace with technical settings hidden", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", createEditorFetchMock());
+
+  renderEditor();
+
+  expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Имя файла")).not.toBeInTheDocument();
+  expect(screen.queryByText("{status}")).not.toBeInTheDocument();
+  expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Настройки шаблона" }));
+
+  expect(screen.getByLabelText("Технический код")).toBeInTheDocument();
+  expect(screen.getByLabelText("Имя файла")).toBeInTheDocument();
+});
+
+test("moves elements with mouse and keyboard while saving millimeter geometry only", async () => {
+  const user = userEvent.setup();
+  let savedLayout: { items: Record<string, unknown>[] } | null = null;
+  const fetchMock = createEditorFetchMock((payload) => {
+    savedLayout = payload.layout_json as { items: Record<string, unknown>[] };
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderEditor();
+
+  const statusElement = await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ });
+  await user.click(statusElement);
+  fireEvent.pointerDown(statusElement, { clientX: 120, clientY: 120, pointerId: 1 });
+  fireEvent.pointerMove(document, { clientX: 150, clientY: 136, pointerId: 1 });
+  fireEvent.pointerUp(document, { clientX: 150, clientY: 136, pointerId: 1 });
+  fireEvent.keyDown(screen.getByLabelText("A4 канвас печатного шаблона"), {
+    key: "ArrowRight",
+  });
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(savedLayout).not.toBeNull());
+  const layout = savedLayout as unknown as { items: Record<string, unknown>[] };
+  const movedItem = layout.items.find((item) => item.field_id === "field-1");
+  expect(movedItem).toEqual(
+    expect.objectContaining({
+      x_mm: expect.any(Number),
+      y_mm: expect.any(Number),
+      width_mm: expect.any(Number),
+      height_mm: expect.any(Number),
+    }),
+  );
+  expect(JSON.stringify(movedItem)).not.toContain("_px");
+});
+
 function jsonResponse(payload: unknown, status = 200) {
   return Promise.resolve(
     new Response(JSON.stringify(payload), {
       status,
       headers: { "Content-Type": "application/json" },
     }),
+  );
+}
+
+function createEditorFetchMock(onSave?: (payload: Record<string, unknown>) => void) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (
+      url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")
+    ) {
+      return jsonResponse({ items: [] });
+    }
+    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates")) {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      onSave?.(payload);
+      return jsonResponse({
+        id: "print-template-1",
+        registry_id: "registry-1",
+        card_template_id: "template-1",
+        code: "municipal_print",
+        name: "Муниципальная карточка: печать",
+        description: null,
+        template_format: "card_print_layout_v1",
+        output_filename_template: "{{ card.display_name }}.docx",
+        output_content_type:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        is_active: true,
+        current_version_id: "print-version-1",
+        current_version_number: 1,
+        current_layout_json: payload.layout_json,
+        created_at: "2026-07-04T00:00:00Z",
+        archived_at: null,
+      });
+    }
+    return jsonResponse({ detail: "not found" }, 404);
+  });
+}
+
+function renderEditor() {
+  return render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <CardPrintTemplateEditor
+        token="token"
+        registryId="registry-1"
+        cardTemplate={{
+          id: "template-1",
+          registry_id: "registry-1",
+          code: "municipal",
+          name: "Муниципальная карточка",
+          description: null,
+          position: 0,
+          field_schema_json: { field_ids: ["field-1"] },
+          default_values_json: [],
+          is_active: true,
+        }}
+        blocks={[
+          {
+            id: "block-1",
+            registry_id: "registry-1",
+            code: "main",
+            title: "Основной блок",
+            description: null,
+            position: 0,
+            is_repeatable: false,
+            is_active: true,
+            public_visible: true,
+            public_editable: false,
+          },
+        ]}
+        fields={[
+          {
+            id: "field-1",
+            block_id: "block-1",
+            code: "status",
+            label: "Статус",
+            description: null,
+            field_type: "text",
+            position: 0,
+            required_mode: "not_required",
+            options_source_type: null,
+            options_source_id: null,
+            options_config_json: null,
+            display_config_json: null,
+            is_active: true,
+            is_list_display: false,
+            public_visible: true,
+            public_editable: false,
+          },
+        ]}
+      />
+    </QueryClientProvider>,
   );
 }

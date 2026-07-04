@@ -845,14 +845,11 @@ export async function createCardPrintTemplate(
   registryId: string,
   payload: CardPrintTemplateCreatePayload,
 ) {
-  return apiRequest<DocumentTemplateRead>(
-    `/api/v1/registries/${registryId}/card-print-templates`,
-    {
-      method: "POST",
-      token,
-      body: payload,
-    },
-  );
+  return apiRequest<DocumentTemplateRead>(`/api/v1/registries/${registryId}/card-print-templates`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
 
 export async function createCardPrintTemplateVersion(

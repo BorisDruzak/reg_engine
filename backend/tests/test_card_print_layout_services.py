@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.services.card_print import validate_card_print_layout
 
@@ -81,3 +81,26 @@ def test_card_print_layout_validation_rejects_blocking_overlap() -> None:
     result = validate_card_print_layout(layout, allowed_field_ids={field_id})
 
     assert any("overlaps" in error for error in result.errors)
+
+
+def test_card_print_layout_validation_rejects_mm_geometry_outside_page() -> None:
+    field_id = UUID("11111111-1111-1111-1111-111111111111")
+    layout = _valid_layout(str(field_id))
+    layout["items"][1].update(
+        {
+            "x_mm": 190,
+            "y_mm": 20,
+            "width_mm": 40,
+            "height_mm": 12,
+            "style": {
+                "font_size": 12,
+                "border": "thin",
+                "padding_mm": 2,
+                "label_position": "top",
+            },
+        }
+    )
+
+    result = validate_card_print_layout(layout, allowed_field_ids={field_id})
+
+    assert any("outside the A4 page width" in error for error in result.errors)

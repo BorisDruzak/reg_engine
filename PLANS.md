@@ -174,6 +174,13 @@ not a hardcoded employee registry.
   editor from the selected card-template editor, normal card filling remains
   unchanged, and production DOCX/PDF generation uses the latest saved print
   layout version.
+- Phase 8B A4 print-template production UX hardening is implemented locally:
+  the editor is refactored into shared A4 renderer/palette/toolbar/properties
+  modules, uses mm geometry in layout JSON, hides technical settings by
+  default, supports mouse drag/resize and keyboard editing, creates fields and
+  blocks from the canvas, reuses the renderer for a preview-only card workspace
+  tab, and strengthens backend layout validation/rendering without a database
+  migration. Full push/deploy/live verification is pending the current gate.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2702,3 +2709,77 @@ Issues found and fixed during production gate:
   assertions in `tests/test_migrations.py`.
 - The PostgreSQL-backed Phase 8 API test expected a mojibake field-value string.
   Fixed the test to assert the real Russian card value `Значение поля`.
+
+## Phase 8B: A4 Print-Template Production UX Hardening
+
+Status: implemented locally; full push/deploy/live browser gate is in progress.
+
+Purpose:
+
+Turn the Phase 8 technical MVP into a visual A4 editor while preserving the
+schema-driven card model and the existing generated-document infrastructure.
+The normal card field editor remains the primary filling workflow; the A4
+surface is used for print-template design and preview.
+
+Implemented scope:
+
+1. Frontend print editor:
+   - refactored the large editor into `frontend/src/features/registry/print/`
+     with shared renderer, toolbar, palette, properties, geometry, validation,
+     and sample-value modules;
+   - kept `frontend/src/features/registry/CardPrintTemplateEditor.tsx` as a
+     compatibility re-export;
+   - hid technical code, output filename, raw ids, and JSON behind
+     `Настройки шаблона` / technical toggles;
+   - added document-style toolbar with name, save status, zoom, grid toggle,
+     preview toggle, save, DOCX/PDF generation buttons, and last-download
+     action;
+   - implemented A4 mm rendering with page shadow, gray workspace, rulers,
+     margins, zoom presets, scroll, grid toggle, selection and hover states;
+   - added mouse drag, resize handles, keyboard nudge, Delete, duplicate,
+     copy/paste, undo/redo, and mm-only layout saving;
+   - added user-facing properties tabs for content, position, appearance,
+     behavior, and technical details;
+   - added palette actions for existing fields, new fields, new blocks,
+     headings, static text, panels, rectangles, dividers, print date, page
+     number, and card metadata; QR/image remain disabled with explicit TODO
+     tooltips;
+   - added canvas field/block creation through existing schema API endpoints,
+     including reference-list selection/inline list creation for select fields.
+2. Shared preview:
+   - reused the same A4 renderer in a preview-only `Печатная форма` card
+     workspace tab;
+   - design mode shows realistic values instead of `{field.code}`;
+   - preview can use current card values and metadata when launched from a
+     card.
+3. Backend validation/rendering:
+   - extended `card_print_layout_v1` validation to normalize and validate
+     `x_mm`, `y_mm`, `width_mm`, `height_mm`, A4 page dimensions, block ids,
+     style enums, and out-of-page geometry;
+   - existing row/column/span layouts remain accepted and are normalized to mm;
+   - PDF rendering now uses mm coordinates plus padding, border, background,
+     text color, and alignment from layout styles;
+   - DOCX remains structured text output through the existing generated-document
+     path; no screenshot or frontend rasterization is used.
+
+Non-goals in this slice:
+
+- No database migration; the extension is inside existing JSON layout.
+- No hardcoded business/employee fields.
+- No replacement of the ordinary card filling form with A4 editing.
+- No public generated-document workflow, new storage backend, MCP changes, MDB
+  migration, service-desk integration, or new binary export phase.
+
+Verification completed locally so far:
+
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `pnpm -C frontend test:run -- src/features/registry/CardPrintTemplateEditor.test.tsx`:
+  passed, 95 tests in the frontend suite.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_card_print_layout_services.py backend\tests\test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values -q`:
+  passed, 5 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts\format.ps1 -Check`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\lint.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\test.ps1`: passed;
+  backend reported 140 passed / 172 skipped, frontend reported 95 passed.

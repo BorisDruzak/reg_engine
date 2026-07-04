@@ -691,10 +691,28 @@ export type AttachmentListRead = {
   items: AttachmentRead[];
 };
 
+export type CardPrintLayoutItemStyle = {
+  font_family?: string;
+  font_size?: number;
+  bold?: boolean;
+  italic?: boolean;
+  align?: "left" | "center" | "right";
+  vertical_align?: "top" | "middle" | "bottom";
+  border?: "none" | "thin" | "medium";
+  border_color?: string;
+  background_color?: string;
+  text_color?: string;
+  padding_mm?: number;
+  label_position?: "top" | "left" | "right" | "bottom";
+  overflow?: "wrap" | "truncate" | "expand_down";
+  max_lines?: number;
+};
+
 export type CardPrintLayoutItem = {
   id: string;
   kind:
     | "field"
+    | "block"
     | "static_text"
     | "heading"
     | "container"
@@ -712,12 +730,22 @@ export type CardPrintLayoutItem = {
   column: number;
   row_span: number;
   column_span: number;
+  x_mm?: number;
+  y_mm?: number;
+  width_mm?: number;
+  height_mm?: number;
   field_id?: string;
+  block_id?: string;
   text?: string;
   label?: string;
   show_label?: boolean;
   metadata_key?: string;
-  style?: Record<string, unknown>;
+  style?: CardPrintLayoutItemStyle;
+  repeat?: {
+    mode?: "first_instance_only" | "repeat_section" | "table_rows";
+  };
+  visible_in?: "both" | "pdf" | "docx";
+  required_marker?: boolean;
 };
 
 export type CardPrintLayout = {

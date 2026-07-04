@@ -1149,26 +1149,61 @@ class DocumentService:
                 if not isinstance(styles, dict):
                     styles = {}
                 font_size = float(styles.get("font_size") or (13 if kind == "heading" else 10))
+                padding = float(styles.get("padding_mm") or 1.5) * mm
                 text = self._card_print_item_text(item, context)
+                border = str(styles.get("border") or ("none" if kind == "heading" else "thin"))
+                background_color = str(styles.get("background_color") or "")
+                border_color = str(styles.get("border_color") or "#728197")
+                text_color = str(styles.get("text_color") or "#17324d")
 
                 if kind in {"container", "panel", "rectangle"}:
-                    pdf_canvas.setStrokeColorRGB(0.45, 0.5, 0.55)
-                    pdf_canvas.rect(x, y_top - height, width, height, stroke=1, fill=0)
+                    self._pdf_apply_hex_color(pdf_canvas, background_color, stroke=False)
+                    self._pdf_apply_hex_color(pdf_canvas, border_color, stroke=True)
+                    pdf_canvas.rect(
+                        x,
+                        y_top - height,
+                        width,
+                        height,
+                        stroke=0 if border == "none" else 1,
+                        fill=1 if background_color else 0,
+                    )
                     continue
                 if kind in {"divider", "line"}:
-                    pdf_canvas.setStrokeColorRGB(0.45, 0.5, 0.55)
+                    self._pdf_apply_hex_color(pdf_canvas, border_color, stroke=True)
                     pdf_canvas.line(x, y_top - (height / 2), x + width, y_top - (height / 2))
                     continue
                 if not text:
                     continue
 
+                if background_color or border != "none":
+                    self._pdf_apply_hex_color(pdf_canvas, background_color, stroke=False)
+                    self._pdf_apply_hex_color(pdf_canvas, border_color, stroke=True)
+                    pdf_canvas.rect(
+                        x,
+                        y_top - height,
+                        width,
+                        height,
+                        stroke=0 if border == "none" else 1,
+                        fill=1 if background_color else 0,
+                    )
+
                 pdf_canvas.setFont(font_name, font_size)
-                y = y_top - font_size - 3
-                max_width = max(12.0, width - 4)
+                self._pdf_apply_hex_color(pdf_canvas, text_color, stroke=False)
+                y = y_top - padding - font_size
+                max_width = max(12.0, width - (padding * 2))
                 for line in self._wrap_pdf_line(text, max_width, font_name, font_size):
-                    if y < y_top - height + 3:
+                    if y < y_top - height + padding:
                         break
-                    pdf_canvas.drawString(x + 2, y, line)
+                    self._pdf_draw_aligned_line(
+                        pdf_canvas,
+                        line,
+                        x=x + padding,
+                        y=y,
+                        width=max_width,
+                        align=str(
+                            styles.get("align") or ("center" if kind == "heading" else "left")
+                        ),
+                    )
                     y -= font_size + 3
 
         pdf_canvas.save()
@@ -1268,6 +1303,12 @@ class DocumentService:
         column_width: float,
         row_height: float,
     ) -> tuple[float, float, float, float]:
+        if all(key in item for key in ("x_mm", "y_mm", "width_mm", "height_mm")):
+            x_mm = self._layout_item_float(item, "x_mm", default=0)
+            y_mm = self._layout_item_float(item, "y_mm", default=0)
+            width_mm = self._layout_item_float(item, "width_mm", default=10)
+            height_mm = self._layout_item_float(item, "height_mm", default=8)
+            return (x_mm * mm, page_height - (y_mm * mm), width_mm * mm, height_mm * mm)
         row = self._layout_item_int(item, "row", default=1)
         column = self._layout_item_int(item, "column", default=1)
         row_span = self._layout_item_int(item, "row_span", default=1)
@@ -1275,6 +1316,57 @@ class DocumentService:
         x = margins["left"] + ((column - 1) * column_width)
         y_top = page_height - margins["top"] - ((row - 1) * row_height)
         return (x, y_top, column_span * column_width, row_span * row_height)
+
+    def _layout_item_float(
+        self,
+        item: dict[str, object],
+        key: str,
+        *,
+        default: float,
+    ) -> float:
+        value = item.get(key)
+        if isinstance(value, bool):
+            return default
+        try:
+            return float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return default
+
+    def _pdf_apply_hex_color(
+        self, pdf_canvas: canvas.Canvas, raw_color: str, *, stroke: bool
+    ) -> None:
+        match = re.fullmatch(r"#?([0-9A-Fa-f]{6})", raw_color.strip())
+        if not match:
+            if stroke:
+                pdf_canvas.setStrokeColorRGB(0.45, 0.5, 0.55)
+            else:
+                pdf_canvas.setFillColorRGB(0.09, 0.2, 0.3)
+            return
+        hex_color = match.group(1)
+        red = int(hex_color[0:2], 16) / 255
+        green = int(hex_color[2:4], 16) / 255
+        blue = int(hex_color[4:6], 16) / 255
+        if stroke:
+            pdf_canvas.setStrokeColorRGB(red, green, blue)
+        else:
+            pdf_canvas.setFillColorRGB(red, green, blue)
+
+    def _pdf_draw_aligned_line(
+        self,
+        pdf_canvas: canvas.Canvas,
+        line: str,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        align: str,
+    ) -> None:
+        if align == "center":
+            pdf_canvas.drawCentredString(x + (width / 2), y, line)
+        elif align == "right":
+            pdf_canvas.drawRightString(x + width, y, line)
+        else:
+            pdf_canvas.drawString(x, y, line)
 
     def _layout_item_int(
         self,
@@ -1472,9 +1564,11 @@ class DocumentService:
             registry_id=registry_id,
             card_template_id=card_template_id,
         )
+        allowed_block_ids = self._card_print_allowed_block_ids(registry_id=registry_id)
         result = validate_card_print_layout(
             layout_json,
             allowed_field_ids=allowed_field_ids,
+            allowed_block_ids=allowed_block_ids,
         )
         if result.errors:
             raise DocumentServiceError("; ".join(result.errors))
@@ -1508,6 +1602,17 @@ class DocumentService:
                     FormBlock.is_active.is_(True),
                     FormField.archived_at.is_(None),
                     FormField.is_active.is_(True),
+                )
+            ).all()
+        )
+
+    def _card_print_allowed_block_ids(self, *, registry_id: UUID) -> set[UUID]:
+        return set(
+            self.session.scalars(
+                select(FormBlock.id).where(
+                    FormBlock.registry_id == registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
                 )
             ).all()
         )

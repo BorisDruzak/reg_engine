@@ -8,6 +8,7 @@ import {
   createOrganizationCard,
   createCardBlockInstance,
   createPublicLink,
+  listCardPrintTemplates,
   listCardFieldReferenceItems,
   listAttachments,
   listPublicLinks,
@@ -43,8 +44,9 @@ import {
   ArchiveConfirmation,
   MutationFeedback,
 } from "@/components/common/AdminMutation";
-import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
+import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
+import { A4TemplateRenderer } from "@/features/registry/print/A4TemplateRenderer";
 
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
@@ -58,10 +60,11 @@ import {
   initialEditorValue,
 } from "./fieldEditorUtils";
 
-type CardWorkspaceTab = "fields" | "attachments" | "documents" | "links" | "history";
+type CardWorkspaceTab = "fields" | "print" | "attachments" | "documents" | "links" | "history";
 
 const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
   { id: "fields", label: uiText.cardFieldsTab },
+  { id: "print", label: "Печатная форма" },
   { id: "attachments", label: uiText.attachments },
   { id: "documents", label: uiText.documents },
   { id: "links", label: uiText.publicLinks },
@@ -563,6 +566,14 @@ export function CardsWorkspace({
               {fieldRows.length === 0 && <p className="data-empty">{uiText.noData}</p>}
             </Panel>
           )}
+          {card && activeTab === "print" && (
+            <CardPrintPreviewPanel
+              card={card}
+              schema={schema}
+              token={token}
+              organizationName={organizationsById.get(card.organization_id)?.name ?? null}
+            />
+          )}
           {card && activeTab === "attachments" && (
             <CardAttachmentsPanel cardId={card.id} token={token} />
           )}
@@ -589,6 +600,62 @@ export function CardsWorkspace({
         </AdminMutationDialog>
       )}
     </div>
+  );
+}
+
+function CardPrintPreviewPanel({
+  card,
+  schema,
+  token,
+  organizationName,
+}: {
+  card: CardRead;
+  schema: RegistrySchemaRead | null | undefined;
+  token: string;
+  organizationName: string | null;
+}) {
+  const printTemplatesQuery = useQuery({
+    queryKey: ["card-print-templates", token, card.registry_id, card.card_template_id],
+    queryFn: () => listCardPrintTemplates(token, card.registry_id, card.card_template_id),
+    enabled: Boolean(token && card.registry_id && card.card_template_id),
+  });
+  const printTemplate = printTemplatesQuery.data?.items[0] ?? null;
+  const layout = printTemplate?.current_layout_json ?? null;
+  const fieldValues = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(card.fields).map((field) => [field.field_id, field.value] as const),
+      ),
+    [card.fields],
+  );
+  const metadataValues = useMemo(
+    () => ({
+      "card.display_name": card.display_name,
+      "card.id": card.id,
+      "registry.name": schema?.registry.name ?? "",
+      "organization.name": organizationName ?? "",
+    }),
+    [card.display_name, card.id, organizationName, schema?.registry.name],
+  );
+
+  return (
+    <Panel title="Печатная форма">
+      <DataAlert error={printTemplatesQuery.error} />
+      {!layout ? (
+        <p className="data-empty">Для шаблона карточки пока нет печатной формы A4</p>
+      ) : (
+        <A4TemplateRenderer
+          layout={layout}
+          fields={schema?.fields ?? []}
+          mode="readonly"
+          zoom={0.64}
+          showGrid={false}
+          showTechnicalData={false}
+          fieldValues={fieldValues}
+          metadataValues={metadataValues}
+        />
+      )}
+    </Panel>
   );
 }
 

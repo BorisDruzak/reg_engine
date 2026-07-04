@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-04 22:34:31 +05:00
+- Generated: 2026-07-05 01:32:07 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -239,6 +239,14 @@
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
 - `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
+- `frontend/src/features/registry/print/A4TemplatePalette.tsx`
+- `frontend/src/features/registry/print/A4TemplatePropertiesPanel.tsx`
+- `frontend/src/features/registry/print/A4TemplateRenderer.tsx`
+- `frontend/src/features/registry/print/A4TemplateToolbar.tsx`
+- `frontend/src/features/registry/print/CardPrintTemplateEditor.tsx`
+- `frontend/src/features/registry/print/printLayoutGeometry.ts`
+- `frontend/src/features/registry/print/printLayoutValidation.ts`
+- `frontend/src/features/registry/print/printSampleValues.ts`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
 - `frontend/src/features/registry/ReportsPanel.tsx`
 - `frontend/src/features/users/UsersAndRoles.tsx`

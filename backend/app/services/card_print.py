@@ -4,6 +4,8 @@ from uuid import UUID
 CARD_PRINT_LAYOUT_VERSION = "card_print_layout_v1"
 CARD_PRINT_LAYOUT_COLUMNS = 12
 CARD_PRINT_REPEAT_MODES = {"first_instance_only", "repeat_section", "table_rows"}
+CARD_PRINT_PAGE_WIDTH_MM = 210.0
+CARD_PRINT_PAGE_HEIGHT_MM = 297.0
 _DECORATIVE_KINDS = {"divider", "line"}
 _KNOWN_KINDS = {
     "field",
@@ -21,6 +23,13 @@ _KNOWN_KINDS = {
     "qr_code",
     "image",
 }
+_STYLE_ALLOWED_VALUES = {
+    "align": {"left", "center", "right"},
+    "vertical_align": {"top", "middle", "bottom"},
+    "border": {"none", "thin", "medium"},
+    "label_position": {"top", "left", "right", "bottom"},
+    "overflow": {"wrap", "truncate", "expand_down"},
+}
 
 
 @dataclass(frozen=True)
@@ -34,6 +43,7 @@ def validate_card_print_layout(
     layout_json: object,
     *,
     allowed_field_ids: set[UUID] | None = None,
+    allowed_block_ids: set[UUID] | None = None,
 ) -> CardPrintLayoutValidationResult:
     errors: list[str] = []
     warnings: list[str] = []
@@ -56,12 +66,19 @@ def validate_card_print_layout(
         page = {}
     if page.get("format") != "A4":
         errors.append("Print layout page format must be A4.")
-    height_mm = _positive_number(page.get("height_mm"), default=297)
+    width_mm = _positive_number(page.get("width_mm"), default=CARD_PRINT_PAGE_WIDTH_MM)
+    height_mm = _positive_number(page.get("height_mm"), default=CARD_PRINT_PAGE_HEIGHT_MM)
+    if abs(width_mm - CARD_PRINT_PAGE_WIDTH_MM) > 0.01:
+        errors.append("Print layout page width must be 210 mm.")
+    if abs(height_mm - CARD_PRINT_PAGE_HEIGHT_MM) > 0.01:
+        errors.append("Print layout page height must be 297 mm.")
     margin = page.get("margin_mm")
     if not isinstance(margin, dict):
         margin = {}
     top_margin = _non_negative_number(margin.get("top"), default=12)
+    right_margin = _non_negative_number(margin.get("right"), default=12)
     bottom_margin = _non_negative_number(margin.get("bottom"), default=12)
+    left_margin = _non_negative_number(margin.get("left"), default=12)
 
     grid = normalized_layout.get("grid")
     if not isinstance(grid, dict):
@@ -81,12 +98,15 @@ def validate_card_print_layout(
         items = []
 
     seen_item_ids: set[str] = set()
-    blocking_rects: list[tuple[str, int, int, int, int, int]] = []
+    normalized_items: list[dict[str, object]] = []
+    blocking_rects: list[tuple[str, int, float, float, float, float]] = []
 
     for index, raw_item in enumerate(items):
         if not isinstance(raw_item, dict):
             errors.append(f"Print layout item at index {index} must be an object.")
             continue
+        normalized_item = dict(raw_item)
+        normalized_items.append(normalized_item)
         item_id = raw_item.get("id")
         if not isinstance(item_id, str) or not item_id.strip():
             errors.append(f"Print layout item at index {index} must have a stable id.")
@@ -128,10 +148,65 @@ def validate_card_print_layout(
                 if allowed_field_ids is not None and field_id not in allowed_field_ids:
                     errors.append(f"Unknown field_id for print layout item '{item_id}'.")
 
+        if kind == "block":
+            raw_block_id = raw_item.get("block_id")
+            if raw_block_id is not None:
+                try:
+                    block_id = UUID(str(raw_block_id))
+                except (TypeError, ValueError):
+                    errors.append(f"Print layout item '{item_id}' has invalid block_id.")
+                else:
+                    if allowed_block_ids is not None and block_id not in allowed_block_ids:
+                        errors.append(f"Unknown block_id for print layout item '{item_id}'.")
+
+        style = raw_item.get("style")
+        if style is not None:
+            if not isinstance(style, dict):
+                errors.append(f"Print layout item '{item_id}' style must be an object.")
+            else:
+                _validate_item_style(style, item_id, errors)
+
+        rect = _item_rect_mm(
+            raw_item,
+            row=row,
+            column=column,
+            row_span=row_span,
+            column_span=column_span,
+            row_height_mm=row_height_mm,
+            width_mm=width_mm,
+            height_mm=height_mm,
+            left_margin=left_margin,
+            right_margin=right_margin,
+            top_margin=top_margin,
+        )
+        if rect is None:
+            errors.append(f"Print layout item '{item_id}' has invalid millimeter geometry.")
+            rect = _grid_rect_mm(
+                row=row,
+                column=column,
+                row_span=row_span,
+                column_span=column_span,
+                row_height_mm=row_height_mm,
+                left_margin=left_margin,
+                right_margin=right_margin,
+                top_margin=top_margin,
+                width_mm=width_mm,
+            )
+        x_mm, y_mm, item_width_mm, item_height_mm = rect
+        normalized_item["x_mm"] = round(x_mm, 3)
+        normalized_item["y_mm"] = round(y_mm, 3)
+        normalized_item["width_mm"] = round(item_width_mm, 3)
+        normalized_item["height_mm"] = round(item_height_mm, 3)
+
+        if x_mm < 0 or x_mm + item_width_mm > width_mm:
+            errors.append(f"Print layout item '{item_id}' is outside the A4 page width.")
+        if y_mm < 0 or y_mm + item_height_mm > height_mm:
+            errors.append(f"Print layout item '{item_id}' is outside the A4 page height.")
+
         if kind in _DECORATIVE_KINDS:
             continue
 
-        current_rect = (item_id, page_number, row, column, row_span, column_span)
+        current_rect = (item_id, page_number, x_mm, y_mm, item_width_mm, item_height_mm)
         for previous in blocking_rects:
             if _rects_overlap(previous, current_rect):
                 errors.append(
@@ -139,6 +214,8 @@ def validate_card_print_layout(
                 )
                 break
         blocking_rects.append(current_rect)
+
+    normalized_layout["items"] = normalized_items
 
     return CardPrintLayoutValidationResult(
         normalized_layout=normalized_layout,
@@ -179,21 +256,113 @@ def _non_negative_number(value: object, *, default: float) -> float:
     return parsed if parsed >= 0 else default
 
 
+def _optional_number(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _item_rect_mm(
+    item: dict[str, object],
+    *,
+    row: int,
+    column: int,
+    row_span: int,
+    column_span: int,
+    row_height_mm: float,
+    width_mm: float,
+    height_mm: float,
+    left_margin: float,
+    right_margin: float,
+    top_margin: float,
+) -> tuple[float, float, float, float] | None:
+    has_mm_geometry = any(key in item for key in ("x_mm", "y_mm", "width_mm", "height_mm"))
+    if not has_mm_geometry:
+        return _grid_rect_mm(
+            row=row,
+            column=column,
+            row_span=row_span,
+            column_span=column_span,
+            row_height_mm=row_height_mm,
+            left_margin=left_margin,
+            right_margin=right_margin,
+            top_margin=top_margin,
+            width_mm=width_mm,
+        )
+    x_mm = _optional_number(item.get("x_mm"))
+    y_mm = _optional_number(item.get("y_mm"))
+    item_width_mm = _optional_number(item.get("width_mm"))
+    item_height_mm = _optional_number(item.get("height_mm"))
+    if x_mm is None or y_mm is None or item_width_mm is None or item_height_mm is None:
+        return None
+    if item_width_mm <= 0 or item_height_mm <= 0:
+        return None
+    if item_width_mm > width_mm or item_height_mm > height_mm:
+        return (x_mm, y_mm, item_width_mm, item_height_mm)
+    return (x_mm, y_mm, item_width_mm, item_height_mm)
+
+
+def _grid_rect_mm(
+    *,
+    row: int,
+    column: int,
+    row_span: int,
+    column_span: int,
+    row_height_mm: float,
+    left_margin: float,
+    right_margin: float,
+    top_margin: float,
+    width_mm: float,
+) -> tuple[float, float, float, float]:
+    usable_width_mm = max(1.0, width_mm - left_margin - right_margin)
+    column_width_mm = usable_width_mm / CARD_PRINT_LAYOUT_COLUMNS
+    return (
+        left_margin + ((column - 1) * column_width_mm),
+        top_margin + ((row - 1) * row_height_mm),
+        column_span * column_width_mm,
+        row_span * row_height_mm,
+    )
+
+
+def _validate_item_style(
+    style: dict[object, object],
+    item_id: str,
+    errors: list[str],
+) -> None:
+    for key, allowed_values in _STYLE_ALLOWED_VALUES.items():
+        value = style.get(key)
+        if value is not None and value not in allowed_values:
+            errors.append(f"Print layout item '{item_id}' has unsupported style {key}.")
+    font_size = style.get("font_size")
+    if font_size is not None and _positive_number(font_size, default=0) <= 0:
+        errors.append(f"Print layout item '{item_id}' has invalid font_size.")
+    padding_mm = style.get("padding_mm")
+    if padding_mm is not None and _non_negative_number(padding_mm, default=-1) < 0:
+        errors.append(f"Print layout item '{item_id}' has invalid padding_mm.")
+    max_lines = style.get("max_lines")
+    if max_lines is not None and _positive_int(max_lines, default=0) <= 0:
+        errors.append(f"Print layout item '{item_id}' has invalid max_lines.")
+
+
 def _rects_overlap(
-    left: tuple[str, int, int, int, int, int],
-    right: tuple[str, int, int, int, int, int],
+    left: tuple[str, int, float, float, float, float],
+    right: tuple[str, int, float, float, float, float],
 ) -> bool:
-    _left_id, left_page, left_row, left_col, left_row_span, left_col_span = left
-    _right_id, right_page, right_row, right_col, right_row_span, right_col_span = right
+    _left_id, left_page, left_x, left_y, left_width, left_height = left
+    _right_id, right_page, right_x, right_y, right_width, right_height = right
     if left_page != right_page:
         return False
-    left_row_end = left_row + left_row_span - 1
-    right_row_end = right_row + right_row_span - 1
-    left_col_end = left_col + left_col_span - 1
-    right_col_end = right_col + right_col_span - 1
+    left_x_end = left_x + left_width
+    right_x_end = right_x + right_width
+    left_y_end = left_y + left_height
+    right_y_end = right_y + right_height
     return not (
-        left_row_end < right_row
-        or right_row_end < left_row
-        or left_col_end < right_col
-        or right_col_end < left_col
+        left_x_end <= right_x
+        or right_x_end <= left_x
+        or left_y_end <= right_y
+        or right_y_end <= left_y
     )
