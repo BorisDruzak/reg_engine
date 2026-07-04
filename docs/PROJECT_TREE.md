@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-03 17:24:38 +05:00
+- Generated: 2026-07-04 22:34:31 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -91,6 +91,7 @@
 - `backend/app/services/audit.py`
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
+- `backend/app/services/card_print.py`
 - `backend/app/services/cards.py`
 - `backend/app/services/documents.py`
 - `backend/app/services/import_export.py`
@@ -124,6 +125,7 @@
 - `backend/migrations/versions/0019_base_card_templates.py`
 - `backend/migrations/versions/0020_schema_layout_static_text.py`
 - `backend/migrations/versions/0021_block_display_config.py`
+- `backend/migrations/versions/0022_card_print_layout_templates.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -140,6 +142,7 @@
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
+- `backend/tests/test_card_print_layout_services.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
@@ -167,6 +170,7 @@
 - `docs/ADR/0007-file-ref-dynamic-field.md`
 - `docs/ADR/0008-binary-docx-template-versioning.md`
 - `docs/ADR/0009-pdf-conversion.md`
+- `docs/ADR/0010-a4-card-print-templates.md`
 - `docs/ARCHITECTURE.md`
 - `docs/BASE.md`
 - `docs/CODEX_PHASE_1A_PROMPT.md`
@@ -232,6 +236,8 @@
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
 - `frontend/src/features/overview/Overview.tsx`
 - `frontend/src/features/registry/.gitkeep`
+- `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
+- `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
 - `frontend/src/features/registry/ReportsPanel.tsx`

@@ -21,8 +21,11 @@ from sqlalchemy.orm import Session
 from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS
 from app.models import (
     Card,
+    CardTemplate,
     DocumentTemplate,
     DocumentTemplateVersion,
+    FormBlock,
+    FormField,
     GeneratedDocument,
     Registry,
     StoredFile,
@@ -33,6 +36,7 @@ from app.services.attachments import (
     normalize_attachment_filename,
 )
 from app.services.audit import AuditService
+from app.services.card_print import CARD_PRINT_LAYOUT_VERSION, validate_card_print_layout
 from app.services.cards import (
     CardFieldRead,
     CardRead,
@@ -55,6 +59,7 @@ class _RenderContext:
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([A-Za-z0-9_.]+)\s*}}")
 _DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_CONTENT_TYPE = "application/pdf"
+_CARD_PRINT_DECORATIVE_KINDS = {"divider", "line", "rectangle", "container", "panel"}
 _PDF_FONT_NAME = "RegEngineDejaVuSans"
 _PDF_FONT_CANDIDATES = (
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -269,6 +274,105 @@ class DocumentService:
                 self.template_storage.delete_bytes(stored_info.storage_key)
             raise
 
+    def create_card_print_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        code: str,
+        name: str,
+        layout_json: dict[str, object],
+        card_template_id: UUID | None = None,
+        description: str | None = None,
+        output_filename_template: str = "{{ card.display_name }}.docx",
+    ) -> DocumentTemplate:
+        self._require_schema_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        normalized_layout = self._validate_card_print_layout_for_template(
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+            layout_json=layout_json,
+        )
+        template = DocumentTemplate(
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+            code=self._clean_required_text(code, "code"),
+            name=self._clean_required_text(name, "name"),
+            description=description,
+            template_format=CARD_PRINT_LAYOUT_VERSION,
+            template_body=None,
+            output_filename_template=self._clean_required_text(
+                output_filename_template,
+                "output filename template",
+            ),
+            output_content_type=_DOCX_CONTENT_TYPE,
+            created_by=actor_user_id,
+            updated_by=actor_user_id,
+        )
+        self.session.add(template)
+        self.session.flush()
+        version = self._create_card_print_template_version(
+            template_id=template.id,
+            layout_json=normalized_layout,
+            created_by=actor_user_id,
+            version_number=1,
+        )
+        audit_service = AuditService(self.session)
+        audit_service.record_user_event(
+            actor_user_id=actor_user_id,
+            action="document_template_create",
+            object_type="document_template",
+            object_id=template.id,
+            new_data_json={
+                "registry_id": str(registry_id),
+                "card_template_id": str(card_template_id) if card_template_id else None,
+                "code": template.code,
+                "template_format": template.template_format,
+                "version_id": str(version.id),
+                "version_number": version.version_number,
+            },
+        )
+        self._record_card_print_template_version_audit(
+            audit_service=audit_service,
+            actor_user_id=actor_user_id,
+            version=version,
+        )
+        return template
+
+    def create_card_print_template_version_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        layout_json: dict[str, object],
+    ) -> DocumentTemplateVersion:
+        template = self._get_active_template(template_id)
+        if template.template_format != CARD_PRINT_LAYOUT_VERSION:
+            raise DocumentServiceError("Document template is not a card print layout template.")
+        self._require_schema_permission(actor_user_id, template.registry_id)
+        normalized_layout = self._validate_card_print_layout_for_template(
+            registry_id=template.registry_id,
+            card_template_id=template.card_template_id,
+            layout_json=layout_json,
+        )
+        version = self._create_card_print_template_version(
+            template_id=template.id,
+            layout_json=normalized_layout,
+            created_by=actor_user_id,
+            version_number=self._next_template_version_number(template.id),
+        )
+        template.template_format = CARD_PRINT_LAYOUT_VERSION
+        template.template_body = None
+        template.output_content_type = _DOCX_CONTENT_TYPE
+        template.updated_by = actor_user_id
+        self.session.flush()
+        self._record_card_print_template_version_audit(
+            audit_service=AuditService(self.session),
+            actor_user_id=actor_user_id,
+            version=version,
+        )
+        return version
+
     def list_template_versions_for_actor(
         self,
         *,
@@ -296,6 +400,19 @@ class DocumentService:
         include_archive: bool = False,
     ) -> DocumentTemplateVersion | None:
         return self._latest_template_version(template_id, include_archive=include_archive)
+
+    def read_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        include_archive: bool = False,
+    ) -> DocumentTemplate:
+        template = self._get_template(template_id)
+        if template.archived_at is not None and not include_archive:
+            raise DocumentServiceError("Document template is only readable in archive scope.")
+        self._require_registry_read_permission(actor_user_id, template.registry_id)
+        return template
 
     def archive_template_for_actor(
         self,
@@ -332,6 +449,32 @@ class DocumentService:
         self._require_registry_read_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
         criteria = [DocumentTemplate.registry_id == registry_id]
+        if not include_archive:
+            criteria.append(DocumentTemplate.archived_at.is_(None))
+            criteria.append(DocumentTemplate.is_active.is_(True))
+        return list(
+            self.session.scalars(
+                select(DocumentTemplate).where(*criteria).order_by(DocumentTemplate.name)
+            ).all()
+        )
+
+    def list_card_print_templates_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        card_template_id: UUID | None = None,
+        include_archive: bool = False,
+    ) -> list[DocumentTemplate]:
+        self._require_registry_read_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        criteria = [
+            DocumentTemplate.registry_id == registry_id,
+            DocumentTemplate.template_format == CARD_PRINT_LAYOUT_VERSION,
+        ]
+        if card_template_id is not None:
+            self._validate_card_template_scope(registry_id, card_template_id)
+            criteria.append(DocumentTemplate.card_template_id == card_template_id)
         if not include_archive:
             criteria.append(DocumentTemplate.archived_at.is_(None))
             criteria.append(DocumentTemplate.is_active.is_(True))
@@ -453,9 +596,9 @@ class DocumentService:
             if template_version is not None
             else template.template_format
         )
-        if template_format != "docx_text_v1":
+        if template_format not in {"docx_text_v1", CARD_PRINT_LAYOUT_VERSION}:
             raise DocumentServiceError(
-                "PDF conversion supports docx_text_v1 templates only in this phase."
+                "PDF conversion supports docx_text_v1 and card_print_layout_v1 templates."
             )
 
         render_context = _RenderContext(card=card_read)
@@ -470,8 +613,16 @@ class DocumentService:
             if template_version is not None
             else template.template_body
         )
-        rendered_text = self._render_plain_text_template(template_body or "", render_context)
-        content = self._build_pdf_from_text(rendered_text)
+        if template_format == CARD_PRINT_LAYOUT_VERSION:
+            if template_version is None or template_version.layout_json is None:
+                raise DocumentServiceError("Card print layout template version was not found.")
+            content = self._build_pdf_from_card_print_layout(
+                template_version.layout_json,
+                render_context,
+            )
+        else:
+            rendered_text = self._render_plain_text_template(template_body or "", render_context)
+            content = self._build_pdf_from_text(rendered_text)
         stored_info = self.storage.write_bytes(content)
         try:
             stored_file = StoredFile(
@@ -657,6 +808,25 @@ class DocumentService:
         self.session.flush()
         return version
 
+    def _create_card_print_template_version(
+        self,
+        *,
+        template_id: UUID,
+        layout_json: dict[str, object],
+        created_by: UUID,
+        version_number: int,
+    ) -> DocumentTemplateVersion:
+        version = DocumentTemplateVersion(
+            template_id=template_id,
+            version_number=version_number,
+            template_format=CARD_PRINT_LAYOUT_VERSION,
+            layout_json=layout_json,
+            created_by=created_by,
+        )
+        self.session.add(version)
+        self.session.flush()
+        return version
+
     def _create_template_stored_file(
         self,
         *,
@@ -703,6 +873,25 @@ class DocumentService:
             },
         )
 
+    def _record_card_print_template_version_audit(
+        self,
+        *,
+        audit_service: AuditService,
+        actor_user_id: UUID,
+        version: DocumentTemplateVersion,
+    ) -> None:
+        audit_service.record_user_event(
+            actor_user_id=actor_user_id,
+            action="document_template_version_create",
+            object_type="document_template",
+            object_id=version.template_id,
+            new_data_json={
+                "version_id": str(version.id),
+                "version_number": version.version_number,
+                "template_format": version.template_format,
+            },
+        )
+
     def _render_template_content(
         self,
         template: DocumentTemplate,
@@ -720,6 +909,10 @@ class DocumentService:
                 raise DocumentServiceError("Binary document template file was not found.")
             content = self.template_storage.read_bytes(stored_file.storage_key)
             return self._render_binary_docx_template(content, context)
+        if template_format == CARD_PRINT_LAYOUT_VERSION:
+            if version is None or version.layout_json is None:
+                raise DocumentServiceError("Card print layout template version was not found.")
+            return self._build_docx_from_card_print_layout(version.layout_json, context)
         template_body = version.template_body if version is not None else template.template_body
         rendered_text = self._render_plain_text_template(template_body or "", context)
         return self._build_docx_from_text(rendered_text)
@@ -892,6 +1085,215 @@ class DocumentService:
             archive.writestr("word/document.xml", document_xml)
         return buffer.getvalue()
 
+    def _build_docx_from_card_print_layout(
+        self,
+        layout_json: dict[str, object],
+        context: _RenderContext,
+    ) -> bytes:
+        lines: list[str] = []
+        current_page = 1
+        for item in self._card_print_items(layout_json):
+            page_number = self._layout_item_int(item, "page", default=1)
+            if page_number != current_page:
+                lines.append("")
+                lines.append(f"Страница {page_number}")
+                current_page = page_number
+            text = self._card_print_item_text(item, context)
+            if text:
+                lines.append(text)
+        return self._build_docx_from_text("\n".join(lines))
+
+    def _build_pdf_from_card_print_layout(
+        self,
+        layout_json: dict[str, object],
+        context: _RenderContext,
+    ) -> bytes:
+        buffer = BytesIO()
+        page_width = float(A4[0])
+        page_height = float(A4[1])
+        margins = self._card_print_margins(layout_json)
+        grid = layout_json.get("grid")
+        if not isinstance(grid, dict):
+            grid = {}
+        row_height = float(grid.get("row_height_mm") or 8) * mm
+        usable_width = page_width - margins["left"] - margins["right"]
+        column_width = usable_width / 12
+        font_name = self._pdf_font_name()
+        pdf_canvas = canvas.Canvas(buffer, pagesize=A4)
+        pdf_canvas.setTitle(context.card.display_name)
+
+        items = self._card_print_items(layout_json)
+        max_page = max(
+            (self._layout_item_int(item, "page", default=1) for item in items),
+            default=1,
+        )
+        for page_number in range(1, max_page + 1):
+            if page_number > 1:
+                pdf_canvas.showPage()
+            pdf_canvas.setFont(font_name, 10)
+            page_items = [
+                item
+                for item in items
+                if self._layout_item_int(item, "page", default=1) == page_number
+            ]
+            for item in page_items:
+                x, y_top, width, height = self._card_print_item_rect(
+                    item,
+                    page_height=page_height,
+                    margins=margins,
+                    column_width=column_width,
+                    row_height=row_height,
+                )
+                kind = item.get("kind")
+                styles = item.get("style")
+                if not isinstance(styles, dict):
+                    styles = {}
+                font_size = float(styles.get("font_size") or (13 if kind == "heading" else 10))
+                text = self._card_print_item_text(item, context)
+
+                if kind in {"container", "panel", "rectangle"}:
+                    pdf_canvas.setStrokeColorRGB(0.45, 0.5, 0.55)
+                    pdf_canvas.rect(x, y_top - height, width, height, stroke=1, fill=0)
+                    continue
+                if kind in {"divider", "line"}:
+                    pdf_canvas.setStrokeColorRGB(0.45, 0.5, 0.55)
+                    pdf_canvas.line(x, y_top - (height / 2), x + width, y_top - (height / 2))
+                    continue
+                if not text:
+                    continue
+
+                pdf_canvas.setFont(font_name, font_size)
+                y = y_top - font_size - 3
+                max_width = max(12.0, width - 4)
+                for line in self._wrap_pdf_line(text, max_width, font_name, font_size):
+                    if y < y_top - height + 3:
+                        break
+                    pdf_canvas.drawString(x + 2, y, line)
+                    y -= font_size + 3
+
+        pdf_canvas.save()
+        return buffer.getvalue()
+
+    def _card_print_items(self, layout_json: dict[str, object]) -> list[dict[str, object]]:
+        raw_items = layout_json.get("items")
+        if not isinstance(raw_items, list):
+            return []
+        items = [item for item in raw_items if isinstance(item, dict)]
+        return sorted(
+            items,
+            key=lambda item: (
+                self._layout_item_int(item, "page", default=1),
+                self._layout_item_int(item, "row", default=1),
+                self._layout_item_int(item, "column", default=1),
+                str(item.get("id") or ""),
+            ),
+        )
+
+    def _card_print_item_text(
+        self,
+        item: dict[str, object],
+        context: _RenderContext,
+    ) -> str:
+        kind = item.get("kind")
+        if kind in _CARD_PRINT_DECORATIVE_KINDS:
+            return ""
+        if kind in {"static_text", "heading"}:
+            return str(item.get("text") or "")
+        if kind == "field":
+            return self._card_print_field_text(item, context)
+        if kind == "metadata":
+            key = str(item.get("metadata_key") or "")
+            if key == "card.display_name":
+                return context.card.display_name
+            if key == "card.id":
+                return str(context.card.card_id)
+            if key == "card.registry_id":
+                return str(context.card.registry_id)
+            if key == "card.organization_id":
+                return str(context.card.organization_id)
+            return ""
+        if kind == "page_number":
+            return f"Страница {self._layout_item_int(item, 'page', default=1)}"
+        if kind == "print_date":
+            return date.today().isoformat()
+        if kind == "qr_code":
+            return str(item.get("text") or context.card.card_id)
+        if kind == "image":
+            return str(item.get("alt") or "")
+        return str(item.get("text") or "")
+
+    def _card_print_field_text(
+        self,
+        item: dict[str, object],
+        context: _RenderContext,
+    ) -> str:
+        raw_field_id = item.get("field_id")
+        try:
+            field_id = UUID(str(raw_field_id))
+        except (TypeError, ValueError):
+            return ""
+        field_read = self._card_print_field_reads_by_id(context).get(field_id)
+        value = self._format_render_value(field_read.value if field_read is not None else None)
+        label = str(item.get("label") or "").strip()
+        if not label:
+            field = self.session.get(FormField, field_id)
+            label = field.label if field is not None else ""
+        if item.get("show_label") is False or not label:
+            return value
+        return f"{label}: {value}"
+
+    def _card_print_field_reads_by_id(self, context: _RenderContext) -> dict[UUID, CardFieldRead]:
+        return {field.field_id: field for field in context.card.fields.values()}
+
+    def _card_print_margins(self, layout_json: dict[str, object]) -> dict[str, float]:
+        page = layout_json.get("page")
+        if not isinstance(page, dict):
+            page = {}
+        raw_margins = page.get("margin_mm")
+        if not isinstance(raw_margins, dict):
+            raw_margins = {}
+        return {
+            "top": float(raw_margins.get("top") or 12) * mm,
+            "right": float(raw_margins.get("right") or 12) * mm,
+            "bottom": float(raw_margins.get("bottom") or 12) * mm,
+            "left": float(raw_margins.get("left") or 12) * mm,
+        }
+
+    def _card_print_item_rect(
+        self,
+        item: dict[str, object],
+        *,
+        page_height: float,
+        margins: dict[str, float],
+        column_width: float,
+        row_height: float,
+    ) -> tuple[float, float, float, float]:
+        row = self._layout_item_int(item, "row", default=1)
+        column = self._layout_item_int(item, "column", default=1)
+        row_span = self._layout_item_int(item, "row_span", default=1)
+        column_span = self._layout_item_int(item, "column_span", default=1)
+        x = margins["left"] + ((column - 1) * column_width)
+        y_top = page_height - margins["top"] - ((row - 1) * row_height)
+        return (x, y_top, column_span * column_width, row_span * row_height)
+
+    def _layout_item_int(
+        self,
+        item: dict[str, object],
+        key: str,
+        *,
+        default: int,
+    ) -> int:
+        value = item.get(key)
+        if isinstance(value, bool):
+            return default
+        if not isinstance(value, int | float | str):
+            return default
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
     def _build_pdf_from_text(self, rendered_text: str) -> bytes:
         buffer = BytesIO()
         page_width = float(A4[0])
@@ -1058,6 +1460,72 @@ class DocumentService:
             registry_id=registry_id,
         ):
             raise PermissionDeniedError("Actor cannot generate documents in this card scope.")
+
+    def _validate_card_print_layout_for_template(
+        self,
+        *,
+        registry_id: UUID,
+        card_template_id: UUID | None,
+        layout_json: dict[str, object],
+    ) -> dict[str, object]:
+        allowed_field_ids = self._card_print_allowed_field_ids(
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+        )
+        result = validate_card_print_layout(
+            layout_json,
+            allowed_field_ids=allowed_field_ids,
+        )
+        if result.errors:
+            raise DocumentServiceError("; ".join(result.errors))
+        return result.normalized_layout
+
+    def _card_print_allowed_field_ids(
+        self,
+        *,
+        registry_id: UUID,
+        card_template_id: UUID | None,
+    ) -> set[UUID]:
+        if card_template_id is not None:
+            card_template = self._validate_card_template_scope(registry_id, card_template_id)
+            raw_field_ids = card_template.field_schema_json.get("field_ids", [])
+            if not isinstance(raw_field_ids, list):
+                raise DocumentServiceError("Card template field schema is invalid.")
+            field_ids: set[UUID] = set()
+            for raw_field_id in raw_field_ids:
+                try:
+                    field_ids.add(UUID(str(raw_field_id)))
+                except (TypeError, ValueError) as exc:
+                    raise DocumentServiceError("Card template field schema is invalid.") from exc
+            return field_ids
+        return set(
+            self.session.scalars(
+                select(FormField.id)
+                .join(FormBlock, FormBlock.id == FormField.block_id)
+                .where(
+                    FormBlock.registry_id == registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                )
+            ).all()
+        )
+
+    def _validate_card_template_scope(
+        self,
+        registry_id: UUID,
+        card_template_id: UUID,
+    ) -> CardTemplate:
+        card_template = self.session.get(CardTemplate, card_template_id)
+        if (
+            card_template is None
+            or card_template.registry_id != registry_id
+            or card_template.archived_at is not None
+            or not card_template.is_active
+        ):
+            raise DocumentServiceError("Card template was not found in this registry.")
+        return card_template
 
     def _validate_template_format(self, template_format: str) -> None:
         if template_format not in DOCUMENT_TEMPLATE_FORMATS:

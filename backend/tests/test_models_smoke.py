@@ -1,6 +1,6 @@
 from sqlalchemy import CheckConstraint
 
-from app.domain.constants import FIELD_TYPES
+from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS, FIELD_TYPES
 from app.models import Base
 
 EXPECTED_TABLES = {
@@ -184,8 +184,11 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
     document_template_versions = Base.metadata.tables["document_template_versions"]
     generated_documents = Base.metadata.tables["generated_documents"]
 
+    assert "card_print_layout_v1" in DOCUMENT_TEMPLATE_FORMATS
+
     for column_name in {
         "registry_id",
+        "card_template_id",
         "code",
         "name",
         "description",
@@ -207,6 +210,7 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
         "version_number",
         "template_format",
         "template_body",
+        "layout_json",
         "stored_file_id",
         "original_filename",
         "content_type",
@@ -233,6 +237,11 @@ def test_generated_document_metadata_tables_use_required_columns() -> None:
         "archive_reason",
     }:
         assert column_name in generated_documents.c
+
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in document_templates.c.card_template_id.foreign_keys
+    } == {("card_templates", "id")}
 
 
 def test_report_metadata_tables_use_required_columns() -> None:

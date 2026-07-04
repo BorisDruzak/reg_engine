@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,11 +29,17 @@ class DocumentTemplate(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
             name="template_format",
         ),
         Index("ix_document_templates_registry_id", "registry_id"),
+        Index("ix_document_templates_card_template_id", "card_template_id"),
         Index("ix_document_templates_registry_archive", "registry_id", "archived_at"),
     )
 
     registry_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("registries.id"), nullable=False
+    )
+    card_template_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("card_templates.id"),
+        nullable=True,
     )
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -81,6 +88,10 @@ class DocumentTemplateVersion(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin,
             "template_format != 'docx_text_v1' OR template_body IS NOT NULL",
             name="body_for_text",
         ),
+        CheckConstraint(
+            "template_format != 'card_print_layout_v1' OR layout_json IS NOT NULL",
+            name="layout_for_card_print",
+        ),
         Index("ix_document_template_versions_template_id", "template_id"),
         Index("ix_document_template_versions_stored_file_id", "stored_file_id"),
         Index("ix_document_template_versions_template_active", "template_id", "archived_at"),
@@ -96,6 +107,7 @@ class DocumentTemplateVersion(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin,
         server_default="docx_text_v1",
     )
     template_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    layout_json: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     stored_file_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("stored_files.id"), nullable=True
     )

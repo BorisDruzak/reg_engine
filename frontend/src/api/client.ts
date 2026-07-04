@@ -6,6 +6,8 @@ import type {
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
+  CardPrintTemplateCreatePayload,
+  CardPrintTemplateVersionCreatePayload,
   CardTemplateCreatePayload,
   CardTemplateListRead,
   CardTemplateRead,
@@ -820,6 +822,52 @@ export async function createDocumentTemplate(
     token,
     body: payload,
   });
+}
+
+export async function listCardPrintTemplates(
+  token: string,
+  registryId: string,
+  cardTemplateId?: string | null,
+) {
+  const params = new URLSearchParams();
+  if (cardTemplateId) {
+    params.set("card_template_id", cardTemplateId);
+  }
+  const query = params.toString();
+  return apiRequest<DocumentTemplateListRead>(
+    `/api/v1/registries/${registryId}/card-print-templates${query ? `?${query}` : ""}`,
+    { token },
+  );
+}
+
+export async function createCardPrintTemplate(
+  token: string,
+  registryId: string,
+  payload: CardPrintTemplateCreatePayload,
+) {
+  return apiRequest<DocumentTemplateRead>(
+    `/api/v1/registries/${registryId}/card-print-templates`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function createCardPrintTemplateVersion(
+  token: string,
+  templateId: string,
+  payload: CardPrintTemplateVersionCreatePayload,
+) {
+  return apiRequest<DocumentTemplateVersionRead>(
+    `/api/v1/card-print-templates/${templateId}/versions`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
 }
 
 export async function uploadBinaryDocumentTemplate(

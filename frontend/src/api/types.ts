@@ -691,9 +691,59 @@ export type AttachmentListRead = {
   items: AttachmentRead[];
 };
 
+export type CardPrintLayoutItem = {
+  id: string;
+  kind:
+    | "field"
+    | "static_text"
+    | "heading"
+    | "container"
+    | "panel"
+    | "rectangle"
+    | "divider"
+    | "line"
+    | "metadata"
+    | "page_number"
+    | "print_date"
+    | "qr_code"
+    | "image";
+  page: number;
+  row: number;
+  column: number;
+  row_span: number;
+  column_span: number;
+  field_id?: string;
+  text?: string;
+  label?: string;
+  show_label?: boolean;
+  metadata_key?: string;
+  style?: Record<string, unknown>;
+};
+
+export type CardPrintLayout = {
+  version: "card_print_layout_v1";
+  page: {
+    format: "A4";
+    width_mm: number;
+    height_mm: number;
+    margin_mm: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
+  };
+  grid: {
+    columns: 12;
+    row_height_mm: number;
+  };
+  items: CardPrintLayoutItem[];
+};
+
 export type DocumentTemplateRead = {
   id: string;
   registry_id: string;
+  card_template_id?: string | null;
   code: string;
   name: string;
   description: string | null;
@@ -703,8 +753,22 @@ export type DocumentTemplateRead = {
   is_active: boolean;
   current_version_id?: string | null;
   current_version_number?: number | null;
+  current_layout_json?: CardPrintLayout | null;
   created_at: string;
   archived_at: string | null;
+};
+
+export type CardPrintTemplateCreatePayload = {
+  code: string;
+  name: string;
+  card_template_id?: string | null;
+  description?: string | null;
+  layout_json: CardPrintLayout;
+  output_filename_template: string;
+};
+
+export type CardPrintTemplateVersionCreatePayload = {
+  layout_json: CardPrintLayout;
 };
 
 export type DocumentTemplateCreatePayload = {
@@ -724,6 +788,7 @@ export type DocumentTemplateVersionRead = {
   template_id: string;
   version_number: number;
   template_format: string;
+  layout_json?: CardPrintLayout | null;
   original_filename: string | null;
   content_type: string | null;
   content_length_bytes: number | null;

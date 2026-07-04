@@ -128,6 +128,60 @@ def _card_read_with_file_ref(value: FileRefValueRead | None) -> CardRead:
     )
 
 
+def _card_print_layout(field_id: UUID) -> dict[str, Any]:
+    return {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "heading",
+                "kind": "heading",
+                "page": 1,
+                "row": 1,
+                "column": 1,
+                "row_span": 2,
+                "column_span": 12,
+                "text": "Печатная форма",
+            },
+            {
+                "id": "text-field",
+                "kind": "field",
+                "page": 1,
+                "row": 4,
+                "column": 1,
+                "row_span": 2,
+                "column_span": 8,
+                "field_id": str(field_id),
+                "label": "Текстовое поле",
+            },
+        ],
+    }
+
+
+def _card_read_for_print_layout(field_id: UUID) -> CardRead:
+    return CardRead(
+        card_id=uuid4(),
+        registry_id=uuid4(),
+        card_template_id=uuid4(),
+        organization_id=uuid4(),
+        display_name="Печатная карточка",
+        fields={
+            "main.text": CardFieldRead(
+                field_id=field_id,
+                code="text",
+                field_type="text",
+                value="Значение для печати",
+            )
+        },
+    )
+
+
 @pytest.fixture(scope="module")
 def migrated_test_engine() -> Iterator[Engine]:
     database_url = _require_test_database_url()
@@ -344,6 +398,25 @@ def test_pdf_renderer_supports_cyrillic_text() -> None:
     extracted_text = _extract_pdf_text(content)
     assert "Карточка: Тест" in extracted_text
     assert "Поле: Значение" in extracted_text
+
+
+def test_card_print_layout_renderers_use_structured_layout_and_card_values() -> None:
+    field_id = uuid4()
+    card = _card_read_for_print_layout(field_id)
+    layout = _card_print_layout(field_id)
+    service = object.__new__(DocumentService)
+
+    docx_content = service._build_docx_from_card_print_layout(layout, _RenderContext(card=card))
+    with ZipFile(BytesIO(docx_content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "Печатная форма" in rendered_xml
+    assert "Текстовое поле: Значение для печати" in rendered_xml
+
+    pdf_content = service._build_pdf_from_card_print_layout(layout, _RenderContext(card=card))
+    assert pdf_content.startswith(b"%PDF")
+    extracted_text = _extract_pdf_text(pdf_content)
+    assert "Печатная форма" in extracted_text
+    assert "Текстовое поле: Значение для печати" in extracted_text
 
 
 def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:

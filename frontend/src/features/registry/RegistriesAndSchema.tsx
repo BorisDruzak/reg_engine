@@ -62,6 +62,7 @@ import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSu
 import { shortId } from "@/components/common/dataUtils";
 
 import { ImportExportPanel } from "./ImportExportPanel";
+import { CardPrintTemplateEditor } from "./CardPrintTemplateEditor";
 import { ReportsPanel } from "./ReportsPanel";
 
 type RegistryFormState = {
@@ -571,6 +572,7 @@ function SchemaVisualEditor({
   const [fieldFormState, setFieldFormState] = useState<FieldFormState | null>(null);
   const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [isPrintEditorOpen, setIsPrintEditorOpen] = useState(false);
   const [blockArchiveTarget, setBlockArchiveTarget] = useState<FormBlockRead | null>(null);
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
@@ -1039,6 +1041,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setSelectedTemplateId(null);
+    setIsPrintEditorOpen(false);
     setBlockFormState(null);
     setFieldFormState(null);
     setTemplateFormState({
@@ -1056,6 +1059,7 @@ function SchemaVisualEditor({
     setBlockFormState(null);
     setFieldFormState(null);
     setTemplateFormState(null);
+    setIsPrintEditorOpen(false);
     setSelectedTemplateId(template.id);
   }
 
@@ -1066,6 +1070,7 @@ function SchemaVisualEditor({
 
   function closeTemplateEditor() {
     setSelectedTemplateId(null);
+    setIsPrintEditorOpen(false);
     setBlockFormState(null);
     setFieldFormState(null);
     setLocalError(null);
@@ -2423,9 +2428,18 @@ function SchemaVisualEditor({
               </h3>
               <span>{`${uiText.technicalCode}: ${selectedTemplate.code}`}</span>
             </div>
-            <button type="button" className="ghost-button" onClick={closeTemplateEditor}>
-              {uiText.cancel}
-            </button>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setIsPrintEditorOpen((current) => !current)}
+              >
+                Печатный шаблон A4
+              </button>
+              <button type="button" className="ghost-button" onClick={closeTemplateEditor}>
+                {uiText.cancel}
+              </button>
+            </div>
           </header>
           <div className="schema-canvas">
             {sortedBlocks.map((block) => {
@@ -2491,6 +2505,15 @@ function SchemaVisualEditor({
               </button>
             )}
           </div>
+          {isPrintEditorOpen && (
+            <CardPrintTemplateEditor
+              token={token}
+              registryId={selectedRegistryId}
+              cardTemplate={selectedTemplate}
+              blocks={blocks}
+              fields={fields}
+            />
+          )}
         </section>
       )}
     </section>

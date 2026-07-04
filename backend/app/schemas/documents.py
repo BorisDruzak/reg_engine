@@ -1,7 +1,21 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+
+class CardPrintTemplateCreate(BaseModel):
+    code: str
+    name: str
+    layout_json: dict[str, Any]
+    card_template_id: UUID | None = None
+    description: str | None = None
+    output_filename_template: str = "{{ card.display_name }}.docx"
+
+
+class CardPrintTemplateVersionCreate(BaseModel):
+    layout_json: dict[str, Any]
 
 
 class DocumentTemplateCreate(BaseModel):
@@ -15,6 +29,7 @@ class DocumentTemplateCreate(BaseModel):
 class DocumentTemplateRead(BaseModel):
     id: UUID
     registry_id: UUID
+    card_template_id: UUID | None = None
     code: str
     name: str
     description: str | None
@@ -24,6 +39,7 @@ class DocumentTemplateRead(BaseModel):
     is_active: bool
     current_version_id: UUID | None = None
     current_version_number: int | None = None
+    current_layout_json: dict[str, Any] | None = None
     created_at: datetime
     archived_at: datetime | None
 
@@ -39,6 +55,7 @@ class DocumentTemplateVersionRead(BaseModel):
     template_id: UUID
     version_number: int
     template_format: str
+    layout_json: dict[str, Any] | None = None
     original_filename: str | None
     content_type: str | None
     content_length_bytes: int | None

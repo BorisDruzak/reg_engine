@@ -166,6 +166,12 @@ not a hardcoded employee registry.
   superadmin login is `admin`, its password was restored to `1.Abcdef`, the
   login form accepts username-style identifiers without `@`, and frontend
   regression tests cover the `admin` login path.
+- Phase 8 A4 card print-template editor is implemented locally: backend now
+  supports `card_print_layout_v1` through the existing document-template and
+  generated-document infrastructure, frontend exposes an explicit A4 print
+  editor from the selected card-template editor, and normal card filling remains
+  unchanged. Production migration `0022_card_print_layout_templates` is not
+  applied yet.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2573,3 +2579,81 @@ Verification completed:
   `http://192.168.100.12:8000/`, but authenticated schema-editor click
   verification is blocked because the current UI session expired and the
   checked dev/e2e password `secret-pass` is not valid on this server.
+
+## Phase 8: A4 Card Print Template Editor
+
+Status: implemented locally. Production migration, server deploy, and live
+browser verification are pending.
+
+Purpose:
+
+Add a production print-template workflow for cards without changing the normal
+card filling UI. The print editor works on A4 pages, but the persisted source of
+truth is a structured `card_print_layout_v1` JSON layout stored in document
+template versions.
+
+Implemented scope:
+
+1. Backend document-template extension:
+   - reuse `document_templates`, `document_template_versions`, and
+     `generated_documents`;
+   - add `card_print_layout_v1`;
+   - add `document_template_versions.layout_json`;
+   - add optional `document_templates.card_template_id`;
+   - keep existing `docx_text_v1` and `docx_binary_v1` behavior stable.
+2. Backend print services:
+   - validate A4 12-column print layouts;
+   - create/list/read print templates and create layout versions;
+   - create a default local frontend layout from the selected card-template
+     fields;
+   - build print views from card data and layout JSON;
+   - generate DOCX/PDF through backend renderers into `generated_documents`.
+3. Frontend print editor:
+   - show an explicit A4 canvas with grid/margins/rulers;
+   - add existing fields, headings, static text, and dividers;
+   - edit selected element properties in a right panel;
+   - validate out-of-page/overlap/field-reference errors on the backend before
+     save;
+   - keep ordinary card filling in the existing simple card workspace.
+4. Compatibility:
+   - no hardcoded HR/employee schema;
+   - no public generated-document workflows;
+   - no frontend screenshot-based generation;
+   - no broken existing document templates, generated downloads, imports,
+     exports, reports, public links, or MCP flows.
+
+Verification completed locally so far:
+
+- `backend\.venv\Scripts\python.exe -m pytest tests/test_card_print_layout_services.py
+  tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
+  tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
+  tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql -q`:
+  passed, 6 tests.
+- `backend\.venv\Scripts\python.exe -m pytest tests/test_card_print_layout_services.py
+  tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
+  tests/test_document_generation_services.py::test_pdf_renderer_supports_cyrillic_text
+  tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
+  tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql
+  tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
+  passed, with the PostgreSQL-backed API test skipped because local
+  `TEST_DATABASE_URL` is not set.
+- `backend\.venv\Scripts\python.exe -m ruff check app tests`: passed.
+- `npm run typecheck` from `frontend`: passed.
+- `npm run test:run -- src/App.test.tsx`: passed, 78 tests.
+- `npm run test:run -- src/features/registry/CardPrintTemplateEditor.test.tsx`:
+  passed, 1 test.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; includes backend ruff/format/mypy/pytest, frontend lint/typecheck/
+  test/build, and project-map check. Frontend suite reported 8 files and 93
+  tests passed; backend suite reported 139 passed, 172 skipped, 1 warning.
+- Dev-server browser sanity check against `http://127.0.0.1:5173/` passed:
+  page title is `Реестровая система`, login shell renders, and the only browser
+  console error is the existing `favicon.ico` 404.
+
+Still required before production migration/deploy:
+
+- run disposable PostgreSQL verification on a database whose name ends with
+  `_test`, including the Phase 8 API test and Alembic upgrade to
+  `0022_card_print_layout_templates`;
+- apply the standing production migration flow with backup/preflight/post-checks;
+- deploy and browser-verify the A4 print-template workflow.

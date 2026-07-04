@@ -71,6 +71,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0018_card_templates" in sql
     assert "0019_base_card_templates" in sql
     assert "0020_schema_layout_static_text" in sql
+    assert "0022_card_print_layout_templates" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -83,6 +84,10 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     )
     assert "template_version_id UUID" in sql
     assert "'docx_binary_v1'" in sql
+    assert "'card_print_layout_v1'" in sql
+    assert "ALTER TABLE public.document_templates ADD COLUMN card_template_id UUID" in sql
+    assert "ALTER TABLE public.document_template_versions ADD COLUMN layout_json JSONB" in sql
+    assert "fk_document_templates_card_template_id_card_templates" in sql
     assert "value_attachment_id UUID" in sql
     assert "fk_field_values_value_attachment_id_card_attachments" in sql
     assert "CREATE TABLE report_templates" in sql or "CREATE TABLE public.report_templates" in sql

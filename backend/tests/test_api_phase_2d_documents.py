@@ -309,7 +309,44 @@ def _document_api_context(db_session: Session) -> dict[str, Any]:
         "card_admin": card_admin,
         "sibling_admin": sibling_admin,
         "registry": registry,
+        "field": field,
         "card": card,
+    }
+
+
+def _card_print_layout(field_id: UUID, *, heading: str = "Печатная форма") -> dict[str, Any]:
+    return {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "title",
+                "kind": "heading",
+                "page": 1,
+                "row": 1,
+                "column": 1,
+                "row_span": 2,
+                "column_span": 12,
+                "text": heading,
+            },
+            {
+                "id": "field-title",
+                "kind": "field",
+                "page": 1,
+                "row": 4,
+                "column": 1,
+                "row_span": 2,
+                "column_span": 8,
+                "field_id": str(field_id),
+                "label_position": "left",
+            },
+        ],
     }
 
 
@@ -398,6 +435,101 @@ def test_generated_document_api_supports_phase_2d_workflow(
         ).all()
     )
     assert {"generated_document_generate", "generated_document_archive"} <= audit_actions
+
+
+def test_card_print_layout_template_versions_and_generates_pdf_docx(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _document_api_context(db_session)
+    layout_v1 = _card_print_layout(context["field"].id, heading="Версия один")
+
+    create_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/card-print-templates",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "code": "card-print",
+            "name": "Печатная карточка",
+            "card_template_id": str(context["card"].card_template_id),
+            "layout_json": layout_v1,
+            "output_filename_template": "{{ card.display_name }}-print.docx",
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    template_payload = create_response.json()
+    assert template_payload["template_format"] == "card_print_layout_v1"
+    assert template_payload["card_template_id"] == str(context["card"].card_template_id)
+    assert template_payload["current_layout_json"]["items"][0]["text"] == "Версия один"
+
+    list_response = api_client.get(
+        f"/api/v1/registries/{context['registry'].id}/card-print-templates",
+        params={"card_template_id": str(context["card"].card_template_id)},
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert list_response.status_code == 200, list_response.text
+    assert [item["id"] for item in list_response.json()["items"]] == [template_payload["id"]]
+
+    layout_v2 = _card_print_layout(context["field"].id, heading="Версия два")
+    version_response = api_client.post(
+        f"/api/v1/card-print-templates/{template_payload['id']}/versions",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={"layout_json": layout_v2},
+    )
+    assert version_response.status_code == 201, version_response.text
+    version_payload = version_response.json()
+    assert version_payload["version_number"] == 2
+    assert version_payload["template_format"] == "card_print_layout_v1"
+    assert version_payload["layout_json"]["items"][0]["text"] == "Версия два"
+
+    docx_response = api_client.post(
+        f"/api/v1/cards/{context['card'].id}/generated-documents",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"template_id": template_payload["id"], "title": "Печатная форма DOCX"},
+    )
+    assert docx_response.status_code == 201, docx_response.text
+    docx_payload = docx_response.json()
+    assert docx_payload["template_version_id"] == version_payload["id"]
+    assert docx_payload["content_type"] == DOCX_CONTENT_TYPE
+    assert docx_payload["output_filename"].endswith("-print.docx")
+
+    docx_download = api_client.get(
+        f"/api/v1/generated-documents/{docx_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert docx_download.status_code == 200, docx_download.text
+    with ZipFile(BytesIO(docx_download.content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "Версия два" in rendered_xml
+    assert "Р—РЅР°С‡РµРЅРёРµ РїРѕР»СЏ" in rendered_xml
+
+    pdf_response = api_client.post(
+        f"/api/v1/cards/{context['card'].id}/generated-documents/pdf",
+        headers=_actor_headers(context["card_admin"].id),
+        json={"template_id": template_payload["id"], "title": "Печатная форма PDF"},
+    )
+    assert pdf_response.status_code == 201, pdf_response.text
+    pdf_payload = pdf_response.json()
+    assert pdf_payload["content_type"] == "application/pdf"
+    pdf_download = api_client.get(
+        f"/api/v1/generated-documents/{pdf_payload['id']}/content",
+        headers=_actor_headers(context["card_admin"].id),
+    )
+    assert pdf_download.status_code == 200, pdf_download.text
+    pdf_text = _extract_pdf_text(pdf_download.content)
+    assert "Версия два" in pdf_text
+    assert "Р—РЅР°С‡РµРЅРёРµ РїРѕР»СЏ" in pdf_text
+
+    invalid_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/card-print-templates",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "code": "bad-card-print",
+            "name": "Неверная печатная карточка",
+            "card_template_id": str(context["card"].card_template_id),
+            "layout_json": _card_print_layout(UUID("00000000-0000-0000-0000-000000000001")),
+        },
+    )
+    assert invalid_response.status_code == 422, invalid_response.text
 
 
 def test_binary_docx_template_upload_versions_and_generates_latest_version(

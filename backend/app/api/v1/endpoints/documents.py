@@ -19,6 +19,8 @@ from app.api.dependencies import get_actor_user_id, get_db_session, raise_servic
 from app.core.config import get_settings
 from app.models import DocumentTemplate, GeneratedDocument
 from app.schemas.documents import (
+    CardPrintTemplateCreate,
+    CardPrintTemplateVersionCreate,
     DocumentTemplateCreate,
     DocumentTemplateListRead,
     DocumentTemplateRead,
@@ -62,6 +64,36 @@ def create_document_template(
             template_body=payload.template_body,
             output_filename_template=payload.output_filename_template,
         )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _document_template_to_read(service, template)
+
+
+@router.post(
+    "/registries/{registry_id}/card-print-templates",
+    response_model=DocumentTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_print_template(
+    registry_id: UUID,
+    payload: CardPrintTemplateCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> DocumentTemplateRead:
+    service = _document_service(session)
+    try:
+        template = service.create_card_print_template_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            code=payload.code,
+            name=payload.name,
+            description=payload.description,
+            card_template_id=payload.card_template_id,
+            layout_json=payload.layout_json,
+            output_filename_template=payload.output_filename_template,
+        )
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise_service_http_error(exc)
     return _document_template_to_read(service, template)
@@ -132,6 +164,53 @@ def list_document_templates(
     )
 
 
+@router.get(
+    "/registries/{registry_id}/card-print-templates",
+    response_model=DocumentTemplateListRead,
+)
+def list_card_print_templates(
+    registry_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    card_template_id: Annotated[UUID | None, Query()] = None,
+    include_archive: Annotated[bool, Query()] = False,
+) -> DocumentTemplateListRead:
+    service = _document_service(session)
+    try:
+        templates = service.list_card_print_templates_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+            include_archive=include_archive,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return DocumentTemplateListRead(
+        items=[_document_template_to_read(service, template) for template in templates]
+    )
+
+
+@router.get("/card-print-templates/{template_id}", response_model=DocumentTemplateRead)
+def read_card_print_template(
+    template_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    include_archive: Annotated[bool, Query()] = False,
+) -> DocumentTemplateRead:
+    service = _document_service(session)
+    try:
+        template = service.read_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            include_archive=include_archive,
+        )
+        if template.template_format != "card_print_layout_v1":
+            raise DocumentServiceError("Document template is not a card print layout template.")
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _document_template_to_read(service, template)
+
+
 @router.delete("/document-templates/{template_id}", response_model=DocumentTemplateRead)
 def archive_document_template(
     template_id: UUID,
@@ -199,6 +278,31 @@ async def create_binary_document_template_version(
         )
     except DocumentTemplateUploadTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return DocumentTemplateVersionRead.model_validate(version)
+
+
+@router.post(
+    "/card-print-templates/{template_id}/versions",
+    response_model=DocumentTemplateVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_print_template_version(
+    template_id: UUID,
+    payload: CardPrintTemplateVersionCreate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> DocumentTemplateVersionRead:
+    service = _document_service(session)
+    try:
+        version = service.create_card_print_template_version_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            layout_json=payload.layout_json,
+        )
     except DocumentServiceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -409,9 +513,15 @@ def _document_template_to_read(
         output_filename_template=template.output_filename_template,
         output_content_type=template.output_content_type,
         is_active=template.is_active,
+        card_template_id=template.card_template_id,
         current_version_id=current_version.id if current_version is not None else None,
         current_version_number=(
             current_version.version_number if current_version is not None else None
+        ),
+        current_layout_json=(
+            current_version.layout_json
+            if current_version is not None and current_version.layout_json is not None
+            else None
         ),
         created_at=template.created_at,
         archived_at=template.archived_at,

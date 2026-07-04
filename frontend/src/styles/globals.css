@@ -1299,6 +1299,243 @@ tr:last-child td {
   background: #ffffff;
 }
 
+.card-print-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #d9dee7;
+}
+
+.card-print-editor-header,
+.card-print-template-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-print-editor-header h3 {
+  margin: 0;
+  color: #101828;
+  font-size: 1rem;
+}
+
+.card-print-editor-header span {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 0.78rem;
+}
+
+.card-print-template-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 0.8fr) minmax(
+      220px,
+      1fr
+    );
+  align-items: end;
+}
+
+.card-print-workbench {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(420px, 1fr) minmax(220px, 260px);
+  gap: 12px;
+  align-items: start;
+}
+
+.card-print-palette,
+.card-print-properties {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.card-print-palette h4,
+.card-print-properties h4 {
+  margin: 0;
+  color: #17324d;
+  font-size: 0.88rem;
+}
+
+.card-print-field-list {
+  display: grid;
+  gap: 7px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.card-print-field-button {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #17324d;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-print-field-button:hover,
+.card-print-field-button:focus {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  outline: 0;
+}
+
+.card-print-field-button span {
+  color: #667085;
+  font-size: 0.72rem;
+}
+
+.card-print-canvas-area {
+  position: relative;
+  min-width: 0;
+  padding: 20px 16px 16px 28px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #eef2f6;
+  overflow: auto;
+}
+
+.card-print-ruler {
+  position: absolute;
+  background: #ffffff;
+  border: 1px solid #d9dee7;
+}
+
+.card-print-ruler-horizontal {
+  top: 8px;
+  left: 28px;
+  right: 16px;
+  height: 10px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    #cbd5e1 0,
+    #cbd5e1 1px,
+    transparent 1px,
+    transparent 28px
+  );
+}
+
+.card-print-ruler-vertical {
+  top: 20px;
+  bottom: 16px;
+  left: 8px;
+  width: 10px;
+  background-image: repeating-linear-gradient(
+    180deg,
+    #cbd5e1 0,
+    #cbd5e1 1px,
+    transparent 1px,
+    transparent 28px
+  );
+}
+
+.card-print-page-shell {
+  display: grid;
+  justify-content: center;
+  min-width: 420px;
+}
+
+.card-print-page {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(34, minmax(0, 1fr));
+  width: min(100%, 720px);
+  aspect-ratio: 210 / 297;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(#edf2f7 1px, transparent 1px),
+    linear-gradient(90deg, #edf2f7 1px, transparent 1px);
+  background-size: calc(100% / 12) calc(100% / 34);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+.card-print-item {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  padding: 5px 7px;
+  border: 1px solid #bfd3ea;
+  border-radius: 5px;
+  background: rgba(248, 250, 252, 0.94);
+  color: #17324d;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.card-print-item:hover,
+.card-print-item:focus,
+.card-print-item.is-selected {
+  border-color: #0f66d0;
+  box-shadow: inset 0 0 0 1px #0f66d0;
+  outline: 0;
+}
+
+.card-print-item strong,
+.card-print-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-print-item strong {
+  font-size: 0.72rem;
+}
+
+.card-print-item span {
+  color: #52677f;
+  font-size: 0.68rem;
+}
+
+.card-print-item--heading {
+  justify-items: center;
+  background: #ffffff;
+  font-weight: 900;
+  text-align: center;
+}
+
+.card-print-item--divider,
+.card-print-item--line {
+  padding: 0;
+  border-style: dashed;
+  background: transparent;
+}
+
+.card-print-line-preview {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: #52677f;
+}
+
+.card-print-properties-form {
+  display: grid;
+  gap: 10px;
+}
+
+.card-print-position-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.card-print-description {
+  display: grid;
+  max-width: 720px;
+}
+
 .schema-template-editor {
   display: grid;
   gap: 14px;
