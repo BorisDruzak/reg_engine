@@ -166,12 +166,14 @@ not a hardcoded employee registry.
   superadmin login is `admin`, its password was restored to `1.Abcdef`, the
   login form accepts username-style identifiers without `@`, and frontend
   regression tests cover the `admin` login path.
-- Phase 8 A4 card print-template editor is implemented locally: backend now
+- Phase 8 A4 card print-template editor is completed on `main`, pushed to
+  GitHub, deployed to the server, production-migrated to
+  `0022_card_print_layout_templates`, and live browser/API verified: backend
   supports `card_print_layout_v1` through the existing document-template and
   generated-document infrastructure, frontend exposes an explicit A4 print
-  editor from the selected card-template editor, and normal card filling remains
-  unchanged. Production migration `0022_card_print_layout_templates` is not
-  applied yet.
+  editor from the selected card-template editor, normal card filling remains
+  unchanged, and production DOCX/PDF generation uses the latest saved print
+  layout version.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2582,8 +2584,8 @@ Verification completed:
 
 ## Phase 8: A4 Card Print Template Editor
 
-Status: implemented locally. Production migration, server deploy, and live
-browser verification are pending.
+Status: completed on `main`, pushed to GitHub, deployed to the server,
+production-migrated to `0022_card_print_layout_templates`, and live verified.
 
 Purpose:
 
@@ -2622,7 +2624,7 @@ Implemented scope:
    - no broken existing document templates, generated downloads, imports,
      exports, reports, public links, or MCP flows.
 
-Verification completed locally so far:
+Verification completed:
 
 - `backend\.venv\Scripts\python.exe -m pytest tests/test_card_print_layout_services.py
   tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
@@ -2650,10 +2652,53 @@ Verification completed locally so far:
   page title is `Реестровая система`, login shell renders, and the only browser
   console error is the existing `favicon.ico` 404.
 
-Still required before production migration/deploy:
+Production deployment and live evidence:
 
-- run disposable PostgreSQL verification on a database whose name ends with
-  `_test`, including the Phase 8 API test and Alembic upgrade to
-  `0022_card_print_layout_templates`;
-- apply the standing production migration flow with backup/preflight/post-checks;
-- deploy and browser-verify the A4 print-template workflow.
+- Commits pushed to `origin/main`:
+  - `7a4f20c6` `Implement A4 card print templates`;
+  - `7b02a581` `Fix card print migration constraint names`;
+  - `1d0ed926` `Fix card print API test encoding`.
+- Server checkout was synchronized to `origin/main` at `1d0ed92`.
+- Disposable PostgreSQL verification on `reg_engine_0022_test` passed after
+  applying Alembic from empty DB to head:
+  `tests/test_database_smoke.py tests/test_models_smoke.py
+  tests/test_migrations.py
+  tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`
+  returned 19 passed, and post-check confirmed Alembic
+  `0022_card_print_layout_templates`, `document_template_versions.layout_json`,
+  and `document_templates.card_template_id`.
+- Production preflight before migration confirmed Alembic
+  `0021_block_display_config`, both new columns absent, and zero unexpected
+  existing document-template/template-version formats.
+- Fresh production backup was created outside Git:
+  `/var/backups/reg_engine/reg_engine_before_0022_20260704_183829.dump`.
+- Production `alembic upgrade head` applied
+  `0022_card_print_layout_templates`; post-check confirmed both new columns and
+  Alembic `0022_card_print_layout_templates (head)`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  passed; frontend build/upload, service restart, API healthcheck, and
+  same-origin frontend smoke passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\server-check.ps1`: passed.
+- Playwright live check against `http://192.168.100.12:8000/` passed after the
+  final deployment. The checked flow logged in as `admin`, opened
+  `Реестры -> Схема карточки`, selected the base card template, opened
+  `Печатный шаблон A4`, verified palette/canvas/properties rendering, created
+  print template `codex_phase8_a4_20260704185323`, saved a second layout
+  version, listed the template through the card-print API, generated DOCX and
+  PDF for a production card, downloaded both generated files, and verified DOCX
+  zip/PDF byte signatures. Browser console/page errors were empty.
+- In-app Browser plugin validation was attempted first but the Browser runtime
+  timed out while listing/opening tabs, so the live UI validation used regular
+  Playwright with screenshots saved outside the repo:
+  `C:\Temp\reg-engine-phase8-live-login.png`,
+  `C:\Temp\reg-engine-phase8-live-editor.png`, and
+  `C:\Temp\reg-engine-phase8-live-saved.png`.
+
+Issues found and fixed during production gate:
+
+- Disposable PostgreSQL caught a migration constraint-name bug where Alembic's
+  naming convention doubled already-conventioned check-constraint names. Fixed
+  in `0022_card_print_layout_templates.py` with `op.f(...)` and regression
+  assertions in `tests/test_migrations.py`.
+- The PostgreSQL-backed Phase 8 API test expected a mojibake field-value string.
+  Fixed the test to assert the real Russian card value `Значение поля`.
