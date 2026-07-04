@@ -174,13 +174,14 @@ not a hardcoded employee registry.
   editor from the selected card-template editor, normal card filling remains
   unchanged, and production DOCX/PDF generation uses the latest saved print
   layout version.
-- Phase 8B A4 print-template production UX hardening is implemented locally:
+- Phase 8B A4 print-template production UX hardening is completed on `main`,
+  pushed to GitHub, deployed to the server, and live-verified:
   the editor is refactored into shared A4 renderer/palette/toolbar/properties
   modules, uses mm geometry in layout JSON, hides technical settings by
   default, supports mouse drag/resize and keyboard editing, creates fields and
   blocks from the canvas, reuses the renderer for a preview-only card workspace
   tab, and strengthens backend layout validation/rendering without a database
-  migration. Full push/deploy/live verification is pending the current gate.
+  migration.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2712,7 +2713,8 @@ Issues found and fixed during production gate:
 
 ## Phase 8B: A4 Print-Template Production UX Hardening
 
-Status: implemented locally; full push/deploy/live browser gate is in progress.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-verified.
 
 Purpose:
 
@@ -2770,7 +2772,7 @@ Non-goals in this slice:
 - No public generated-document workflow, new storage backend, MCP changes, MDB
   migration, service-desk integration, or new binary export phase.
 
-Verification completed locally so far:
+Verification completed:
 
 - `pnpm -C frontend typecheck`: passed.
 - `pnpm -C frontend lint`: passed.
@@ -2783,3 +2785,50 @@ Verification completed locally so far:
 - `powershell -ExecutionPolicy Bypass -File scripts\lint.ps1`: passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\test.ps1`: passed;
   backend reported 140 passed / 172 skipped, frontend reported 95 passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\typecheck.ps1`: passed;
+  mypy reported no issues and frontend TypeScript passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1`: passed after
+  the backend validation fix; backend reported 141 passed / 172 skipped,
+  frontend reported 95 passed, frontend production build passed, and project
+  tree check was current.
+- `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
+  "Improve A4 print template editor UX"`: committed and pushed `242a4a05`.
+- `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
+  "Handle invalid A4 print style validation" -SkipCheck`: committed and pushed
+  `b7b9f995` after the full local check had already passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: server
+  checkout fast-forwarded to `b7b9f99`, backend package was reinstalled, and
+  server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\service.ps1 -Command
+  restart`: `reg-engine.service` restarted and healthcheck passed on
+  `0.0.0.0:8000`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
+  built and uploaded `frontend/dist`, restarted `reg-engine.service`, and
+  passed backend healthcheck plus same-origin frontend smoke.
+- Live Playwright check against `http://192.168.100.12:8000/` passed with
+  system Chrome after the in-app Browser runtime failed during the earlier
+  tab/navigation attempt. Evidence:
+  - login as `admin` / configured production test password succeeded;
+  - schema editor opened `Печатный шаблон A4`;
+  - technical codes were hidden by default;
+  - drag plus keyboard nudge saved mm-only layout geometry, with no px geometry
+    in the saved API layout;
+  - DOCX and PDF generation/download returned valid `PK` and `%PDF`
+    signatures;
+  - invalid object-valued `style.border` now returns 422 with an unsupported
+    style validation message instead of 500;
+  - ordinary card `Мун служайщий` opened through the real card list, and the
+    `Печатная форма` tab rendered the A4 preview with the card value `Пупкин`;
+  - browser console warnings/errors and page errors were empty.
+- Live screenshots were saved outside Git:
+  `C:\Temp\reg-engine-phase8b-live-saved-20260704205551.png`,
+  `C:\Temp\reg-engine-phase8b-live-card-list-20260704210651.png`, and
+  `C:\Temp\reg-engine-phase8b-live-card-print-preview-20260704210651.png`.
+
+Issues found and fixed during the Phase 8B gate:
+
+- A non-string enum-style value such as object-valued `style.border` could raise
+  a backend `TypeError` and surface as HTTP 500. Fixed
+  `backend/app/services/card_print.py` so enum style values must be strings and
+  invalid shapes become normal layout-validation errors; regression coverage was
+  added in `backend/tests/test_card_print_layout_services.py`.
