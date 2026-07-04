@@ -88,6 +88,19 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "ALTER TABLE public.document_templates ADD COLUMN card_template_id UUID" in sql
     assert "ALTER TABLE public.document_template_versions ADD COLUMN layout_json JSONB" in sql
     assert "fk_document_templates_card_template_id_card_templates" in sql
+    assert "ck_document_templates_ck_document_templates_template_format" not in sql
+    assert (
+        "ck_document_template_versions_ck_document_template_versions_template_format"
+        not in sql
+    )
+    assert (
+        "ck_document_template_versions_ck_document_template_versions_layout_for_card_print"
+        not in sql
+    )
+    assert (
+        "fk_document_templates_fk_document_templates_card_template_id_card_templates"
+        not in sql
+    )
     assert "value_attachment_id UUID" in sql
     assert "fk_field_values_value_attachment_id_card_attachments" in sql
     assert "CREATE TABLE report_templates" in sql or "CREATE TABLE public.report_templates" in sql

@@ -30,7 +30,7 @@ def upgrade() -> None:
         schema="public",
     )
     op.create_foreign_key(
-        "fk_document_templates_card_template_id_card_templates",
+        op.f("fk_document_templates_card_template_id_card_templates"),
         "document_templates",
         "card_templates",
         ["card_template_id"],
@@ -44,31 +44,31 @@ def upgrade() -> None:
         schema="public",
     )
     op.drop_constraint(
-        "ck_document_templates_template_format",
+        op.f("ck_document_templates_template_format"),
         "document_templates",
         schema="public",
         type_="check",
     )
     op.create_check_constraint(
-        "ck_document_templates_template_format",
+        op.f("ck_document_templates_template_format"),
         "document_templates",
         "template_format in ('docx_text_v1', 'docx_binary_v1', 'card_print_layout_v1')",
         schema="public",
     )
     op.drop_constraint(
-        "ck_document_template_versions_template_format",
+        op.f("ck_document_template_versions_template_format"),
         "document_template_versions",
         schema="public",
         type_="check",
     )
     op.create_check_constraint(
-        "ck_document_template_versions_template_format",
+        op.f("ck_document_template_versions_template_format"),
         "document_template_versions",
         "template_format in ('docx_text_v1', 'docx_binary_v1', 'card_print_layout_v1')",
         schema="public",
     )
     op.create_check_constraint(
-        "ck_document_template_versions_layout_for_card_print",
+        op.f("ck_document_template_versions_layout_for_card_print"),
         "document_template_versions",
         "template_format != 'card_print_layout_v1' OR layout_json IS NOT NULL",
         schema="public",
@@ -77,38 +77,38 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(
-        "ck_document_template_versions_layout_for_card_print",
+        op.f("ck_document_template_versions_layout_for_card_print"),
         "document_template_versions",
         schema="public",
         type_="check",
     )
     op.drop_constraint(
-        "ck_document_template_versions_template_format",
+        op.f("ck_document_template_versions_template_format"),
         "document_template_versions",
         schema="public",
         type_="check",
     )
     op.create_check_constraint(
-        "ck_document_template_versions_template_format",
+        op.f("ck_document_template_versions_template_format"),
         "document_template_versions",
         "template_format in ('docx_text_v1', 'docx_binary_v1')",
         schema="public",
     )
     op.drop_constraint(
-        "ck_document_templates_template_format",
+        op.f("ck_document_templates_template_format"),
         "document_templates",
         schema="public",
         type_="check",
     )
     op.create_check_constraint(
-        "ck_document_templates_template_format",
+        op.f("ck_document_templates_template_format"),
         "document_templates",
         "template_format in ('docx_text_v1', 'docx_binary_v1')",
         schema="public",
     )
     op.drop_column("document_template_versions", "layout_json", schema="public")
     op.drop_constraint(
-        "fk_document_templates_card_template_id_card_templates",
+        op.f("fk_document_templates_card_template_id_card_templates"),
         "document_templates",
         schema="public",
         type_="foreignkey",
