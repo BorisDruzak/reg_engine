@@ -500,7 +500,7 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
     with ZipFile(BytesIO(docx_download.content)) as docx:
         rendered_xml = docx.read("word/document.xml").decode("utf-8")
     assert "Версия два" in rendered_xml
-    assert "Р—РЅР°С‡РµРЅРёРµ РїРѕР»СЏ" in rendered_xml
+    assert "Значение поля" in rendered_xml
 
     pdf_response = api_client.post(
         f"/api/v1/cards/{context['card'].id}/generated-documents/pdf",
@@ -517,7 +517,7 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
     assert pdf_download.status_code == 200, pdf_download.text
     pdf_text = _extract_pdf_text(pdf_download.content)
     assert "Версия два" in pdf_text
-    assert "Р—РЅР°С‡РµРЅРёРµ РїРѕР»СЏ" in pdf_text
+    assert "Значение поля" in pdf_text
 
     invalid_response = api_client.post(
         f"/api/v1/registries/{context['registry'].id}/card-print-templates",
