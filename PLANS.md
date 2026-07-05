@@ -212,13 +212,13 @@ not a hardcoded employee registry.
   emits editable Word section tables instead of plain text lines, the preview
   endpoint validates/normalizes unsaved layouts, and decorative A4 block
   containers no longer raise false overlap warnings against their own fields.
-- Phase 8G unified card-template studio correction is in progress locally.
-  Scope: remove the nested old schema visual editor from the selected template
-  workspace, make `CardLayoutStudio` and `A4LayoutRenderer` the real canonical
-  implementations instead of thin wrappers, expose one selected-template screen
-  with modes for card composition, web form, A4 print form, card preview, and
-  technical settings, and preserve current PDF/DOCX generation without a
-  database migration.
+- Phase 8G unified card-template studio correction is completed on `main`,
+  pushed to GitHub, deployed to the server, and live-verified without a
+  database migration: the selected card-template workspace is now one
+  `CardLayoutStudio` with modes for card composition, web form, A4 print form,
+  card preview, and settings; the old nested A4 button and selected-template
+  `schema-canvas` editor are removed; `A4LayoutRenderer` is the canonical A4
+  renderer; blank DOCX/PDF downloads still work from the unified screen.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3166,8 +3166,8 @@ Verification completed:
 
 ## Phase 8G: Unified Card Template Studio Correction
 
-Status: local implementation and checks completed. Commit, deploy, and live
-browser verification are still pending. No database migration is planned.
+Status: completed on `main`, pushed to GitHub, deployed to the configured
+server, and live-browser verified. No database migration was required.
 
 Purpose:
 
@@ -3248,3 +3248,37 @@ Local verification completed:
   selected-template visual-canvas checks. They targeted the removed old
   `schema-canvas` editor and were replaced by focused CardLayoutStudio/A4
   renderer regression coverage.
+
+Deployment and live verification completed:
+
+- Commit `2eda94cd Unify card template layout studio` was pushed to
+  `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: passed; the
+  server checkout fast-forwarded to `2eda94c`, the backend package was
+  reinstalled, and server checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`:
+  passed; the production frontend build was uploaded, `reg-engine.service` was
+  restarted, the API healthcheck passed, and same-origin frontend/API smoke
+  passed on port 8000.
+- In-app Browser documentation output was truncated in this session, so final
+  live UI validation used the project's installed `@playwright/test` runtime
+  against `http://192.168.100.12:8000/`.
+- Live Playwright QA passed:
+  - authenticated as `admin`;
+  - opened `Реестры` -> `Схема карточки` -> selected `Базовый шаблон`;
+  - verified the unified studio tabs `Состав карточки`, `Веб-форма`,
+    `Печатная форма A4`, `Предпросмотр карточки`, and `Настройки`;
+  - verified A4 mode is selected by default;
+  - verified the old `Печатный шаблон A4` button is absent;
+  - verified the old selected-template `.schema-canvas.schema-block-layout-grid`
+    is absent;
+  - verified the structure/web modes render 3 blocks and 10 `На A4` bridge
+    controls;
+  - verified preview mode hides the design grid and palette;
+  - verified blank DOCX and PDF downloads from the unified screen.
+- Live QA found no framework overlay and no console errors.
+- Live screenshots and downloaded blank files were saved outside Git:
+  `C:\Temp\reg-engine-phase8g-unified-studio-live.png`,
+  `C:\Temp\reg-engine-phase8g-preview.png`,
+  `C:\Temp\reg-engine-phase8g-blank.docx`, and
+  `C:\Temp\reg-engine-phase8g-blank.pdf`.
