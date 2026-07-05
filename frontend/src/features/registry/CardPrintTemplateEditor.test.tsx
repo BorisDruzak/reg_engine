@@ -155,7 +155,7 @@ test("adds an existing field by mouse drag from the palette to the A4 canvas", a
   ).toBeInTheDocument();
 });
 
-test("downloads blank DOCX and PDF files from the A4 editor after saving the layout", async () => {
+test("downloads blank DOCX and PDF files from the current unsaved A4 layout", async () => {
   const user = userEvent.setup();
   const fetchMock = createEditorFetchMock();
   vi.stubGlobal("fetch", fetchMock);
@@ -168,8 +168,10 @@ test("downloads blank DOCX and PDF files from the A4 editor after saving the lay
 
   await waitFor(() => {
     expect(
-      fetchMock.mock.calls.some(([input]) =>
-        String(input).endsWith("/api/v1/card-print-templates/print-template-1/blank-docx"),
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx") &&
+          init?.method === "POST",
       ),
     ).toBe(true);
   });
@@ -178,11 +180,41 @@ test("downloads blank DOCX and PDF files from the A4 editor after saving the lay
 
   await waitFor(() => {
     expect(
-      fetchMock.mock.calls.some(([input]) =>
-        String(input).endsWith("/api/v1/card-print-templates/print-template-1/blank-pdf"),
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/registries/registry-1/card-print-templates/blank-pdf") &&
+          init?.method === "POST",
       ),
     ).toBe(true);
   });
+
+  expect(
+    fetchMock.mock.calls.some(
+      ([input, init]) =>
+        String(input).endsWith("/api/v1/registries/registry-1/card-print-templates") &&
+        init?.method === "POST",
+    ),
+  ).toBe(false);
+});
+
+test("adds an existing data block to the A4 canvas by click and mouse drag", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", createEditorFetchMock());
+
+  renderEditor();
+
+  const paletteBlock = await screen.findByRole("button", { name: "Основной блок" });
+  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
+
+  await user.click(paletteBlock);
+  expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(2);
+
+  const dataTransfer = createDataTransfer();
+  fireEvent.dragStart(paletteBlock, { dataTransfer });
+  fireEvent.dragOver(canvas, { clientX: 190, clientY: 210, dataTransfer });
+  fireEvent.drop(canvas, { clientX: 190, clientY: 210, dataTransfer });
+
+  expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(3);
 });
 
 test("renders the A4 editor as a visual workspace with technical settings hidden", async () => {
@@ -309,6 +341,40 @@ function createEditorFetchMock(onSave?: (payload: Record<string, unknown>) => vo
     if (url.endsWith("/api/v1/card-print-templates/print-template-1/blank-pdf")) {
       return Promise.resolve(
         new Response(new Blob(["%PDF blank"]), {
+          status: 200,
+          headers: { "X-Document-Filename": "blank.pdf" },
+        }),
+      );
+    }
+    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx")) {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {
+        card_template_id: string;
+        layout_json: { items: { kind: string; field_id?: string }[] };
+      };
+      expect(init?.method).toBe("POST");
+      expect(payload.card_template_id).toBe("template-1");
+      expect(payload.layout_json.items).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "field", field_id: "field-1" })]),
+      );
+      return Promise.resolve(
+        new Response(new Blob(["PK blank current layout"]), {
+          status: 200,
+          headers: { "X-Document-Filename": "blank.docx" },
+        }),
+      );
+    }
+    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-pdf")) {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {
+        card_template_id: string;
+        layout_json: { items: { kind: string; field_id?: string }[] };
+      };
+      expect(init?.method).toBe("POST");
+      expect(payload.card_template_id).toBe("template-1");
+      expect(payload.layout_json.items).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: "field", field_id: "field-1" })]),
+      );
+      return Promise.resolve(
+        new Response(new Blob(["%PDF blank current layout"]), {
           status: 200,
           headers: { "X-Document-Filename": "blank.pdf" },
         }),

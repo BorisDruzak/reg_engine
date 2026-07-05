@@ -7,8 +7,8 @@ import {
   createFormBlock,
   createFormField,
   createReferenceList,
-  downloadBlankCardPrintTemplateDocx,
-  downloadBlankCardPrintTemplatePdf,
+  downloadBlankCardPrintLayoutDocx,
+  downloadBlankCardPrintLayoutPdf,
   downloadGeneratedDocumentContent,
   generateDocument,
   generatePdfDocument,
@@ -205,11 +205,15 @@ export function CardPrintTemplateEditor({
 
   const generateDocxMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
-      const { templateId } = await saveMutation.mutateAsync();
       if (selectedCardId) {
+        const { templateId } = await saveMutation.mutateAsync();
         return generateDocument(token, selectedCardId, templateId, name);
       }
-      const download = await downloadBlankCardPrintTemplateDocx(token, templateId);
+      const download = await downloadBlankCardPrintLayoutDocx(
+        token,
+        registryId,
+        blankLayoutDownloadPayload(),
+      );
       triggerBrowserDownload(download.blob, download.filename);
       return null;
     },
@@ -226,11 +230,15 @@ export function CardPrintTemplateEditor({
 
   const generatePdfMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
-      const { templateId } = await saveMutation.mutateAsync();
       if (selectedCardId) {
+        const { templateId } = await saveMutation.mutateAsync();
         return generatePdfDocument(token, selectedCardId, templateId, name);
       }
-      const download = await downloadBlankCardPrintTemplatePdf(token, templateId);
+      const download = await downloadBlankCardPrintLayoutPdf(
+        token,
+        registryId,
+        blankLayoutDownloadPayload(),
+      );
       triggerBrowserDownload(download.blob, download.filename);
       return null;
     },
@@ -386,6 +394,52 @@ export function CardPrintTemplateEditor({
         height_mm: 12,
       }),
     );
+  }
+
+  function addExistingBlock(block: FormBlockRead) {
+    addItem(createBlockItem(block, layout.items, printRepeatModeForBlock(block)));
+  }
+
+  function addExistingBlockAt(blockId: string, point: { x_mm: number; y_mm: number }) {
+    const block = allBlocks.find((candidate) => candidate.id === blockId);
+    if (!block) {
+      setLocalError("Блок не найден в текущем реестре.");
+      return;
+    }
+    addItem(
+      createBlockItem(block, layout.items, printRepeatModeForBlock(block), {
+        x_mm: point.x_mm,
+        y_mm: point.y_mm,
+        width_mm: A4_WIDTH_MM - 30,
+        height_mm: 42,
+      }),
+    );
+  }
+
+  function blankLayoutDownloadPayload() {
+    const normalizedLayout = validateCurrentLayout();
+    return {
+      name: name.trim(),
+      card_template_id: cardTemplate.id,
+      layout_json: normalizedLayout,
+      output_filename_template: outputFilenameTemplate.trim(),
+    };
+  }
+
+  function validateCurrentLayout() {
+    const normalizedLayout = normalizeLayoutGeometry(layout);
+    const issues = validatePrintLayout(
+      normalizedLayout,
+      availableFields,
+      allBlocks,
+      name,
+      outputFilenameTemplate,
+    );
+    const errors = issues.filter((issue) => issue.level === "error");
+    if (errors.length > 0) {
+      throw new Error(errors[0].message);
+    }
+    return normalizedLayout;
   }
 
   function updateSelectedItem(patch: Partial<CardPrintLayoutItem>) {
@@ -579,8 +633,10 @@ export function CardPrintTemplateEditor({
 
       <div className="a4-template-workbench">
         <A4TemplatePalette
+          blocks={allBlocks}
           fields={availableFields}
           showTechnicalData={showTechnicalData}
+          onAddExistingBlock={addExistingBlock}
           onAddExistingField={(field) => addItem(createFieldItem(field, layout.items))}
           onAddHeading={() => addItem(createTextItem("heading", "Заголовок", layout.items))}
           onAddStaticText={() => addItem(createTextItem("static_text", "Текст", layout.items))}
@@ -626,6 +682,7 @@ export function CardPrintTemplateEditor({
             onSelectItem={setSelectedItemId}
             onChangeLayout={commitLayout}
             onDropField={addExistingFieldAt}
+            onDropBlock={addExistingBlockAt}
           />
           {validationIssues.length > 0 && (
             <div className="a4-template-validation" role="status">
@@ -924,6 +981,7 @@ function createBlockItem(
   block: FormBlockRead,
   items: CardPrintLayoutItem[],
   repeatMode: BlockDialogState["repeatMode"],
+  rect = nextRect(items, A4_WIDTH_MM - 30, 42),
 ): CardPrintLayoutItem {
   return {
     id: createLayoutItemId("block", items),
@@ -938,7 +996,7 @@ function createBlockItem(
     text: block.title,
     repeat: { mode: repeatMode },
     style: { border: "thin", background_color: "#f8fafc", padding_mm: 3 },
-    ...nextRect(items, A4_WIDTH_MM - 30, 42),
+    ...rect,
   };
 }
 
@@ -1098,6 +1156,18 @@ function fieldTypeLabel(fieldType: string) {
     static_text: "Информационный текст карточки",
   };
   return labels[fieldType] ?? fieldType;
+}
+
+function printRepeatModeForBlock(block: FormBlockRead): BlockDialogState["repeatMode"] {
+  const rawMode = block.display_config_json?.print_repeat_mode;
+  if (
+    rawMode === "first_instance_only" ||
+    rawMode === "repeat_section" ||
+    rawMode === "table_rows"
+  ) {
+    return rawMode;
+  }
+  return block.is_repeatable ? "repeat_section" : "first_instance_only";
 }
 
 function saveStatusText(

@@ -191,6 +191,11 @@ not a hardcoded employee registry.
   download DOCX/PDF through the active A4 print form, and the production test
   registries/templates from the Phase 8B live run were soft-archived through
   API.
+- Phase 8D A4 blank-download and existing-block follow-up is implemented
+  locally and verified without a database migration: blank DOCX/PDF downloads
+  from the A4 editor render the current unsaved canvas through an ad-hoc
+  backend endpoint without creating `document_templates`, and existing form
+  blocks can be added to the A4 canvas by click or mouse drag/drop.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2935,3 +2940,64 @@ Verification completed so far:
   `C:\Temp\reg-engine-20260705_phase8c-blank-template.pdf`,
   `C:\Temp\reg-engine-20260705_phase8c-card-action.docx`, and
   `C:\Temp\reg-engine-20260705_phase8c-card-action.pdf`.
+
+## Phase 8D: A4 Blank Download And Existing Blocks Follow-Up
+
+Status: implemented locally and verified; push, deployment, and live browser
+verification are pending.
+
+Purpose:
+
+Fix the production A4 editor follow-up where downloading DOCX/PDF from an
+unsaved `Новый шаблон` attempted to create a duplicate print template and
+surfaced `Данные нарушают ограничения базы`, and let administrators place an
+existing schema block on the A4 canvas directly instead of adding only
+individual fields.
+
+Implemented scope:
+
+1. Blank current-layout downloads:
+   - added `POST /api/v1/registries/{registry_id}/card-print-templates/blank-docx`
+     and `/blank-pdf`;
+   - the endpoints validate the submitted `card_print_layout_v1` against the
+     selected card template and registry blocks, render blank DOCX/PDF content,
+     and return binary responses without creating `document_templates`,
+     `document_template_versions`, `generated_documents`, or stored files;
+   - the A4 editor DOCX/PDF buttons now send the current unsaved canvas layout
+     to those endpoints when no card is selected.
+2. Existing block placement:
+   - the A4 palette now includes `Существующие блоки`;
+   - existing form blocks can be added by click or mouse drag/drop onto the A4
+     canvas;
+   - block print repeat mode is reused from
+     `form_blocks.display_config_json.print_repeat_mode` when present, otherwise
+     it falls back to repeat-section for repeatable blocks and first-instance
+     mode for non-repeatable blocks.
+
+Non-goals in this slice:
+
+- No database migration.
+- No hardcoded business-specific fields or employee schema.
+- No public generated-document workflow.
+- No changes to ordinary card filling.
+- No physical cleanup of production data.
+
+Verification completed so far:
+
+- `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`:
+  passed, 6 tests.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
+  skipped locally because `TEST_DATABASE_URL` is not configured.
+- `backend\.venv\Scripts\python.exe -m ruff check backend/app/api/v1/endpoints/documents.py backend/app/services/documents.py backend/app/schemas/documents.py backend/tests/test_api_phase_2d_documents.py`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m ruff format --check backend/app/api/v1/endpoints/documents.py backend/app/services/documents.py backend/app/schemas/documents.py backend/tests/test_api_phase_2d_documents.py`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values backend\tests\test_card_print_layout_services.py -q`:
+  passed, 6 tests.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend format:check`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed; backend reported 141 passed / 172 skipped / 1 warning, frontend
+  reported 98 passed, production frontend build passed, and project-map check
+  passed.

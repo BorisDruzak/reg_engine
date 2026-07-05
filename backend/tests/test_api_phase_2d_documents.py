@@ -11,14 +11,22 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_permissions
+from app.models import (
+    AccessGrant,
+    AuditEvent,
+    DocumentTemplate,
+    Permission,
+    Role,
+    User,
+    role_permissions,
+)
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
@@ -543,6 +551,54 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
     assert "Версия два" in blank_pdf_text
     assert "Название:" in blank_pdf_text
     assert "Значение поля" not in blank_pdf_text
+
+    template_count_before = db_session.scalar(
+        select(func.count(DocumentTemplate.id)).where(
+            DocumentTemplate.registry_id == context["registry"].id
+        )
+    )
+    unsaved_layout = _card_print_layout(context["field"].id, heading="Несохраненная версия")
+    blank_unsaved_docx_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/card-print-templates/blank-docx",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "name": "Черновой печатный шаблон",
+            "card_template_id": str(context["card"].card_template_id),
+            "layout_json": unsaved_layout,
+            "output_filename_template": "{{ card.display_name }}-draft.docx",
+        },
+    )
+    assert blank_unsaved_docx_response.status_code == 200, blank_unsaved_docx_response.text
+    assert blank_unsaved_docx_response.headers["content-type"] == DOCX_CONTENT_TYPE
+    with ZipFile(BytesIO(blank_unsaved_docx_response.content)) as docx:
+        blank_unsaved_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "Несохраненная версия" in blank_unsaved_xml
+    assert "Название:" in blank_unsaved_xml
+    assert "Значение поля" not in blank_unsaved_xml
+
+    blank_unsaved_pdf_response = api_client.post(
+        f"/api/v1/registries/{context['registry'].id}/card-print-templates/blank-pdf",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "name": "Черновой печатный шаблон",
+            "card_template_id": str(context["card"].card_template_id),
+            "layout_json": unsaved_layout,
+            "output_filename_template": "{{ card.display_name }}-draft.docx",
+        },
+    )
+    assert blank_unsaved_pdf_response.status_code == 200, blank_unsaved_pdf_response.text
+    assert blank_unsaved_pdf_response.headers["content-type"] == "application/pdf"
+    blank_unsaved_pdf_text = _extract_pdf_text(blank_unsaved_pdf_response.content)
+    assert "Несохраненная версия" in blank_unsaved_pdf_text
+    assert "Название:" in blank_unsaved_pdf_text
+    assert "Значение поля" not in blank_unsaved_pdf_text
+
+    template_count_after = db_session.scalar(
+        select(func.count(DocumentTemplate.id)).where(
+            DocumentTemplate.registry_id == context["registry"].id
+        )
+    )
+    assert template_count_after == template_count_before
 
     invalid_response = api_client.post(
         f"/api/v1/registries/{context['registry'].id}/card-print-templates",

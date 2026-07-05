@@ -622,6 +622,55 @@ class DocumentService:
             )
         raise DocumentServiceError("Unsupported card print template output format.")
 
+    def render_blank_card_print_layout_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        layout_json: dict[str, object],
+        output_format: str,
+        name: str,
+        card_template_id: UUID | None = None,
+        output_filename_template: str = "{{ card.display_name }}.docx",
+    ) -> RenderedDocumentDownload:
+        self._require_schema_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        normalized_layout = self._validate_card_print_layout_for_template(
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+            layout_json=layout_json,
+        )
+        render_context = _RenderContext(
+            card=self._blank_card_print_context_card_from_values(
+                registry_id=registry_id,
+                card_template_id=card_template_id,
+                display_name=self._clean_required_text(name, "name"),
+            )
+        )
+        clean_output_template = self._clean_required_text(
+            output_filename_template,
+            "output filename template",
+        )
+        if output_format == "docx":
+            output_filename = normalize_attachment_filename(
+                self._render_plain_text_template(clean_output_template, render_context)
+            )
+            return RenderedDocumentDownload(
+                content=self._build_docx_from_card_print_layout(normalized_layout, render_context),
+                filename=output_filename,
+                content_type=_DOCX_CONTENT_TYPE,
+            )
+        if output_format == "pdf":
+            output_filename = self._pdf_output_filename(
+                self._render_plain_text_template(clean_output_template, render_context)
+            )
+            return RenderedDocumentDownload(
+                content=self._build_pdf_from_card_print_layout(normalized_layout, render_context),
+                filename=output_filename,
+                content_type=_PDF_CONTENT_TYPE,
+            )
+        raise DocumentServiceError("Unsupported card print template output format.")
+
     def generate_pdf_for_actor(
         self,
         *,
@@ -1059,12 +1108,25 @@ class DocumentService:
         return _PLACEHOLDER_PATTERN.sub(replace, template_body)
 
     def _blank_card_print_context_card(self, template: DocumentTemplate) -> CardRead:
+        return self._blank_card_print_context_card_from_values(
+            registry_id=template.registry_id,
+            card_template_id=template.card_template_id,
+            display_name=template.name,
+        )
+
+    def _blank_card_print_context_card_from_values(
+        self,
+        *,
+        registry_id: UUID,
+        card_template_id: UUID | None,
+        display_name: str,
+    ) -> CardRead:
         return CardRead(
             card_id=UUID(int=0),
-            registry_id=template.registry_id,
+            registry_id=registry_id,
             organization_id=UUID(int=0),
-            display_name=template.name,
-            card_template_id=template.card_template_id or UUID(int=0),
+            display_name=display_name,
+            card_template_id=card_template_id or UUID(int=0),
             card_template_name=None,
             blocks={},
             fields={},

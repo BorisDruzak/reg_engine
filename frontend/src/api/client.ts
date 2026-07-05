@@ -7,6 +7,7 @@ import type {
   AttachmentRead,
   CardBlockInstanceSummaryRead,
   CardPrintTemplateCreatePayload,
+  CardPrintTemplateBlankDownloadPayload,
   CardPrintTemplateVersionCreatePayload,
   CardTemplateCreatePayload,
   CardTemplateListRead,
@@ -985,6 +986,32 @@ export async function downloadBlankCardPrintTemplatePdf(token: string, templateI
   );
 }
 
+export async function downloadBlankCardPrintLayoutDocx(
+  token: string,
+  registryId: string,
+  payload: CardPrintTemplateBlankDownloadPayload,
+) {
+  return downloadJsonFile(
+    `/api/v1/registries/${registryId}/card-print-templates/blank-docx`,
+    token,
+    "X-Document-Filename",
+    payload,
+  );
+}
+
+export async function downloadBlankCardPrintLayoutPdf(
+  token: string,
+  registryId: string,
+  payload: CardPrintTemplateBlankDownloadPayload,
+) {
+  return downloadJsonFile(
+    `/api/v1/registries/${registryId}/card-print-templates/blank-pdf`,
+    token,
+    "X-Document-Filename",
+    payload,
+  );
+}
+
 export async function archiveGeneratedDocument(token: string, generatedDocumentId: string) {
   return apiRequest<GeneratedDocumentRead>(`/api/v1/generated-documents/${generatedDocumentId}`, {
     method: "DELETE",
@@ -1137,6 +1164,33 @@ async function downloadFile(path: string, token: string, filenameHeader: string)
     headers: {
       Authorization: `Bearer ${token}`,
     },
+  });
+
+  if (!response.ok) {
+    const message = await errorMessage(response);
+    throw new ApiError(message, response.status);
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: response.headers.get(filenameHeader) ?? "download",
+  };
+}
+
+async function downloadJsonFile(
+  path: string,
+  token: string,
+  filenameHeader: string,
+  body: unknown,
+) {
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, "")}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/octet-stream",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {

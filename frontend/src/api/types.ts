@@ -799,6 +799,13 @@ export type CardPrintTemplateVersionCreatePayload = {
   layout_json: CardPrintLayout;
 };
 
+export type CardPrintTemplateBlankDownloadPayload = {
+  name: string;
+  card_template_id?: string | null;
+  layout_json: CardPrintLayout;
+  output_filename_template: string;
+};
+
 export type DocumentTemplateCreatePayload = {
   code: string;
   name: string;

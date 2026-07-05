@@ -47,9 +47,11 @@ type A4TemplateRendererProps = {
   onSelectItem?: (itemId: string | null) => void;
   onChangeLayout?: (layout: CardPrintLayout) => void;
   onDropField?: (fieldId: string, point: { x_mm: number; y_mm: number }) => void;
+  onDropBlock?: (blockId: string, point: { x_mm: number; y_mm: number }) => void;
 };
 
 const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
+const A4_BLOCK_DRAG_TYPE = "application/x-reg-engine-block-id";
 
 const RESIZE_HANDLES = [
   "top-left",
@@ -75,6 +77,7 @@ export function A4TemplateRenderer({
   onSelectItem,
   onChangeLayout,
   onDropField,
+  onDropBlock,
 }: A4TemplateRendererProps) {
   const normalizedLayout = useMemo(() => normalizeLayoutGeometry(layout), [layout]);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
@@ -181,7 +184,7 @@ export function A4TemplateRenderer({
   }
 
   function handleCanvasDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!interactive || !onDropField) {
+    if (!interactive || (!onDropField && !onDropBlock)) {
       return;
     }
     event.preventDefault();
@@ -189,19 +192,25 @@ export function A4TemplateRenderer({
   }
 
   function handleCanvasDrop(event: DragEvent<HTMLDivElement>) {
-    if (!interactive || !onDropField) {
+    if (!interactive || (!onDropField && !onDropBlock)) {
       return;
     }
     const fieldId = event.dataTransfer.getData(A4_FIELD_DRAG_TYPE);
-    if (!fieldId) {
+    const blockId = event.dataTransfer.getData(A4_BLOCK_DRAG_TYPE);
+    if (!fieldId && !blockId) {
       return;
     }
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    onDropField(fieldId, {
+    const point = {
       x_mm: Math.max(0, (event.clientX - rect.left) / scale),
       y_mm: Math.max(0, (event.clientY - rect.top) / scale),
-    });
+    };
+    if (fieldId) {
+      onDropField?.(fieldId, point);
+      return;
+    }
+    onDropBlock?.(blockId, point);
   }
 
   return (

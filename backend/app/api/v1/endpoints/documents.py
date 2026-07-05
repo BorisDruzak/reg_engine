@@ -19,6 +19,7 @@ from app.api.dependencies import get_actor_user_id, get_db_session, raise_servic
 from app.core.config import get_settings
 from app.models import DocumentTemplate, GeneratedDocument
 from app.schemas.documents import (
+    CardPrintTemplateBlankDownload,
     CardPrintTemplateCreate,
     CardPrintTemplateVersionCreate,
     DocumentTemplateCreate,
@@ -187,6 +188,64 @@ def list_card_print_templates(
         raise_service_http_error(exc)
     return DocumentTemplateListRead(
         items=[_document_template_to_read(service, template) for template in templates]
+    )
+
+
+@router.post("/registries/{registry_id}/card-print-templates/blank-docx")
+def download_blank_card_print_layout_docx(
+    registry_id: UUID,
+    payload: CardPrintTemplateBlankDownload,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> Response:
+    service = _document_service(session)
+    try:
+        rendered = service.render_blank_card_print_layout_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            name=payload.name,
+            card_template_id=payload.card_template_id,
+            layout_json=payload.layout_json,
+            output_filename_template=payload.output_filename_template,
+            output_format="docx",
+        )
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return Response(
+        content=rendered.content,
+        media_type=rendered.content_type,
+        headers=_download_headers_for_filename(rendered.filename),
+    )
+
+
+@router.post("/registries/{registry_id}/card-print-templates/blank-pdf")
+def download_blank_card_print_layout_pdf(
+    registry_id: UUID,
+    payload: CardPrintTemplateBlankDownload,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> Response:
+    service = _document_service(session)
+    try:
+        rendered = service.render_blank_card_print_layout_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            name=payload.name,
+            card_template_id=payload.card_template_id,
+            layout_json=payload.layout_json,
+            output_filename_template=payload.output_filename_template,
+            output_format="pdf",
+        )
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return Response(
+        content=rendered.content,
+        media_type=rendered.content_type,
+        headers=_download_headers_for_filename(rendered.filename),
     )
 
 

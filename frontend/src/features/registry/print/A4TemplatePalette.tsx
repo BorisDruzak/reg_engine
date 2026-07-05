@@ -1,11 +1,14 @@
-import type { FormFieldRead } from "@/api/types";
+import type { FormBlockRead, FormFieldRead } from "@/api/types";
 import { uiText } from "@/app/uiText";
 
 const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
+const A4_BLOCK_DRAG_TYPE = "application/x-reg-engine-block-id";
 
 type A4TemplatePaletteProps = {
+  blocks: FormBlockRead[];
   fields: FormFieldRead[];
   showTechnicalData: boolean;
+  onAddExistingBlock: (block: FormBlockRead) => void;
   onAddExistingField: (field: FormFieldRead) => void;
   onAddHeading: () => void;
   onAddStaticText: () => void;
@@ -20,8 +23,10 @@ type A4TemplatePaletteProps = {
 };
 
 export function A4TemplatePalette({
+  blocks,
   fields,
   showTechnicalData,
+  onAddExistingBlock,
   onAddExistingField,
   onAddHeading,
   onAddStaticText,
@@ -43,6 +48,29 @@ export function A4TemplatePalette({
       <button type="button" className="ghost-button" onClick={onOpenNewBlock}>
         Новый блок данных
       </button>
+      <h4>Существующие блоки</h4>
+      <div className="a4-template-field-list">
+        {blocks.length === 0 ? (
+          <p className="data-empty">{uiText.noData}</p>
+        ) : (
+          blocks.map((block) => (
+            <button
+              key={block.id}
+              type="button"
+              className="a4-template-field-button"
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData(A4_BLOCK_DRAG_TYPE, block.id);
+              }}
+              onClick={() => onAddExistingBlock(block)}
+            >
+              <strong>{block.title}</strong>
+              {showTechnicalData && <span>{block.code}</span>}
+            </button>
+          ))
+        )}
+      </div>
       <h4>Существующие поля</h4>
       <div className="a4-template-field-list">
         {fields.length === 0 ? (

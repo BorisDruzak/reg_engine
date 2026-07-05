@@ -18,6 +18,13 @@ class CardPrintTemplateVersionCreate(BaseModel):
     layout_json: dict[str, Any]
 
 
+class CardPrintTemplateBlankDownload(BaseModel):
+    name: str
+    layout_json: dict[str, Any]
+    card_template_id: UUID | None = None
+    output_filename_template: str = "{{ card.display_name }}.docx"
+
+
 class DocumentTemplateCreate(BaseModel):
     code: str
     name: str
