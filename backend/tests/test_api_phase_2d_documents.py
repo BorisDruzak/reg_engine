@@ -519,6 +519,31 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
     assert "Версия два" in pdf_text
     assert "Значение поля" in pdf_text
 
+    blank_docx_response = api_client.get(
+        f"/api/v1/card-print-templates/{template_payload['id']}/blank-docx",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+    assert blank_docx_response.status_code == 200, blank_docx_response.text
+    assert blank_docx_response.headers["content-type"] == DOCX_CONTENT_TYPE
+    assert blank_docx_response.headers["x-document-filename"].endswith(".docx")
+    with ZipFile(BytesIO(blank_docx_response.content)) as docx:
+        blank_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "Версия два" in blank_xml
+    assert "Название:" in blank_xml
+    assert "Значение поля" not in blank_xml
+
+    blank_pdf_response = api_client.get(
+        f"/api/v1/card-print-templates/{template_payload['id']}/blank-pdf",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+    assert blank_pdf_response.status_code == 200, blank_pdf_response.text
+    assert blank_pdf_response.headers["content-type"] == "application/pdf"
+    assert blank_pdf_response.headers["x-document-filename"].endswith(".pdf")
+    blank_pdf_text = _extract_pdf_text(blank_pdf_response.content)
+    assert "Версия два" in blank_pdf_text
+    assert "Название:" in blank_pdf_text
+    assert "Значение поля" not in blank_pdf_text
+
     invalid_response = api_client.post(
         f"/api/v1/registries/{context['registry'].id}/card-print-templates",
         headers=_actor_headers(context["schema_admin"].id),

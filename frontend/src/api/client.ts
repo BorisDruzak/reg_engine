@@ -969,6 +969,22 @@ export async function downloadGeneratedDocumentContent(token: string, generatedD
   );
 }
 
+export async function downloadBlankCardPrintTemplateDocx(token: string, templateId: string) {
+  return downloadFile(
+    `/api/v1/card-print-templates/${templateId}/blank-docx`,
+    token,
+    "X-Document-Filename",
+  );
+}
+
+export async function downloadBlankCardPrintTemplatePdf(token: string, templateId: string) {
+  return downloadFile(
+    `/api/v1/card-print-templates/${templateId}/blank-pdf`,
+    token,
+    "X-Document-Filename",
+  );
+}
+
 export async function archiveGeneratedDocument(token: string, generatedDocumentId: string) {
   return apiRequest<GeneratedDocumentRead>(`/api/v1/generated-documents/${generatedDocumentId}`, {
     method: "DELETE",

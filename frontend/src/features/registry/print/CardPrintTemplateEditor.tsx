@@ -7,6 +7,8 @@ import {
   createFormBlock,
   createFormField,
   createReferenceList,
+  downloadBlankCardPrintTemplateDocx,
+  downloadBlankCardPrintTemplatePdf,
   downloadGeneratedDocumentContent,
   generateDocument,
   generatePdfDocument,
@@ -118,7 +120,7 @@ export function CardPrintTemplateEditor({
   );
   const [description, setDescription] = useState("");
   const [outputFilenameTemplate, setOutputFilenameTemplate] = useState(defaultOutputFilename);
-  const [layout, setLayout] = useState<CardPrintLayout>(() => createDefaultLayout(availableFields));
+  const [layout, setLayout] = useState<CardPrintLayout>(() => createEmptyCardPrintLayout());
   const [history, setHistory] = useState<CardPrintLayout[]>([]);
   const [future, setFuture] = useState<CardPrintLayout[]>([]);
   const [zoom, setZoom] = useState(0.75);
@@ -143,7 +145,9 @@ export function CardPrintTemplateEditor({
     enabled: Boolean(token && registryId),
   });
 
-  const printTemplates = printTemplatesQuery.data?.items ?? [];
+  const printTemplates = (printTemplatesQuery.data?.items ?? []).filter(
+    (template) => template.card_template_id === cardTemplate.id,
+  );
   const selectedItem = layout.items.find((item) => item.id === selectedItemId) ?? null;
   const validationIssues = useMemo(
     () => validatePrintLayout(layout, availableFields, allBlocks, name, outputFilenameTemplate),
@@ -199,30 +203,44 @@ export function CardPrintTemplateEditor({
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
   });
 
-  const generateDocxMutation = useMutation({
+  const generateDocxMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
-      if (!selectedCardId || !selectedTemplateId) {
-        throw new Error("Выберите карточку и сохраненный шаблон для генерации DOCX.");
+      const { templateId } = await saveMutation.mutateAsync();
+      if (selectedCardId) {
+        return generateDocument(token, selectedCardId, templateId, name);
       }
-      return generateDocument(token, selectedCardId, selectedTemplateId, name);
+      const download = await downloadBlankCardPrintTemplateDocx(token, templateId);
+      triggerBrowserDownload(download.blob, download.filename);
+      return null;
     },
     onSuccess: (generated) => {
-      setLastGenerated(generated);
-      setLocalMessage("DOCX сформирован");
+      if (generated) {
+        setLastGenerated(generated);
+        setLocalMessage("DOCX сформирован");
+      } else {
+        setLocalMessage("Пустой DOCX скачан");
+      }
     },
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
   });
 
-  const generatePdfMutation = useMutation({
+  const generatePdfMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
-      if (!selectedCardId || !selectedTemplateId) {
-        throw new Error("Выберите карточку и сохраненный шаблон для генерации PDF.");
+      const { templateId } = await saveMutation.mutateAsync();
+      if (selectedCardId) {
+        return generatePdfDocument(token, selectedCardId, templateId, name);
       }
-      return generatePdfDocument(token, selectedCardId, selectedTemplateId, name);
+      const download = await downloadBlankCardPrintTemplatePdf(token, templateId);
+      triggerBrowserDownload(download.blob, download.filename);
+      return null;
     },
     onSuccess: (generated) => {
-      setLastGenerated(generated);
-      setLocalMessage("PDF сформирован");
+      if (generated) {
+        setLastGenerated(generated);
+        setLocalMessage("PDF сформирован");
+      } else {
+        setLocalMessage("Пустой PDF скачан");
+      }
     },
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
   });
@@ -232,7 +250,11 @@ export function CardPrintTemplateEditor({
       if (!lastGenerated) {
         throw new Error("Нет сформированного файла для скачивания.");
       }
-      await downloadGeneratedDocumentContent(token, lastGenerated.id);
+      return downloadGeneratedDocumentContent(token, lastGenerated.id);
+    },
+    onSuccess: ({ blob, filename }) => {
+      triggerBrowserDownload(blob, filename);
+      setLocalMessage("Документ скачан");
     },
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
   });
@@ -350,6 +372,22 @@ export function CardPrintTemplateEditor({
     setSelectedItemId(normalizedItem.id);
   }
 
+  function addExistingFieldAt(fieldId: string, point: { x_mm: number; y_mm: number }) {
+    const field = availableFields.find((candidate) => candidate.id === fieldId);
+    if (!field) {
+      setLocalError("Поле не найдено в текущем шаблоне карточки.");
+      return;
+    }
+    addItem(
+      createFieldItem(field, layout.items, {
+        x_mm: point.x_mm,
+        y_mm: point.y_mm,
+        width_mm: 78,
+        height_mm: 12,
+      }),
+    );
+  }
+
   function updateSelectedItem(patch: Partial<CardPrintLayoutItem>) {
     if (!selectedItem) {
       return;
@@ -397,7 +435,7 @@ export function CardPrintTemplateEditor({
     setCode(generateTechnicalCode(`${cardTemplate.code}-print`, "print", []));
     setDescription("");
     setOutputFilenameTemplate(defaultOutputFilename);
-    setLayout(createDefaultLayout(availableFields));
+    setLayout(createEmptyCardPrintLayout());
     setHistory([]);
     setFuture([]);
     setLocalMessage(null);
@@ -414,7 +452,7 @@ export function CardPrintTemplateEditor({
       return;
     }
     const nextLayout = normalizeLayoutGeometry(
-      template.current_layout_json ?? createDefaultLayout(availableFields),
+      template.current_layout_json ?? createEmptyCardPrintLayout(),
     );
     setSelectedTemplateId(template.id);
     setSelectedItemId(nextLayout.items[0]?.id ?? null);
@@ -441,7 +479,12 @@ export function CardPrintTemplateEditor({
         zoom={zoom}
         showGrid={showGrid}
         previewMode={mode === "preview"}
-        canGenerate={Boolean(selectedTemplateId && selectedCardId)}
+        canGenerate={
+          validationErrors.length === 0 &&
+          !saveMutation.isPending &&
+          !generateDocxMutation.isPending &&
+          !generatePdfMutation.isPending
+        }
         canDownloadLast={Boolean(lastGenerated)}
         onTemplateNameChange={setName}
         onZoomChange={setZoom}
@@ -582,6 +625,7 @@ export function CardPrintTemplateEditor({
             selectedItemId={selectedItemId}
             onSelectItem={setSelectedItemId}
             onChangeLayout={commitLayout}
+            onDropField={addExistingFieldAt}
           />
           {validationIssues.length > 0 && (
             <div className="a4-template-validation" role="status">
@@ -855,27 +899,6 @@ function BlockDialog({
   );
 }
 
-function createDefaultLayout(fields: FormFieldRead[]): CardPrintLayout {
-  const layout = createEmptyCardPrintLayout();
-  layout.items = [
-    createTextItem("heading", "Печатная форма", [], {
-      x_mm: 28,
-      y_mm: 18,
-      width_mm: 154,
-      height_mm: 12,
-    }),
-    ...fields.slice(0, 8).map((field, index) =>
-      createFieldItem(field, [], {
-        x_mm: 20 + (index % 2) * 90,
-        y_mm: 42 + Math.floor(index / 2) * 18,
-        width_mm: 78,
-        height_mm: 12,
-      }),
-    ),
-  ];
-  return normalizeLayoutGeometry(layout);
-}
-
 function createFieldItem(
   field: FormFieldRead,
   items: CardPrintLayoutItem[],
@@ -1089,4 +1112,13 @@ function saveStatusText(
     return "Есть ошибки";
   }
   return successMessage ? "Сохранено" : "Черновик";
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

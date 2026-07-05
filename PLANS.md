@@ -182,6 +182,14 @@ not a hardcoded employee registry.
   blocks from the canvas, reuses the renderer for a preview-only card workspace
   tab, and strengthens backend layout validation/rendering without a database
   migration.
+- Phase 8C A4 production review follow-up is implemented locally and ready for
+  full gate/deploy: new print templates open with an empty A4 canvas instead of
+  auto-placing existing fields, existing fields can be dragged from the palette
+  onto the canvas, print-template lists are defensively scoped to the selected
+  card template, the editor can download blank DOCX/PDF files from the saved
+  A4 layout, card action panels can download DOCX/PDF through the active A4
+  print form, and the production test registries/templates from the Phase 8B
+  live run were soft-archived through API.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2832,3 +2840,60 @@ Issues found and fixed during the Phase 8B gate:
   `backend/app/services/card_print.py` so enum style values must be strings and
   invalid shapes become normal layout-validation errors; regression coverage was
   added in `backend/tests/test_card_print_layout_services.py`.
+
+## Phase 8C: A4 Production Review Follow-Up
+
+Status: implemented locally; full gate, push, deploy, and live browser
+verification are in progress.
+
+Purpose:
+
+Close the user review comments from the production A4 editor without changing
+the schema-driven card model or adding a database migration.
+
+Implemented scope:
+
+1. A4 editor behavior:
+   - new print templates now start from an empty A4 canvas;
+   - existing schema fields remain in the palette and can be added by click or
+     mouse drag/drop onto the canvas;
+   - the template dropdown is defensively filtered to the selected card
+     template, even if an API/cache response contains unrelated templates.
+2. Blank template downloads:
+   - `GET /api/v1/card-print-templates/{template_id}/blank-docx` and
+     `/blank-pdf` render the latest saved A4 layout with empty field values;
+   - blank downloads use the existing backend A4 renderers and return binary
+     responses directly, without creating `generated_documents` records.
+3. Card action panel:
+   - the selected card action panel can download DOCX/PDF through the active
+     A4 print form for the card's template;
+   - generation and audit remain backend-enforced through the existing
+     generated-document APIs.
+4. Production data cleanup:
+   - test registries `codex_a4b20260704205201` and
+     `codex_a4b20260704205325` were soft-archived through
+     `DELETE /api/v1/registries/{id}`;
+   - test A4 templates `0000 Minimal A4 20260704210135` and
+     `Codex Phase8 A4 20260704185323` were soft-archived through
+     `DELETE /api/v1/document-templates/{id}`;
+   - the active registry list now contains only the primary card registry, and
+     the active print-template list for that registry contains only
+     `base_template_print`.
+
+Verification completed so far:
+
+- `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`:
+  passed, 5 tests.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend lint`: passed.
+- `pnpm -C frontend format:check`: passed after formatting the touched TSX
+  files.
+- `backend\.venv\Scripts\python.exe -m ruff check backend/app/api/v1/endpoints/documents.py backend/app/services/documents.py backend/tests/test_api_phase_2d_documents.py`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m ruff format --check backend/app/api/v1/endpoints/documents.py backend/app/services/documents.py backend/tests/test_api_phase_2d_documents.py`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values -q`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
+  skipped locally because `TEST_DATABASE_URL` is not configured.
+- `.venv\Scripts\python.exe -m mypy app` from `backend/`: passed.

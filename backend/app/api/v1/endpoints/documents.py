@@ -310,6 +310,50 @@ def create_card_print_template_version(
     return DocumentTemplateVersionRead.model_validate(version)
 
 
+@router.get("/card-print-templates/{template_id}/blank-docx")
+def download_blank_card_print_template_docx(
+    template_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> Response:
+    service = _document_service(session)
+    try:
+        rendered = service.render_blank_card_print_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            output_format="docx",
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return Response(
+        content=rendered.content,
+        media_type=rendered.content_type,
+        headers=_download_headers_for_filename(rendered.filename),
+    )
+
+
+@router.get("/card-print-templates/{template_id}/blank-pdf")
+def download_blank_card_print_template_pdf(
+    template_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> Response:
+    service = _document_service(session)
+    try:
+        rendered = service.render_blank_card_print_template_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template_id,
+            output_format="pdf",
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return Response(
+        content=rendered.content,
+        media_type=rendered.content_type,
+        headers=_download_headers_for_filename(rendered.filename),
+    )
+
+
 @router.post(
     "/cards/{card_id}/generated-documents",
     response_model=GeneratedDocumentRead,

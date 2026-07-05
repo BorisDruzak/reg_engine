@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { CardPrintTemplateEditor } from "./CardPrintTemplateEditor";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -114,6 +115,11 @@ test("saves an A4 card print layout through the card print template API", async 
   );
 
   expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Статус" }));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(await screen.findByText("Печатный шаблон сохранен")).toBeInTheDocument();
@@ -123,6 +129,57 @@ test("saves an A4 card print layout through the card print template API", async 
         ([input, init]) =>
           String(input).endsWith("/api/v1/registries/registry-1/card-print-templates") &&
           init?.method === "POST",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("adds an existing field by mouse drag from the palette to the A4 canvas", async () => {
+  vi.stubGlobal("fetch", createEditorFetchMock());
+
+  renderEditor();
+
+  const paletteField = await screen.findByRole("button", { name: "Статус" });
+  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
+  expect(
+    screen.queryByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
+  ).not.toBeInTheDocument();
+
+  const dataTransfer = createDataTransfer();
+  fireEvent.dragStart(paletteField, { dataTransfer });
+  fireEvent.dragOver(canvas, { clientX: 140, clientY: 150, dataTransfer });
+  fireEvent.drop(canvas, { clientX: 140, clientY: 150, dataTransfer });
+
+  expect(
+    await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
+  ).toBeInTheDocument();
+});
+
+test("downloads blank DOCX and PDF files from the A4 editor after saving the layout", async () => {
+  const user = userEvent.setup();
+  const fetchMock = createEditorFetchMock();
+  vi.stubGlobal("fetch", fetchMock);
+  stubBrowserDownload();
+
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Статус" }));
+  await user.click(screen.getByRole("button", { name: "DOCX" }));
+
+  await waitFor(() => {
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/card-print-templates/print-template-1/blank-docx"),
+      ),
+    ).toBe(true);
+  });
+
+  await user.click(screen.getByRole("button", { name: "PDF" }));
+
+  await waitFor(() => {
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/card-print-templates/print-template-1/blank-pdf"),
       ),
     ).toBe(true);
   });
@@ -138,6 +195,10 @@ test("renders the A4 editor as a visual workspace with technical settings hidden
   expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Имя файла")).not.toBeInTheDocument();
   expect(screen.queryByText("{status}")).not.toBeInTheDocument();
+  expect(screen.queryByText("Иванов Иван Иванович")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Статус" }));
+
   expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Настройки шаблона" }));
@@ -156,6 +217,7 @@ test("moves elements with mouse and keyboard while saving millimeter geometry on
 
   renderEditor();
 
+  await user.click(await screen.findByRole("button", { name: "Статус" }));
   const statusElement = await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ });
   await user.click(statusElement);
   fireEvent.pointerDown(statusElement, { clientX: 120, clientY: 120, pointerId: 1 });
@@ -219,8 +281,71 @@ function createEditorFetchMock(onSave?: (payload: Record<string, unknown>) => vo
         archived_at: null,
       });
     }
+    if (url.endsWith("/api/v1/card-print-templates/print-template-1/versions")) {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      onSave?.(payload);
+      return jsonResponse({
+        id: "print-version-2",
+        template_id: "print-template-1",
+        version_number: 2,
+        template_format: "card_print_layout_v1",
+        template_body: null,
+        layout_json: payload.layout_json,
+        original_filename: null,
+        content_type: null,
+        content_length_bytes: null,
+        created_at: "2026-07-04T00:00:00Z",
+        archived_at: null,
+      });
+    }
+    if (url.endsWith("/api/v1/card-print-templates/print-template-1/blank-docx")) {
+      return Promise.resolve(
+        new Response(new Blob(["PK blank docx"]), {
+          status: 200,
+          headers: { "X-Document-Filename": "blank.docx" },
+        }),
+      );
+    }
+    if (url.endsWith("/api/v1/card-print-templates/print-template-1/blank-pdf")) {
+      return Promise.resolve(
+        new Response(new Blob(["%PDF blank"]), {
+          status: 200,
+          headers: { "X-Document-Filename": "blank.pdf" },
+        }),
+      );
+    }
     return jsonResponse({ detail: "not found" }, 404);
   });
+}
+
+function createDataTransfer(): DataTransfer {
+  const data = new Map<string, string>();
+  return {
+    effectAllowed: "",
+    dropEffect: "",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [] as unknown as readonly string[],
+    clearData: vi.fn(() => data.clear()),
+    getData: vi.fn((type: string) => data.get(type) ?? ""),
+    setData: vi.fn((type: string, value: string) => {
+      data.set(type, value);
+      return undefined;
+    }),
+    setDragImage: vi.fn(),
+  } as unknown as DataTransfer;
+}
+
+function stubBrowserDownload() {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:reg-engine-test"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
 }
 
 function renderEditor() {

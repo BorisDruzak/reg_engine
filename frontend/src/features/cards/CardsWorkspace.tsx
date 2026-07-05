@@ -8,6 +8,9 @@ import {
   createOrganizationCard,
   createCardBlockInstance,
   createPublicLink,
+  downloadGeneratedDocumentContent,
+  generateDocument,
+  generatePdfDocument,
   listCardPrintTemplates,
   listCardFieldReferenceItems,
   listAttachments,
@@ -270,6 +273,62 @@ export function CardsWorkspace({
       }
     },
   });
+  const cardPrintTemplatesQuery = useQuery({
+    queryKey: ["card-print-templates", token, card?.registry_id, card?.card_template_id],
+    queryFn: () => {
+      if (!card) {
+        throw new Error(uiText.notFound);
+      }
+      return listCardPrintTemplates(token, card.registry_id, card.card_template_id);
+    },
+    enabled: Boolean(token && card?.registry_id && card?.card_template_id),
+  });
+  const selectedCardPrintTemplate = useMemo(() => {
+    if (!card) {
+      return null;
+    }
+    return (
+      (cardPrintTemplatesQuery.data?.items ?? []).find(
+        (template) => template.card_template_id === card.card_template_id,
+      ) ?? null
+    );
+  }, [card, cardPrintTemplatesQuery.data?.items]);
+  const downloadCardPrintDocxMutation = useMutation({
+    mutationFn: async () => {
+      if (!card || !selectedCardPrintTemplate) {
+        throw new Error("Для шаблона карточки пока нет печатной формы A4.");
+      }
+      const generated = await generateDocument(
+        token,
+        card.id,
+        selectedCardPrintTemplate.id,
+        selectedCardPrintTemplate.name,
+      );
+      return downloadGeneratedDocumentContent(token, generated.id);
+    },
+    onSuccess: ({ blob, filename }) => {
+      triggerBrowserDownload(blob, filename);
+      setSuccessMessage("DOCX печатной формы скачан");
+    },
+  });
+  const downloadCardPrintPdfMutation = useMutation({
+    mutationFn: async () => {
+      if (!card || !selectedCardPrintTemplate) {
+        throw new Error("Для шаблона карточки пока нет печатной формы A4.");
+      }
+      const generated = await generatePdfDocument(
+        token,
+        card.id,
+        selectedCardPrintTemplate.id,
+        `${selectedCardPrintTemplate.name} PDF`,
+      );
+      return downloadGeneratedDocumentContent(token, generated.id);
+    },
+    onSuccess: ({ blob, filename }) => {
+      triggerBrowserDownload(blob, filename);
+      setSuccessMessage("PDF печатной формы скачан");
+    },
+  });
 
   useEffect(() => {
     saveCardTabs({
@@ -475,9 +534,20 @@ export function CardsWorkspace({
                 activeTab === "fields" && bulkFieldRows.length > 0 ? bulkFieldFormId : undefined
               }
               isActivating={activateCardMutation.isPending}
-              actionError={activateCardMutation.error ?? archiveCardMutation.error}
+              canDownloadPrint={Boolean(selectedCardPrintTemplate)}
+              isDownloadingPrint={
+                downloadCardPrintDocxMutation.isPending || downloadCardPrintPdfMutation.isPending
+              }
+              actionError={
+                activateCardMutation.error ??
+                archiveCardMutation.error ??
+                downloadCardPrintDocxMutation.error ??
+                downloadCardPrintPdfMutation.error
+              }
               successMessage={successMessage}
               onActivate={() => activateCardMutation.mutate()}
+              onDownloadPrintDocx={() => downloadCardPrintDocxMutation.mutate()}
+              onDownloadPrintPdf={() => downloadCardPrintPdfMutation.mutate()}
               onArchive={() => {
                 setArchiveTarget(selectedCard);
                 setCardFormMode(null);
@@ -672,9 +742,13 @@ function CardActionPanel({
   editorState,
   fieldFormId,
   isActivating,
+  canDownloadPrint,
+  isDownloadingPrint,
   actionError,
   successMessage,
   onActivate,
+  onDownloadPrintDocx,
+  onDownloadPrintPdf,
   onArchive,
 }: {
   card: CardRead;
@@ -682,9 +756,13 @@ function CardActionPanel({
   editorState: CardEditorPanelState;
   fieldFormId?: string;
   isActivating: boolean;
+  canDownloadPrint: boolean;
+  isDownloadingPrint: boolean;
   actionError?: unknown;
   successMessage?: string | null;
   onActivate: () => void;
+  onDownloadPrintDocx: () => void;
+  onDownloadPrintPdf: () => void;
   onArchive: () => void;
 }) {
   return (
@@ -727,6 +805,22 @@ function CardActionPanel({
             {uiText.activateCard}
           </button>
         )}
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!canDownloadPrint || isDownloadingPrint}
+          onClick={onDownloadPrintDocx}
+        >
+          Скачать DOCX
+        </button>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={!canDownloadPrint || isDownloadingPrint}
+          onClick={onDownloadPrintPdf}
+        >
+          Скачать PDF
+        </button>
         <button
           type="button"
           className="danger-button"
@@ -1847,4 +1941,13 @@ function templateFieldIdSet(template: CardTemplateRead | undefined) {
     return null;
   }
   return new Set(fieldIds);
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

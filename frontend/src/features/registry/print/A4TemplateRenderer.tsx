@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   type CSSProperties,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
 
@@ -45,7 +46,10 @@ type A4TemplateRendererProps = {
   selectedItemId?: string | null;
   onSelectItem?: (itemId: string | null) => void;
   onChangeLayout?: (layout: CardPrintLayout) => void;
+  onDropField?: (fieldId: string, point: { x_mm: number; y_mm: number }) => void;
 };
+
+const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
 
 const RESIZE_HANDLES = [
   "top-left",
@@ -70,6 +74,7 @@ export function A4TemplateRenderer({
   selectedItemId = null,
   onSelectItem,
   onChangeLayout,
+  onDropField,
 }: A4TemplateRendererProps) {
   const normalizedLayout = useMemo(() => normalizeLayoutGeometry(layout), [layout]);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
@@ -175,6 +180,30 @@ export function A4TemplateRenderer({
     }
   }
 
+  function handleCanvasDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!interactive || !onDropField) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleCanvasDrop(event: DragEvent<HTMLDivElement>) {
+    if (!interactive || !onDropField) {
+      return;
+    }
+    const fieldId = event.dataTransfer.getData(A4_FIELD_DRAG_TYPE);
+    if (!fieldId) {
+      return;
+    }
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    onDropField(fieldId, {
+      x_mm: Math.max(0, (event.clientX - rect.left) / scale),
+      y_mm: Math.max(0, (event.clientY - rect.top) / scale),
+    });
+  }
+
   return (
     <div className="a4-template-workspace">
       <div className="a4-ruler a4-ruler-horizontal" aria-hidden="true">
@@ -212,6 +241,8 @@ export function A4TemplateRenderer({
           }
           tabIndex={interactive ? 0 : undefined}
           onKeyDown={handleCanvasKeyDown}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
           onClick={(event) => {
             if (event.currentTarget === event.target) {
               onSelectItem?.(null);

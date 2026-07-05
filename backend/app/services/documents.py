@@ -56,6 +56,13 @@ class _RenderContext:
     card: CardRead
 
 
+@dataclass(frozen=True)
+class RenderedDocumentDownload:
+    content: bytes
+    filename: str
+    content_type: str
+
+
 _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([A-Za-z0-9_.]+)\s*}}")
 _DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_CONTENT_TYPE = "application/pdf"
@@ -566,6 +573,55 @@ class DocumentService:
                 self.storage.delete_bytes(stored_info.storage_key)
             raise
 
+    def render_blank_card_print_template_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+        output_format: str,
+    ) -> RenderedDocumentDownload:
+        template = self._get_active_template(template_id)
+        if template.template_format != CARD_PRINT_LAYOUT_VERSION:
+            raise DocumentServiceError("Document template is not a card print layout template.")
+        self._require_registry_read_permission(actor_user_id, template.registry_id)
+
+        template_version = self._latest_template_version(template.id)
+        if template_version is None or template_version.layout_json is None:
+            raise DocumentServiceError("Card print layout template version was not found.")
+
+        render_context = _RenderContext(card=self._blank_card_print_context_card(template))
+        if output_format == "docx":
+            output_filename = normalize_attachment_filename(
+                self._render_plain_text_template(
+                    template.output_filename_template,
+                    render_context,
+                )
+            )
+            return RenderedDocumentDownload(
+                content=self._build_docx_from_card_print_layout(
+                    template_version.layout_json,
+                    render_context,
+                ),
+                filename=output_filename,
+                content_type=_DOCX_CONTENT_TYPE,
+            )
+        if output_format == "pdf":
+            output_filename = self._pdf_output_filename(
+                self._render_plain_text_template(
+                    template.output_filename_template,
+                    render_context,
+                )
+            )
+            return RenderedDocumentDownload(
+                content=self._build_pdf_from_card_print_layout(
+                    template_version.layout_json,
+                    render_context,
+                ),
+                filename=output_filename,
+                content_type=_PDF_CONTENT_TYPE,
+            )
+        raise DocumentServiceError("Unsupported card print template output format.")
+
     def generate_pdf_for_actor(
         self,
         *,
@@ -1001,6 +1057,18 @@ class DocumentService:
             return self._format_render_value(self._resolve_placeholder(match.group(1), context))
 
         return _PLACEHOLDER_PATTERN.sub(replace, template_body)
+
+    def _blank_card_print_context_card(self, template: DocumentTemplate) -> CardRead:
+        return CardRead(
+            card_id=UUID(int=0),
+            registry_id=template.registry_id,
+            organization_id=UUID(int=0),
+            display_name=template.name,
+            card_template_id=template.card_template_id or UUID(int=0),
+            card_template_name=None,
+            blocks={},
+            fields={},
+        )
 
     def _resolve_placeholder(self, placeholder: str, context: _RenderContext) -> object | None:
         if placeholder == "card.id":

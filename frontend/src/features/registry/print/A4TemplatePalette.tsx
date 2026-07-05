@@ -1,6 +1,8 @@
 import type { FormFieldRead } from "@/api/types";
 import { uiText } from "@/app/uiText";
 
+const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
+
 type A4TemplatePaletteProps = {
   fields: FormFieldRead[];
   showTechnicalData: boolean;
@@ -51,6 +53,11 @@ export function A4TemplatePalette({
               key={field.id}
               type="button"
               className="a4-template-field-button"
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData(A4_FIELD_DRAG_TYPE, field.id);
+              }}
               onClick={() => onAddExistingField(field)}
             >
               <strong>{field.label}</strong>
