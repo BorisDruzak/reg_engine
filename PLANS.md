@@ -191,11 +191,12 @@ not a hardcoded employee registry.
   download DOCX/PDF through the active A4 print form, and the production test
   registries/templates from the Phase 8B live run were soft-archived through
   API.
-- Phase 8D A4 blank-download and existing-block follow-up is implemented
-  locally and verified without a database migration: blank DOCX/PDF downloads
-  from the A4 editor render the current unsaved canvas through an ad-hoc
-  backend endpoint without creating `document_templates`, and existing form
-  blocks can be added to the A4 canvas by click or mouse drag/drop.
+- Phase 8D A4 blank-download and existing-block follow-up is completed on
+  `main`, pushed to GitHub, deployed to the server, and live-verified without a
+  database migration: blank DOCX/PDF downloads from the A4 editor render the
+  current unsaved canvas through an ad-hoc backend endpoint without creating
+  `document_templates`, and existing form blocks can be added to the A4 canvas
+  by click or mouse drag/drop.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2943,8 +2944,8 @@ Verification completed so far:
 
 ## Phase 8D: A4 Blank Download And Existing Blocks Follow-Up
 
-Status: implemented locally and verified; push, deployment, and live browser
-verification are pending.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-verified.
 
 Purpose:
 
@@ -3001,3 +3002,36 @@ Verification completed so far:
   passed; backend reported 141 passed / 172 skipped / 1 warning, frontend
   reported 98 passed, production frontend build passed, and project-map check
   passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Fix A4 blank downloads and block placement" -SkipCheck`:
+  committed and pushed `c444d4d1`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
+  fast-forwarded to `c444d4d`, backend package was reinstalled, and server
+  checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`: built
+  and uploaded `frontend/dist`, restarted `reg-engine.service`, and passed API
+  health plus same-origin frontend smoke.
+- `powershell -ExecutionPolicy Bypass -File scripts/server-check.ps1`: passed
+  after deployment.
+- In-app Browser validation was attempted first, but it timed out while
+  inspecting the deployed app and reset the browser automation kernel. The live
+  UI validation used regular Playwright fallback.
+- Playwright live QA against `http://192.168.100.12:8000/` passed:
+  - login as `admin` succeeded through the production auth API;
+  - registry `Реестр карточек` and card template `Базовый шаблон` opened in
+    the deployed UI;
+  - the A4 palette showed `Существующие блоки`;
+  - existing field `Имя` was added to the canvas;
+  - existing block `ФИО` was added by click and by mouse drag/drop, leaving two
+    block elements and one field element on the A4 canvas;
+  - DOCX and PDF downloads called only
+    `POST /api/v1/registries/{registry_id}/card-print-templates/blank-docx`
+    and `/blank-pdf`;
+  - no `POST /api/v1/registries/{registry_id}/card-print-templates` create
+    request was made during blank downloads;
+  - the red `Данные нарушают ограничения базы.` message was not visible;
+  - downloaded files had valid `PK` and `%PDF` signatures;
+  - browser console warnings/errors and page errors were empty.
+- Live screenshots and downloaded files were saved outside Git:
+  `C:\Temp\reg-engine-phase8d-a4-blocks-20260705101536.png`,
+  `C:\Temp\reg-engine-phase8d-blank-current-20260705101536.docx`, and
+  `C:\Temp\reg-engine-phase8d-blank-current-20260705101536.pdf`.
