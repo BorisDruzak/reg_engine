@@ -204,12 +204,14 @@ not a hardcoded employee registry.
   `form_blocks.display_config_json`, and adding an existing block to the A4
   canvas now adds the block container plus all card-template fields from that
   block while preserving their relative visual layout.
-- Phase 8F A4 Layout Studio normalized-layout refactor is in progress locally
-  without a database migration: `CardLayoutStudio` is the active print editor
-  entry point, `card_print_layout_v1` accepts normalized `sections[]` and
+- Phase 8F A4 Layout Studio normalized-layout refactor is completed on `main`,
+  pushed to GitHub, deployed to the server, and live-verified without a
+  database migration: `CardLayoutStudio` is the active print editor entry
+  point, `card_print_layout_v1` accepts normalized `sections[]` and
   `overlays[]` while keeping legacy `items[]` compatibility, DOCX generation
-  emits editable Word section tables instead of plain text lines, and a
-  preview endpoint validates/normalizes unsaved layouts.
+  emits editable Word section tables instead of plain text lines, the preview
+  endpoint validates/normalizes unsaved layouts, and decorative A4 block
+  containers no longer raise false overlap warnings against their own fields.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3051,7 +3053,8 @@ Verification completed so far:
 
 ## Phase 8F: A4 Layout Studio Normalized Layout Refactor
 
-Status: in progress locally, no database migration.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-verified. No database migration.
 
 Purpose:
 
@@ -3059,7 +3062,7 @@ Move the A4 print-template implementation toward one normalized layout contract
 that can support design, preview, readonly, and optional fill modes without
 breaking ordinary card filling or existing generated-document flows.
 
-Implemented scope so far:
+Implemented scope:
 
 1. Frontend layout contract:
    - added `CardLayoutStudio` as the active print editor entry point while
@@ -3069,7 +3072,10 @@ Implemented scope so far:
    - extended API types with `CardPrintSection`, `CardPrintFlowItem`,
      `CardPrintOverlayItem`, preview payload/read models, and renderer modes;
    - added geometry normalization helpers that convert legacy flat `items[]`
-     into normalized `sections[]` and `overlays[]` without storing CSS pixels.
+     into normalized `sections[]` and `overlays[]` without storing CSS pixels;
+   - aligned frontend overlap validation with backend rules so decorative A4
+     block/container/panel/rectangle items do not warn when they contain field
+     content, while overlapping content fields still warn.
 2. Backend validation:
    - `card_print_layout_v1` accepts `sections[]`, `overlays[]`, and legacy
      `items[]`;
@@ -3087,7 +3093,7 @@ Implemented scope so far:
    - frontend API wrappers were added for read/archive/preview and explicit
      card-print DOCX/PDF generation calls.
 
-Verification completed so far:
+Verification completed:
 
 - `backend\.venv\Scripts\python.exe -m ruff check backend/app/services/card_print.py backend/app/services/documents.py backend/app/schemas/documents.py backend/app/api/v1/endpoints/documents.py backend/tests/test_card_print_layout_services.py backend/tests/test_document_generation_services.py`:
   passed.
@@ -3096,11 +3102,57 @@ Verification completed so far:
 - `pnpm -C frontend typecheck`: passed.
 - `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx src/features/registry/print/printLayoutGeometry.test.ts --reporter=dot --testTimeout=10000`:
   passed, 7 tests.
-
-Remaining gate before closing this phase:
-
-- Run full format/lint/typecheck/test/check scripts.
-- Commit and push `main`.
-- Deploy backend/frontend to the configured server.
-- Live-check the deployed A4 editor, preview, DOCX/PDF generation, and ordinary
-  card filling entry point.
+- `pnpm -C frontend exec vitest run src/features/registry/print/printLayoutValidation.test.ts --reporter=dot --testTimeout=10000`:
+  failed before the fix and passed after the frontend validation update, 2 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`:
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/lint.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`: passed; backend
+  reported 148 passed / 172 skipped / 1 warning, frontend reported 100 passed
+  before the validation regression test was added.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`: passed after the
+  validation follow-up; backend reported 148 passed / 172 skipped / 1 warning,
+  frontend reported 102 passed, production frontend build passed, and
+  project-map check passed.
+- `git commit -m "Refactor A4 print layout normalization"`: committed
+  `98953547`.
+- `git commit -m "Allow A4 block container overlap validation"`: committed
+  `b28dd2bb`.
+- `git push origin main`: pushed through `b28dd2bb`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
+  fast-forwarded to `b28dd2b`, backend package reinstalled, and server checks
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`: built
+  and uploaded `frontend/dist`, restarted `reg-engine.service`, and passed API
+  health plus same-origin frontend smoke.
+- In-app Browser read access worked but DOM snapshot/click interaction did not
+  change React state on this page, so live UI validation used regular
+  Playwright fallback after recording that reason.
+- Playwright live QA against `http://192.168.100.12:8000/` passed:
+  - login as `admin` succeeded;
+  - ordinary card-template composition opened first, with the A4 editor available
+    through `Печатный шаблон A4`;
+  - A4 Studio opened with the expected toolbar, palette, rulers, empty new
+    canvas, and existing blocks/fields;
+  - adding existing block `ФИО` placed the block container plus its fields on
+    the canvas and no longer showed the false overlap warning;
+  - ordinary card workspace opened with `Поля` selected by default, and
+    `Печатная форма` remained a separate tab using the A4 renderer;
+  - card action buttons for DOCX/PDF were visible.
+- Production API smoke passed:
+  - `POST /api/v1/card-print-templates/preview` returned one normalized section,
+    one overlay, and zero warnings for a normalized sample layout;
+  - blank current-layout DOCX/PDF endpoints returned valid `PK` and `%PDF`
+    signatures without creating templates or generated documents;
+  - real card DOCX/PDF generation returned valid `PK` and `%PDF` content, and
+    the smoke generated documents were soft-archived afterward.
+- Browser network capture during live QA showed only 200 responses for the
+  relevant registry/schema/card/card-print API calls.
+- Live screenshots and downloaded files were saved outside Git:
+  `C:\Temp\reg-engine-a4-layout-studio-block-live.png`,
+  `C:\Temp\reg-engine-a4-card-preview-live.png`,
+  `C:\Temp\reg-engine-a4-live-blank.docx`,
+  `C:\Temp\reg-engine-a4-live-blank.pdf`,
+  `C:\Temp\reg-engine-a4-card-action.docx`, and
+  `C:\Temp\reg-engine-a4-card-action.pdf`.
