@@ -1612,12 +1612,94 @@ tr:last-child td {
   justify-content: space-between;
 }
 
+.card-layout-studio-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.card-layout-studio-tabs button[role="tab"] {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #17324d;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.card-layout-studio-tabs button[role="tab"].is-active {
+  border-color: #17324d;
+  background: #17324d;
+  color: #ffffff;
+}
+
+.card-layout-structure {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.card-layout-structure-header,
+.card-layout-structure-block > header,
+.card-layout-structure-field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-layout-structure-header h4,
+.card-layout-structure-block h5 {
+  margin: 0;
+  color: #17324d;
+}
+
+.card-layout-structure-header span,
+.card-layout-structure-block span,
+.card-layout-structure-field small {
+  color: #667085;
+  font-size: 0.76rem;
+}
+
+.card-layout-structure-list,
+.card-layout-structure-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.card-layout-structure-block,
+.card-layout-structure-field {
+  padding: 10px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.card-layout-structure-field > div {
+  display: grid;
+  gap: 2px;
+}
+
 .a4-template-workbench {
   display: grid;
   grid-template-columns: minmax(190px, 240px) minmax(520px, 1fr) minmax(260px, 300px);
   gap: 12px;
   align-items: start;
   min-width: 0;
+}
+
+.a4-template-workbench.is-preview {
+  grid-template-columns: minmax(520px, 1fr);
 }
 
 .a4-template-palette,

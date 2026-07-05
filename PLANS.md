@@ -212,6 +212,13 @@ not a hardcoded employee registry.
   emits editable Word section tables instead of plain text lines, the preview
   endpoint validates/normalizes unsaved layouts, and decorative A4 block
   containers no longer raise false overlap warnings against their own fields.
+- Phase 8G unified card-template studio correction is in progress locally.
+  Scope: remove the nested old schema visual editor from the selected template
+  workspace, make `CardLayoutStudio` and `A4LayoutRenderer` the real canonical
+  implementations instead of thin wrappers, expose one selected-template screen
+  with modes for card composition, web form, A4 print form, card preview, and
+  technical settings, and preserve current PDF/DOCX generation without a
+  database migration.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3156,3 +3163,88 @@ Verification completed:
   `C:\Temp\reg-engine-a4-live-blank.pdf`,
   `C:\Temp\reg-engine-a4-card-action.docx`, and
   `C:\Temp\reg-engine-a4-card-action.pdf`.
+
+## Phase 8G: Unified Card Template Studio Correction
+
+Status: local implementation and checks completed. Commit, deploy, and live
+browser verification are still pending. No database migration is planned.
+
+Purpose:
+
+Correct the failed unification from Phase 8F. The selected card template screen
+must be one studio, not an old web schema canvas with a nested A4 button. The
+same screen must expose the card composition, web-form structure, A4 print
+layout, card preview, and technical settings while keeping the existing
+schema-driven data model and document generation APIs.
+
+Implementation scope:
+
+1. Selected-template screen:
+   - replace the selected-template block in `RegistriesAndSchema.tsx` with the
+     canonical `CardLayoutStudio`;
+   - remove `isPrintEditorOpen`, the nested A4 open button, and the old
+     `schema-canvas schema-block-layout-grid` selected-template editor;
+   - keep create/edit/archive flows outside the selected-template studio
+     unchanged unless they are needed by the studio callback contract.
+2. Canonical frontend modules:
+   - make `frontend/src/features/registry/print/CardLayoutStudio.tsx` the real
+     implementation with the public props contract used by
+     `RegistriesAndSchema.tsx`;
+   - keep `CardPrintTemplateEditor` files only as compatibility exports;
+   - make `frontend/src/features/registry/print/A4LayoutRenderer.tsx` the real
+     renderer implementation with design, preview, fill, and readonly modes;
+   - keep `A4TemplateRenderer`/`A4LayoutCanvas` only as compatibility exports.
+3. Studio modes:
+   - default directly to the A4 print form canvas;
+   - add mode navigation for card composition, web form, A4 print form, card
+     preview, and settings;
+   - show compact structure lists for blocks and fields instead of the old
+     schema drag/drop canvas;
+   - keep adding existing fields and blocks to A4 by click and mouse drag/drop,
+     preserving field order inside a block.
+4. Unified selected element behavior:
+   - when an A4 item is selected, show data, web-form, print-form, appearance,
+     access/publicity, and technical property sections in one side panel;
+   - show unresolved/archived field problems as A4 validation issues through
+     the existing layout validation path.
+5. Saving and generation:
+   - keep create/update print-template saves through
+     `createCardPrintTemplate`/`createCardPrintTemplateVersion`;
+   - keep blank DOCX/PDF downloads for unsaved layouts;
+   - do not change backend migrations or the `card_print_layout_v1` database
+     contract unless a test proves it is required.
+
+Required verification:
+
+- Frontend regression tests must prove that the selected template renders
+  `CardLayoutStudio` directly, no old A4 open button is present, no old selected
+  `schema-canvas` is present, the structure panel lists blocks/fields, A4 design
+  mode can select an item, preview mode hides grid/technical data, saving calls
+  the existing print-template APIs, and DOCX/PDF buttons call the existing
+  generation/download APIs.
+- Grep acceptance must show `isPrintEditorOpen` is removed from
+  `RegistriesAndSchema.tsx`, `CardPrintTemplateEditor` is not the active editor
+  imported there, and `A4TemplateRenderer` is not the canonical renderer
+  implementation.
+- Run focused frontend tests, typecheck/lint/test/check scripts, deploy to the
+  configured server, then live browser-check the unified studio at
+  `http://192.168.100.12:8000/`.
+
+Local verification completed:
+
+- `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`:
+  passed, 9 tests.
+- `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`:
+  passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/lint.ps1`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`: passed; backend
+  reported 148 passed / 172 skipped / 1 warning, frontend reported 80 passed /
+  25 skipped.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`: passed; GitHub
+  SSH, server root SSH, backend checks, frontend lint/typecheck/test, production
+  frontend build, and project-map check passed.
+- The 25 skipped frontend tests in `frontend/src/App.test.tsx` are obsolete
+  selected-template visual-canvas checks. They targeted the removed old
+  `schema-canvas` editor and were replaced by focused CardLayoutStudio/A4
+  renderer regression coverage.
