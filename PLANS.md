@@ -197,6 +197,13 @@ not a hardcoded employee registry.
   current unsaved canvas through an ad-hoc backend endpoint without creating
   `document_templates`, and existing form blocks can be added to the A4 canvas
   by click or mouse drag/drop.
+- Phase 8E card-template editor and A4 block layout follow-up is completed
+  locally without a database migration: field create/edit flags are grouped
+  under one `Расширенные настройки` disclosure, form blocks use the same
+  10-row by 5-column visual placement grid as fields through existing
+  `form_blocks.display_config_json`, and adding an existing block to the A4
+  canvas now adds the block container plus all card-template fields from that
+  block while preserving their relative visual layout.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,

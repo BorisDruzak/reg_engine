@@ -85,6 +85,10 @@ type BlockFormState = {
   publicVisible: boolean;
   publicEditable: boolean;
   titlePosition: string;
+  columnSpan: string;
+  layoutRow: string;
+  layoutColumn: string;
+  displayConfigBase: Record<string, unknown>;
 };
 
 type FieldFormState = {
@@ -108,6 +112,7 @@ type FieldFormState = {
   isListDisplay: boolean;
   publicVisible: boolean;
   publicEditable: boolean;
+  advancedOpen: boolean;
 };
 
 type FieldResizeState = {
@@ -206,6 +211,11 @@ function displayConfigNumber(field: FormFieldRead, key: string, fallback: number
 function blockDisplayConfigValue(block: FormBlockRead, key: string, fallback: string) {
   const value = block.display_config_json?.[key];
   return typeof value === "string" ? value : fallback;
+}
+
+function blockDisplayConfigNumber(block: FormBlockRead, key: string, fallback: number) {
+  const value = block.display_config_json?.[key];
+  return typeof value === "number" ? value : fallback;
 }
 
 function staticTextValue(field: FormFieldRead) {
@@ -577,6 +587,7 @@ function SchemaVisualEditor({
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
+  const [activeBlockLayoutId, setActiveBlockLayoutId] = useState<string | null>(null);
   const [layoutNativeDragFieldId, setLayoutNativeDragFieldId] = useState<string | null>(null);
   const [suppressHandleClickFieldId, setSuppressHandleClickFieldId] = useState<string | null>(null);
   const [resizingField, setResizingField] = useState<FieldResizeState | null>(null);
@@ -589,10 +600,7 @@ function SchemaVisualEditor({
   const [showInlineReferenceItemForm, setShowInlineReferenceItemForm] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const sortedBlocks = useMemo(
-    () => [...blocks].sort((left, right) => left.position - right.position),
-    [blocks],
-  );
+  const sortedBlocks = useMemo(() => sortBlocksByVisualPlacement(blocks), [blocks]);
   const sortedTemplates = useMemo(
     () => [...templates].sort((left, right) => left.position - right.position),
     [templates],
@@ -637,13 +645,14 @@ function SchemaVisualEditor({
   }
 
   useEffect(() => {
-    if (!draggedFieldId) {
+    if (!draggedFieldId && !activeBlockLayoutId) {
       return undefined;
     }
 
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setActiveDraggedFieldId(null);
+        setActiveBlockLayoutId(null);
       }
     };
     const handleDocumentPointerDown = (event: PointerEvent) => {
@@ -655,6 +664,7 @@ function SchemaVisualEditor({
         return;
       }
       setActiveDraggedFieldId(null);
+      setActiveBlockLayoutId(null);
     };
 
     document.addEventListener("keydown", handleDocumentKeyDown);
@@ -663,7 +673,7 @@ function SchemaVisualEditor({
       document.removeEventListener("keydown", handleDocumentKeyDown);
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
     };
-  }, [draggedFieldId]);
+  }, [activeBlockLayoutId, draggedFieldId]);
 
   const createBlockMutation = useMutation({
     mutationFn: (payload: {
@@ -907,9 +917,11 @@ function SchemaVisualEditor({
   const isTemplateFormSubmitting = createTemplateMutation.isPending;
 
   function openCreateBlockForm() {
+    const placement = nextBlockPlacement(blocks);
     setLocalError(null);
     setSuccessMessage(null);
     setFieldFormState(null);
+    setActiveBlockLayoutId(null);
     setBlockFormState({
       mode: "create",
       blockId: null,
@@ -921,6 +933,10 @@ function SchemaVisualEditor({
       publicVisible: true,
       publicEditable: false,
       titlePosition: "top",
+      columnSpan: String(maxVisualColumns),
+      layoutRow: String(placement.row),
+      layoutColumn: String(placement.column),
+      displayConfigBase: {},
     });
   }
 
@@ -928,6 +944,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setFieldFormState(null);
+    setActiveBlockLayoutId(null);
     setBlockFormState({
       mode: "edit",
       blockId: block.id,
@@ -939,6 +956,10 @@ function SchemaVisualEditor({
       publicVisible: block.public_visible,
       publicEditable: block.public_editable,
       titlePosition: blockDisplayConfigValue(block, "title_position", "top"),
+      columnSpan: String(blockColumnSpan(block)),
+      layoutRow: String(blockLayoutRow(block, block.position + 1)),
+      layoutColumn: String(blockLayoutColumn(block, 1)),
+      displayConfigBase: block.display_config_json ?? {},
     });
   }
 
@@ -962,6 +983,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
+    setActiveBlockLayoutId(null);
     setInlineReferenceListName("");
     setInlineReferenceItemLabel("");
     setShowInlineReferenceItemForm(false);
@@ -986,6 +1008,7 @@ function SchemaVisualEditor({
       isListDisplay: false,
       publicVisible: true,
       publicEditable: false,
+      advancedOpen: false,
     });
   }
 
@@ -993,6 +1016,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setBlockFormState(null);
+    setActiveBlockLayoutId(null);
     setInlineReferenceListName("");
     setInlineReferenceItemLabel("");
     setShowInlineReferenceItemForm(false);
@@ -1018,6 +1042,7 @@ function SchemaVisualEditor({
       isListDisplay: field.is_list_display,
       publicVisible: field.public_visible,
       publicEditable: field.public_editable,
+      advancedOpen: false,
     });
   }
 
@@ -1073,6 +1098,7 @@ function SchemaVisualEditor({
     setIsPrintEditorOpen(false);
     setBlockFormState(null);
     setFieldFormState(null);
+    setActiveBlockLayoutId(null);
     setLocalError(null);
   }
 
@@ -1470,6 +1496,25 @@ function SchemaVisualEditor({
     handleFieldSpanResize(field, fieldColumnSpan(field) + direction);
   }
 
+  function toggleBlockLayoutGrid(blockId: string) {
+    setActiveDraggedFieldId(null);
+    setBlockFormState(null);
+    setActiveBlockLayoutId((current) => (current === blockId ? null : blockId));
+  }
+
+  function handleBlockLayoutDrop(block: FormBlockRead, row: number, column: number) {
+    setLocalError(null);
+    setSuccessMessage(null);
+    setActiveBlockLayoutId(null);
+    updateBlockMutation.mutate({
+      blockId: block.id,
+      title: block.title,
+      description: block.description ?? null,
+      position: block.position,
+      display_config_json: blockDisplayConfigWithPlacement(block, row, column),
+    });
+  }
+
   function renderSchemaFieldGrid(blockFields: FormFieldRead[]) {
     const rows = visualFieldRows(blockFields);
     const layoutField = blockFields.find((field) => field.id === draggedFieldId) ?? null;
@@ -1713,6 +1758,97 @@ function SchemaVisualEditor({
             {isCurrent ? "Текущее" : isOccupiedByAnotherField ? "Занято" : `${row}.${column}`}
           </span>
           {occupant && <small>{occupant.field.label}</small>}
+        </button>
+      );
+    });
+  }
+
+  function renderBlockLayoutDropPanel(layoutBlock: FormBlockRead) {
+    return (
+      <div
+        className="schema-layout-panel schema-block-layout-panel"
+        role="group"
+        aria-label={`Сетка перемещения блока ${layoutBlock.title}`}
+      >
+        <div className="schema-layout-panel-header">
+          <div>
+            <strong>Перемещение блока: {layoutBlock.title}</strong>
+            <span>
+              {maxVisualRows} строк и {maxVisualColumns} колонок
+            </span>
+          </div>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setActiveBlockLayoutId(null)}
+          >
+            Закрыть сетку
+          </button>
+        </div>
+        <div className="schema-layout-grid-scroll">
+          <div
+            className="schema-layout-grid"
+            style={{ "--schema-row-columns": String(maxVisualColumns) } as CSSProperties}
+          >
+            {Array.from({ length: maxVisualRows }, (_, index) => (
+              <Fragment key={index + 1}>
+                {renderBlockLayoutDropSlots(layoutBlock, index + 1)}
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderBlockLayoutDropSlots(layoutBlock: FormBlockRead, row: number) {
+    const visualItems = visualBlockItems(sortedBlocks);
+    const currentItem = visualItems.find((item) => item.block.id === layoutBlock.id) ?? null;
+
+    return Array.from({ length: maxVisualColumns }, (_, index) => {
+      const column = index + 1;
+      const occupant = visualItems.find(
+        (item) =>
+          item.row === row && column >= item.column && column < item.column + item.columnSpan,
+      );
+      const isCurrent =
+        currentItem != null &&
+        row === currentItem.row &&
+        column >= currentItem.column &&
+        column < currentItem.column + currentItem.columnSpan;
+      const isOccupiedByAnotherBlock = occupant != null && !isCurrent;
+      const isUnavailable = isCurrent || isOccupiedByAnotherBlock;
+      return (
+        <button
+          key={`${row}:${column}`}
+          type="button"
+          className={[
+            "schema-layout-drop-slot",
+            occupant ? "is-occupied" : "",
+            isCurrent ? "is-current" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-label={
+            isCurrent
+              ? `Текущее положение блока ${layoutBlock.title}: строка ${row} колонка ${column}`
+              : isOccupiedByAnotherBlock && occupant
+                ? `Занято блоком ${occupant.block.title}: строка ${row} колонка ${column}`
+                : `Поместить блок в строку ${row} колонку ${column}`
+          }
+          data-layout-row={row}
+          data-layout-column={column}
+          disabled={isUnavailable}
+          onClick={() => {
+            if (!isUnavailable) {
+              handleBlockLayoutDrop(layoutBlock, row, column);
+            }
+          }}
+        >
+          <span>
+            {isCurrent ? "Текущее" : isOccupiedByAnotherBlock ? "Занято" : `${row}.${column}`}
+          </span>
+          {occupant && <small>{occupant.block.title}</small>}
         </button>
       );
     });
@@ -2130,21 +2266,6 @@ function SchemaVisualEditor({
               }
             />
           </label>
-          {fieldFormState.fieldType !== "static_text" && (
-            <label className="checkbox-inline schema-required-checkbox">
-              <input
-                type="checkbox"
-                checked={fieldFormState.requiredMode !== "not_required"}
-                onChange={(event) =>
-                  setFieldFormState({
-                    ...fieldFormState,
-                    requiredMode: event.currentTarget.checked ? "required" : "not_required",
-                  })
-                }
-              />
-              {uiText.requiredFieldCheckbox}
-            </label>
-          )}
           {fieldFormState.fieldType === "static_text" && (
             <label className="schema-static-text-label">
               {uiText.staticTextContent}
@@ -2181,68 +2302,100 @@ function SchemaVisualEditor({
             onChange: (value) => setFieldFormState({ ...fieldFormState, separatorStyle: value }),
           })}
         </div>
-        <div className="schema-field-options">
-          {fieldFormState.fieldType !== "static_text" && (
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={fieldFormState.isListDisplay}
-                onChange={(event) =>
-                  setFieldFormState({
-                    ...fieldFormState,
-                    isListDisplay: event.currentTarget.checked,
-                  })
-                }
-              />
-              {uiText.listDisplayField}
-            </label>
-          )}
-          {fieldFormState.mode === "create" && (
-            <>
-              <label className="checkbox-inline">
-                <input
-                  type="checkbox"
-                  checked={fieldFormState.publicVisible}
-                  onChange={(event) =>
-                    setFieldFormState({
-                      ...fieldFormState,
-                      publicVisible: event.currentTarget.checked,
-                    })
-                  }
-                />
-                {uiText.publicVisibleField}
-              </label>
+        <div className="schema-field-advanced">
+          <button
+            type="button"
+            className="schema-advanced-toggle"
+            aria-expanded={fieldFormState.advancedOpen}
+            onClick={() =>
+              setFieldFormState({
+                ...fieldFormState,
+                advancedOpen: !fieldFormState.advancedOpen,
+              })
+            }
+          >
+            Расширенные настройки
+          </button>
+          {fieldFormState.advancedOpen && (
+            <div className="schema-field-options">
+              {fieldFormState.fieldType !== "static_text" && (
+                <label className="checkbox-inline schema-required-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={fieldFormState.requiredMode !== "not_required"}
+                    onChange={(event) =>
+                      setFieldFormState({
+                        ...fieldFormState,
+                        requiredMode: event.currentTarget.checked ? "required" : "not_required",
+                      })
+                    }
+                  />
+                  {uiText.requiredFieldCheckbox}
+                </label>
+              )}
               {fieldFormState.fieldType !== "static_text" && (
                 <label className="checkbox-inline">
                   <input
                     type="checkbox"
-                    checked={fieldFormState.publicEditable}
+                    checked={fieldFormState.isListDisplay}
                     onChange={(event) =>
                       setFieldFormState({
                         ...fieldFormState,
-                        publicEditable: event.currentTarget.checked,
+                        isListDisplay: event.currentTarget.checked,
                       })
                     }
                   />
-                  {uiText.publicEditableField}
+                  {uiText.listDisplayField}
                 </label>
               )}
-            </>
-          )}
-          {fieldFormState.mode === "edit" && (
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={fieldFormState.isActive}
-                onChange={(event) =>
-                  setFieldFormState({
-                    ...fieldFormState,
-                    isActive: event.currentTarget.checked,
-                  })
-                }
-              />
-              {uiText.activeFormField}
-            </label>
+              {fieldFormState.mode === "create" && (
+                <>
+                  <label className="checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={fieldFormState.publicVisible}
+                      onChange={(event) =>
+                        setFieldFormState({
+                          ...fieldFormState,
+                          publicVisible: event.currentTarget.checked,
+                        })
+                      }
+                    />
+                    {uiText.publicVisibleField}
+                  </label>
+                  {fieldFormState.fieldType !== "static_text" && (
+                    <label className="checkbox-inline">
+                      <input
+                        type="checkbox"
+                        checked={fieldFormState.publicEditable}
+                        onChange={(event) =>
+                          setFieldFormState({
+                            ...fieldFormState,
+                            publicEditable: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                      {uiText.publicEditableField}
+                    </label>
+                  )}
+                </>
+              )}
+              {fieldFormState.mode === "edit" && (
+                <label className="checkbox-inline">
+                  <input
+                    type="checkbox"
+                    checked={fieldFormState.isActive}
+                    onChange={(event) =>
+                      setFieldFormState({
+                        ...fieldFormState,
+                        isActive: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                  {uiText.activeFormField}
+                </label>
+              )}
+            </div>
           )}
         </div>
         {fieldFormState.mode === "edit" && fieldFormState.fieldId && (
@@ -2441,11 +2594,20 @@ function SchemaVisualEditor({
               </button>
             </div>
           </header>
-          <div className="schema-canvas">
-            {sortedBlocks.map((block) => {
+          <div className="schema-canvas schema-block-layout-grid">
+            {visualBlockItems(sortedBlocks).map(({ block, row, column, columnSpan }) => {
               const blockFields = fieldsByBlockId.get(block.id) ?? [];
               return (
-                <article key={block.id} className="schema-block-card">
+                <article
+                  key={block.id}
+                  className="schema-block-card"
+                  style={
+                    {
+                      "--schema-block-column": `${column} / span ${columnSpan}`,
+                      "--schema-block-row": String(row),
+                    } as CSSProperties
+                  }
+                >
                   <header
                     className="schema-block-header schema-clickable-header"
                     role="button"
@@ -2462,7 +2624,20 @@ function SchemaVisualEditor({
                       <h3>{block.title}</h3>
                       <span>{`${uiText.technicalCode}: ${block.code}`}</span>
                     </div>
+                    <button
+                      type="button"
+                      className="drag-handle schema-drag-handle schema-block-drag-handle"
+                      aria-label={`Переместить блок ${block.title}`}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleBlockLayoutGrid(block.id);
+                      }}
+                    >
+                      ::
+                    </button>
                   </header>
+                  {activeBlockLayoutId === block.id && renderBlockLayoutDropPanel(block)}
                   {blockFormState?.mode === "edit" && blockFormState.blockId === block.id && (
                     <div
                       className="panel-form schema-block-inline-form"
@@ -3334,8 +3509,19 @@ function clampFieldColumnSpan(span: number, column: number) {
   return Math.min(maxVisualColumns - safeColumn + 1, Math.max(1, span));
 }
 
+function clampBlockColumnSpan(span: number, column: number) {
+  const safeColumn = Math.min(maxVisualColumns, Math.max(1, column));
+  return Math.min(maxVisualColumns - safeColumn + 1, Math.max(1, span));
+}
+
 function blockDisplayConfig(blockFormState: BlockFormState) {
+  const layoutColumn = layoutColumnNumber(blockFormState.layoutColumn);
+  const columnSpan = clampBlockColumnSpan(layoutNumber(blockFormState.columnSpan), layoutColumn);
   return {
+    ...blockFormState.displayConfigBase,
+    column_span: columnSpan,
+    layout_row: layoutRowNumber(blockFormState.layoutRow),
+    layout_column: layoutColumn,
     title_position: blockTitlePositions.includes(blockFormState.titlePosition)
       ? blockFormState.titlePosition
       : "top",
@@ -3366,6 +3552,27 @@ function fieldColumnSpan(field: FormFieldRead) {
   return Math.min(maxVisualColumns, Math.max(1, displayConfigNumber(field, "column_span", 1)));
 }
 
+function blockColumnSpan(block: FormBlockRead) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, blockDisplayConfigNumber(block, "column_span", maxVisualColumns)),
+  );
+}
+
+function blockLayoutRow(block: FormBlockRead, fallback: number) {
+  return Math.min(
+    maxVisualRows,
+    Math.max(1, blockDisplayConfigNumber(block, "layout_row", fallback)),
+  );
+}
+
+function blockLayoutColumn(block: FormBlockRead, fallback: number) {
+  return Math.min(
+    maxVisualColumns,
+    Math.max(1, blockDisplayConfigNumber(block, "layout_column", fallback)),
+  );
+}
+
 function fieldLayoutRow(field: FormFieldRead, fallback: number) {
   return Math.min(maxVisualRows, Math.max(1, displayConfigNumber(field, "layout_row", fallback)));
 }
@@ -3383,6 +3590,24 @@ type VisualFieldItem = {
   column: number;
   columnSpan: number;
 };
+
+type VisualBlockItem = {
+  block: FormBlockRead;
+  row: number;
+  column: number;
+  columnSpan: number;
+};
+
+function visualBlockItems(blocks: FormBlockRead[]) {
+  return [...blocks]
+    .sort((left, right) => left.position - right.position)
+    .map((block, index): VisualBlockItem => {
+      const row = blockLayoutRow(block, index + 1);
+      const column = blockLayoutColumn(block, 1);
+      const columnSpan = Math.min(blockColumnSpan(block), maxVisualColumns - column + 1);
+      return { block, row, column, columnSpan };
+    });
+}
 
 function visualFieldItems(fields: FormFieldRead[]) {
   return [...fields]
@@ -3434,6 +3659,29 @@ function sortFieldsByVisualPlacement(fields: FormFieldRead[]) {
     .map((item) => item.field);
 }
 
+function sortBlocksByVisualPlacement(blocks: FormBlockRead[]) {
+  return visualBlockItems(blocks)
+    .sort(
+      (left, right) =>
+        left.row - right.row ||
+        left.column - right.column ||
+        left.block.position - right.block.position,
+    )
+    .map((item) => item.block);
+}
+
+function blockDisplayConfigWithPlacement(block: FormBlockRead, row: number, column: number) {
+  const safeColumn = Math.min(maxVisualColumns, Math.max(1, column));
+  const safeSpan = clampBlockColumnSpan(blockColumnSpan(block), safeColumn);
+  return {
+    ...(block.display_config_json ?? {}),
+    column_span: safeSpan,
+    layout_row: Math.min(maxVisualRows, Math.max(1, row)),
+    layout_column: safeColumn,
+    title_position: blockDisplayConfigValue(block, "title_position", "top"),
+  };
+}
+
 function fieldDisplayConfigWithPlacement(field: FormFieldRead, row: number, column: number) {
   const safeColumn = Math.min(maxVisualColumns, Math.max(1, column));
   const safeSpan = clampFieldColumnSpan(fieldColumnSpan(field), safeColumn);
@@ -3459,6 +3707,14 @@ function fieldDisplayConfigWithSpan(field: FormFieldRead, columnSpan: number) {
 
 function nextFieldPlacement(fields: FormFieldRead[]) {
   const rows = visualFieldRows(fields);
+  if (rows.length === 0) {
+    return { row: 1, column: 1 };
+  }
+  return { row: Math.min(maxVisualRows, Math.max(...rows.map((row) => row.row)) + 1), column: 1 };
+}
+
+function nextBlockPlacement(blocks: FormBlockRead[]) {
+  const rows = visualBlockItems(blocks);
   if (rows.length === 0) {
     return { row: 1, column: 1 };
   }

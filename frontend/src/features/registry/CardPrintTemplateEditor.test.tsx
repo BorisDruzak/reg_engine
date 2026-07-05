@@ -208,6 +208,10 @@ test("adds an existing data block to the A4 canvas by click and mouse drag", asy
 
   await user.click(paletteBlock);
   expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(2);
+  expect(
+    await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Подтверждено.*Да/ })).toBeInTheDocument();
 
   const dataTransfer = createDataTransfer();
   fireEvent.dragStart(paletteBlock, { dataTransfer });
@@ -215,6 +219,8 @@ test("adds an existing data block to the A4 canvas by click and mouse drag", asy
   fireEvent.drop(canvas, { clientX: 190, clientY: 210, dataTransfer });
 
   expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(3);
+  expect(screen.getAllByRole("button", { name: /Статус.*Иванов Иван Иванович/ })).toHaveLength(2);
+  expect(screen.getAllByRole("button", { name: /Подтверждено.*Да/ })).toHaveLength(2);
 });
 
 test("renders the A4 editor as a visual workspace with technical settings hidden", async () => {
@@ -429,7 +435,7 @@ function renderEditor() {
           name: "Муниципальная карточка",
           description: null,
           position: 0,
-          field_schema_json: { field_ids: ["field-1"] },
+          field_schema_json: { field_ids: ["field-1", "field-2"] },
           default_values_json: [],
           is_active: true,
         }}
@@ -461,6 +467,30 @@ function renderEditor() {
             options_source_id: null,
             options_config_json: null,
             display_config_json: null,
+            is_active: true,
+            is_list_display: false,
+            public_visible: true,
+            public_editable: false,
+          },
+          {
+            id: "field-2",
+            block_id: "block-1",
+            code: "approved",
+            label: "Подтверждено",
+            description: null,
+            field_type: "bool",
+            position: 1,
+            required_mode: "not_required",
+            options_source_type: null,
+            options_source_id: null,
+            options_config_json: null,
+            display_config_json: {
+              column_span: 1,
+              layout_row: 1,
+              layout_column: 2,
+              label_position: "top",
+              separator_style: "none",
+            },
             is_active: true,
             is_list_display: false,
             public_visible: true,

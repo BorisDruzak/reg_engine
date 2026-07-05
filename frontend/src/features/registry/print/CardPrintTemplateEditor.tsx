@@ -41,6 +41,11 @@ import {
 import { validatePrintLayout } from "./printLayoutValidation";
 
 const defaultOutputFilename = "{{ card.display_name }}.docx";
+const blockFieldGridColumns = 5;
+const blockFieldPaddingMm = 4;
+const blockFieldHeaderMm = 10;
+const blockFieldGapMm = 3;
+const blockFieldHeightMm = 12;
 
 const FIELD_TYPES = [
   "text",
@@ -374,10 +379,20 @@ export function CardPrintTemplateEditor({
     setLocalMessage(null);
   }
 
+  function addItems(items: CardPrintLayoutItem[]) {
+    const nextItems = [...layout.items];
+    let selectedId: string | null = null;
+    for (const item of items) {
+      const normalizedItem = ensureItemGeometry(item, { ...layout, items: nextItems });
+      nextItems.push(normalizedItem);
+      selectedId = normalizedItem.id;
+    }
+    commitLayout({ ...layout, items: nextItems });
+    setSelectedItemId(selectedId);
+  }
+
   function addItem(item: CardPrintLayoutItem) {
-    const normalizedItem = ensureItemGeometry(item, layout);
-    commitLayout({ ...layout, items: [...layout.items, normalizedItem] });
-    setSelectedItemId(normalizedItem.id);
+    addItems([item]);
   }
 
   function addExistingFieldAt(fieldId: string, point: { x_mm: number; y_mm: number }) {
@@ -397,7 +412,9 @@ export function CardPrintTemplateEditor({
   }
 
   function addExistingBlock(block: FormBlockRead) {
-    addItem(createBlockItem(block, layout.items, printRepeatModeForBlock(block)));
+    addItems(
+      createBlockItems(block, availableFields, layout.items, printRepeatModeForBlock(block)),
+    );
   }
 
   function addExistingBlockAt(blockId: string, point: { x_mm: number; y_mm: number }) {
@@ -406,8 +423,8 @@ export function CardPrintTemplateEditor({
       setLocalError("Блок не найден в текущем реестре.");
       return;
     }
-    addItem(
-      createBlockItem(block, layout.items, printRepeatModeForBlock(block), {
+    addItems(
+      createBlockItems(block, availableFields, layout.items, printRepeatModeForBlock(block), {
         x_mm: point.x_mm,
         y_mm: point.y_mm,
         width_mm: A4_WIDTH_MM - 30,
@@ -1000,6 +1017,47 @@ function createBlockItem(
   };
 }
 
+function createBlockItems(
+  block: FormBlockRead,
+  fields: FormFieldRead[],
+  items: CardPrintLayoutItem[],
+  repeatMode: BlockDialogState["repeatMode"],
+  rect = nextRect(items, A4_WIDTH_MM - 30, 42),
+): CardPrintLayoutItem[] {
+  const blockFields = fields
+    .filter((field) => field.block_id === block.id)
+    .sort(compareFieldsByVisualPlacement);
+  const maxRow = blockFields.reduce(
+    (max, field, index) => Math.max(max, printFieldLayoutRow(field, index + 1)),
+    0,
+  );
+  const computedHeight =
+    maxRow > 0
+      ? blockFieldPaddingMm * 2 +
+        blockFieldHeaderMm +
+        maxRow * blockFieldHeightMm +
+        Math.max(0, maxRow - 1) * blockFieldGapMm
+      : 42;
+  const blockRect = {
+    ...rect,
+    height_mm: Math.max(rect.height_mm, computedHeight),
+  };
+  const createdItems: CardPrintLayoutItem[] = [];
+  const accumulatedItems = [...items];
+  const blockItem = createBlockItem(block, accumulatedItems, repeatMode, blockRect);
+  createdItems.push(blockItem);
+  accumulatedItems.push(blockItem);
+
+  for (const [index, field] of blockFields.entries()) {
+    const fieldRect = fieldRectInsideBlock(blockRect, field, index);
+    const fieldItem = createFieldItem(field, accumulatedItems, fieldRect);
+    createdItems.push(fieldItem);
+    accumulatedItems.push(fieldItem);
+  }
+
+  return createdItems;
+}
+
 function createTextItem(
   kind: "heading" | "static_text",
   text: string,
@@ -1103,6 +1161,61 @@ function createLayoutItemId(prefix: string, items: CardPrintLayoutItem[]) {
     candidate = `${prefix}-${index}`;
   }
   return candidate;
+}
+
+function fieldRectInsideBlock(
+  blockRect: NonNullable<Parameters<typeof createBlockItem>[3]>,
+  field: FormFieldRead,
+  index: number,
+) {
+  const row = printFieldLayoutRow(field, index + 1);
+  const column = printFieldLayoutColumn(field, 1);
+  const columnSpan = Math.min(printFieldColumnSpan(field), blockFieldGridColumns - column + 1);
+  const contentWidth = Math.max(20, blockRect.width_mm - blockFieldPaddingMm * 2);
+  const columnWidth =
+    (contentWidth - blockFieldGapMm * (blockFieldGridColumns - 1)) / blockFieldGridColumns;
+  return {
+    x_mm: blockRect.x_mm + blockFieldPaddingMm + (column - 1) * (columnWidth + blockFieldGapMm),
+    y_mm:
+      blockRect.y_mm +
+      blockFieldPaddingMm +
+      blockFieldHeaderMm +
+      (row - 1) * (blockFieldHeightMm + blockFieldGapMm),
+    width_mm: columnWidth * columnSpan + blockFieldGapMm * Math.max(0, columnSpan - 1),
+    height_mm: blockFieldHeightMm,
+  };
+}
+
+function compareFieldsByVisualPlacement(left: FormFieldRead, right: FormFieldRead) {
+  return (
+    printFieldLayoutRow(left, left.position + 1) - printFieldLayoutRow(right, right.position + 1) ||
+    printFieldLayoutColumn(left, 1) - printFieldLayoutColumn(right, 1) ||
+    left.position - right.position ||
+    left.label.localeCompare(right.label)
+  );
+}
+
+function printFieldColumnSpan(field: FormFieldRead) {
+  return Math.min(
+    blockFieldGridColumns,
+    Math.max(1, printDisplayConfigNumber(field, "column_span", 1)),
+  );
+}
+
+function printFieldLayoutRow(field: FormFieldRead, fallback: number) {
+  return Math.max(1, printDisplayConfigNumber(field, "layout_row", fallback));
+}
+
+function printFieldLayoutColumn(field: FormFieldRead, fallback: number) {
+  return Math.min(
+    blockFieldGridColumns,
+    Math.max(1, printDisplayConfigNumber(field, "layout_column", fallback)),
+  );
+}
+
+function printDisplayConfigNumber(field: FormFieldRead, key: string, fallback: number) {
+  const value = field.display_config_json?.[key];
+  return typeof value === "number" ? value : fallback;
 }
 
 function cardTemplateFields(

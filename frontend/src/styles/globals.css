@@ -645,6 +645,11 @@ tr:last-child td {
   gap: 18px;
 }
 
+.schema-block-layout-grid {
+  grid-template-columns: repeat(var(--schema-block-columns, 5), minmax(0, 1fr));
+  align-items: start;
+}
+
 .schema-block-card {
   display: grid;
   gap: 12px;
@@ -653,6 +658,8 @@ tr:last-child td {
   border: 2px solid #17324d;
   border-radius: 6px;
   background: #ffffff;
+  grid-column: var(--schema-block-column, 1 / -1);
+  grid-row: var(--schema-block-row, auto);
 }
 
 .schema-block-header,
@@ -905,6 +912,10 @@ tr:last-child td {
   align-self: center;
 }
 
+.schema-block-drag-handle {
+  flex: 0 0 auto;
+}
+
 .schema-field-form-panel {
   max-width: 760px;
   padding: 12px;
@@ -932,6 +943,29 @@ tr:last-child td {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.schema-field-advanced {
+  display: grid;
+  gap: 10px;
+}
+
+.schema-advanced-toggle {
+  width: fit-content;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17324d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.schema-advanced-toggle[aria-expanded="true"] {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  color: #0f766e;
 }
 
 .schema-visual-option-group {
@@ -3519,6 +3553,7 @@ tr:last-child td {
   .registry-workspace-grid,
   .reference-workspace,
   .reference-workspace-single,
+  .schema-block-layout-grid,
   .schema-field-list,
   .schema-field-layout-row,
   .schema-field-row,
