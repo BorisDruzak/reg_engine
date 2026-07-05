@@ -30,6 +30,17 @@ const SUPPORTED_KINDS = new Set<CardPrintLayoutItem["kind"]>([
   "image",
 ]);
 
+const DECORATIVE_OVERLAP_KINDS = new Set<CardPrintLayoutItem["kind"]>([
+  "block",
+  "container",
+  "panel",
+  "rectangle",
+  "divider",
+  "line",
+  "image",
+  "qr_code",
+]);
+
 export function validatePrintLayout(
   layout: CardPrintLayout,
   fields: FormFieldRead[],
@@ -54,9 +65,7 @@ export function validatePrintLayout(
     });
   }
 
-  const blockingItems = normalized.items.filter(
-    (item) => !["divider", "line", "image", "qr_code"].includes(item.kind),
-  );
+  const blockingItems = normalized.items.filter((item) => !DECORATIVE_OVERLAP_KINDS.has(item.kind));
   for (const item of normalized.items) {
     const rect = itemRectFromMm(item);
     if (!SUPPORTED_KINDS.has(item.kind)) {

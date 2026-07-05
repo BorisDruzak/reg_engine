@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-06 00:40:49 +05:00
+- Generated: 2026-07-06 00:56:40 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -257,6 +257,7 @@
 - `frontend/src/features/registry/print/printLayoutGeometry.test.ts`
 - `frontend/src/features/registry/print/printLayoutGeometry.ts`
 - `frontend/src/features/registry/print/printLayoutTypes.ts`
+- `frontend/src/features/registry/print/printLayoutValidation.test.ts`
 - `frontend/src/features/registry/print/printLayoutValidation.ts`
 - `frontend/src/features/registry/print/printSampleValues.ts`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
