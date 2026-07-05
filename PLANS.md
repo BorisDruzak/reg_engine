@@ -182,14 +182,15 @@ not a hardcoded employee registry.
   blocks from the canvas, reuses the renderer for a preview-only card workspace
   tab, and strengthens backend layout validation/rendering without a database
   migration.
-- Phase 8C A4 production review follow-up is implemented locally and ready for
-  full gate/deploy: new print templates open with an empty A4 canvas instead of
-  auto-placing existing fields, existing fields can be dragged from the palette
-  onto the canvas, print-template lists are defensively scoped to the selected
-  card template, the editor can download blank DOCX/PDF files from the saved
-  A4 layout, card action panels can download DOCX/PDF through the active A4
-  print form, and the production test registries/templates from the Phase 8B
-  live run were soft-archived through API.
+- Phase 8C A4 production review follow-up is completed on `main`, pushed to
+  GitHub, deployed to the server, and live-verified: new print templates open
+  with an empty A4 canvas instead of auto-placing existing fields, existing
+  fields can be dragged from the palette onto the canvas, print-template lists
+  are defensively scoped to the selected card template, the editor can download
+  blank DOCX/PDF files from the saved A4 layout, card action panels can
+  download DOCX/PDF through the active A4 print form, and the production test
+  registries/templates from the Phase 8B live run were soft-archived through
+  API.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -2843,8 +2844,8 @@ Issues found and fixed during the Phase 8B gate:
 
 ## Phase 8C: A4 Production Review Follow-Up
 
-Status: implemented locally; full gate, push, deploy, and live browser
-verification are in progress.
+Status: completed on `main`, pushed to GitHub, deployed to the server, and
+live-verified.
 
 Purpose:
 
@@ -2897,3 +2898,40 @@ Verification completed so far:
 - `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
   skipped locally because `TEST_DATABASE_URL` is not configured.
 - `.venv\Scripts\python.exe -m mypy app` from `backend/`: passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\check.ps1`: passed; backend
+  reported 141 passed / 172 skipped, frontend reported 97 passed, production
+  frontend build passed, and project-map check passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message "Fix A4 print template review issues" -SkipCheck`:
+  committed and pushed `9079faa7`.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: server checkout
+  fast-forwarded to `9079faa`, backend package was reinstalled, and server
+  checks passed.
+- `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`: built
+  and uploaded `frontend/dist`, restarted `reg-engine.service`, and passed API
+  health plus same-origin frontend smoke.
+- `powershell -ExecutionPolicy Bypass -File scripts\service.ps1 -Command status`:
+  `reg-engine.service` was active on `0.0.0.0:8000` and `/api/v1/health`
+  returned ok after live QA.
+- In-app Browser validation was attempted first, but the Browser runtime timed
+  out while opening/snapshotting the deployed app and reset the kernel. The live
+  UI validation used regular Playwright fallback.
+- Playwright live QA against `http://192.168.100.12:8000/` passed:
+  - login as `admin` succeeded;
+  - active registry list contained one registry after soft-archiving the two
+    `codex_a4b*` test registries;
+  - A4 dropdown contained only `Новый шаблон` and `Базовый шаблон: печать`;
+  - new A4 template canvas had zero field elements on open;
+  - mouse drag from the existing-field palette to the canvas created one field
+    element;
+  - blank DOCX/PDF downloads from the A4 editor saved valid files with `PK` and
+    `%PDF` signatures;
+  - card action panel showed enabled `Скачать DOCX` and `Скачать PDF` buttons,
+    downloaded valid files with `PK` and `%PDF` signatures, and the browser
+    console/page-error capture was empty.
+- Live screenshots and downloaded files were saved outside Git:
+  `C:\Temp\reg-engine-20260705_phase8c-a4-editor-drag-verify.png`,
+  `C:\Temp\reg-engine-20260705_phase8c-card-action-panel.png`,
+  `C:\Temp\reg-engine-20260705_phase8c-blank-template.docx`,
+  `C:\Temp\reg-engine-20260705_phase8c-blank-template.pdf`,
+  `C:\Temp\reg-engine-20260705_phase8c-card-action.docx`, and
+  `C:\Temp\reg-engine-20260705_phase8c-card-action.pdf`.
