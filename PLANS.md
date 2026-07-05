@@ -204,6 +204,12 @@ not a hardcoded employee registry.
   `form_blocks.display_config_json`, and adding an existing block to the A4
   canvas now adds the block container plus all card-template fields from that
   block while preserving their relative visual layout.
+- Phase 8F A4 Layout Studio normalized-layout refactor is in progress locally
+  without a database migration: `CardLayoutStudio` is the active print editor
+  entry point, `card_print_layout_v1` accepts normalized `sections[]` and
+  `overlays[]` while keeping legacy `items[]` compatibility, DOCX generation
+  emits editable Word section tables instead of plain text lines, and a
+  preview endpoint validates/normalizes unsaved layouts.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3042,3 +3048,59 @@ Verification completed so far:
   `C:\Temp\reg-engine-phase8d-a4-blocks-20260705101536.png`,
   `C:\Temp\reg-engine-phase8d-blank-current-20260705101536.docx`, and
   `C:\Temp\reg-engine-phase8d-blank-current-20260705101536.pdf`.
+
+## Phase 8F: A4 Layout Studio Normalized Layout Refactor
+
+Status: in progress locally, no database migration.
+
+Purpose:
+
+Move the A4 print-template implementation toward one normalized layout contract
+that can support design, preview, readonly, and optional fill modes without
+breaking ordinary card filling or existing generated-document flows.
+
+Implemented scope so far:
+
+1. Frontend layout contract:
+   - added `CardLayoutStudio` as the active print editor entry point while
+     keeping `CardPrintTemplateEditor` as a thin compatibility export;
+   - added A4 layout module entry files under
+     `frontend/src/features/registry/print/`;
+   - extended API types with `CardPrintSection`, `CardPrintFlowItem`,
+     `CardPrintOverlayItem`, preview payload/read models, and renderer modes;
+   - added geometry normalization helpers that convert legacy flat `items[]`
+     into normalized `sections[]` and `overlays[]` without storing CSS pixels.
+2. Backend validation:
+   - `card_print_layout_v1` accepts `sections[]`, `overlays[]`, and legacy
+     `items[]`;
+   - validation checks page bounds, section bounds, section grid placement,
+     field ids, block ids, style values, section overlaps, and decorative
+     overlay rules;
+   - legacy flat layouts are normalized server-side for render compatibility.
+3. Rendering and API:
+   - DOCX rendering for normalized sections now emits editable Word tables
+     instead of plain text lines;
+   - PDF rendering consumes the same normalized section/overlay model through
+     the existing A4 item renderer;
+   - added `POST /api/v1/card-print-templates/preview` to validate and
+     normalize unsaved layouts without creating templates or generated files;
+   - frontend API wrappers were added for read/archive/preview and explicit
+     card-print DOCX/PDF generation calls.
+
+Verification completed so far:
+
+- `backend\.venv\Scripts\python.exe -m ruff check backend/app/services/card_print.py backend/app/services/documents.py backend/app/schemas/documents.py backend/app/api/v1/endpoints/documents.py backend/tests/test_card_print_layout_services.py backend/tests/test_document_generation_services.py`:
+  passed.
+- `backend\.venv\Scripts\python.exe -m pytest backend\tests\test_card_print_layout_services.py backend\tests\test_document_generation_services.py::test_card_print_layout_docx_renders_sections_as_editable_word_tables -q`:
+  passed, 12 tests.
+- `pnpm -C frontend typecheck`: passed.
+- `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx src/features/registry/print/printLayoutGeometry.test.ts --reporter=dot --testTimeout=10000`:
+  passed, 7 tests.
+
+Remaining gate before closing this phase:
+
+- Run full format/lint/typecheck/test/check scripts.
+- Commit and push `main`.
+- Deploy backend/frontend to the configured server.
+- Live-check the deployed A4 editor, preview, DOCX/PDF generation, and ordinary
+  card filling entry point.

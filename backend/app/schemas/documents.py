@@ -25,6 +25,20 @@ class CardPrintTemplateBlankDownload(BaseModel):
     output_filename_template: str = "{{ card.display_name }}.docx"
 
 
+class CardPrintTemplatePreviewPayload(BaseModel):
+    registry_id: UUID
+    layout_json: dict[str, Any]
+    card_template_id: UUID | None = None
+    card_id: UUID | None = None
+    sample: bool = True
+
+
+class CardPrintTemplatePreviewRead(BaseModel):
+    layout_json: dict[str, Any]
+    warnings: list[str]
+    view: dict[str, Any]
+
+
 class DocumentTemplateCreate(BaseModel):
     code: str
     name: str

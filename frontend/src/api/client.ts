@@ -20,6 +20,8 @@ import type {
   CardImportPreviewPayload,
   CardImportPreviewRead,
   CardListRead,
+  CardPrintPreviewPayload,
+  CardPrintPreviewRead,
   CardRead,
   CardSummaryRead,
   CardTransferPayload,
@@ -841,6 +843,10 @@ export async function listCardPrintTemplates(
   );
 }
 
+export async function readCardPrintTemplate(token: string, templateId: string) {
+  return apiRequest<DocumentTemplateRead>(`/api/v1/card-print-templates/${templateId}`, { token });
+}
+
 export async function createCardPrintTemplate(
   token: string,
   registryId: string,
@@ -866,6 +872,18 @@ export async function createCardPrintTemplateVersion(
       body: payload,
     },
   );
+}
+
+export async function archiveCardPrintTemplate(token: string, templateId: string) {
+  return archiveDocumentTemplate(token, templateId);
+}
+
+export async function previewCardPrintTemplate(token: string, payload: CardPrintPreviewPayload) {
+  return apiRequest<CardPrintPreviewRead>("/api/v1/card-print-templates/preview", {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
 
 export async function uploadBinaryDocumentTemplate(
@@ -960,6 +978,24 @@ export async function generatePdfDocument(
     token,
     body: { template_id: templateId, title: title?.trim() ? title.trim() : null },
   });
+}
+
+export async function generateCardPrintDocumentDocx(
+  token: string,
+  cardId: string,
+  templateId: string,
+  title?: string,
+) {
+  return generateDocument(token, cardId, templateId, title);
+}
+
+export async function generateCardPrintDocumentPdf(
+  token: string,
+  cardId: string,
+  templateId: string,
+  title?: string,
+) {
+  return generatePdfDocument(token, cardId, templateId, title);
 }
 
 export async function downloadGeneratedDocumentContent(token: string, generatedDocumentId: string) {

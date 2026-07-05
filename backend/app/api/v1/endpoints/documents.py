@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any, cast
 from urllib.parse import quote
 from uuid import UUID
 
@@ -21,6 +21,8 @@ from app.models import DocumentTemplate, GeneratedDocument
 from app.schemas.documents import (
     CardPrintTemplateBlankDownload,
     CardPrintTemplateCreate,
+    CardPrintTemplatePreviewPayload,
+    CardPrintTemplatePreviewRead,
     CardPrintTemplateVersionCreate,
     DocumentTemplateCreate,
     DocumentTemplateListRead,
@@ -246,6 +248,33 @@ def download_blank_card_print_layout_pdf(
         content=rendered.content,
         media_type=rendered.content_type,
         headers=_download_headers_for_filename(rendered.filename),
+    )
+
+
+@router.post("/card-print-templates/preview", response_model=CardPrintTemplatePreviewRead)
+def preview_card_print_template(
+    payload: CardPrintTemplatePreviewPayload,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardPrintTemplatePreviewRead:
+    service = _document_service(session)
+    try:
+        preview = service.preview_card_print_layout_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=payload.registry_id,
+            card_template_id=payload.card_template_id,
+            card_id=payload.card_id,
+            layout_json=payload.layout_json,
+            sample=payload.sample,
+        )
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardPrintTemplatePreviewRead(
+        layout_json=cast(dict[str, Any], preview["layout_json"]),
+        warnings=cast(list[str], preview["warnings"]),
+        view=cast(dict[str, Any], preview["view"]),
     )
 
 

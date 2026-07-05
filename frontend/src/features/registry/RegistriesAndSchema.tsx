@@ -62,7 +62,7 @@ import { Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSu
 import { shortId } from "@/components/common/dataUtils";
 
 import { ImportExportPanel } from "./ImportExportPanel";
-import { CardPrintTemplateEditor } from "./CardPrintTemplateEditor";
+import { CardLayoutStudio } from "./CardPrintTemplateEditor";
 import { ReportsPanel } from "./ReportsPanel";
 
 type RegistryFormState = {
@@ -2681,7 +2681,7 @@ function SchemaVisualEditor({
             )}
           </div>
           {isPrintEditorOpen && (
-            <CardPrintTemplateEditor
+            <CardLayoutStudio
               token={token}
               registryId={selectedRegistryId}
               cardTemplate={selectedTemplate}

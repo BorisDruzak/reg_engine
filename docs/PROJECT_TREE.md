@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-05 01:32:07 +05:00
+- Generated: 2026-07-06 00:40:49 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -239,12 +239,24 @@
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
 - `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
+- `frontend/src/features/registry/print/A4LayoutCanvas.tsx`
+- `frontend/src/features/registry/print/A4LayoutPalette.tsx`
+- `frontend/src/features/registry/print/A4LayoutPreviewPanel.tsx`
+- `frontend/src/features/registry/print/A4LayoutPropertiesPanel.tsx`
+- `frontend/src/features/registry/print/A4LayoutRenderer.tsx`
+- `frontend/src/features/registry/print/A4LayoutSettingsPanel.tsx`
+- `frontend/src/features/registry/print/A4LayoutToolbar.tsx`
+- `frontend/src/features/registry/print/A4ResizeHandles.tsx`
+- `frontend/src/features/registry/print/A4SelectionOverlay.tsx`
 - `frontend/src/features/registry/print/A4TemplatePalette.tsx`
 - `frontend/src/features/registry/print/A4TemplatePropertiesPanel.tsx`
 - `frontend/src/features/registry/print/A4TemplateRenderer.tsx`
 - `frontend/src/features/registry/print/A4TemplateToolbar.tsx`
+- `frontend/src/features/registry/print/CardLayoutStudio.tsx`
 - `frontend/src/features/registry/print/CardPrintTemplateEditor.tsx`
+- `frontend/src/features/registry/print/printLayoutGeometry.test.ts`
 - `frontend/src/features/registry/print/printLayoutGeometry.ts`
+- `frontend/src/features/registry/print/printLayoutTypes.ts`
 - `frontend/src/features/registry/print/printLayoutValidation.ts`
 - `frontend/src/features/registry/print/printSampleValues.ts`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`

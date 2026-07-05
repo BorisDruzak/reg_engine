@@ -46,3 +46,25 @@ existing `document_templates`, `document_template_versions`, and
   text wrapping.
 - QR and image/logo items may be represented in layout JSON before full
   rendering support, but unsupported generation must be explicit and safe.
+
+## 2026-07-06 Follow-Up
+
+`card_print_layout_v1` now accepts a normalized section/overlay shape while
+continuing to accept legacy flat `items[]` layouts.
+
+- `sections[]` are the flow layout surface. They may be linked to a
+  `form_blocks.id`, use A4 millimeter coordinates, and contain field/static
+  flow items positioned on a 12-column section grid.
+- `overlays[]` are absolute decorative A4 elements such as panels, rectangles,
+  lines, images, and QR placeholders. Decorative overlay overlap is allowed;
+  blocking overlaps inside the same section are still rejected.
+- Legacy `items[]` layouts are normalized server-side and frontend-side into
+  sections and overlays before rendering or saving new layout revisions.
+- The frontend keeps the old `CardPrintTemplateEditor` import as a compatibility
+  wrapper, but the active entry point is `CardLayoutStudio` under
+  `frontend/src/features/registry/print/`.
+- `POST /api/v1/card-print-templates/preview` validates and normalizes an
+  unsaved layout and returns a render-view payload without creating document
+  templates, generated documents, or card values.
+- DOCX rendering for normalized layouts uses editable Word table XML for
+  sections instead of plain text lines.

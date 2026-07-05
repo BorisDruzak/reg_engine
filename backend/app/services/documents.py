@@ -671,6 +671,64 @@ class DocumentService:
             )
         raise DocumentServiceError("Unsupported card print template output format.")
 
+    def preview_card_print_layout_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        layout_json: dict[str, object],
+        card_template_id: UUID | None = None,
+        card_id: UUID | None = None,
+        sample: bool = True,
+    ) -> dict[str, object]:
+        self._require_registry_read_permission(actor_user_id, registry_id)
+        self._get_active_registry(registry_id)
+        allowed_field_ids = self._card_print_allowed_field_ids(
+            registry_id=registry_id,
+            card_template_id=card_template_id,
+        )
+        allowed_block_ids = self._card_print_allowed_block_ids(registry_id=registry_id)
+        result = validate_card_print_layout(
+            layout_json,
+            allowed_field_ids=allowed_field_ids,
+            allowed_block_ids=allowed_block_ids,
+        )
+        if result.errors:
+            raise DocumentServiceError("; ".join(result.errors))
+        if card_id is not None and not sample:
+            try:
+                card_read = CardService(self.session).read_card_for_actor(
+                    actor_user_id=actor_user_id,
+                    card_id=card_id,
+                )
+            except CardServiceError as exc:
+                raise DocumentServiceError(str(exc)) from exc
+            if card_read.registry_id != registry_id:
+                raise DocumentServiceError("Card does not belong to the preview registry.")
+        else:
+            card_read = self._blank_card_print_context_card_from_values(
+                registry_id=registry_id,
+                card_template_id=card_template_id,
+                display_name="Печатная форма",
+            )
+        context = _RenderContext(card=card_read)
+        return {
+            "layout_json": result.normalized_layout,
+            "warnings": result.warnings,
+            "view": {
+                "card_id": str(card_read.card_id),
+                "display_name": card_read.display_name,
+                "items": [
+                    {
+                        "id": str(item.get("id") or ""),
+                        "kind": str(item.get("kind") or ""),
+                        "text": self._card_print_item_text(item, context),
+                    }
+                    for item in self._card_print_items(result.normalized_layout)
+                ],
+            },
+        }
+
     def generate_pdf_for_actor(
         self,
         *,
@@ -1181,6 +1239,9 @@ class DocumentService:
         body = "\n".join(self._paragraph_xml(line) for line in rendered_text.splitlines())
         if not body:
             body = self._paragraph_xml("")
+        return self._build_docx_package(body)
+
+    def _build_docx_package(self, body: str) -> bytes:
         document_xml = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -1220,6 +1281,20 @@ class DocumentService:
         layout_json: dict[str, object],
         context: _RenderContext,
     ) -> bytes:
+        body_parts: list[str] = []
+        current_page = 1
+        for section in self._card_print_sections(layout_json):
+            page_number = self._layout_item_int(section, "page", default=1)
+            if page_number != current_page:
+                body_parts.append(self._paragraph_xml(""))
+                body_parts.append(self._paragraph_xml(f"Страница {page_number}"))
+                current_page = page_number
+            title = str(section.get("title") or "").strip()
+            if title:
+                body_parts.append(self._paragraph_xml(title))
+            body_parts.append(self._card_print_section_table_xml(section, context))
+        if body_parts:
+            return self._build_docx_package("".join(body_parts))
         lines: list[str] = []
         current_page = 1
         for item in self._card_print_items(layout_json):
@@ -1339,8 +1414,119 @@ class DocumentService:
         pdf_canvas.save()
         return buffer.getvalue()
 
+    def _card_print_sections(self, layout_json: dict[str, object]) -> list[dict[str, object]]:
+        normalized_layout = validate_card_print_layout(layout_json).normalized_layout
+        raw_sections = normalized_layout.get("sections")
+        if not isinstance(raw_sections, list):
+            return []
+        sections = [section for section in raw_sections if isinstance(section, dict)]
+        return sorted(
+            sections,
+            key=lambda section: (
+                self._layout_item_int(section, "page", default=1),
+                self._layout_item_float(section, "y_mm", default=0),
+                self._layout_item_float(section, "x_mm", default=0),
+                str(section.get("id") or ""),
+            ),
+        )
+
+    def _card_print_section_table_xml(
+        self,
+        section: dict[str, object],
+        context: _RenderContext,
+    ) -> str:
+        raw_items = section.get("items")
+        if not isinstance(raw_items, list):
+            return "<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"
+        items = [item for item in raw_items if isinstance(item, dict)]
+        if not items:
+            return "<w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"
+        table_rows: list[str] = []
+        row_numbers = sorted({self._layout_item_int(item, "row", default=1) for item in items})
+        for row_number in row_numbers:
+            row_items = sorted(
+                [
+                    item
+                    for item in items
+                    if self._layout_item_int(item, "row", default=1) == row_number
+                ],
+                key=lambda item: (
+                    self._layout_item_int(item, "column", default=1),
+                    str(item.get("id") or ""),
+                ),
+            )
+            cells: list[str] = []
+            current_column = 1
+            for item in row_items:
+                column = self._layout_item_int(item, "column", default=1)
+                while current_column < column and current_column <= 12:
+                    cells.append(self._docx_table_cell_xml("", 1))
+                    current_column += 1
+                span = min(
+                    self._layout_item_int(item, "column_span", default=1),
+                    max(1, 13 - current_column),
+                )
+                cells.append(
+                    self._docx_table_cell_xml(self._card_print_item_text(item, context), span)
+                )
+                current_column += span
+            while current_column <= 12:
+                cells.append(self._docx_table_cell_xml("", 1))
+                current_column += 1
+            table_rows.append(f"<w:tr>{''.join(cells)}</w:tr>")
+        return (
+            "<w:tbl>"
+            '<w:tblPr><w:tblW w:w="0" w:type="auto"/>'
+            "<w:tblBorders>"
+            '<w:top w:val="single" w:sz="4" w:space="0" w:color="B8C2D0"/>'
+            '<w:left w:val="single" w:sz="4" w:space="0" w:color="B8C2D0"/>'
+            '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="B8C2D0"/>'
+            '<w:right w:val="single" w:sz="4" w:space="0" w:color="B8C2D0"/>'
+            '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="D7DEE8"/>'
+            '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="D7DEE8"/>'
+            "</w:tblBorders></w:tblPr>"
+            f"{self._docx_table_grid_xml(12)}"
+            f"{''.join(table_rows)}</w:tbl>"
+        )
+
+    def _docx_table_grid_xml(self, columns: int) -> str:
+        return (
+            "<w:tblGrid>"
+            + "".join('<w:gridCol w:w="900"/>' for _ in range(columns))
+            + "</w:tblGrid>"
+        )
+
+    def _docx_table_cell_xml(self, text: str, grid_span: int) -> str:
+        grid_span_xml = f'<w:gridSpan w:val="{grid_span}"/>' if grid_span > 1 else ""
+        return (
+            f'<w:tc><w:tcPr>{grid_span_xml}<w:vAlign w:val="top"/></w:tcPr>'
+            f"{self._paragraph_xml(text)}</w:tc>"
+        )
+
     def _card_print_items(self, layout_json: dict[str, object]) -> list[dict[str, object]]:
-        raw_items = layout_json.get("items")
+        normalized_layout = validate_card_print_layout(layout_json).normalized_layout
+        section_items = [
+            item
+            for section in self._card_print_sections(layout_json)
+            for item in self._card_print_flatten_section_items(section)
+        ]
+        overlay_items = []
+        raw_overlays = normalized_layout.get("overlays")
+        if isinstance(raw_overlays, list):
+            overlay_items = [overlay for overlay in raw_overlays if isinstance(overlay, dict)]
+        if section_items or overlay_items:
+            items = [*overlay_items, *section_items]
+            return sorted(
+                items,
+                key=lambda item: (
+                    self._layout_item_int(item, "page", default=1),
+                    self._layout_item_float(item, "y_mm", default=0),
+                    self._layout_item_float(item, "x_mm", default=0),
+                    str(item.get("id") or ""),
+                ),
+            )
+
+        raw_items = normalized_layout.get("items")
         if not isinstance(raw_items, list):
             return []
         items = [item for item in raw_items if isinstance(item, dict)]
@@ -1352,6 +1538,56 @@ class DocumentService:
                 self._layout_item_int(item, "column", default=1),
                 str(item.get("id") or ""),
             ),
+        )
+
+    def _card_print_flatten_section_items(
+        self,
+        section: dict[str, object],
+    ) -> list[dict[str, object]]:
+        raw_items = section.get("items")
+        if not isinstance(raw_items, list):
+            return []
+        flattened: list[dict[str, object]] = []
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            item = dict(raw_item)
+            x_mm, y_mm, item_width_mm, item_height_mm = self._card_print_section_item_rect(
+                section,
+                item,
+            )
+            item.update(
+                {
+                    "page": self._layout_item_int(section, "page", default=1),
+                    "x_mm": x_mm,
+                    "y_mm": y_mm,
+                    "width_mm": item_width_mm,
+                    "height_mm": item_height_mm,
+                }
+            )
+            flattened.append(item)
+        return flattened
+
+    def _card_print_section_item_rect(
+        self,
+        section: dict[str, object],
+        item: dict[str, object],
+    ) -> tuple[float, float, float, float]:
+        section_x = self._layout_item_float(section, "x_mm", default=0)
+        section_y = self._layout_item_float(section, "y_mm", default=0)
+        section_width = self._layout_item_float(section, "width_mm", default=1)
+        grid_columns = self._layout_item_int(section, "grid_columns", default=12)
+        column_width = section_width / max(1, grid_columns)
+        row_height = 8.0
+        row = self._layout_item_int(item, "row", default=1)
+        column = self._layout_item_int(item, "column", default=1)
+        row_span = self._layout_item_int(item, "row_span", default=1)
+        column_span = self._layout_item_int(item, "column_span", default=1)
+        return (
+            section_x + ((column - 1) * column_width),
+            section_y + ((row - 1) * row_height),
+            column_span * column_width,
+            row_span * row_height,
         )
 
     def _card_print_item_text(

@@ -164,6 +164,65 @@ def _card_print_layout(field_id: UUID) -> dict[str, Any]:
     }
 
 
+def _card_print_section_layout(field_id: UUID) -> dict[str, Any]:
+    return {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "baseline_mm": 4, "row_height_mm": 8, "snap_mm": 2},
+        "sections": [
+            {
+                "id": "main-section",
+                "kind": "section",
+                "title": "Основной блок",
+                "page": 1,
+                "x_mm": 12,
+                "y_mm": 24,
+                "width_mm": 186,
+                "height_mm": 64,
+                "grid_columns": 12,
+                "items": [
+                    {
+                        "id": "heading",
+                        "kind": "heading",
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 1,
+                        "column_span": 12,
+                        "text": "Печатная форма",
+                    },
+                    {
+                        "id": "text-field",
+                        "kind": "field",
+                        "row": 2,
+                        "column": 1,
+                        "row_span": 2,
+                        "column_span": 8,
+                        "field_id": str(field_id),
+                        "label": "Текстовое поле",
+                        "show_label": True,
+                    },
+                ],
+            }
+        ],
+        "overlays": [
+            {
+                "id": "bottom-line",
+                "kind": "line",
+                "page": 1,
+                "x_mm": 12,
+                "y_mm": 96,
+                "width_mm": 186,
+                "height_mm": 2,
+            }
+        ],
+    }
+
+
 def _card_read_for_print_layout(field_id: UUID) -> CardRead:
     return CardRead(
         card_id=uuid4(),
@@ -417,6 +476,30 @@ def test_card_print_layout_renderers_use_structured_layout_and_card_values() -> 
     extracted_text = _extract_pdf_text(pdf_content)
     assert "Печатная форма" in extracted_text
     assert "Текстовое поле: Значение для печати" in extracted_text
+
+
+def test_card_print_layout_docx_renders_sections_as_editable_word_tables() -> None:
+    field_id = uuid4()
+    card = _card_read_for_print_layout(field_id)
+    layout = _card_print_section_layout(field_id)
+    service = object.__new__(DocumentService)
+
+    docx_content = service._build_docx_from_card_print_layout(layout, _RenderContext(card=card))
+
+    with ZipFile(BytesIO(docx_content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "<w:tbl>" in rendered_xml
+    assert "<w:gridSpan" in rendered_xml
+    assert "Основной блок" in rendered_xml
+    assert "Печатная форма" in rendered_xml
+    section = layout["sections"][0]
+    assert isinstance(section, dict)
+    items = section["items"]
+    assert isinstance(items, list)
+    field_item = items[1]
+    assert isinstance(field_item, dict)
+    field_value = card.fields["main.text"].value
+    assert f"{field_item['label']}: {field_value}" in rendered_xml
 
 
 def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:

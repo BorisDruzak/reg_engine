@@ -708,6 +708,10 @@ export type CardPrintLayoutItemStyle = {
   max_lines?: number;
 };
 
+export type CardPrintStyle = CardPrintLayoutItemStyle;
+
+export type A4RendererMode = "design" | "preview" | "fill" | "readonly";
+
 export type CardPrintLayoutItem = {
   id: string;
   kind:
@@ -748,6 +752,52 @@ export type CardPrintLayoutItem = {
   required_marker?: boolean;
 };
 
+export type CardPrintFlowItem = {
+  id: string;
+  kind: "field" | "static_text" | "heading" | "metadata" | "page_number" | "print_date";
+  field_id?: string;
+  metadata_key?: "card.display_name" | "card.id" | "card.registry_id" | "card.organization_id";
+  text?: string;
+  label?: string;
+  show_label?: boolean;
+  row: number;
+  column: number;
+  row_span: number;
+  column_span: number;
+  style?: CardPrintStyle;
+};
+
+export type CardPrintSection = {
+  id: string;
+  kind: "section";
+  block_id?: string;
+  title?: string;
+  page: number;
+  x_mm: number;
+  y_mm: number;
+  width_mm: number;
+  height_mm: number;
+  grid_columns: 12;
+  repeat?: {
+    mode: "first_instance_only" | "repeat_section" | "table_rows";
+  };
+  style?: CardPrintStyle;
+  items: CardPrintFlowItem[];
+};
+
+export type CardPrintOverlayItem = {
+  id: string;
+  kind: "line" | "divider" | "rectangle" | "panel" | "container" | "image" | "qr_code";
+  page: number;
+  x_mm: number;
+  y_mm: number;
+  width_mm: number;
+  height_mm: number;
+  text?: string;
+  alt?: string;
+  style?: CardPrintStyle;
+};
+
 export type CardPrintLayout = {
   version: "card_print_layout_v1";
   page: {
@@ -763,9 +813,28 @@ export type CardPrintLayout = {
   };
   grid: {
     columns: 12;
+    baseline_mm?: number;
     row_height_mm: number;
+    snap_mm?: number;
+    gutter_mm?: number;
   };
+  sections?: CardPrintSection[];
+  overlays?: CardPrintOverlayItem[];
   items: CardPrintLayoutItem[];
+};
+
+export type CardPrintPreviewPayload = {
+  registry_id: string;
+  card_template_id?: string | null;
+  layout_json: CardPrintLayout;
+  card_id?: string | null;
+  sample?: boolean;
+};
+
+export type CardPrintPreviewRead = {
+  layout_json: CardPrintLayout;
+  warnings: string[];
+  view: Record<string, unknown>;
 };
 
 export type DocumentTemplateRead = {
