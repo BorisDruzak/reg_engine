@@ -225,11 +225,12 @@ not a hardcoded employee registry.
   exposes structure, form layout, A4 print views, export settings, and sync
   status as one card-template concept while keeping existing
   `document_templates` rows as internal storage for A4 print-view versions.
-- Phase 8I unified card-template editor UX is implemented locally and under
-  verification: the separate user-facing web/A4 editor tabs are replaced with
-  one `Макет карточки` workspace where the same selected block/field exposes
-  web placement, A4 placement, appearance, access, and technical settings in
-  one properties panel. No database migration is planned.
+- Phase 8I unified card-template editor UX is completed on `main`, pushed to
+  GitHub, deployed to the configured server frontend, and live browser-verified:
+  the separate user-facing web/A4 editor tabs are replaced with one
+  `Макет карточки` workspace where the same selected block/field exposes web
+  placement, A4 placement, appearance, access, and technical settings in one
+  properties panel. No database migration was required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3485,8 +3486,8 @@ Acceptance criteria:
 
 ## Phase 8I: Single Workspace Card Template Editor UX
 
-Status: implemented locally; GitHub/server synchronization and live browser
-verification are in progress. No database migration is required.
+Status: completed on `main`, pushed to GitHub, deployed to the configured
+server frontend, and live browser-verified. No database migration was required.
 
 Problem:
 
@@ -3558,6 +3559,22 @@ Verification completed locally so far:
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed, including backend pytest, frontend test run, frontend production
   build, and project-map check.
+- `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Unify card template editor workspace"`
+  passed full local checks with GitHub/server SSH checks, committed
+  `efc703a7`, and pushed `main` to `origin/main`.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1` fast-forwarded
+  the server checkout to `efc703a7` and passed server checks.
+- `powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1`
+  rebuilt, uploaded, and smoke-checked the frontend on the server.
+- Live browser verification on `http://192.168.100.12:8000/` passed:
+  `Макет карточки`, `Предпросмотр карточки`, and `Экспорт` are the only studio
+  top-level modes; old top-level `Веб-форма` and `Печатная форма A4` tabs are
+  absent; the unified workspace and A4 page render together; selecting the
+  `Имя` A4 field opens one unified properties panel with `Данные`,
+  `Веб-форма`, `Печатная форма A4`, `Внешний вид`,
+  `Доступ / публичность`, and `Техническое`; the A4 tab shows X/Y/width/height
+  controls; preview mode renders without palette/properties; browser console
+  had no warnings or errors.
 
 Acceptance criteria:
 
