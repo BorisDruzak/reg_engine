@@ -225,6 +225,11 @@ not a hardcoded employee registry.
   exposes structure, form layout, A4 print views, export settings, and sync
   status as one card-template concept while keeping existing
   `document_templates` rows as internal storage for A4 print-view versions.
+- Phase 8I unified card-template editor UX is implemented locally and under
+  verification: the separate user-facing web/A4 editor tabs are replaced with
+  one `Макет карточки` workspace where the same selected block/field exposes
+  web placement, A4 placement, appearance, access, and technical settings in
+  one properties panel. No database migration is planned.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3477,3 +3482,90 @@ Acceptance criteria:
 - DOCX/PDF generation uses the selected/default `print_view` from the unified
   card-template layout.
 - Legacy `/card-print-templates` endpoints remain compatible.
+
+## Phase 8I: Single Workspace Card Template Editor UX
+
+Status: implemented locally; GitHub/server synchronization and live browser
+verification are in progress. No database migration is required.
+
+Problem:
+
+Phase 8H unified the backend/API contract, but the frontend still exposed
+`Веб-форма` and `Печатная форма A4` as separate editor modes. That still makes
+the user think there are two templates instead of one card template with web and
+print projections.
+
+Goal:
+
+Make the selected `Шаблон карточки` feel like one editor. The user should work
+with one block/field identity and see/edit its web placement and A4 placement as
+properties of the same element, not as separate tabs.
+
+Implementation tasks:
+
+1. Frontend regression tests first:
+   - Update `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
+     so the selected template opens with a single `Макет карточки` mode.
+   - Assert that `Веб-форма` and `Печатная форма A4` are no longer top-level
+     editor tabs.
+   - Assert that the one workspace renders both the web/form structure and the
+     A4 preview/editor area.
+   - Assert that selecting a field shows one properties panel with tabs
+     `Данные`, `Веб-форма`, `Печатная форма A4`, `Внешний вид`,
+     `Доступ / публичность`, and `Техническое`.
+
+2. `CardLayoutStudio` mode model:
+   - Replace the current top-level modes
+     `Состав карточки`, `Веб-форма`, `Печатная форма A4`,
+     `Предпросмотр карточки`, `Экспорт` with:
+     `Макет карточки`, `Предпросмотр карточки`, `Экспорт`.
+   - Keep A4 toolbar actions, print-view selector, DOCX/PDF, save, and sync
+     controls available from `Макет карточки`.
+   - Keep `Предпросмотр карточки` read-only and `Экспорт` focused on generated
+     document settings.
+
+3. Unified workspace layout:
+   - In `Макет карточки`, render a left structure/web-form panel and a center
+     A4 projection side by side inside one working area.
+   - Selecting a block/field from either side updates the same selected-element
+     state.
+   - Remove copy that implies separate templates.
+
+4. Unified selected-element panel:
+   - Add one properties panel for the selected block/field with tabs:
+     `Данные`, `Веб-форма`, `Печатная форма A4`, `Внешний вид`,
+     `Доступ / публичность`, `Техническое`.
+   - For this phase, reuse existing editable controls where they already exist
+     and show read-only bridge data where a write control is not yet wired.
+   - Keep the existing detailed A4 properties panel for A4-only decorative
+     elements such as headings, lines, QR codes, and images.
+
+5. Verification and deployment:
+   - Focused frontend test:
+     `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`.
+   - Local full check:
+     `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+   - Commit to `main`, push `origin/main`, run `scripts/deploy.ps1`, deploy the
+     frontend with `scripts/deploy-frontend.ps1`, and live browser-check
+     `http://192.168.100.12:8000/`.
+
+Verification completed locally so far:
+
+- `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`
+  passed: 1 test file, 9 tests.
+- `pnpm -C frontend typecheck` passed.
+- `pnpm -C frontend lint` passed.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed, including backend pytest, frontend test run, frontend production
+  build, and project-map check.
+
+Acceptance criteria:
+
+- The selected card template editor has no top-level `Веб-форма` tab and no
+  top-level `Печатная форма A4` tab.
+- The main editor mode is `Макет карточки`.
+- The same workspace shows web/form structure and A4 projection together.
+- Selecting one field/block shows a single properties panel with web and A4
+  tabs for that same element.
+- Existing A4 print-view save, sync, preview, blank DOCX/PDF, and card action
+  DOCX/PDF flows still work.

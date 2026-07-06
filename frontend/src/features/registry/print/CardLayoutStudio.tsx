@@ -20,6 +20,7 @@ import {
 import type {
   CardPrintLayout,
   CardPrintLayoutItem,
+  CardPrintLayoutItemStyle,
   CardTemplatePrintViewRead,
   CardTemplateRead,
   FormBlockRead,
@@ -100,12 +101,10 @@ type BlockDialogState = {
   publicEditable: boolean;
 };
 
-type StudioMode = "composition" | "web" | "a4" | "preview" | "settings";
+type StudioMode = "layout" | "preview" | "settings";
 
 const studioModes: { id: StudioMode; label: string }[] = [
-  { id: "composition", label: "Состав карточки" },
-  { id: "web", label: "Веб-форма" },
-  { id: "a4", label: "Печатная форма A4" },
+  { id: "layout", label: "Макет карточки" },
   { id: "preview", label: "Предпросмотр карточки" },
   { id: "settings", label: "Экспорт" },
 ];
@@ -165,7 +164,7 @@ export function CardLayoutStudio({
   const [zoom, setZoom] = useState(0.75);
   const [showGrid, setShowGrid] = useState(true);
   const [showTechnicalData, setShowTechnicalData] = useState(false);
-  const [studioMode, setStudioMode] = useState<StudioMode>("a4");
+  const [studioMode, setStudioMode] = useState<StudioMode>("layout");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<GeneratedDocumentRead | null>(null);
@@ -188,6 +187,18 @@ export function CardLayoutStudio({
     printViews.find((printView) => printView.id === selectedTemplateId) ?? null;
   const effectiveReferenceLists = referenceLists ?? referenceListsQuery.data?.items ?? [];
   const selectedItem = layout.items.find((item) => item.id === selectedItemId) ?? null;
+  const selectedField = selectedItem?.field_id
+    ? availableFields.find((field) => field.id === selectedItem.field_id) ?? null
+    : null;
+  const selectedBlock = selectedItem?.block_id
+    ? allBlocks.find((block) => block.id === selectedItem.block_id) ?? null
+    : null;
+  const selectedTemplateElement =
+    selectedField && selectedItem
+      ? { kind: "field" as const, field: selectedField, item: selectedItem }
+      : selectedBlock && selectedItem
+        ? { kind: "block" as const, block: selectedBlock, item: selectedItem }
+        : null;
   const validationIssues = useMemo(
     () => validatePrintLayout(layout, availableFields, allBlocks, name, outputFilenameTemplate),
     [allBlocks, availableFields, layout, name, outputFilenameTemplate],
@@ -469,7 +480,7 @@ export function CardLayoutStudio({
     validationErrors.length,
   );
   const rendererMode: A4RendererMode = studioMode === "preview" ? "preview" : "design";
-  const isDesignMode = studioMode === "a4";
+  const isDesignMode = studioMode === "layout";
 
   async function appendFieldToCardTemplate(fieldId: string) {
     const currentFieldIds = templateFieldIds(cardTemplate);
@@ -663,7 +674,7 @@ export function CardLayoutStudio({
         onZoomChange={setZoom}
         onToggleGrid={() => setShowGrid((current) => !current)}
         onTogglePreview={() =>
-          setStudioMode((current) => (current === "preview" ? "a4" : "preview"))
+          setStudioMode((current) => (current === "preview" ? "layout" : "preview"))
         }
         onOpenSettings={() => setStudioMode("settings")}
         onSave={() => saveMutation.mutate()}
@@ -784,7 +795,7 @@ export function CardLayoutStudio({
         <aside className="a4-template-settings" aria-label="Экспорт шаблона">
           <div className="a4-template-settings-header">
             <h4>Экспорт</h4>
-            <button type="button" className="ghost-button" onClick={() => setStudioMode("a4")}>
+            <button type="button" className="ghost-button" onClick={() => setStudioMode("layout")}>
               Закрыть
             </button>
           </div>
@@ -809,113 +820,105 @@ export function CardLayoutStudio({
         </aside>
       )}
 
-      {(studioMode === "composition" || studioMode === "web") && (
-        <section className="card-layout-structure" aria-label="Структура карточки">
-          <header className="card-layout-structure-header">
-            <div>
-              <h4>{studioMode === "composition" ? "Состав карточки" : "Веб-форма"}</h4>
-              <span>
-                {studioMode === "composition"
-                  ? "Блоки и поля текущего шаблона карточки"
-                  : "Порядок блоков и полей для заполнения карточки в вебе"}
-              </span>
-            </div>
-            <div className="row-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() =>
-                  setBlockDialog({
-                    title: "",
-                    repeatable: false,
-                    repeatMode: "first_instance_only",
-                    publicVisible: true,
-                    publicEditable: false,
-                  })
-                }
-              >
-                + Новый блок данных
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() =>
-                  setFieldDialog({
-                    label: "",
-                    fieldType: "text",
-                    blockId: allBlocks[0]?.id ?? "",
-                    required: false,
-                    publicVisible: true,
-                    publicEditable: false,
-                    isListDisplay: false,
-                    referenceListId: "",
-                    newReferenceListName: "",
-                  })
-                }
-              >
-                + Новое поле данных
-              </button>
-            </div>
-          </header>
-          <div className="card-layout-structure-list">
-            {allBlocks.map((block) => {
-              const blockFields = availableFieldsByBlockId.get(block.id) ?? [];
-              return (
-                <article key={block.id} className="card-layout-structure-block">
-                  <header>
-                    <div>
-                      <h5>{block.title}</h5>
-                      <span>Технический код: {block.code}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => addExistingBlock(block)}
-                    >
-                      На A4
-                    </button>
-                  </header>
-                  {blockFields.length > 0 ? (
-                    <div className="card-layout-structure-fields">
-                      {blockFields.map((field) => (
-                        <div key={field.id} className="card-layout-structure-field">
-                          <div>
-                            <strong>{field.label}</strong>
-                            <span>
-                              {fieldTypeLabel(field.field_type)} /{" "}
-                              {requiredModeLabel(field.required_mode)}
-                            </span>
-                            {studioMode === "web" && (
-                              <small>
-                                {field.public_visible
-                                  ? "Видно в публичной ссылке"
-                                  : "Скрыто в публичной ссылке"}
-                              </small>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => addItem(createFieldItem(field, layout.items))}
-                          >
-                            На A4
-                          </button>
+      {studioMode === "layout" && (
+        <div className="card-layout-unified-workspace">
+          <aside className="card-layout-unified-left">
+            <section className="card-layout-structure" aria-label="Веб-структура шаблона карточки">
+              <header className="card-layout-structure-header">
+                <div>
+                  <h4>Макет карточки</h4>
+                  <span>Одна структура для заполнения в вебе и печати на A4</span>
+                </div>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() =>
+                      setBlockDialog({
+                        title: "",
+                        repeatable: false,
+                        repeatMode: "first_instance_only",
+                        publicVisible: true,
+                        publicEditable: false,
+                      })
+                    }
+                  >
+                    + Новый блок данных
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() =>
+                      setFieldDialog({
+                        label: "",
+                        fieldType: "text",
+                        blockId: allBlocks[0]?.id ?? "",
+                        required: false,
+                        publicVisible: true,
+                        publicEditable: false,
+                        isListDisplay: false,
+                        referenceListId: "",
+                        newReferenceListName: "",
+                      })
+                    }
+                  >
+                    + Новое поле данных
+                  </button>
+                </div>
+              </header>
+              <div className="card-layout-structure-list">
+                {allBlocks.map((block) => {
+                  const blockFields = availableFieldsByBlockId.get(block.id) ?? [];
+                  return (
+                    <article key={block.id} className="card-layout-structure-block">
+                      <header>
+                        <div>
+                          <h5>{block.title}</h5>
+                          <span>Технический код: {block.code}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted-text">В блоке пока нет полей текущего шаблона.</p>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => addExistingBlock(block)}
+                        >
+                          На A4
+                        </button>
+                      </header>
+                      {blockFields.length > 0 ? (
+                        <div className="card-layout-structure-fields">
+                          {blockFields.map((field) => (
+                            <div key={field.id} className="card-layout-structure-field">
+                              <div>
+                                <strong>{field.label}</strong>
+                                <span>
+                                  {fieldTypeLabel(field.field_type)} /{" "}
+                                  {requiredModeLabel(field.required_mode)}
+                                </span>
+                                <small>
+                                  {field.public_visible
+                                    ? "Видно в публичной ссылке"
+                                    : "Скрыто в публичной ссылке"}
+                                </small>
+                              </div>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => addItem(createFieldItem(field, layout.items))}
+                              >
+                                На A4
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="muted-text">В блоке пока нет полей текущего шаблона.</p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
 
-      {(studioMode === "a4" || studioMode === "preview") && (
-        <div className={`a4-template-workbench ${studioMode === "preview" ? "is-preview" : ""}`}>
-          {isDesignMode && (
             <A4TemplatePalette
               blocks={allBlocks}
               fields={availableFields}
@@ -953,8 +956,55 @@ export function CardLayoutStudio({
                 })
               }
             />
-          )}
+          </aside>
 
+          <main className="a4-template-canvas-column">
+            <A4LayoutRenderer
+              layout={layout}
+              fields={availableFields}
+              blocks={allBlocks}
+              mode={rendererMode}
+              zoom={zoom}
+              showGrid={showGrid}
+              showTechnicalData={showTechnicalData}
+              selectedItemId={selectedItemId}
+              onSelectItem={setSelectedItemId}
+              onChangeLayout={commitLayout}
+              onDropField={addExistingFieldAt}
+              onDropBlock={addExistingBlockAt}
+            />
+            {validationIssues.length > 0 && (
+              <div className="a4-template-validation" role="status">
+                {validationIssues.map((issue, index) => (
+                  <span key={`${issue.message}-${index}`} className={`is-${issue.level}`}>
+                    {issue.message}
+                  </span>
+                ))}
+              </div>
+            )}
+          </main>
+
+          {selectedTemplateElement ? (
+            <UnifiedTemplatePropertiesPanel
+              selectedElement={selectedTemplateElement}
+              showTechnicalData={showTechnicalData}
+              onUpdateItem={updateSelectedItem}
+              onDeleteItem={removeSelectedItem}
+            />
+          ) : (
+            <A4TemplatePropertiesPanel
+              item={selectedItem}
+              fields={availableFields}
+              showTechnicalData={showTechnicalData}
+              onUpdateItem={updateSelectedItem}
+              onDeleteItem={removeSelectedItem}
+            />
+          )}
+        </div>
+      )}
+
+      {studioMode === "preview" && (
+        <div className={`a4-template-workbench ${studioMode === "preview" ? "is-preview" : ""}`}>
           <main className="a4-template-canvas-column">
             <A4LayoutRenderer
               layout={layout}
@@ -970,26 +1020,7 @@ export function CardLayoutStudio({
               onDropField={isDesignMode ? addExistingFieldAt : undefined}
               onDropBlock={isDesignMode ? addExistingBlockAt : undefined}
             />
-            {validationIssues.length > 0 && (
-              <div className="a4-template-validation" role="status">
-                {validationIssues.map((issue, index) => (
-                  <span key={`${issue.message}-${index}`} className={`is-${issue.level}`}>
-                    {issue.message}
-                  </span>
-                ))}
-              </div>
-            )}
           </main>
-
-          {isDesignMode && (
-            <A4TemplatePropertiesPanel
-              item={selectedItem}
-              fields={availableFields}
-              showTechnicalData={showTechnicalData}
-              onUpdateItem={updateSelectedItem}
-              onDeleteItem={removeSelectedItem}
-            />
-          )}
         </div>
       )}
 
@@ -1014,6 +1045,333 @@ export function CardLayoutStudio({
         />
       )}
     </section>
+  );
+}
+
+type UnifiedTemplateElement =
+  | { kind: "field"; field: FormFieldRead; item: CardPrintLayoutItem }
+  | { kind: "block"; block: FormBlockRead; item: CardPrintLayoutItem };
+
+type UnifiedPropertyTab = "data" | "web" | "print" | "appearance" | "access" | "technical";
+
+const unifiedPropertyTabs: { key: UnifiedPropertyTab; label: string }[] = [
+  { key: "data", label: "Данные" },
+  { key: "web", label: "Веб-форма" },
+  { key: "print", label: "Печатная форма A4" },
+  { key: "appearance", label: "Внешний вид" },
+  { key: "access", label: "Доступ / публичность" },
+  { key: "technical", label: "Техническое" },
+];
+
+function UnifiedTemplatePropertiesPanel({
+  selectedElement,
+  showTechnicalData,
+  onUpdateItem,
+  onDeleteItem,
+}: {
+  selectedElement: UnifiedTemplateElement;
+  showTechnicalData: boolean;
+  onUpdateItem: (patch: Partial<CardPrintLayoutItem>) => void;
+  onDeleteItem: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<UnifiedPropertyTab>("data");
+  const item = selectedElement.item;
+  const style = item.style ?? {};
+  const title = selectedElement.kind === "field" ? selectedElement.field.label : selectedElement.block.title;
+
+  return (
+    <aside
+      className="a4-template-properties card-layout-unified-properties"
+      role="region"
+      aria-label="Свойства выбранного элемента шаблона"
+    >
+      <h4>Свойства выбранного элемента</h4>
+      <strong>{title}</strong>
+      <div className="a4-template-tabs" role="tablist" aria-label="Разделы свойств шаблона">
+        {unifiedPropertyTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            className={activeTab === tab.key ? "is-active" : ""}
+            onClick={() => setActiveTab(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="a4-template-property-body">
+        {activeTab === "data" && selectedElement.kind === "field" && (
+          <>
+            <label>
+              Тип поля
+              <input value={fieldTypeLabel(selectedElement.field.field_type)} readOnly />
+            </label>
+            <label>
+              Название поля
+              <input value={selectedElement.field.label} readOnly />
+            </label>
+            <label>
+              Обязательность
+              <input value={requiredModeLabel(selectedElement.field.required_mode)} readOnly />
+            </label>
+            <label>
+              Подпись на A4
+              <input
+                value={item.label ?? ""}
+                onChange={(event) => onUpdateItem({ label: event.currentTarget.value })}
+              />
+            </label>
+          </>
+        )}
+        {activeTab === "data" && selectedElement.kind === "block" && (
+          <>
+            <label>
+              Тип элемента
+              <input value="Блок данных" readOnly />
+            </label>
+            <label>
+              Название блока
+              <input value={selectedElement.block.title} readOnly />
+            </label>
+            <label>
+              Повторяемость
+              <input
+                value={selectedElement.block.is_repeatable ? "Повторяющийся" : "Обычный блок"}
+                readOnly
+              />
+            </label>
+          </>
+        )}
+
+        {activeTab === "web" && (
+          <>
+            <h5>Размещение в веб-форме</h5>
+            {selectedElement.kind === "field" ? (
+              <div className="card-layout-property-summary">
+                <span>Блок: {selectedElement.field.block_id}</span>
+                <span>Порядок: {selectedElement.field.position + 1}</span>
+                <span>
+                  Сетка: строка {printFieldLayoutRow(selectedElement.field, selectedElement.field.position + 1)},
+                  колонка {printFieldLayoutColumn(selectedElement.field, 1)}, ширина{" "}
+                  {printFieldColumnSpan(selectedElement.field)}
+                </span>
+              </div>
+            ) : (
+              <div className="card-layout-property-summary">
+                <span>Порядок блока: {selectedElement.block.position + 1}</span>
+                <span>
+                  Повторения:{" "}
+                  {selectedElement.block.is_repeatable ? "разрешены" : "не используются"}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "print" && (
+          <>
+            <h5>Размещение на A4</h5>
+            <div className="a4-template-property-grid">
+              <NumberField
+                label="X, мм"
+                value={item.x_mm ?? 0}
+                min={0}
+                max={210}
+                onChange={(x_mm) => onUpdateItem({ x_mm })}
+              />
+              <NumberField
+                label="Y, мм"
+                value={item.y_mm ?? 0}
+                min={0}
+                max={297}
+                onChange={(y_mm) => onUpdateItem({ y_mm })}
+              />
+              <NumberField
+                label="Ширина, мм"
+                value={item.width_mm ?? 20}
+                min={1}
+                max={210}
+                onChange={(width_mm) => onUpdateItem({ width_mm })}
+              />
+              <NumberField
+                label="Высота, мм"
+                value={item.height_mm ?? 8}
+                min={1}
+                max={297}
+                onChange={(height_mm) => onUpdateItem({ height_mm })}
+              />
+            </div>
+            <label className="checkbox-inline">
+              <input
+                type="checkbox"
+                checked={item.show_label !== false}
+                onChange={(event) => onUpdateItem({ show_label: event.currentTarget.checked })}
+              />
+              Показывать подпись на A4
+            </label>
+          </>
+        )}
+
+        {activeTab === "appearance" && (
+          <>
+            <label>
+              Шрифт
+              <select
+                value={style.font_family ?? "Inter"}
+                onChange={(event) =>
+                  onUpdateItem({ style: { ...style, font_family: event.currentTarget.value } })
+                }
+              >
+                <option value="Inter">Inter</option>
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+              </select>
+            </label>
+            <div className="a4-template-property-grid">
+              <NumberField
+                label="Размер"
+                value={style.font_size ?? 10}
+                min={6}
+                max={32}
+                onChange={(font_size) => onUpdateItem({ style: { ...style, font_size } })}
+              />
+              <NumberField
+                label="Отступ, мм"
+                value={style.padding_mm ?? 1.5}
+                min={0}
+                max={10}
+                step={0.5}
+                onChange={(padding_mm) => onUpdateItem({ style: { ...style, padding_mm } })}
+              />
+            </div>
+            <label>
+              Граница
+              <select
+                value={style.border ?? "thin"}
+                onChange={(event) =>
+                  onUpdateItem({
+                    style: {
+                      ...style,
+                      border: event.currentTarget.value as CardPrintLayoutItemStyle["border"],
+                    },
+                  })
+                }
+              >
+                <option value="none">Нет</option>
+                <option value="thin">Тонкая</option>
+                <option value="medium">Средняя</option>
+              </select>
+            </label>
+          </>
+        )}
+
+        {activeTab === "access" && (
+          <>
+            <h5>Публичность и доступ</h5>
+            {selectedElement.kind === "field" ? (
+              <div className="card-layout-property-summary">
+                <span>
+                  Публичная ссылка:{" "}
+                  {selectedElement.field.public_visible ? "поле видно" : "поле скрыто"}
+                </span>
+                <span>
+                  Публичное редактирование:{" "}
+                  {selectedElement.field.public_editable ? "разрешено" : "запрещено"}
+                </span>
+                <span>
+                  Список карточек:{" "}
+                  {selectedElement.field.is_list_display ? "показывать" : "не показывать"}
+                </span>
+              </div>
+            ) : (
+              <div className="card-layout-property-summary">
+                <span>
+                  Публичная ссылка:{" "}
+                  {selectedElement.block.public_visible ? "блок виден" : "блок скрыт"}
+                </span>
+                <span>
+                  Публичное редактирование:{" "}
+                  {selectedElement.block.public_editable ? "разрешено" : "запрещено"}
+                </span>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === "technical" && (
+          <>
+            <label>
+              Технический код
+              <input
+                value={
+                  selectedElement.kind === "field"
+                    ? selectedElement.field.code
+                    : selectedElement.block.code
+                }
+                readOnly
+              />
+            </label>
+            <label>
+              ID элемента A4
+              <input value={item.id} readOnly />
+            </label>
+            <label>
+              Источник синхронизации
+              <input value={item.source_item_id ?? "Не задан"} readOnly />
+            </label>
+            <label>
+              Ручное положение
+              <input value={item.override ? "Да" : "Нет"} readOnly />
+            </label>
+            {showTechnicalData && (
+              <label>
+                JSON A4
+                <textarea value={JSON.stringify(item, null, 2)} readOnly />
+              </label>
+            )}
+          </>
+        )}
+      </div>
+
+      <button type="button" className="danger-button" onClick={onDeleteItem}>
+        Удалить элемент с A4
+      </button>
+    </aside>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) =>
+          onChange(Math.min(max, Math.max(min, Number(event.currentTarget.value) || min)))
+        }
+      />
+    </label>
   );
 }
 

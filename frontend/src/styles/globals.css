@@ -1690,6 +1690,49 @@ tr:last-child td {
   gap: 2px;
 }
 
+.card-layout-unified-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 330px) minmax(520px, 1fr) minmax(280px, 340px);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.card-layout-unified-left {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.card-layout-unified-left .card-layout-structure {
+  padding: 10px;
+}
+
+.card-layout-unified-properties {
+  align-self: start;
+}
+
+.card-layout-unified-properties h5 {
+  margin: 0;
+  color: #17324d;
+  font-size: 0.78rem;
+}
+
+.card-layout-property-summary {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #17324d;
+  font-size: 0.78rem;
+}
+
+.card-layout-property-summary span {
+  overflow-wrap: anywhere;
+}
+
 .a4-template-workbench {
   display: grid;
   grid-template-columns: minmax(190px, 240px) minmax(520px, 1fr) minmax(260px, 300px);
@@ -2121,6 +2164,14 @@ tr:last-child td {
 }
 
 @media (max-width: 1180px) {
+  .card-layout-unified-workspace {
+    grid-template-columns: minmax(220px, 280px) minmax(460px, 1fr);
+  }
+
+  .card-layout-unified-properties {
+    grid-column: 1 / -1;
+  }
+
   .a4-template-workbench {
     grid-template-columns: minmax(180px, 220px) minmax(460px, 1fr);
   }
@@ -2139,6 +2190,10 @@ tr:last-child td {
   }
 
   .a4-template-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .card-layout-unified-workspace {
     grid-template-columns: 1fr;
   }
 

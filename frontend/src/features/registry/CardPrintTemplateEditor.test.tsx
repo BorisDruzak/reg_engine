@@ -262,25 +262,39 @@ test("renders the selected card template with the unified CardLayoutStudio direc
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
   await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
 
+  expect(await screen.findByRole("tab", { name: "Макет карточки" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Печатная форма A4" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("region", { name: "Веб-структура шаблона карточки" })).toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Веб-форма" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Печатная форма A4" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Печатный шаблон A4" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
 });
 
-test("switches CardLayoutStudio between structure and preview modes", async () => {
+test("shows one selected field properties panel with web and A4 sections", async () => {
   const user = userEvent.setup();
   vi.stubGlobal("fetch", createEditorFetchMock());
 
   const { container } = renderEditor();
 
-  await user.click(screen.getByRole("tab", { name: "Состав карточки" }));
-  expect(screen.getByRole("region", { name: "Структура карточки" })).toBeInTheDocument();
-  expect(screen.getByText("Основной блок")).toBeInTheDocument();
-  expect(screen.getByText("Статус")).toBeInTheDocument();
+  await user.click(await screen.findByRole("button", { name: "Статус" }));
+  expect(screen.getByRole("region", { name: "Свойства выбранного элемента шаблона" })).toBeInTheDocument();
+  for (const tabName of [
+    "Данные",
+    "Веб-форма",
+    "Печатная форма A4",
+    "Внешний вид",
+    "Доступ / публичность",
+    "Техническое",
+  ]) {
+    expect(screen.getByRole("tab", { name: tabName })).toBeInTheDocument();
+  }
 
   await user.click(screen.getByRole("tab", { name: "Печатная форма A4" }));
-  await user.click(await screen.findByRole("button", { name: "Статус" }));
+  expect(screen.getByText("Размещение на A4")).toBeInTheDocument();
   await user.click(screen.getByLabelText("Показать технические данные"));
   expect(container.querySelector(".a4-page--grid")).not.toBeNull();
   expect(screen.getByText(/Технический код: status/)).toBeInTheDocument();
