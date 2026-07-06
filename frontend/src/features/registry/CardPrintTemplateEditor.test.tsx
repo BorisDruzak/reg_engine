@@ -263,7 +263,7 @@ test("renders the selected card template with the unified CardLayoutStudio direc
   await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
 
   expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Печать A4" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: "Печатная форма A4" })).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("button", { name: "Печатный шаблон A4" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
 });
@@ -274,18 +274,18 @@ test("switches CardLayoutStudio between structure and preview modes", async () =
 
   const { container } = renderEditor();
 
-  await user.click(screen.getByRole("tab", { name: "Состав" }));
+  await user.click(screen.getByRole("tab", { name: "Состав карточки" }));
   expect(screen.getByRole("region", { name: "Структура карточки" })).toBeInTheDocument();
   expect(screen.getByText("Основной блок")).toBeInTheDocument();
   expect(screen.getByText("Статус")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: "Печать A4" }));
+  await user.click(screen.getByRole("tab", { name: "Печатная форма A4" }));
   await user.click(await screen.findByRole("button", { name: "Статус" }));
   await user.click(screen.getByLabelText("Показать технические данные"));
   expect(container.querySelector(".a4-page--grid")).not.toBeNull();
   expect(screen.getByText(/Технический код: status/)).toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: "Предпросмотр" }));
+  await user.click(screen.getByRole("tab", { name: "Предпросмотр карточки" }));
   expect(screen.queryByLabelText("Палитра элементов")).not.toBeInTheDocument();
   expect(container.querySelector(".a4-page--grid")).toBeNull();
   expect(screen.queryByText(/Технический код: status/)).not.toBeInTheDocument();

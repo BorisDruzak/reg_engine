@@ -103,10 +103,10 @@ type BlockDialogState = {
 type StudioMode = "composition" | "web" | "a4" | "preview" | "settings";
 
 const studioModes: { id: StudioMode; label: string }[] = [
-  { id: "composition", label: "Состав" },
-  { id: "web", label: "Форма" },
-  { id: "a4", label: "Печать A4" },
-  { id: "preview", label: "Предпросмотр" },
+  { id: "composition", label: "Состав карточки" },
+  { id: "web", label: "Веб-форма" },
+  { id: "a4", label: "Печатная форма A4" },
+  { id: "preview", label: "Предпросмотр карточки" },
   { id: "settings", label: "Экспорт" },
 ];
 
