@@ -219,6 +219,12 @@ not a hardcoded employee registry.
   card preview, and settings; the old nested A4 button and selected-template
   `schema-canvas` editor are removed; `A4LayoutRenderer` is the canonical A4
   renderer; blank DOCX/PDF downloads still work from the unified screen.
+- Phase 8H unified card-template layout contract is planned and in progress
+  locally. Scope: add a `card_template_layout_v1` API/contract that exposes
+  structure, form layout, print views, export settings, and sync status as one
+  card-template concept while keeping existing `document_templates` rows as
+  internal storage for A4 print-view versions. No destructive migration is
+  planned.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3282,3 +3288,155 @@ Deployment and live verification completed:
   `C:\Temp\reg-engine-phase8g-preview.png`,
   `C:\Temp\reg-engine-phase8g-blank.docx`, and
   `C:\Temp\reg-engine-phase8g-blank.pdf`.
+
+## Phase 8H: Unified Card Template Layout Contract
+
+Status: planned in `PLANS.md` before implementation. No destructive database
+migration is planned.
+
+Goal:
+
+Make the card template the single user-facing layout contract. The UI and new
+API must stop treating A4 as a separate user-level "print template" entity.
+Internally, existing `document_templates` / `document_template_versions` with
+`template_format=card_print_layout_v1` remain the storage and generation
+mechanism for A4 print views.
+
+Architecture:
+
+- Add a backend `CardTemplateLayoutRead` contract with:
+  - `version = "card_template_layout_v1"`;
+  - `structure` from current `form_blocks`, `form_fields`, and
+    `card_templates.field_schema_json.field_ids`;
+  - `form_layout` as a logical 12-column flow model stored inside
+    `card_templates.field_schema_json.form_layout`;
+  - `print_views` projected from internal `document_templates` rows and
+    normalized `card_print_layout_v1` layout JSON;
+  - `export_settings` derived from the default print view / output filename;
+  - `sync_status` computed from mapping between `form_layout` item ids and A4
+    `source_item_id` values.
+- Keep web and A4 geometry separate:
+  - web/form layout: 12-column logical sections/items;
+  - print view: A4 millimeter geometry and existing A4 renderer;
+  - projection maps logical item position to A4 coordinates without scaling DOM
+    pixels.
+- Keep legacy `/card-print-templates` endpoints working for compatibility, but
+  switch the main frontend studio and ordinary card print actions to the new
+  card-template layout endpoints.
+
+Implementation tasks:
+
+1. Backend schemas and projection tests:
+   - Add `backend/app/schemas/card_template_layouts.py` with:
+     `CardTemplateLayoutRead`, `CardTemplateLayoutUpdate`,
+     `CardTemplateStructureRead`, `CardTemplateFormLayoutRead`,
+     `CardTemplatePrintViewRead`, `CardTemplatePrintViewUpdate`,
+     `CardTemplateLayoutSyncStatusRead`,
+     `CardTemplateLayoutProjectionResult`, and
+     `CardTemplateExportSettingsRead`.
+   - Add `backend/app/services/card_template_projection.py` with pure functions:
+     `project_form_layout_to_a4`, `sync_print_view`, and
+     `build_mapping_table`.
+   - Add backend RED tests before implementation in
+     `backend/tests/test_card_template_layout_services.py` for:
+     virtual default print view generation;
+     field item projection from `form_layout` to A4;
+     preserving `override=true` geometry during sync;
+     missing source field warnings;
+     archived field sync status.
+
+2. Backend service and API:
+   - Add `backend/app/services/card_template_layout.py`.
+   - Implement `CardTemplateLayoutService` methods:
+     `read_layout_for_actor`, `update_form_layout_for_actor`,
+     `create_print_view_for_actor`, `update_print_view_for_actor`,
+     `sync_print_view_from_form_layout`, `generate_docx_for_actor`, and
+     `generate_pdf_for_actor`.
+   - Add `backend/app/api/v1/endpoints/card_template_layouts.py`.
+   - Register it in `backend/app/api/v1/router.py`.
+   - Add endpoints:
+     - `GET /api/v1/card-templates/{template_id}/layout`;
+     - `PATCH /api/v1/card-templates/{template_id}/layout/form`;
+     - `POST /api/v1/card-templates/{template_id}/layout/print-views`;
+     - `PATCH /api/v1/card-templates/{template_id}/layout/print-views/{print_view_id}`;
+     - `POST /api/v1/card-templates/{template_id}/layout/print-views/{print_view_id}/sync`;
+     - `POST /api/v1/cards/{card_id}/card-template-layout/{template_id}/generate-docx`;
+     - `POST /api/v1/cards/{card_id}/card-template-layout/{template_id}/generate-pdf`.
+   - Reuse `DocumentService` for validation/rendering/generation instead of
+     duplicating DOCX/PDF rendering logic.
+   - Persist print views by creating/updating internal `DocumentTemplate` and
+     `DocumentTemplateVersion` records only when the user saves the print view.
+     If no internal print view exists, return a virtual `default-a4` print view
+     generated from `form_layout` without writing to the database.
+
+3. Frontend types and client:
+   - Extend `frontend/src/api/types.ts` with the unified layout contract types.
+   - Add client functions in `frontend/src/api/client.ts`:
+     `getCardTemplateLayout`, `updateCardTemplateFormLayout`,
+     `createCardTemplatePrintView`, `updateCardTemplatePrintView`,
+     `syncCardTemplatePrintView`, `generateCardTemplateLayoutDocx`, and
+     `generateCardTemplateLayoutPdf`.
+   - Keep old card-print client functions for compatibility and focused
+     regression tests.
+
+4. CardLayoutStudio data model switch:
+   - Change `frontend/src/features/registry/print/CardLayoutStudio.tsx` so it
+     loads and edits `CardTemplateLayoutRead`.
+   - Replace the "Шаблон печати / Новый шаблон" dropdown with a print-view
+     selector labelled "Печатное представление", default option
+     "Основная A4", and `+ Добавить представление`.
+   - Rename user-facing studio modes to:
+     `Состав`, `Форма`, `Печать A4`, `Предпросмотр`, `Экспорт`.
+   - Make the `Форма` mode edit logical `form_layout`.
+   - Make `Печать A4` edit the selected `print_view`.
+   - When A4 item geometry is changed by drag/resize/properties, mark the item
+     with `override=true`.
+   - When form layout changes, either project missing A4 items automatically or
+     expose sync warnings through the sync panel.
+
+5. Sync panel and ordinary card print actions:
+   - Add a `Синхронизация` panel to the studio showing:
+     missing A4 fields, archived fields, A4 items without a source item, and
+     manual overrides.
+   - Add buttons where feasible in this phase:
+     `Синхронизировать автоматически`, `Разместить отсутствующие`,
+     and `Сбросить ручное положение`.
+   - Update `frontend/src/features/cards/CardsWorkspace.tsx` to use unified
+     layout generation endpoints for card action DOCX/PDF downloads while
+     preserving the existing generated-document download flow.
+
+6. Verification and deployment:
+   - Backend focused tests:
+     `python -m pytest backend/tests/test_card_template_layout_services.py -q`.
+   - Frontend focused tests:
+     `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`.
+   - Full local checks:
+     `powershell -ExecutionPolicy Bypass -File scripts/format.ps1 -Check`;
+     `powershell -ExecutionPolicy Bypass -File scripts/lint.ps1`;
+     `powershell -ExecutionPolicy Bypass -File scripts/typecheck.ps1`;
+     `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`;
+     `powershell -ExecutionPolicy Bypass -File scripts/check.ps1`.
+   - Commit to `main`, push `origin/main`, deploy with
+     `scripts/deploy.ps1`, deploy frontend with `scripts/deploy-frontend.ps1`,
+     then live browser-check `http://192.168.100.12:8000/`.
+
+Acceptance criteria:
+
+- The user sees one entity, `Шаблон карточки`; A4 is shown as a
+  `Печатное представление` inside it, not as a separate user-level
+  `Шаблон печати`.
+- `GET /api/v1/card-templates/{template_id}/layout` returns one
+  `card_template_layout_v1` contract with `structure`, `form_layout`,
+  `print_views`, `export_settings`, and `sync_status`.
+- A card template with no saved print views returns a virtual A4 print view
+  generated from `form_layout` and does not persist it until save.
+- Saved A4 print views are still stored internally in existing
+  `document_templates` / `document_template_versions` rows.
+- A4 print-view items carry `source_item_id` where they originate from
+  `form_layout`.
+- Manual A4 movement sets `override=true`, and sync preserves overridden
+  geometry.
+- Added/archived/missing fields are surfaced in sync status.
+- DOCX/PDF generation uses the selected/default `print_view` from the unified
+  card-template layout.
+- Legacy `/card-print-templates` endpoints remain compatible.
