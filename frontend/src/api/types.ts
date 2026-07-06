@@ -738,6 +738,7 @@ export type CardPrintLayoutItem = {
   y_mm?: number;
   width_mm?: number;
   height_mm?: number;
+  source_item_id?: string | null;
   field_id?: string;
   block_id?: string;
   text?: string;
@@ -750,6 +751,8 @@ export type CardPrintLayoutItem = {
   };
   visible_in?: "both" | "pdf" | "docx";
   required_marker?: boolean;
+  override?: boolean;
+  sync_status?: string;
 };
 
 export type CardPrintFlowItem = {
@@ -835,6 +838,111 @@ export type CardPrintPreviewRead = {
   layout_json: CardPrintLayout;
   warnings: string[];
   view: Record<string, unknown>;
+};
+
+export type CardTemplateFormLayoutItemRead = {
+  id: string;
+  kind: string;
+  field_id?: string | null;
+  row: number;
+  column: number;
+  column_span: number;
+  text?: string | null;
+};
+
+export type CardTemplateFormLayoutSectionRead = {
+  id: string;
+  block_id?: string | null;
+  row: number;
+  column: number;
+  column_span: number;
+  items: CardTemplateFormLayoutItemRead[];
+};
+
+export type CardTemplateFormLayoutRead = {
+  columns: number;
+  sections: CardTemplateFormLayoutSectionRead[];
+};
+
+export type CardTemplatePrintPageRead = CardPrintLayout["page"];
+
+export type CardTemplatePrintViewItemRead = {
+  id: string;
+  source_item_id?: string | null;
+  kind: string;
+  block_id?: string | null;
+  field_id?: string | null;
+  page: number;
+  x_mm: number;
+  y_mm: number;
+  width_mm: number;
+  height_mm: number;
+  override: boolean;
+  sync_status: string;
+  text?: string | null;
+};
+
+export type CardTemplatePrintViewRead = {
+  id: string;
+  name: string;
+  is_default: boolean;
+  document_template_id?: string | null;
+  current_version_id?: string | null;
+  source: "form_layout";
+  page: CardTemplatePrintPageRead;
+  items: CardTemplatePrintViewItemRead[];
+  layout_json: CardPrintLayout;
+  output_filename_template: string;
+};
+
+export type CardTemplateLayoutSyncStatusRead = {
+  has_errors: boolean;
+  errors: string[];
+  warnings: string[];
+  mapping: Record<string, string[]>;
+};
+
+export type CardTemplateExportSettingsRead = {
+  default_print_view_id?: string | null;
+  output_filename_template: string;
+  formats: Array<"docx" | "pdf">;
+};
+
+export type CardTemplateStructureRead = {
+  blocks: FormBlockRead[];
+  fields: FormFieldRead[];
+};
+
+export type CardTemplateLayoutRead = {
+  version: "card_template_layout_v1";
+  card_template_id: string;
+  registry_id: string;
+  structure: CardTemplateStructureRead;
+  form_layout: CardTemplateFormLayoutRead;
+  print_views: CardTemplatePrintViewRead[];
+  export_settings: CardTemplateExportSettingsRead;
+  sync_status: CardTemplateLayoutSyncStatusRead;
+};
+
+export type CardTemplateLayoutUpdatePayload = {
+  form_layout: CardTemplateFormLayoutRead;
+};
+
+export type CardTemplatePrintViewUpdatePayload = {
+  name?: string | null;
+  is_default?: boolean;
+  layout_json: CardPrintLayout;
+  output_filename_template?: string;
+};
+
+export type CardTemplateLayoutGeneratePayload = {
+  print_view_id?: string | null;
+  title?: string | null;
+};
+
+export type CardTemplateLayoutGeneratedDocumentRead = {
+  document: GeneratedDocumentRead;
+  print_view: CardTemplatePrintViewRead;
 };
 
 export type DocumentTemplateRead = {

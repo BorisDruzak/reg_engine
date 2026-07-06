@@ -14,54 +14,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("saves an A4 card print layout through the card print template API", async () => {
+test("saves an A4 print view through the unified card template layout API", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    if (
-      url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")
-    ) {
-      return jsonResponse({ items: [] });
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/reference-lists")) {
-      return jsonResponse({ items: [] });
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as {
-        card_template_id: string;
-        layout_json: { version: string; items: { kind: string; field_id?: string }[] };
-      };
-      expect(init?.method).toBe("POST");
-      expect(payload.card_template_id).toBe("template-1");
-      expect(payload.layout_json.version).toBe("card_print_layout_v1");
-      expect(payload.layout_json.items).toEqual(
-        expect.arrayContaining([
+  const fetchMock = createEditorFetchMock((payload) => {
+    expect(payload.layout_json).toEqual(
+      expect.objectContaining({
+        version: "card_print_layout_v1",
+        items: expect.arrayContaining([
           expect.objectContaining({
             kind: "field",
             field_id: "field-1",
           }),
         ]),
-      );
-      return jsonResponse({
-        id: "print-template-1",
-        registry_id: "registry-1",
-        card_template_id: "template-1",
-        code: "municipal_print",
-        name: "Муниципальная карточка: печать",
-        description: null,
-        template_format: "card_print_layout_v1",
-        output_filename_template: "{{ card.display_name }}.docx",
-        output_content_type:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        is_active: true,
-        current_version_id: "print-version-1",
-        current_version_number: 1,
-        current_layout_json: payload.layout_json,
-        created_at: "2026-07-04T00:00:00Z",
-        archived_at: null,
-      });
-    }
-    return jsonResponse({ detail: "not found" }, 404);
+      }),
+    );
   });
   vi.stubGlobal("fetch", fetchMock);
 
@@ -129,12 +95,12 @@ test("saves an A4 card print layout through the card print template API", async 
   await user.click(screen.getByRole("button", { name: "Статус" }));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
-  expect(await screen.findByText("Печатный шаблон сохранен")).toBeInTheDocument();
+  expect(await screen.findByText("Печатное представление сохранено")).toBeInTheDocument();
   await waitFor(() => {
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
-          String(input).endsWith("/api/v1/registries/registry-1/card-print-templates") &&
+          String(input).endsWith("/api/v1/card-templates/template-1/layout/print-views") &&
           init?.method === "POST",
       ),
     ).toBe(true);
@@ -297,10 +263,7 @@ test("renders the selected card template with the unified CardLayoutStudio direc
   await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
 
   expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Печатная форма A4" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  expect(screen.getByRole("tab", { name: "Печать A4" })).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("button", { name: "Печатный шаблон A4" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
 });
@@ -311,18 +274,18 @@ test("switches CardLayoutStudio between structure and preview modes", async () =
 
   const { container } = renderEditor();
 
-  await user.click(screen.getByRole("tab", { name: "Состав карточки" }));
+  await user.click(screen.getByRole("tab", { name: "Состав" }));
   expect(screen.getByRole("region", { name: "Структура карточки" })).toBeInTheDocument();
   expect(screen.getByText("Основной блок")).toBeInTheDocument();
   expect(screen.getByText("Статус")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: "Печатная форма A4" }));
+  await user.click(screen.getByRole("tab", { name: "Печать A4" }));
   await user.click(await screen.findByRole("button", { name: "Статус" }));
   await user.click(screen.getByLabelText("Показать технические данные"));
   expect(container.querySelector(".a4-page--grid")).not.toBeNull();
   expect(screen.getByText(/Технический код: status/)).toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: "Предпросмотр карточки" }));
+  await user.click(screen.getByRole("tab", { name: "Предпросмотр" }));
   expect(screen.queryByLabelText("Палитра элементов")).not.toBeInTheDocument();
   expect(container.querySelector(".a4-page--grid")).toBeNull();
   expect(screen.queryByText(/Технический код: status/)).not.toBeInTheDocument();
@@ -421,9 +384,171 @@ function jsonResponse(payload: unknown, status = 200) {
   );
 }
 
+function unifiedLayoutPayload(layout: CardPrintLayout = createEmptyPrintLayout()) {
+  return {
+    version: "card_template_layout_v1",
+    card_template_id: "template-1",
+    registry_id: "registry-1",
+    structure: {
+      blocks: [
+        {
+          id: "block-1",
+          registry_id: "registry-1",
+          code: "main",
+          title: "Основной блок",
+          description: null,
+          position: 0,
+          is_repeatable: false,
+          is_active: true,
+          public_visible: true,
+          public_editable: false,
+          layout_columns: 1,
+          display_config_json: null,
+        },
+      ],
+      fields: [
+        {
+          id: "field-1",
+          block_id: "block-1",
+          code: "status",
+          label: "Статус",
+          description: null,
+          field_type: "text",
+          position: 0,
+          required_mode: "not_required",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          display_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: false,
+        },
+        {
+          id: "field-2",
+          block_id: "block-1",
+          code: "approved",
+          label: "Подтверждено",
+          description: null,
+          field_type: "bool",
+          position: 1,
+          required_mode: "not_required",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          display_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: false,
+        },
+      ],
+    },
+    form_layout: {
+      columns: 12,
+      sections: [
+        {
+          id: "block-block-1",
+          block_id: "block-1",
+          row: 1,
+          column: 1,
+          column_span: 12,
+          items: [
+            {
+              id: "field-field-1",
+              kind: "field",
+              field_id: "field-1",
+              row: 1,
+              column: 1,
+              column_span: 12,
+            },
+            {
+              id: "field-field-2",
+              kind: "field",
+              field_id: "field-2",
+              row: 2,
+              column: 1,
+              column_span: 12,
+            },
+          ],
+        },
+      ],
+    },
+    print_views: [
+      {
+        id: "default-a4",
+        name: "Основная A4",
+        is_default: true,
+        document_template_id: null,
+        current_version_id: null,
+        source: "form_layout",
+        page: layout.page,
+        items: layout.items,
+        layout_json: layout,
+        output_filename_template: "{{ card.display_name }}.docx",
+      },
+    ],
+    export_settings: {
+      default_print_view_id: "default-a4",
+      output_filename_template: "{{ card.display_name }}.docx",
+      formats: ["docx", "pdf"],
+    },
+    sync_status: {
+      has_errors: false,
+      errors: [],
+      warnings: [],
+      mapping: {
+        missing_print_items: [],
+        missing_source_items: [],
+        manual_items: [],
+        overridden_items: [],
+        archived_field_items: [],
+      },
+    },
+  };
+}
+
+function createEmptyPrintLayout(): CardPrintLayout {
+  return {
+    version: "card_print_layout_v1",
+    page: {
+      format: "A4",
+      width_mm: 210,
+      height_mm: 297,
+      margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+    },
+    grid: { columns: 12, row_height_mm: 8, snap_mm: 2 },
+    items: [],
+  };
+}
+
 function createEditorFetchMock(onSave?: (payload: Record<string, unknown>) => void) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.endsWith("/api/v1/card-templates/template-1/layout")) {
+      return jsonResponse(unifiedLayoutPayload());
+    }
+    if (url.endsWith("/api/v1/card-templates/template-1/layout/print-views")) {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      onSave?.(payload);
+      const layout = payload.layout_json as CardPrintLayout;
+      return jsonResponse(
+        {
+          id: "print-template-1",
+          name: "Основная A4",
+          is_default: true,
+          document_template_id: "print-template-1",
+          current_version_id: "print-version-1",
+          source: "form_layout",
+          page: layout.page,
+          items: layout.items,
+          layout_json: layout,
+          output_filename_template: "{{ card.display_name }}.docx",
+        },
+        201,
+      );
+    }
     if (
       url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")
     ) {

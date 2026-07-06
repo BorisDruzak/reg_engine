@@ -27,8 +27,13 @@ import {
   resizeItemByMm,
 } from "./printLayoutGeometry";
 import { fieldTypeIcon, itemDisplayText } from "./printSampleValues";
-
-export type A4RendererMode = "design" | "preview" | "fill" | "readonly";
+import {
+  A4_BLOCK_DRAG_TYPE,
+  A4_FIELD_DRAG_TYPE,
+  clearA4DragPayload,
+  decodeA4DragPayload,
+  getA4DragPayload,
+} from "./a4DragPayload";
 
 type DragState = {
   itemId: string;
@@ -56,8 +61,7 @@ export type A4LayoutRendererProps = {
   onDropBlock?: (blockId: string, point: { x_mm: number; y_mm: number }) => void;
 };
 
-const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
-const A4_BLOCK_DRAG_TYPE = "application/x-reg-engine-block-id";
+export type A4RendererMode = "design" | "preview" | "fill" | "readonly";
 
 const RESIZE_HANDLES = [
   "top-left",
@@ -202,8 +206,14 @@ export function A4LayoutRenderer({
     if (!interactive || (!onDropField && !onDropBlock)) {
       return;
     }
-    const fieldId = event.dataTransfer.getData(A4_FIELD_DRAG_TYPE);
-    const blockId = event.dataTransfer.getData(A4_BLOCK_DRAG_TYPE);
+    const plainPayload = event.dataTransfer.getData("text/plain");
+    const decodedPayload = decodeA4DragPayload(plainPayload) ?? getA4DragPayload();
+    const fieldId =
+      event.dataTransfer.getData(A4_FIELD_DRAG_TYPE) ||
+      (decodedPayload?.kind === "field" ? decodedPayload.id : "");
+    const blockId =
+      event.dataTransfer.getData(A4_BLOCK_DRAG_TYPE) ||
+      (decodedPayload?.kind === "block" ? decodedPayload.id : "");
     if (!fieldId && !blockId) {
       return;
     }
@@ -215,9 +225,11 @@ export function A4LayoutRenderer({
     };
     if (fieldId) {
       onDropField?.(fieldId, point);
+      clearA4DragPayload();
       return;
     }
     onDropBlock?.(blockId, point);
+    clearA4DragPayload();
   }
 
   return (

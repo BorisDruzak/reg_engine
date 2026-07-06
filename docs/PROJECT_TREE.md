@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-06 00:56:40 +05:00
+- Generated: 2026-07-06 11:12:47 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -37,6 +37,7 @@
 - `backend/app/api/v1/endpoints/attachments.py`
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
+- `backend/app/api/v1/endpoints/card_template_layouts.py`
 - `backend/app/api/v1/endpoints/cards.py`
 - `backend/app/api/v1/endpoints/documents.py`
 - `backend/app/api/v1/endpoints/health.py`
@@ -79,6 +80,7 @@
 - `backend/app/schemas/attachments.py`
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
+- `backend/app/schemas/card_template_layouts.py`
 - `backend/app/schemas/cards.py`
 - `backend/app/schemas/documents.py`
 - `backend/app/schemas/import_export.py`
@@ -92,6 +94,8 @@
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
 - `backend/app/services/card_print.py`
+- `backend/app/services/card_template_layout.py`
+- `backend/app/services/card_template_projection.py`
 - `backend/app/services/cards.py`
 - `backend/app/services/documents.py`
 - `backend/app/services/import_export.py`
@@ -143,6 +147,7 @@
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
 - `backend/tests/test_card_print_layout_services.py`
+- `backend/tests/test_card_template_layout_services.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
 - `backend/tests/test_database_smoke.py`
@@ -239,6 +244,7 @@
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
 - `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
+- `frontend/src/features/registry/print/a4DragPayload.ts`
 - `frontend/src/features/registry/print/A4LayoutCanvas.tsx`
 - `frontend/src/features/registry/print/A4LayoutPalette.tsx`
 - `frontend/src/features/registry/print/A4LayoutPreviewPanel.tsx`

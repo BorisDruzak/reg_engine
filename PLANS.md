@@ -219,12 +219,13 @@ not a hardcoded employee registry.
   card preview, and settings; the old nested A4 button and selected-template
   `schema-canvas` editor are removed; `A4LayoutRenderer` is the canonical A4
   renderer; blank DOCX/PDF downloads still work from the unified screen.
-- Phase 8H unified card-template layout contract is planned and in progress
-  locally. Scope: add a `card_template_layout_v1` API/contract that exposes
-  structure, form layout, print views, export settings, and sync status as one
-  card-template concept while keeping existing `document_templates` rows as
-  internal storage for A4 print-view versions. No destructive migration is
-  planned.
+- Phase 8H unified card-template layout contract is implemented locally and
+  locally verified without a database migration: the new
+  `card_template_layout_v1` API exposes structure, form layout, A4 print
+  views, export settings, and sync status as one card-template concept while
+  keeping existing `document_templates` rows as internal storage for A4
+  print-view versions. `scripts/check.ps1 -SkipRemote` passes; commit, push,
+  deploy, and browser live verification are the remaining closeout steps.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3291,8 +3292,11 @@ Deployment and live verification completed:
 
 ## Phase 8H: Unified Card Template Layout Contract
 
-Status: planned in `PLANS.md` before implementation. No destructive database
-migration is planned.
+Status: implemented locally after the plan was written. No destructive database
+migration is required. Local verification passed with
+`powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+Pending closeout: commit, push `main`, deploy, and browser live verification on
+`http://192.168.100.12:8000/`.
 
 Goal:
 
@@ -3419,6 +3423,27 @@ Implementation tasks:
    - Commit to `main`, push `origin/main`, deploy with
      `scripts/deploy.ps1`, deploy frontend with `scripts/deploy-frontend.ps1`,
      then live browser-check `http://192.168.100.12:8000/`.
+
+Implementation notes after local execution:
+
+- Backend schemas, projection service, layout service, and API router were
+  added. The API now exposes the unified `card_template_layout_v1` read/update,
+  print-view create/update/sync, and DOCX/PDF generation endpoints.
+- The first A4 print view remains virtual (`default-a4`) until save; saved
+  views are persisted through existing `document_templates` /
+  `document_template_versions` with `card_print_layout_v1`.
+- Frontend API types/client were extended. `CardLayoutStudio` now loads the
+  unified layout contract, uses a `Печатное представление` selector, has modes
+  `Состав`, `Форма`, `Печать A4`, `Предпросмотр`, `Экспорт`, marks manual A4
+  geometry with `override=true`, and shows sync status/actions.
+- Card action DOCX/PDF downloads and the card print preview now use the unified
+  card-template layout endpoints instead of listing print templates directly.
+- A4 drag/drop was hardened with a shared payload helper and the initial
+  virtual-view load no longer overwrites local canvas edits.
+- Verification completed locally:
+  - `backend/.venv/Scripts/python.exe -m pytest tests/test_card_template_layout_services.py tests/test_api_phase_2d_documents.py -q`;
+  - `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`;
+  - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
 
 Acceptance criteria:
 

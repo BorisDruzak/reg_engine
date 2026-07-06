@@ -613,6 +613,66 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
     assert invalid_response.status_code == 422, invalid_response.text
 
 
+def test_card_template_layout_api_returns_virtual_default_print_view(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _document_api_context(db_session)
+    template_id = context["card"].card_template_id
+
+    response = api_client.get(
+        f"/api/v1/card-templates/{template_id}/layout",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["version"] == "card_template_layout_v1"
+    assert payload["card_template_id"] == str(template_id)
+    assert payload["structure"]["fields"][0]["id"] == str(context["field"].id)
+    assert payload["form_layout"]["columns"] == 12
+    assert payload["print_views"][0]["id"] == "default-a4"
+    assert payload["print_views"][0]["document_template_id"] is None
+    assert payload["print_views"][0]["items"][0]["source_item_id"].startswith("field-")
+    assert payload["sync_status"]["has_errors"] is False
+
+
+def test_card_template_layout_api_creates_internal_print_view(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _document_api_context(db_session)
+    template_id = context["card"].card_template_id
+    field_id = context["field"].id
+
+    create_response = api_client.post(
+        f"/api/v1/card-templates/{template_id}/layout/print-views",
+        headers=_actor_headers(context["schema_admin"].id),
+        json={
+            "name": "Основная A4",
+            "is_default": True,
+            "layout_json": _card_print_layout(field_id),
+            "output_filename_template": "{{ card.display_name }}.docx",
+        },
+    )
+
+    assert create_response.status_code == 201, create_response.text
+    created = create_response.json()
+    assert created["document_template_id"] is not None
+    assert created["current_version_id"] is not None
+    assert created["items"][1]["field_id"] == str(field_id)
+
+    read_response = api_client.get(
+        f"/api/v1/card-templates/{template_id}/layout",
+        headers=_actor_headers(context["schema_admin"].id),
+    )
+
+    assert read_response.status_code == 200, read_response.text
+    payload = read_response.json()
+    assert payload["print_views"][0]["id"] == created["id"]
+    assert payload["print_views"][0]["document_template_id"] == created["document_template_id"]
+
+
 def test_binary_docx_template_upload_versions_and_generates_latest_version(
     api_client: TestClient,
     db_session: Session,

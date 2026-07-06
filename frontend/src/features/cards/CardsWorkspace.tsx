@@ -9,9 +9,9 @@ import {
   createCardBlockInstance,
   createPublicLink,
   downloadGeneratedDocumentContent,
-  generateDocument,
-  generatePdfDocument,
-  listCardPrintTemplates,
+  generateCardTemplateLayoutDocx,
+  generateCardTemplateLayoutPdf,
+  getCardTemplateLayout,
   listCardFieldReferenceItems,
   listAttachments,
   listPublicLinks,
@@ -273,38 +273,32 @@ export function CardsWorkspace({
       }
     },
   });
-  const cardPrintTemplatesQuery = useQuery({
-    queryKey: ["card-print-templates", token, card?.registry_id, card?.card_template_id],
+  const cardTemplateLayoutQuery = useQuery({
+    queryKey: ["card-template-layout", token, card?.card_template_id],
     queryFn: () => {
       if (!card) {
         throw new Error(uiText.notFound);
       }
-      return listCardPrintTemplates(token, card.registry_id, card.card_template_id);
+      return getCardTemplateLayout(token, card.card_template_id);
     },
-    enabled: Boolean(token && card?.registry_id && card?.card_template_id),
+    enabled: Boolean(token && card?.card_template_id),
   });
-  const selectedCardPrintTemplate = useMemo(() => {
-    if (!card) {
-      return null;
-    }
-    return (
-      (cardPrintTemplatesQuery.data?.items ?? []).find(
-        (template) => template.card_template_id === card.card_template_id,
-      ) ?? null
-    );
-  }, [card, cardPrintTemplatesQuery.data?.items]);
+  const selectedCardPrintView = cardTemplateLayoutQuery.data?.print_views[0] ?? null;
   const downloadCardPrintDocxMutation = useMutation({
     mutationFn: async () => {
-      if (!card || !selectedCardPrintTemplate) {
+      if (!card || !selectedCardPrintView) {
         throw new Error("Для шаблона карточки пока нет печатной формы A4.");
       }
-      const generated = await generateDocument(
+      const generated = await generateCardTemplateLayoutDocx(
         token,
         card.id,
-        selectedCardPrintTemplate.id,
-        selectedCardPrintTemplate.name,
+        card.card_template_id,
+        {
+          print_view_id: selectedCardPrintView.id,
+          title: selectedCardPrintView.name,
+        },
       );
-      return downloadGeneratedDocumentContent(token, generated.id);
+      return downloadGeneratedDocumentContent(token, generated.document.id);
     },
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
@@ -313,16 +307,14 @@ export function CardsWorkspace({
   });
   const downloadCardPrintPdfMutation = useMutation({
     mutationFn: async () => {
-      if (!card || !selectedCardPrintTemplate) {
+      if (!card || !selectedCardPrintView) {
         throw new Error("Для шаблона карточки пока нет печатной формы A4.");
       }
-      const generated = await generatePdfDocument(
-        token,
-        card.id,
-        selectedCardPrintTemplate.id,
-        `${selectedCardPrintTemplate.name} PDF`,
-      );
-      return downloadGeneratedDocumentContent(token, generated.id);
+      const generated = await generateCardTemplateLayoutPdf(token, card.id, card.card_template_id, {
+        print_view_id: selectedCardPrintView.id,
+        title: `${selectedCardPrintView.name} PDF`,
+      });
+      return downloadGeneratedDocumentContent(token, generated.document.id);
     },
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
@@ -534,7 +526,7 @@ export function CardsWorkspace({
                 activeTab === "fields" && bulkFieldRows.length > 0 ? bulkFieldFormId : undefined
               }
               isActivating={activateCardMutation.isPending}
-              canDownloadPrint={Boolean(selectedCardPrintTemplate)}
+              canDownloadPrint={Boolean(selectedCardPrintView)}
               isDownloadingPrint={
                 downloadCardPrintDocxMutation.isPending || downloadCardPrintPdfMutation.isPending
               }
@@ -684,13 +676,13 @@ function CardPrintPreviewPanel({
   token: string;
   organizationName: string | null;
 }) {
-  const printTemplatesQuery = useQuery({
-    queryKey: ["card-print-templates", token, card.registry_id, card.card_template_id],
-    queryFn: () => listCardPrintTemplates(token, card.registry_id, card.card_template_id),
-    enabled: Boolean(token && card.registry_id && card.card_template_id),
+  const cardTemplateLayoutQuery = useQuery({
+    queryKey: ["card-template-layout", token, card.card_template_id],
+    queryFn: () => getCardTemplateLayout(token, card.card_template_id),
+    enabled: Boolean(token && card.card_template_id),
   });
-  const printTemplate = printTemplatesQuery.data?.items[0] ?? null;
-  const layout = printTemplate?.current_layout_json ?? null;
+  const printView = cardTemplateLayoutQuery.data?.print_views[0] ?? null;
+  const layout = printView?.layout_json ?? null;
   const fieldValues = useMemo(
     () =>
       Object.fromEntries(
@@ -710,7 +702,7 @@ function CardPrintPreviewPanel({
 
   return (
     <Panel title="Печатная форма">
-      <DataAlert error={printTemplatesQuery.error} />
+      <DataAlert error={cardTemplateLayoutQuery.error} />
       {!layout ? (
         <p className="data-empty">Для шаблона карточки пока нет печатной формы A4</p>
       ) : (

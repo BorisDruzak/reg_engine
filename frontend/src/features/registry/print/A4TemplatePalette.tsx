@@ -1,8 +1,12 @@
 import type { FormBlockRead, FormFieldRead } from "@/api/types";
 import { uiText } from "@/app/uiText";
 
-const A4_FIELD_DRAG_TYPE = "application/x-reg-engine-field-id";
-const A4_BLOCK_DRAG_TYPE = "application/x-reg-engine-block-id";
+import {
+  A4_BLOCK_DRAG_TYPE,
+  A4_FIELD_DRAG_TYPE,
+  encodeA4DragPayload,
+  setA4DragPayload,
+} from "./a4DragPayload";
 
 type A4TemplatePaletteProps = {
   blocks: FormBlockRead[];
@@ -60,8 +64,11 @@ export function A4TemplatePalette({
               className="a4-template-field-button"
               draggable
               onDragStart={(event) => {
+                const payload = { kind: "block" as const, id: block.id };
+                setA4DragPayload(payload);
                 event.dataTransfer.effectAllowed = "copy";
                 event.dataTransfer.setData(A4_BLOCK_DRAG_TYPE, block.id);
+                event.dataTransfer.setData("text/plain", encodeA4DragPayload(payload));
               }}
               onClick={() => onAddExistingBlock(block)}
             >
@@ -83,8 +90,11 @@ export function A4TemplatePalette({
               className="a4-template-field-button"
               draggable
               onDragStart={(event) => {
+                const payload = { kind: "field" as const, id: field.id };
+                setA4DragPayload(payload);
                 event.dataTransfer.effectAllowed = "copy";
                 event.dataTransfer.setData(A4_FIELD_DRAG_TYPE, field.id);
+                event.dataTransfer.setData("text/plain", encodeA4DragPayload(payload));
               }}
               onClick={() => onAddExistingField(field)}
             >

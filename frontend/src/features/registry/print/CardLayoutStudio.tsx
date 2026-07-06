@@ -1,24 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createCardPrintTemplate,
-  createCardPrintTemplateVersion,
+  createCardTemplatePrintView,
   createFormBlock,
   createFormField,
   createReferenceList,
   downloadBlankCardPrintLayoutDocx,
   downloadBlankCardPrintLayoutPdf,
   downloadGeneratedDocumentContent,
-  generateDocument,
-  generatePdfDocument,
-  listCardPrintTemplates,
+  generateCardTemplateLayoutDocx,
+  generateCardTemplateLayoutPdf,
+  getCardTemplateLayout,
   listReferenceLists,
+  syncCardTemplatePrintView,
+  updateCardTemplatePrintView,
   updateCardTemplate,
 } from "@/api/client";
 import type {
   CardPrintLayout,
   CardPrintLayoutItem,
+  CardTemplatePrintViewRead,
   CardTemplateRead,
   FormBlockRead,
   FormFieldRead,
@@ -101,11 +103,11 @@ type BlockDialogState = {
 type StudioMode = "composition" | "web" | "a4" | "preview" | "settings";
 
 const studioModes: { id: StudioMode; label: string }[] = [
-  { id: "composition", label: "Состав карточки" },
-  { id: "web", label: "Веб-форма" },
-  { id: "a4", label: "Печатная форма A4" },
-  { id: "preview", label: "Предпросмотр карточки" },
-  { id: "settings", label: "Настройки" },
+  { id: "composition", label: "Состав" },
+  { id: "web", label: "Форма" },
+  { id: "a4", label: "Печать A4" },
+  { id: "preview", label: "Предпросмотр" },
+  { id: "settings", label: "Экспорт" },
 ];
 
 export function CardLayoutStudio({
@@ -120,6 +122,8 @@ export function CardLayoutStudio({
   onSchemaChanged,
 }: CardLayoutStudioProps) {
   const queryClient = useQueryClient();
+  const initialPrintViewAppliedRef = useRef(false);
+  const hasLocalPrintLayoutEditsRef = useRef(false);
   const [createdFields, setCreatedFields] = useState<FormFieldRead[]>([]);
   const [createdBlocks, setCreatedBlocks] = useState<FormBlockRead[]>([]);
   const allBlocks = useMemo(() => [...blocks, ...createdBlocks], [blocks, createdBlocks]);
@@ -168,10 +172,10 @@ export function CardLayoutStudio({
   const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
   const [blockDialog, setBlockDialog] = useState<BlockDialogState | null>(null);
 
-  const printTemplatesQuery = useQuery({
-    queryKey: ["card-print-templates", token, registryId, cardTemplate.id],
-    queryFn: () => listCardPrintTemplates(token, registryId, cardTemplate.id),
-    enabled: Boolean(token && registryId && cardTemplate.id),
+  const layoutQuery = useQuery({
+    queryKey: ["card-template-layout", token, cardTemplate.id],
+    queryFn: () => getCardTemplateLayout(token, cardTemplate.id),
+    enabled: Boolean(token && cardTemplate.id),
   });
   const referenceListsQuery = useQuery({
     queryKey: ["reference-lists", token, registryId],
@@ -179,9 +183,9 @@ export function CardLayoutStudio({
     enabled: Boolean(token && registryId && !referenceLists),
   });
 
-  const printTemplates = (printTemplatesQuery.data?.items ?? []).filter(
-    (template) => template.card_template_id === cardTemplate.id,
-  );
+  const printViews = useMemo(() => layoutQuery.data?.print_views ?? [], [layoutQuery.data]);
+  const selectedPrintView =
+    printViews.find((printView) => printView.id === selectedTemplateId) ?? null;
   const effectiveReferenceLists = referenceLists ?? referenceListsQuery.data?.items ?? [];
   const selectedItem = layout.items.find((item) => item.id === selectedItemId) ?? null;
   const validationIssues = useMemo(
@@ -189,6 +193,39 @@ export function CardLayoutStudio({
     [allBlocks, availableFields, layout, name, outputFilenameTemplate],
   );
   const validationErrors = validationIssues.filter((issue) => issue.level === "error");
+
+  const applyPrintView = useCallback(
+    (printView: CardTemplatePrintViewRead) => {
+      hasLocalPrintLayoutEditsRef.current = false;
+      const nextLayout = normalizeLayoutGeometry(
+        printView.layout_json ?? createEmptyCardPrintLayout(),
+      );
+      setSelectedTemplateId(printView.id);
+      setSelectedItemId(nextLayout.items[0]?.id ?? null);
+      setName(printView.name);
+      setCode(generateTechnicalCode(`${cardTemplate.code}-print`, "print", []));
+      setDescription("");
+      setOutputFilenameTemplate(printView.output_filename_template || defaultOutputFilename);
+      setLayout(nextLayout);
+      setHistory([]);
+      setFuture([]);
+      setLocalMessage(null);
+      setLocalError(null);
+    },
+    [cardTemplate.code],
+  );
+
+  useEffect(() => {
+    if (
+      initialPrintViewAppliedRef.current ||
+      hasLocalPrintLayoutEditsRef.current ||
+      printViews.length === 0
+    ) {
+      return;
+    }
+    applyPrintView(printViews[0]);
+    initialPrintViewAppliedRef.current = true;
+  }, [applyPrintView, printViews]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -205,34 +242,40 @@ export function CardLayoutStudio({
         throw new Error(errors[0].message);
       }
       const cleanName = name.trim();
-      const cleanCode = code.trim();
       const cleanOutput = outputFilenameTemplate.trim();
-      if (selectedTemplateId) {
-        await createCardPrintTemplateVersion(token, selectedTemplateId, {
-          layout_json: normalizedLayout,
-        });
-        return { templateId: selectedTemplateId };
+      if (selectedTemplateId && selectedPrintView?.document_template_id) {
+        const updated = await updateCardTemplatePrintView(
+          token,
+          cardTemplate.id,
+          selectedTemplateId,
+          {
+            name: cleanName,
+            is_default: true,
+            layout_json: normalizedLayout,
+            output_filename_template: cleanOutput,
+          },
+        );
+        return { printView: updated };
       }
-      const created = await createCardPrintTemplate(token, registryId, {
-        code: cleanCode,
+      const created = await createCardTemplatePrintView(token, cardTemplate.id, {
         name: cleanName,
-        description: description.trim() || null,
-        card_template_id: cardTemplate.id,
+        is_default: true,
         layout_json: normalizedLayout,
         output_filename_template: cleanOutput,
       });
-      return { templateId: created.id };
+      return { printView: created };
     },
     onMutate: () => {
       setLocalError(null);
       setLocalMessage(null);
     },
     onSuccess: async (result) => {
-      setLocalMessage("Печатный шаблон сохранен");
+      setLocalMessage("Печатное представление сохранено");
       await queryClient.invalidateQueries({
-        queryKey: ["card-print-templates", token, registryId, cardTemplate.id],
+        queryKey: ["card-template-layout", token, cardTemplate.id],
       });
-      setSelectedTemplateId(result.templateId);
+      setSelectedTemplateId(result.printView.id);
+      setOutputFilenameTemplate(result.printView.output_filename_template || defaultOutputFilename);
       setLayout((current) => normalizeLayoutGeometry(current));
     },
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
@@ -241,8 +284,17 @@ export function CardLayoutStudio({
   const generateDocxMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
       if (selectedCardId) {
-        const { templateId } = await saveMutation.mutateAsync();
-        return generateDocument(token, selectedCardId, templateId, name);
+        const { printView } = await saveMutation.mutateAsync();
+        const generated = await generateCardTemplateLayoutDocx(
+          token,
+          selectedCardId,
+          cardTemplate.id,
+          {
+            print_view_id: printView.id,
+            title: name,
+          },
+        );
+        return generated.document;
       }
       const download = await downloadBlankCardPrintLayoutDocx(
         token,
@@ -266,8 +318,17 @@ export function CardLayoutStudio({
   const generatePdfMutation = useMutation<GeneratedDocumentRead | null>({
     mutationFn: async () => {
       if (selectedCardId) {
-        const { templateId } = await saveMutation.mutateAsync();
-        return generatePdfDocument(token, selectedCardId, templateId, name);
+        const { printView } = await saveMutation.mutateAsync();
+        const generated = await generateCardTemplateLayoutPdf(
+          token,
+          selectedCardId,
+          cardTemplate.id,
+          {
+            print_view_id: printView.id,
+            title: name,
+          },
+        );
+        return generated.document;
       }
       const download = await downloadBlankCardPrintLayoutPdf(
         token,
@@ -298,6 +359,23 @@ export function CardLayoutStudio({
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
       setLocalMessage("Документ скачан");
+    },
+    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
+  });
+
+  const syncPrintViewMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedTemplateId || !selectedPrintView?.document_template_id) {
+        throw new Error("Сначала сохраните печатное представление.");
+      }
+      return syncCardTemplatePrintView(token, cardTemplate.id, selectedTemplateId);
+    },
+    onSuccess: async (printView) => {
+      applyPrintView(printView);
+      await queryClient.invalidateQueries({
+        queryKey: ["card-template-layout", token, cardTemplate.id],
+      });
+      setLocalMessage("Печатное представление синхронизировано");
     },
     onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
   });
@@ -407,9 +485,10 @@ export function CardLayoutStudio({
   }
 
   function commitLayout(nextLayout: CardPrintLayout) {
+    hasLocalPrintLayoutEditsRef.current = true;
     setHistory((current) => [...current.slice(-24), layout]);
     setFuture([]);
-    setLayout(normalizeLayoutGeometry(nextLayout));
+    setLayout(normalizeLayoutGeometry(markManualGeometryChanges(layout, nextLayout)));
     setLocalMessage(null);
   }
 
@@ -497,10 +576,11 @@ export function CardLayoutStudio({
     if (!selectedItem) {
       return;
     }
+    const nextPatch = hasGeometryPatch(patch) ? { ...patch, override: true } : patch;
     commitLayout({
       ...layout,
       items: layout.items.map((item) =>
-        item.id === selectedItem.id ? ensureItemGeometry({ ...item, ...patch }, layout) : item,
+        item.id === selectedItem.id ? ensureItemGeometry({ ...item, ...nextPatch }, layout) : item,
       ),
     });
   }
@@ -534,9 +614,10 @@ export function CardLayoutStudio({
   }
 
   function startNewTemplate() {
+    hasLocalPrintLayoutEditsRef.current = false;
     setSelectedTemplateId(null);
     setSelectedItemId(null);
-    setName(`${cardTemplate.name}: печать`);
+    setName(`${cardTemplate.name}: A4`);
     setCode(generateTechnicalCode(`${cardTemplate.code}-print`, "print", []));
     setDescription("");
     setOutputFilenameTemplate(defaultOutputFilename);
@@ -552,24 +633,11 @@ export function CardLayoutStudio({
       startNewTemplate();
       return;
     }
-    const template = printTemplates.find((candidate) => candidate.id === templateId);
-    if (!template) {
+    const printView = printViews.find((candidate) => candidate.id === templateId);
+    if (!printView) {
       return;
     }
-    const nextLayout = normalizeLayoutGeometry(
-      template.current_layout_json ?? createEmptyCardPrintLayout(),
-    );
-    setSelectedTemplateId(template.id);
-    setSelectedItemId(nextLayout.items[0]?.id ?? null);
-    setName(template.name);
-    setCode(template.code);
-    setDescription(template.description ?? "");
-    setOutputFilenameTemplate(template.output_filename_template || defaultOutputFilename);
-    setLayout(nextLayout);
-    setHistory([]);
-    setFuture([]);
-    setLocalMessage(null);
-    setLocalError(null);
+    applyPrintView(printView);
   }
 
   return (
@@ -607,7 +675,7 @@ export function CardLayoutStudio({
         error={localError ? new Error(localError) : null}
         successMessage={localMessage}
       />
-      <DataAlert error={printTemplatesQuery.error ?? referenceListsQuery.error} />
+      <DataAlert error={layoutQuery.error ?? referenceListsQuery.error} />
 
       <div className="card-layout-studio-tabs" role="tablist" aria-label="Режимы редактора шаблона">
         {studioModes.map((studioModeOption) => (
@@ -631,15 +699,15 @@ export function CardLayoutStudio({
 
       <div className="a4-template-subbar">
         <label>
-          Шаблон печати
+          Печатное представление
           <select
             value={selectedTemplateId ?? ""}
             onChange={(event) => loadPrintTemplate(event.currentTarget.value)}
           >
-            <option value="">Новый шаблон</option>
-            {printTemplates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
+            {!selectedTemplateId && <option value="">Новое представление</option>}
+            {printViews.map((printView) => (
+              <option key={printView.id} value={printView.id}>
+                {printView.name}
               </option>
             ))}
           </select>
@@ -670,15 +738,52 @@ export function CardLayoutStudio({
             Повторить
           </button>
           <button type="button" className="ghost-button" onClick={startNewTemplate}>
-            Новый шаблон
+            + Добавить представление
           </button>
         </div>
       </div>
 
+      <section className="card-layout-sync-panel" aria-label="Синхронизация шаблона карточки">
+        <div>
+          <strong>Связь структуры и A4</strong>
+          {layoutQuery.data?.sync_status.has_errors ? (
+            <span className="inline-alert">Есть ошибки A4</span>
+          ) : (layoutQuery.data?.sync_status.warnings.length ?? 0) > 0 ? (
+            <span className="muted-text">Есть предупреждения синхронизации</span>
+          ) : (
+            <span className="inline-success">Синхронизировано</span>
+          )}
+        </div>
+        <div className="card-layout-sync-details">
+          {layoutQuery.data?.sync_status.errors.map((error) => (
+            <span key={error} className="inline-alert">
+              {error}
+            </span>
+          ))}
+          {layoutQuery.data?.sync_status.warnings.map((warning) => (
+            <span key={warning} className="muted-text">
+              {warning}
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={
+            syncPrintViewMutation.isPending ||
+            !selectedTemplateId ||
+            !selectedPrintView?.document_template_id
+          }
+          onClick={() => syncPrintViewMutation.mutate()}
+        >
+          Синхронизировать автоматически
+        </button>
+      </section>
+
       {studioMode === "settings" && (
-        <aside className="a4-template-settings" aria-label="Настройки шаблона">
+        <aside className="a4-template-settings" aria-label="Экспорт шаблона">
           <div className="a4-template-settings-header">
-            <h4>Настройки шаблона</h4>
+            <h4>Экспорт</h4>
             <button type="button" className="ghost-button" onClick={() => setStudioMode("a4")}>
               Закрыть
             </button>
@@ -1137,6 +1242,42 @@ function BlockDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+function markManualGeometryChanges(
+  previousLayout: CardPrintLayout,
+  nextLayout: CardPrintLayout,
+): CardPrintLayout {
+  const previousItems = new Map(previousLayout.items.map((item) => [item.id, item]));
+  return {
+    ...nextLayout,
+    items: nextLayout.items.map((item) => {
+      const previousItem = previousItems.get(item.id);
+      if (!previousItem || !geometryChanged(previousItem, item)) {
+        return item;
+      }
+      return { ...item, override: true };
+    }),
+  };
+}
+
+function hasGeometryPatch(patch: Partial<CardPrintLayoutItem>) {
+  return ["x_mm", "y_mm", "width_mm", "height_mm", "row", "column", "row_span", "column_span"].some(
+    (key) => key in patch,
+  );
+}
+
+function geometryChanged(previousItem: CardPrintLayoutItem, nextItem: CardPrintLayoutItem) {
+  return (
+    previousItem.x_mm !== nextItem.x_mm ||
+    previousItem.y_mm !== nextItem.y_mm ||
+    previousItem.width_mm !== nextItem.width_mm ||
+    previousItem.height_mm !== nextItem.height_mm ||
+    previousItem.row !== nextItem.row ||
+    previousItem.column !== nextItem.column ||
+    previousItem.row_span !== nextItem.row_span ||
+    previousItem.column_span !== nextItem.column_span
   );
 }
 

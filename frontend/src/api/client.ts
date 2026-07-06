@@ -10,7 +10,13 @@ import type {
   CardPrintTemplateBlankDownloadPayload,
   CardPrintTemplateVersionCreatePayload,
   CardTemplateCreatePayload,
+  CardTemplateLayoutGeneratePayload,
+  CardTemplateLayoutGeneratedDocumentRead,
+  CardTemplateLayoutRead,
+  CardTemplateLayoutUpdatePayload,
   CardTemplateListRead,
+  CardTemplatePrintViewRead,
+  CardTemplatePrintViewUpdatePayload,
   CardTemplateRead,
   CardTemplateUpdatePayload,
   CardCreatePayload,
@@ -843,6 +849,69 @@ export async function listCardPrintTemplates(
   );
 }
 
+export async function getCardTemplateLayout(token: string, templateId: string) {
+  return apiRequest<CardTemplateLayoutRead>(`/api/v1/card-templates/${templateId}/layout`, {
+    token,
+  });
+}
+
+export async function updateCardTemplateFormLayout(
+  token: string,
+  templateId: string,
+  payload: CardTemplateLayoutUpdatePayload,
+) {
+  return apiRequest<CardTemplateLayoutRead>(`/api/v1/card-templates/${templateId}/layout/form`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function createCardTemplatePrintView(
+  token: string,
+  templateId: string,
+  payload: CardTemplatePrintViewUpdatePayload,
+) {
+  return apiRequest<CardTemplatePrintViewRead>(
+    `/api/v1/card-templates/${templateId}/layout/print-views`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function updateCardTemplatePrintView(
+  token: string,
+  templateId: string,
+  printViewId: string,
+  payload: CardTemplatePrintViewUpdatePayload,
+) {
+  return apiRequest<CardTemplatePrintViewRead>(
+    `/api/v1/card-templates/${templateId}/layout/print-views/${printViewId}`,
+    {
+      method: "PATCH",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function syncCardTemplatePrintView(
+  token: string,
+  templateId: string,
+  printViewId: string,
+) {
+  return apiRequest<CardTemplatePrintViewRead>(
+    `/api/v1/card-templates/${templateId}/layout/print-views/${printViewId}/sync`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
 export async function readCardPrintTemplate(token: string, templateId: string) {
   return apiRequest<DocumentTemplateRead>(`/api/v1/card-print-templates/${templateId}`, { token });
 }
@@ -996,6 +1065,38 @@ export async function generateCardPrintDocumentPdf(
   title?: string,
 ) {
   return generatePdfDocument(token, cardId, templateId, title);
+}
+
+export async function generateCardTemplateLayoutDocx(
+  token: string,
+  cardId: string,
+  templateId: string,
+  payload: CardTemplateLayoutGeneratePayload,
+) {
+  return apiRequest<CardTemplateLayoutGeneratedDocumentRead>(
+    `/api/v1/cards/${cardId}/card-template-layout/${templateId}/generate-docx`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function generateCardTemplateLayoutPdf(
+  token: string,
+  cardId: string,
+  templateId: string,
+  payload: CardTemplateLayoutGeneratePayload,
+) {
+  return apiRequest<CardTemplateLayoutGeneratedDocumentRead>(
+    `/api/v1/cards/${cardId}/card-template-layout/${templateId}/generate-pdf`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
 }
 
 export async function downloadGeneratedDocumentContent(token: string, generatedDocumentId: string) {
