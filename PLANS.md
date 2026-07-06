@@ -219,13 +219,12 @@ not a hardcoded employee registry.
   card preview, and settings; the old nested A4 button and selected-template
   `schema-canvas` editor are removed; `A4LayoutRenderer` is the canonical A4
   renderer; blank DOCX/PDF downloads still work from the unified screen.
-- Phase 8H unified card-template layout contract is implemented locally and
-  locally verified without a database migration: the new
-  `card_template_layout_v1` API exposes structure, form layout, A4 print
-  views, export settings, and sync status as one card-template concept while
-  keeping existing `document_templates` rows as internal storage for A4
-  print-view versions. `scripts/check.ps1 -SkipRemote` passes; commit, push,
-  deploy, and browser live verification are the remaining closeout steps.
+- Phase 8H unified card-template layout contract is completed on `main`,
+  pushed to GitHub, deployed to the configured server, and live-browser
+  verified without a database migration: the new `card_template_layout_v1` API
+  exposes structure, form layout, A4 print views, export settings, and sync
+  status as one card-template concept while keeping existing
+  `document_templates` rows as internal storage for A4 print-view versions.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3292,11 +3291,9 @@ Deployment and live verification completed:
 
 ## Phase 8H: Unified Card Template Layout Contract
 
-Status: implemented locally after the plan was written. No destructive database
-migration is required. Local verification passed with
-`powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
-Pending closeout: commit, push `main`, deploy, and browser live verification on
-`http://192.168.100.12:8000/`.
+Status: completed on `main`, pushed to GitHub, deployed to the configured
+server, and live-browser verified on `http://192.168.100.12:8000/`. No
+destructive database migration is required.
 
 Goal:
 
@@ -3444,6 +3441,21 @@ Implementation notes after local execution:
   - `backend/.venv/Scripts/python.exe -m pytest tests/test_card_template_layout_services.py tests/test_api_phase_2d_documents.py -q`;
   - `pnpm -C frontend exec vitest run src/features/registry/CardPrintTemplateEditor.test.tsx --reporter=dot --testTimeout=10000`;
   - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`.
+- Deployment and live verification completed:
+  - commits `a8e06fdd` and `77a1c9d9` were pushed to `origin/main`;
+  - `scripts/deploy.ps1` fast-forwarded the configured server checkout to
+    `77a1c9d9`, and server checks passed;
+  - `scripts/deploy-frontend.ps1` deployed frontend asset
+    `index-C80psq5i.js`, restarted `reg-engine.service`, and the health and
+    frontend smoke checks passed;
+  - in-app Browser verified the deployed unified studio modes
+    `Состав карточки`, `Веб-форма`, `Печатная форма A4`,
+    `Предпросмотр карточки`, `Экспорт`, the `Печатное представление` selector,
+    the A4 sync panel, the absence of the old `Печатный шаблон A4` button, and
+    the card action buttons `Скачать DOCX` / `Скачать PDF`;
+  - REST live smoke verified `GET /api/v1/card-templates/{template_id}/layout`
+    returns `card_template_layout_v1`, and generated DOCX/PDF downloads have
+    valid `PK` / `%PDF` signatures.
 
 Acceptance criteria:
 
