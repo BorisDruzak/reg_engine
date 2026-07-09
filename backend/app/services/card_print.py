@@ -11,6 +11,7 @@ CARD_PRINT_LINKED_CARD_HEIGHT_MM = 273.0
 CARD_PRINT_MIN_LINKED_CARD_SCALE = 0.5
 _DECORATIVE_KINDS = {"divider", "line", "block", "container", "panel", "rectangle"}
 _OVERLAY_KINDS = {"divider", "line", "container", "panel", "rectangle", "image", "qr_code"}
+_EXPLICIT_OVERLAY_KINDS = {*_OVERLAY_KINDS, "static_text", "heading"}
 _FLOW_KINDS = {"field", "static_text", "heading", "metadata", "page_number", "print_date"}
 _KNOWN_KINDS = {
     "field",
@@ -271,7 +272,13 @@ def validate_card_print_layout(
             row_height_mm=row_height_mm,
         )
         normalized_layout["sections"] = legacy_sections
-        normalized_layout["overlays"] = legacy_overlays
+        explicit_overlays = _normalize_overlays(
+            normalized_layout.get("overlays"),
+            errors=errors,
+            width_mm=width_mm,
+            height_mm=height_mm,
+        )
+        normalized_layout["overlays"] = _merge_overlays(explicit_overlays, legacy_overlays)
 
     return CardPrintLayoutValidationResult(
         normalized_layout=normalized_layout,
@@ -282,7 +289,10 @@ def validate_card_print_layout(
 
 def _normalize_linked_card_item(item: dict[str, object]) -> dict[str, object]:
     return {
-        "id": _required_string(item.get("id"), "Linked card item id is required."),
+        "id": _required_string(
+            item.get("id"),
+            "Не указан идентификатор связанного макета карточки.",
+        ),
         "kind": "card_layout",
         "card_template_id": _required_uuid_string(item.get("card_template_id")),
         "page": _positive_int(item.get("page"), default=1),
@@ -305,7 +315,9 @@ def _required_uuid_string(value: object) -> str:
     try:
         return str(UUID(str(value)))
     except (TypeError, ValueError) as exc:
-        raise CardPrintLayoutError("Linked card template id is invalid.") from exc
+        raise CardPrintLayoutError(
+            "Идентификатор связанного шаблона карточки некорректен."
+        ) from exc
 
 
 def _normalize_sections(
@@ -506,7 +518,7 @@ def _normalize_overlays(
             errors.append(f"Print layout overlay '{overlay_id}' has a duplicate id.")
         seen_overlay_ids.add(overlay_id)
         kind = raw_overlay.get("kind")
-        if kind not in _OVERLAY_KINDS:
+        if kind not in _EXPLICIT_OVERLAY_KINDS:
             errors.append(f"Print layout overlay '{overlay_id}' has unsupported kind '{kind}'.")
         page_number = _positive_int(raw_overlay.get("page"), default=1)
         x_mm = _non_negative_number(raw_overlay.get("x_mm"), default=0)
@@ -534,6 +546,22 @@ def _normalize_overlays(
         )
         normalized_overlays.append(overlay)
     return normalized_overlays
+
+
+def _merge_overlays(
+    primary: list[dict[str, object]],
+    secondary: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    merged: list[dict[str, object]] = []
+    seen_ids: set[str] = set()
+    for overlay in [*primary, *secondary]:
+        overlay_id = str(overlay.get("id") or "")
+        if overlay_id and overlay_id in seen_ids:
+            continue
+        merged.append(overlay)
+        if overlay_id:
+            seen_ids.add(overlay_id)
+    return merged
 
 
 def _normalize_legacy_items_to_sections(

@@ -30,6 +30,7 @@ from app.models import (
     role_permissions,
 )
 from app.services.attachments import LocalFilesystemAttachmentStorage
+from app.services.card_print import validate_card_print_layout
 from app.services.cards import CardFieldRead, CardRead, CardService, FileRefValueRead
 from app.services.documents import DocumentService, DocumentServiceError, _RenderContext
 from app.services.organizations import OrganizationService
@@ -588,7 +589,27 @@ def test_linked_generation_uses_current_form_layout_without_persisting_expansion
                 "y_mm": 260.0,
                 "width_mm": 80.0,
                 "height_mm": 1.0,
-            }
+            },
+            {
+                "id": "brand-image",
+                "kind": "image",
+                "page": 1,
+                "x_mm": 20.0,
+                "y_mm": 20.0,
+                "width_mm": 30.0,
+                "height_mm": 20.0,
+                "alt": "Эмблема карточки",
+            },
+            {
+                "id": "card-qr",
+                "kind": "qr_code",
+                "page": 1,
+                "x_mm": 160.0,
+                "y_mm": 220.0,
+                "width_mm": 24.0,
+                "height_mm": 24.0,
+                "text": "QR-CARD-42",
+            },
         ],
     }
     persisted_layout = deepcopy(layout)
@@ -601,14 +622,23 @@ def test_linked_generation_uses_current_form_layout_without_persisting_expansion
 
     assert layout == persisted_layout
     assert render_layout["items"][0]["source_item_id"] == "field-current"
-    assert any(item["id"] == "signature-line" for item in render_layout["items"])
+    assert [overlay["id"] for overlay in render_layout["overlays"]] == [
+        "signature-line",
+        "brand-image",
+        "card-qr",
+    ]
     assert docx_content.startswith(b"PK")
     with ZipFile(BytesIO(docx_content)) as docx:
         rendered_xml = docx.read("word/document.xml").decode("utf-8")
     field_value = str(card.fields["main.text"].value)
     assert field_value in rendered_xml
+    assert "Эмблема карточки" in rendered_xml
+    assert "QR-CARD-42" in rendered_xml
     assert pdf_content.startswith(b"%PDF")
-    assert "".join(field_value.split()) in "".join(_extract_pdf_text(pdf_content).split())
+    pdf_text = "".join(_extract_pdf_text(pdf_content).split())
+    assert "".join(field_value.split()) in pdf_text
+    assert "Эмблемакарточки" in pdf_text
+    assert "QR-CARD-42" in pdf_text
 
 
 def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_previous(
@@ -619,17 +649,50 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
     card_template_id = uuid4()
     document_template_id = uuid4()
     previous_layout = _card_print_layout(uuid4())
-    previous_layout["items"].append(
+    previous_layout["items"] = [
         {
-            "id": "signature-line",
-            "kind": "line",
+            "id": "footer-heading",
+            "kind": "heading",
             "page": 1,
             "x_mm": 15.0,
-            "y_mm": 260.0,
-            "width_mm": 80.0,
-            "height_mm": 1.0,
+            "y_mm": 286.0,
+            "width_mm": 180.0,
+            "height_mm": 8.0,
+            "text": "Служебный заголовок",
         }
-    )
+    ]
+    previous_layout["overlays"] = [
+        {
+            "id": "brand-image",
+            "kind": "image",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 20.0,
+            "width_mm": 30.0,
+            "height_mm": 20.0,
+            "alt": "Эмблема",
+        },
+        {
+            "id": "card-qr",
+            "kind": "qr_code",
+            "page": 1,
+            "x_mm": 160.0,
+            "y_mm": 220.0,
+            "width_mm": 24.0,
+            "height_mm": 24.0,
+            "text": "QR-CARD-42",
+        },
+        {
+            "id": "static-note",
+            "kind": "static_text",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 250.0,
+            "width_mm": 80.0,
+            "height_mm": 10.0,
+            "text": "Служебная пометка",
+        },
+    ]
     previous_snapshot = deepcopy(previous_layout)
     template = SimpleNamespace(
         id=document_template_id,
@@ -642,20 +705,46 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
         version_number=1,
         layout_json=previous_layout,
     )
-    created_payloads: list[dict[str, object]] = []
-    next_version = SimpleNamespace(id=uuid4(), version_number=2, layout_json=None)
-    service = DocumentService(SimpleNamespace(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    next_version = SimpleNamespace(
+        id=uuid4(),
+        template_id=document_template_id,
+        version_number=2,
+        template_format="card_print_layout_v1",
+        layout_json=None,
+    )
+
+    class FakeSession:
+        def flush(self) -> None:
+            return None
+
+    service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    audit_events: list[dict[str, object]] = []
 
     monkeypatch.setattr(service, "_get_active_template", lambda _template_id: template)
     monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
     monkeypatch.setattr(service, "_latest_template_version", lambda _template_id: previous_version)
+    monkeypatch.setattr(service, "_next_template_version_number", lambda _template_id: 2)
+    monkeypatch.setattr(
+        service,
+        "_validate_card_print_layout_for_template",
+        lambda **payload: payload["layout_json"],
+    )
+    monkeypatch.setattr(
+        service,
+        "_create_card_print_template_version",
+        lambda **payload: (
+            setattr(next_version, "layout_json", payload["layout_json"]) or next_version
+        ),
+    )
 
-    def create_version(**payload: object) -> object:
-        created_payloads.append(payload)
-        next_version.layout_json = payload["layout_json"]
-        return next_version
+    class FakeAuditService:
+        def __init__(self, _session: object) -> None:
+            pass
 
-    monkeypatch.setattr(service, "create_card_print_template_version_for_actor", create_version)
+        def record_user_event(self, **payload: object) -> None:
+            audit_events.append(payload)
+
+    monkeypatch.setattr("app.services.documents.AuditService", FakeAuditService)
 
     result = service.convert_print_view_to_linked_card_for_actor(
         actor_user_id=actor_user_id,
@@ -663,13 +752,281 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
     )
 
     assert result is next_version
+    assert result.version_number == 2
     assert previous_version.layout_json == previous_snapshot
-    assert created_payloads[0]["actor_user_id"] == actor_user_id
-    assert created_payloads[0]["template_id"] == document_template_id
-    converted_layout = created_payloads[0]["layout_json"]
+    converted_layout = result.layout_json
     linked_items = [item for item in converted_layout["items"] if item["kind"] == "card_layout"]
     assert linked_items[0]["card_template_id"] == str(card_template_id)
-    assert any(item["id"] == "signature-line" for item in converted_layout["items"])
+    assert any(item["id"] == "footer-heading" for item in converted_layout["items"])
+    assert [overlay["id"] for overlay in converted_layout["overlays"]] == [
+        "brand-image",
+        "card-qr",
+        "static-note",
+    ]
+    assert validate_card_print_layout(converted_layout).errors == []
+    assert audit_events == [
+        {
+            "actor_user_id": actor_user_id,
+            "action": "document_template_version_create",
+            "object_type": "document_template",
+            "object_id": document_template_id,
+            "new_data_json": {
+                "version_id": str(next_version.id),
+                "version_number": 2,
+                "template_format": "card_print_layout_v1",
+            },
+        }
+    ]
+
+
+def test_card_print_version_save_rejects_linked_template_identity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    document_template_id = uuid4()
+    expected_card_template_id = uuid4()
+    foreign_card_template_id = uuid4()
+    template = SimpleNamespace(
+        id=document_template_id,
+        registry_id=registry_id,
+        card_template_id=expected_card_template_id,
+        template_format="card_print_layout_v1",
+    )
+    layout = {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "linked-card",
+                "kind": "card_layout",
+                "card_template_id": str(foreign_card_template_id),
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 12.0,
+                "width_mm": 186.0,
+                "height_mm": 273.0,
+            }
+        ],
+    }
+
+    class FakeSession:
+        def flush(self) -> None:
+            return None
+
+    service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_template", lambda _template_id: template)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "_card_print_allowed_field_ids", lambda **_kwargs: set())
+    monkeypatch.setattr(service, "_card_print_allowed_block_ids", lambda **_kwargs: set())
+    monkeypatch.setattr(service, "_next_template_version_number", lambda _template_id: 2)
+    monkeypatch.setattr(
+        service,
+        "_create_card_print_template_version",
+        lambda **_kwargs: SimpleNamespace(id=uuid4(), version_number=2),
+    )
+    monkeypatch.setattr(
+        service,
+        "_record_card_print_template_version_audit",
+        lambda **_kwargs: None,
+    )
+
+    with pytest.raises(
+        DocumentServiceError,
+        match="Связанный макет карточки не соответствует шаблону печатной формы",
+    ):
+        service.create_card_print_template_version_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=document_template_id,
+            layout_json=layout,
+        )
+
+
+def test_card_print_generation_rejects_document_template_for_another_card_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    document_card_template_id = uuid4()
+    card_template_id = uuid4()
+    template = SimpleNamespace(
+        id=uuid4(),
+        registry_id=registry_id,
+        card_template_id=document_card_template_id,
+        template_format="card_print_layout_v1",
+        output_filename_template="{{ card.display_name }}.docx",
+        output_content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        name="Печатная форма",
+    )
+    card = replace(
+        _card_read_for_print_layout(uuid4()),
+        registry_id=registry_id,
+        card_template_id=card_template_id,
+    )
+
+    class FakeSession:
+        def add(self, _value: object) -> None:
+            return None
+
+        def flush(self) -> None:
+            return None
+
+    class FakeStorage:
+        backend_name = "test"
+
+        def write_bytes(self, _content: bytes) -> SimpleNamespace:
+            return SimpleNamespace(
+                storage_key="generated/test.docx",
+                content_length_bytes=4,
+                checksum_sha256="0" * 64,
+            )
+
+    class FakeCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, **_kwargs: object) -> CardRead:
+            return card
+
+    class FakeAuditService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_payload: object) -> None:
+            return None
+
+    service = DocumentService(FakeSession(), storage=FakeStorage())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_template", lambda _template_id: template)
+    monkeypatch.setattr(service, "_require_card_manage_permission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_latest_template_version",
+        lambda _template_id: SimpleNamespace(id=uuid4()),
+    )
+    monkeypatch.setattr(service, "_render_template_content", lambda *_args: b"docx")
+    monkeypatch.setattr("app.services.documents.CardService", FakeCardService)
+    monkeypatch.setattr("app.services.documents.AuditService", FakeAuditService)
+
+    with pytest.raises(
+        DocumentServiceError,
+        match="Печатная форма не соответствует шаблону карточки",
+    ):
+        service.generate_document_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template.id,
+            card_id=card.card_id,
+        )
+
+
+def test_linked_generation_uses_schema_fallback_for_legacy_card_template() -> None:
+    field_id = uuid4()
+    block_id = uuid4()
+    card_template_id = uuid4()
+    card = replace(_card_read_for_print_layout(field_id), card_template_id=card_template_id)
+    card_template = SimpleNamespace(
+        id=card_template_id,
+        registry_id=card.registry_id,
+        archived_at=None,
+        is_active=True,
+        field_schema_json={"field_ids": [str(field_id)]},
+    )
+    block = SimpleNamespace(id=block_id, registry_id=card.registry_id, position=0, title="Раздел")
+    field = SimpleNamespace(
+        id=field_id,
+        block_id=block_id,
+        position=0,
+        label="Поле",
+    )
+
+    class ScalarResult:
+        def __init__(self, values: list[object]) -> None:
+            self.values = values
+
+        def all(self) -> list[object]:
+            return self.values
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.scalar_results = iter(([block], [field]))
+
+        def get(self, model: type[object], object_id: UUID) -> object | None:
+            if model is CardTemplate and object_id == card_template_id:
+                return card_template
+            return None
+
+        def scalars(self, _statement: object) -> ScalarResult:
+            return ScalarResult(list(next(self.scalar_results)))
+
+    layout = {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "linked-card",
+                "kind": "card_layout",
+                "card_template_id": str(card_template_id),
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 12.0,
+                "width_mm": 186.0,
+                "height_mm": 273.0,
+            }
+        ],
+    }
+    service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
+
+    render_layout = service._expand_linked_card_layouts_for_generation(
+        layout,
+        _RenderContext(card=card),
+    )
+
+    assert render_layout["items"][0]["field_id"] == str(field_id)
+    assert render_layout["items"][0]["source_item_id"] == f"field-{field_id}"
+
+
+def test_linked_preview_maps_validation_details_to_safe_russian(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    layout = {
+        "version": "card_print_layout_v1",
+        "page": {"format": "A4", "width_mm": 210, "height_mm": 297},
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "linked-card",
+                "kind": "card_layout",
+                "card_template_id": "not-a-uuid",
+            }
+        ],
+    }
+    service = DocumentService(SimpleNamespace(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_require_registry_read_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "_get_active_registry", lambda _registry_id: None)
+    monkeypatch.setattr(service, "_card_print_allowed_field_ids", lambda **_kwargs: set())
+    monkeypatch.setattr(service, "_card_print_allowed_block_ids", lambda **_kwargs: set())
+
+    with pytest.raises(
+        DocumentServiceError,
+        match="Связанный макет карточки содержит недопустимые параметры",
+    ):
+        service.preview_card_print_layout_for_actor(
+            actor_user_id=uuid4(),
+            registry_id=registry_id,
+            layout_json=layout,
+        )
 
 
 def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:

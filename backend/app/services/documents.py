@@ -31,7 +31,6 @@ from app.models import (
     Registry,
     StoredFile,
 )
-from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 from app.services.attachments import (
     AttachmentStorage,
     StoredObjectInfo,
@@ -39,7 +38,10 @@ from app.services.attachments import (
 )
 from app.services.audit import AuditService
 from app.services.card_print import CARD_PRINT_LAYOUT_VERSION, validate_card_print_layout
-from app.services.card_template_projection import expand_linked_card_layout
+from app.services.card_template_projection import (
+    expand_linked_card_layout,
+    resolve_card_template_form_layout,
+)
 from app.services.cards import (
     CardFieldRead,
     CardRead,
@@ -70,6 +72,7 @@ _PLACEHOLDER_PATTERN = re.compile(r"{{\s*([A-Za-z0-9_.]+)\s*}}")
 _DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_CONTENT_TYPE = "application/pdf"
 _CARD_PRINT_DECORATIVE_KINDS = {"divider", "line", "rectangle", "container", "panel"}
+_CARD_PRINT_OVERLAY_KINDS = {*_CARD_PRINT_DECORATIVE_KINDS, "image", "qr_code"}
 _PDF_FONT_NAME = "RegEngineDejaVuSans"
 _PDF_FONT_CANDIDATES = (
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -391,13 +394,13 @@ class DocumentService:
     ) -> DocumentTemplateVersion:
         template = self._get_active_template(template_id)
         if template.template_format != CARD_PRINT_LAYOUT_VERSION:
-            raise DocumentServiceError("Document template is not a card print layout template.")
+            raise DocumentServiceError("Шаблон документа не является печатной формой карточки.")
         self._require_schema_permission(actor_user_id, template.registry_id)
         if template.card_template_id is None:
-            raise DocumentServiceError("Card print layout is not linked to a card template.")
+            raise DocumentServiceError("Печатная форма не связана с шаблоном карточки.")
         current_version = self._latest_template_version(template.id)
         if current_version is None or current_version.layout_json is None:
-            raise DocumentServiceError("Card print layout template version was not found.")
+            raise DocumentServiceError("Версия печатной формы карточки не найдена.")
         converted_layout = self._linked_card_conversion_layout(
             current_version.layout_json,
             card_template_id=template.card_template_id,
@@ -542,6 +545,7 @@ class DocumentService:
             card_read.organization_id,
             registry_id=card_read.registry_id,
         )
+        self._validate_card_print_template_for_card(template, card_read)
 
         template_version = self._latest_template_version(template.id)
         render_context = _RenderContext(card=card_read)
@@ -722,7 +726,11 @@ class DocumentService:
             allowed_block_ids=allowed_block_ids,
         )
         if result.errors:
-            raise DocumentServiceError("; ".join(result.errors))
+            self._raise_card_print_layout_errors(layout_json, result.errors)
+        self._validate_linked_card_template_identity(
+            result.normalized_layout,
+            expected_card_template_id=card_template_id,
+        )
         if card_id is not None and not sample:
             try:
                 card_read = CardService(self.session).read_card_for_actor(
@@ -780,6 +788,7 @@ class DocumentService:
             card_read.organization_id,
             registry_id=card_read.registry_id,
         )
+        self._validate_card_print_template_for_card(template, card_read)
 
         template_version = self._latest_template_version(template.id)
         template_format = (
@@ -1339,10 +1348,12 @@ class DocumentService:
         }
         converted["version"] = CARD_PRINT_LAYOUT_VERSION
         converted["page"] = page
+        flow_items, overlay_items = self._split_print_only_card_layout_items(layout_json)
         converted["items"] = [
             linked_item,
-            *self._print_only_card_layout_items(layout_json),
+            *flow_items,
         ]
+        converted["overlays"] = overlay_items
         return converted
 
     def _expand_linked_card_layouts_for_generation(
@@ -1365,7 +1376,9 @@ class DocumentService:
             try:
                 card_template_id = UUID(str(linked_item.get("card_template_id")))
             except (TypeError, ValueError) as exc:
-                raise DocumentServiceError("Linked card template id is invalid.") from exc
+                raise DocumentServiceError(
+                    "Идентификатор связанного шаблона карточки некорректен."
+                ) from exc
             card_template = self.session.get(CardTemplate, card_template_id)
             if (
                 card_template is None
@@ -1374,19 +1387,15 @@ class DocumentService:
                 or card_template.registry_id != context.card.registry_id
                 or card_template.id != context.card.card_template_id
             ):
-                raise DocumentServiceError("Linked card template was not found for this card.")
-            field_schema = card_template.field_schema_json
-            raw_form_layout = (
-                field_schema.get("form_layout") if isinstance(field_schema, dict) else None
-            )
-            if not isinstance(raw_form_layout, dict):
-                raise DocumentServiceError("Linked card template form layout was not found.")
-            try:
-                form_layout = CardTemplateFormLayoutRead.model_validate(raw_form_layout).model_dump(
-                    mode="json"
+                raise DocumentServiceError(
+                    "Связанный шаблон карточки недоступен для этой карточки."
                 )
+            try:
+                form_layout = self._card_template_form_layout(card_template)
             except ValueError as exc:
-                raise DocumentServiceError("Linked card template form layout is invalid.") from exc
+                raise DocumentServiceError(
+                    "Макет связанного шаблона карточки содержит недопустимые параметры."
+                ) from exc
             rect = {
                 "x_mm": self._layout_item_float(linked_item, "x_mm", default=12),
                 "y_mm": self._layout_item_float(linked_item, "y_mm", default=12),
@@ -1397,21 +1406,62 @@ class DocumentService:
             for item in expand_linked_card_layout(form_layout, rect):
                 render_items.append({**item, "page": page_number})
 
-        render_items.extend(self._print_only_card_layout_items(layout_json))
+        flow_items, overlay_items = self._split_print_only_card_layout_items(layout_json)
+        render_items.extend(flow_items)
         render_layout = deepcopy(layout_json)
         render_layout.pop("sections", None)
-        render_layout.pop("overlays", None)
         render_layout["items"] = render_items
+        render_layout["overlays"] = overlay_items
         return render_layout
 
-    def _print_only_card_layout_items(
+    def _card_template_form_layout(self, card_template: CardTemplate) -> dict[str, object]:
+        field_schema = (
+            card_template.field_schema_json
+            if isinstance(card_template.field_schema_json, dict)
+            else {}
+        )
+        if isinstance(field_schema.get("form_layout"), dict):
+            return resolve_card_template_form_layout(field_schema, blocks=[], fields=[])
+
+        raw_field_ids = field_schema.get("field_ids")
+        field_ids: set[UUID] = set()
+        if isinstance(raw_field_ids, list):
+            for raw_field_id in raw_field_ids:
+                try:
+                    field_ids.add(UUID(str(raw_field_id)))
+                except (TypeError, ValueError):
+                    continue
+        block_statement = (
+            select(FormBlock)
+            .where(FormBlock.registry_id == card_template.registry_id)
+            .order_by(FormBlock.position, FormBlock.title, FormBlock.id)
+        )
+        blocks = list(self.session.scalars(block_statement).all())
+        field_statement = (
+            select(FormField)
+            .join(FormBlock, FormBlock.id == FormField.block_id)
+            .where(FormBlock.registry_id == card_template.registry_id)
+            .order_by(FormBlock.position, FormField.position, FormField.label, FormField.id)
+        )
+        if field_ids:
+            field_statement = field_statement.where(FormField.id.in_(field_ids))
+        fields = list(self.session.scalars(field_statement).all())
+        block_ids_with_fields = {field.block_id for field in fields}
+        return resolve_card_template_form_layout(
+            field_schema,
+            blocks=[{"id": str(block.id)} for block in blocks if block.id in block_ids_with_fields],
+            fields=[{"id": str(field.id), "block_id": str(field.block_id)} for field in fields],
+        )
+
+    def _split_print_only_card_layout_items(
         self,
         layout_json: dict[str, object],
-    ) -> list[dict[str, object]]:
-        print_only: list[dict[str, object]] = []
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        flow_items: list[dict[str, object]] = []
+        overlay_items: list[dict[str, object]] = []
         seen_ids: set[str] = set()
 
-        def append_item(raw_item: object) -> None:
+        def append_item(raw_item: object, *, explicit_overlay: bool = False) -> None:
             if not isinstance(raw_item, dict):
                 return
             if raw_item.get("kind") in {"field", "block", "card_layout"}:
@@ -1419,10 +1469,19 @@ class DocumentService:
             item_id = str(raw_item.get("id") or "")
             if item_id and item_id in seen_ids:
                 return
-            print_only.append(deepcopy(raw_item))
+            target = (
+                overlay_items
+                if explicit_overlay or raw_item.get("kind") in _CARD_PRINT_OVERLAY_KINDS
+                else flow_items
+            )
+            target.append(deepcopy(raw_item))
             if item_id:
                 seen_ids.add(item_id)
 
+        raw_overlays = layout_json.get("overlays")
+        if isinstance(raw_overlays, list):
+            for overlay in raw_overlays:
+                append_item(overlay, explicit_overlay=True)
         raw_items = layout_json.get("items")
         if isinstance(raw_items, list):
             for item in raw_items:
@@ -1434,11 +1493,7 @@ class DocumentService:
                     continue
                 for item in self._card_print_flatten_section_items(raw_section):
                     append_item(item)
-        raw_overlays = layout_json.get("overlays")
-        if isinstance(raw_overlays, list):
-            for overlay in raw_overlays:
-                append_item(overlay)
-        return print_only
+        return flow_items, overlay_items
 
     def _build_docx_from_card_print_layout(
         self,
@@ -1458,6 +1513,10 @@ class DocumentService:
             if title:
                 body_parts.append(self._paragraph_xml(title))
             body_parts.append(self._card_print_section_table_xml(section, context))
+        for overlay in self._card_print_overlay_items(render_layout):
+            text = self._card_print_item_text(overlay, context)
+            if text:
+                body_parts.append(self._paragraph_xml(text))
         if body_parts:
             return self._build_docx_package("".join(body_parts))
         lines: list[str] = []
@@ -1593,6 +1652,25 @@ class DocumentService:
                 self._layout_item_float(section, "y_mm", default=0),
                 self._layout_item_float(section, "x_mm", default=0),
                 str(section.get("id") or ""),
+            ),
+        )
+
+    def _card_print_overlay_items(
+        self,
+        layout_json: dict[str, object],
+    ) -> list[dict[str, object]]:
+        normalized_layout = validate_card_print_layout(layout_json).normalized_layout
+        raw_overlays = normalized_layout.get("overlays")
+        if not isinstance(raw_overlays, list):
+            return []
+        overlays = [overlay for overlay in raw_overlays if isinstance(overlay, dict)]
+        return sorted(
+            overlays,
+            key=lambda overlay: (
+                self._layout_item_int(overlay, "page", default=1),
+                self._layout_item_float(overlay, "y_mm", default=0),
+                self._layout_item_float(overlay, "x_mm", default=0),
+                str(overlay.get("id") or ""),
             ),
         )
 
@@ -2103,8 +2181,63 @@ class DocumentService:
             allowed_block_ids=allowed_block_ids,
         )
         if result.errors:
-            raise DocumentServiceError("; ".join(result.errors))
+            self._raise_card_print_layout_errors(layout_json, result.errors)
+        self._validate_linked_card_template_identity(
+            result.normalized_layout,
+            expected_card_template_id=card_template_id,
+        )
         return result.normalized_layout
+
+    def _raise_card_print_layout_errors(
+        self,
+        layout_json: dict[str, object],
+        errors: list[str],
+    ) -> None:
+        raw_items = layout_json.get("items")
+        if isinstance(raw_items, list) and any(
+            isinstance(item, dict) and item.get("kind") == "card_layout" for item in raw_items
+        ):
+            raise DocumentServiceError("Связанный макет карточки содержит недопустимые параметры.")
+        raise DocumentServiceError("; ".join(errors))
+
+    def _validate_linked_card_template_identity(
+        self,
+        layout_json: dict[str, object],
+        *,
+        expected_card_template_id: UUID | None,
+    ) -> None:
+        raw_items = layout_json.get("items")
+        if not isinstance(raw_items, list):
+            return
+        linked_items = [
+            item
+            for item in raw_items
+            if isinstance(item, dict) and item.get("kind") == "card_layout"
+        ]
+        for linked_item in linked_items:
+            try:
+                linked_card_template_id = UUID(str(linked_item.get("card_template_id")))
+            except (TypeError, ValueError) as exc:
+                raise DocumentServiceError(
+                    "Связанный макет карточки содержит недопустимые параметры."
+                ) from exc
+            if (
+                expected_card_template_id is None
+                or linked_card_template_id != expected_card_template_id
+            ):
+                raise DocumentServiceError(
+                    "Связанный макет карточки не соответствует шаблону печатной формы."
+                )
+
+    def _validate_card_print_template_for_card(
+        self,
+        template: DocumentTemplate,
+        card: CardRead,
+    ) -> None:
+        if template.template_format != CARD_PRINT_LAYOUT_VERSION:
+            return
+        if template.card_template_id is None or template.card_template_id != card.card_template_id:
+            raise DocumentServiceError("Печатная форма не соответствует шаблону карточки.")
 
     def _card_print_allowed_field_ids(
         self,
@@ -2116,13 +2249,15 @@ class DocumentService:
             card_template = self._validate_card_template_scope(registry_id, card_template_id)
             raw_field_ids = card_template.field_schema_json.get("field_ids", [])
             if not isinstance(raw_field_ids, list):
-                raise DocumentServiceError("Card template field schema is invalid.")
+                raise DocumentServiceError("Схема полей шаблона карточки содержит ошибку.")
             field_ids: set[UUID] = set()
             for raw_field_id in raw_field_ids:
                 try:
                     field_ids.add(UUID(str(raw_field_id)))
                 except (TypeError, ValueError) as exc:
-                    raise DocumentServiceError("Card template field schema is invalid.") from exc
+                    raise DocumentServiceError(
+                        "Схема полей шаблона карточки содержит ошибку."
+                    ) from exc
             return field_ids
         return set(
             self.session.scalars(
@@ -2161,7 +2296,7 @@ class DocumentService:
             or card_template.archived_at is not None
             or not card_template.is_active
         ):
-            raise DocumentServiceError("Card template was not found in this registry.")
+            raise DocumentServiceError("Шаблон карточки не найден в этом реестре.")
         return card_template
 
     def _validate_template_format(self, template_format: str) -> None:

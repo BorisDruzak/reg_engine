@@ -284,6 +284,62 @@ def test_card_print_layout_validation_rejects_unreadable_linked_card_scale() -> 
     assert any("readable text" in error for error in result.errors)
 
 
+def test_linked_card_allows_overlapping_image_and_qr_overlays() -> None:
+    layout = _linked_layout(str(uuid4()))
+    layout["overlays"] = [
+        {
+            "id": "brand-image",
+            "kind": "image",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 20.0,
+            "width_mm": 30.0,
+            "height_mm": 20.0,
+            "alt": "Эмблема",
+        },
+        {
+            "id": "card-qr",
+            "kind": "qr_code",
+            "page": 1,
+            "x_mm": 160.0,
+            "y_mm": 240.0,
+            "width_mm": 24.0,
+            "height_mm": 24.0,
+            "text": "https://example.test/card",
+        },
+    ]
+
+    result = validate_card_print_layout(layout)
+
+    assert result.errors == []
+    assert [overlay["id"] for overlay in result.normalized_layout["overlays"]] == [
+        "brand-image",
+        "card-qr",
+    ]
+
+
+def test_linked_card_still_rejects_overlapping_heading_flow_item() -> None:
+    layout = _linked_layout(str(uuid4()))
+    items = layout["items"]
+    assert isinstance(items, list)
+    items.append(
+        {
+            "id": "overlapping-heading",
+            "kind": "heading",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 20.0,
+            "width_mm": 40.0,
+            "height_mm": 10.0,
+            "text": "Заголовок",
+        }
+    )
+
+    result = validate_card_print_layout(layout)
+
+    assert any("overlaps" in error for error in result.errors)
+
+
 def test_legacy_field_items_remain_valid() -> None:
     field_id = uuid4()
 

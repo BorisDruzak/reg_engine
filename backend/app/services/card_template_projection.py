@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
+
 CARD_TEMPLATE_LAYOUT_VERSION = "card_template_layout_v1"
 FORM_LAYOUT_COLUMNS = 12
 DEFAULT_A4_PAGE: dict[str, Any] = {
@@ -29,20 +31,41 @@ def expand_linked_card_layout(
     for section in _form_sections(form_layout):
         section_x = rect["x_mm"] + (_positive_int(section.get("column"), 1) - 1) * column_mm
         section_y = rect["y_mm"] + (_positive_int(section.get("row"), 1) - 1) * row_mm
+        section_width = _positive_int(section.get("column_span"), FORM_LAYOUT_COLUMNS) * column_mm
+        section_height = _positive_int(section.get("row_span"), 1) * row_mm
+        nested_column_mm = section_width / FORM_LAYOUT_COLUMNS
+        nested_row_mm = section_height / 4
         for item in _form_items(section):
             source_item_id = str(item.get("id") or "")
             result.append(
                 {
                     **item,
                     "source_item_id": source_item_id,
-                    "x_mm": section_x + (_positive_int(item.get("column"), 1) - 1) * column_mm,
-                    "y_mm": section_y + (_positive_int(item.get("row"), 1) - 1) * row_mm,
+                    "x_mm": section_x
+                    + (_positive_int(item.get("column"), 1) - 1) * nested_column_mm,
+                    "y_mm": section_y + (_positive_int(item.get("row"), 1) - 1) * nested_row_mm,
                     "width_mm": _positive_int(item.get("column_span"), FORM_LAYOUT_COLUMNS)
-                    * column_mm,
-                    "height_mm": _positive_int(item.get("row_span"), 1) * row_mm,
+                    * nested_column_mm,
+                    "height_mm": _positive_int(item.get("row_span"), 1) * nested_row_mm,
                 }
             )
     return result
+
+
+def resolve_card_template_form_layout(
+    field_schema_json: object,
+    *,
+    blocks: list[dict[str, Any]],
+    fields: list[dict[str, Any]],
+) -> dict[str, Any]:
+    raw_layout = (
+        field_schema_json.get("form_layout") if isinstance(field_schema_json, dict) else None
+    )
+    if isinstance(raw_layout, dict):
+        layout = raw_layout
+    else:
+        layout = default_form_layout_for_blocks(blocks, fields)
+    return CardTemplateFormLayoutRead.model_validate(layout).model_dump(mode="json")
 
 
 def project_form_layout_to_a4(

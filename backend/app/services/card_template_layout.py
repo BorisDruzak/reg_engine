@@ -30,7 +30,7 @@ from app.services.card_print import CARD_PRINT_LAYOUT_VERSION
 from app.services.card_template_projection import (
     DEFAULT_A4_PAGE,
     build_mapping_table,
-    default_form_layout_for_blocks,
+    resolve_card_template_form_layout,
     sync_print_view,
     virtual_default_print_view,
 )
@@ -388,12 +388,14 @@ class CardTemplateLayoutService:
         blocks: list[FormBlock],
         fields: list[FormField],
     ) -> dict[str, Any]:
-        raw_layout = (template.field_schema_json or {}).get("form_layout")
-        if isinstance(raw_layout, dict):
-            return CardTemplateFormLayoutRead.model_validate(raw_layout).model_dump(mode="json")
-        return default_form_layout_for_blocks(
-            [FormBlockRead.model_validate(block).model_dump(mode="json") for block in blocks],
-            [FormFieldRead.model_validate(field).model_dump(mode="json") for field in fields],
+        return resolve_card_template_form_layout(
+            template.field_schema_json,
+            blocks=[
+                FormBlockRead.model_validate(block).model_dump(mode="json") for block in blocks
+            ],
+            fields=[
+                FormFieldRead.model_validate(field).model_dump(mode="json") for field in fields
+            ],
         )
 
     def _print_views_for_template(

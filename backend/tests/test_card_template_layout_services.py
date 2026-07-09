@@ -591,6 +591,63 @@ def test_card_layout_item_expands_current_form_layout() -> None:
     assert expanded[0]["y_mm"] >= 30.0
 
 
+def test_linked_card_fields_use_nested_section_grid_and_stay_inside_boundaries() -> None:
+    field_id = str(uuid4())
+    linked_rect = {"x_mm": 15.0, "y_mm": 30.0, "width_mm": 180.0, "height_mm": 220.0}
+    form_layout = {
+        "columns": 12,
+        "sections": [
+            {
+                "id": "section-late-half",
+                "row": 3,
+                "column": 7,
+                "row_span": 2,
+                "column_span": 6,
+                "items": [
+                    {
+                        "id": "field-late-half",
+                        "kind": "field",
+                        "field_id": field_id,
+                        "row": 4,
+                        "column": 7,
+                        "row_span": 1,
+                        "column_span": 6,
+                    }
+                ],
+            }
+        ],
+    }
+
+    expanded = expand_linked_card_layout(form_layout, linked_rect)
+
+    assert expanded == [
+        {
+            "id": "field-late-half",
+            "kind": "field",
+            "field_id": field_id,
+            "row": 4,
+            "column": 7,
+            "row_span": 1,
+            "column_span": 6,
+            "source_item_id": "field-late-half",
+            "x_mm": 150.0,
+            "y_mm": 222.5,
+            "width_mm": 45.0,
+            "height_mm": 27.5,
+        }
+    ]
+    section_rect = {"x_mm": 105.0, "y_mm": 140.0, "width_mm": 90.0, "height_mm": 110.0}
+    for item in expanded:
+        assert linked_rect["x_mm"] <= item["x_mm"]
+        assert linked_rect["y_mm"] <= item["y_mm"]
+        assert item["x_mm"] + item["width_mm"] <= linked_rect["x_mm"] + linked_rect["width_mm"]
+        assert item["y_mm"] + item["height_mm"] <= linked_rect["y_mm"] + linked_rect["height_mm"]
+        assert section_rect["x_mm"] <= item["x_mm"]
+        assert section_rect["y_mm"] <= item["y_mm"]
+        assert item["x_mm"] + item["width_mm"] <= section_rect["x_mm"] + section_rect["width_mm"]
+        assert item["y_mm"] + item["height_mm"] <= section_rect["y_mm"] + section_rect["height_mm"]
+
+
 def test_sync_print_view_preserves_manual_override_geometry() -> None:
     field_id = str(uuid4())
     form_layout = _form_layout(field_id)
