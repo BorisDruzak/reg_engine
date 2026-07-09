@@ -3586,3 +3586,51 @@ Acceptance criteria:
   tabs for that same element.
 - Existing A4 print-view save, sync, preview, blank DOCX/PDF, and card action
   DOCX/PDF flows still work.
+
+## Phase 8J: Contextual Card Layout Studio
+
+Status: planned; visual design and written specification approved on 2026-07-10.
+
+Goal:
+
+Replace the current A4-dominated template workspace with a contextual,
+mouse-first 12-by-4 card-layout editor. Blocks and fields snap to quarter width
+and quarter height, semantic editors open inside the selected object, and the
+linked web-card composition is placed into A4 as one object.
+
+Design and implementation plan:
+
+- `docs/superpowers/specs/2026-07-10-contextual-card-layout-studio-design.md`
+- `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
+
+## Phase 8K: Filled Card Workspace
+
+Status: planned; visual design and written specification approved on 2026-07-10.
+
+Goal:
+
+Render completed cards with the exact configured block/field geometry and edit
+one block at a time directly inside its existing cells. Keep `file_ref` in the
+attachment-aware single-field workflow and remove the global mass-edit surface
+from the ordinary card view.
+
+Design and implementation plan:
+
+- `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
+- `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
+
+## Phase 8L: Public Link Review Lifecycle
+
+Status: planned; visual design and written specification approved on 2026-07-10.
+
+Goal:
+
+Extend public links with submit, request-changes, approve, and close states.
+Public edits continue to update the real card immediately; administrator review
+compares against the link baseline, and approval records the reviewer before
+closing all card access through that token.
+
+Design and implementation plan:
+
+- `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
+- `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
