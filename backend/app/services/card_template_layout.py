@@ -3,6 +3,7 @@ import json
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -93,7 +94,12 @@ def reject_overlaps(form_layout: dict[str, Any]) -> None:
 
 
 def validate_form_layout_geometry(form_layout: dict[str, Any]) -> dict[str, Any]:
-    normalized = CardTemplateFormLayoutRead.model_validate(form_layout).model_dump(mode="json")
+    try:
+        normalized = CardTemplateFormLayoutRead.model_validate(form_layout).model_dump(mode="json")
+    except ValidationError as exc:
+        raise CardTemplateLayoutError("Card layout geometry is invalid.") from exc
+    if normalized["columns"] != 12:
+        raise CardTemplateLayoutError("Card layout must use exactly 12 columns.")
     for section in normalized["sections"]:
         if section["column_span"] not in QUARTER_COLUMN_SPANS:
             raise CardTemplateLayoutError("Block width must use a quarter-grid span.")
@@ -163,7 +169,7 @@ class CardTemplateLayoutService:
         expected_revision: str,
         form_layout: dict[str, Any],
     ) -> CardTemplateLayoutRead:
-        template = self._get_active_card_template(card_template_id)
+        template = self._get_active_card_template(card_template_id, lock_for_update=True)
         self._require_schema_permission(actor_user_id, template.registry_id)
         blocks, fields = self._template_structure(template)
         current = self._form_layout(template, blocks, fields)
@@ -613,8 +619,22 @@ class CardTemplateLayoutService:
             suffix += 1
         return f"{prefix}_{suffix}"
 
-    def _get_active_card_template(self, card_template_id: UUID) -> CardTemplate:
-        template = self.session.get(CardTemplate, card_template_id)
+    def _get_active_card_template(
+        self,
+        card_template_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> CardTemplate:
+        if lock_for_update:
+            statement = (
+                select(CardTemplate)
+                .where(CardTemplate.id == card_template_id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            )
+            template = self.session.scalars(statement).one_or_none()
+        else:
+            template = self.session.get(CardTemplate, card_template_id)
         if template is None or template.archived_at is not None or not template.is_active:
             raise RegistrySchemaError("Card template was not found.")
         return template

@@ -55,6 +55,11 @@ def update_card_template_form_layout(
         )
     except CardTemplateLayoutConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CardTemplateLayoutError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Макет карточки содержит недопустимые размеры или расположение элементов.",
+        ) from exc
     except Exception as exc:
         raise_service_http_error(exc)
 
