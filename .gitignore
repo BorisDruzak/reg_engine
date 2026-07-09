@@ -72,3 +72,4 @@ storage/
 *.accdb
 playwright-report/
 test-results/
+.superpowers/
