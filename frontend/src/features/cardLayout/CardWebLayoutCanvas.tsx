@@ -40,10 +40,7 @@ export type CardWebLayoutCanvasProps = {
 };
 
 export function CardWebLayoutCanvas({ mode, ...props }: CardWebLayoutCanvasProps) {
-  const designMode = mode === "design" || mode === "block-edit";
-  const selectionSessionKey = designMode ? "design" : mode;
-
-  return <CardWebLayoutCanvasSession key={selectionSessionKey} mode={mode} {...props} />;
+  return <CardWebLayoutCanvasSession key={mode} mode={mode} {...props} />;
 }
 
 function CardWebLayoutCanvasSession({
@@ -72,8 +69,9 @@ function CardWebLayoutCanvasSession({
   const [uncontrolledSelection, setUncontrolledSelection] = useState<CardLayoutSelection>(null);
   const blocksById = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
-  const designMode = mode === "design" || mode === "block-edit";
-  const activeSelection: CardLayoutSelection = designMode
+  const designMode = mode === "design";
+  const selectionMode = designMode || mode === "block-edit";
+  const activeSelection: CardLayoutSelection = selectionMode
     ? selectionControlled
       ? selection
       : uncontrolledSelection

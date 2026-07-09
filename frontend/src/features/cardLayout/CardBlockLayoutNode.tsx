@@ -50,8 +50,11 @@ export function CardBlockLayoutNode({
   onFieldValueChange,
 }: CardBlockLayoutNodeProps) {
   const nodeId = block?.id ?? section.id;
-  const designMode = mode === "design" || mode === "block-edit";
-  const editing = Boolean(onCommitBlock) && selection?.kind === "block" && selection.id === nodeId;
+  const designMode = mode === "design";
+  const schemaEditing =
+    designMode && Boolean(onCommitBlock) && selection?.kind === "block" && selection.id === nodeId;
+  const valueEditing =
+    mode === "block-edit" && selection?.kind === "block" && selection.id === nodeId;
   const style: CSSProperties = {
     gridColumn: `${section.column} / span ${section.column_span}`,
     gridRow: `${section.row} / span ${section.row_span}`,
@@ -59,13 +62,13 @@ export function CardBlockLayoutNode({
 
   return (
     <section
-      className={`card-layout-block-node${editing ? " is-editing" : ""}`}
+      className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}`}
       data-testid={`layout-block-${section.id}`}
       style={style}
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
       onClick={(event) => event.stopPropagation()}
     >
-      {editing && block && designMode && onCommitBlock ? (
+      {schemaEditing && block && onCommitBlock ? (
         <InlineBlockEditor
           block={block}
           onCommit={(draft) => {
@@ -127,6 +130,7 @@ export function CardBlockLayoutNode({
                   field={field}
                   mode={mode}
                   selection={selection}
+                  valueEditing={valueEditing}
                   renderedValue={renderedValues?.[valueKey]}
                   value={fieldValues?.[valueKey]}
                   options={fieldOptions?.[valueKey]}

@@ -63,6 +63,22 @@ const fields: FormFieldRead[] = [
   },
 ];
 
+const secondaryBlock: FormBlockRead = {
+  ...block,
+  id: "block-work",
+  code: "work",
+  title: "Работа",
+  position: 1,
+};
+
+const secondaryField: FormFieldRead = {
+  ...fields[0],
+  id: "field-position",
+  block_id: secondaryBlock.id,
+  code: "position",
+  label: "Должность",
+};
+
 const layout: CardTemplateLayoutRead = {
   version: "card_template_layout_v1",
   revision: "revision-1",
@@ -108,6 +124,39 @@ const layout: CardTemplateLayoutRead = {
     formats: ["docx", "pdf"],
   },
   sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+};
+
+const twoBlockLayout: CardTemplateLayoutRead = {
+  ...layout,
+  structure: {
+    blocks: [block, secondaryBlock],
+    fields: [...fields, secondaryField],
+  },
+  form_layout: {
+    ...layout.form_layout,
+    sections: [
+      layout.form_layout.sections[0],
+      {
+        id: secondaryBlock.id,
+        block_id: secondaryBlock.id,
+        row: 3,
+        column: 7,
+        row_span: 2,
+        column_span: 6,
+        items: [
+          {
+            id: secondaryField.id,
+            kind: "field",
+            field_id: secondaryField.id,
+            row: 2,
+            column: 4,
+            row_span: 2,
+            column_span: 6,
+          },
+        ],
+      },
+    ],
+  },
 };
 
 function canvasProps(overrides: Partial<CardWebLayoutCanvasProps> = {}): CardWebLayoutCanvasProps {
@@ -395,6 +444,122 @@ describe("CardWebLayoutCanvas", () => {
     );
     expect(screen.getByRole("button", { name: "Изменить значение Имя" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
+  });
+
+  test("edits values only inside the selected block and preserves both grid geometries", () => {
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: twoBlockLayout,
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+          mode: "block-edit",
+          selection: { kind: "block", id: block.id },
+          fieldValues: {
+            [fields[0].id]: "Анна",
+            [secondaryField.id]: "Секретарь",
+          },
+          onFieldValueChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Имя" })).toHaveValue("Анна");
+    expect(screen.queryByRole("textbox", { name: "Должность" })).not.toBeInTheDocument();
+    expect(screen.getByText("Секретарь")).toBeInTheDocument();
+    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "1 / span 2",
+    });
+    expect(screen.getByTestId("layout-block-block-work")).toHaveStyle({
+      gridColumn: "7 / span 6",
+      gridRow: "3 / span 2",
+    });
+    expect(screen.getByTestId("layout-field-field-position")).toHaveStyle({
+      gridColumn: "4 / span 6",
+      gridRow: "2 / span 2",
+    });
+  });
+
+  test("never exposes schema actions or inline schema editors in block-edit mode", () => {
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          mode: "block-edit",
+          selection: { kind: "block", id: block.id },
+          fieldValues: { [fields[0].id]: "Анна" },
+          onFieldValueChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Создать блок в этой области" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Вставить существующий блок в эту область" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Создать поле в блоке ФИО" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Название блока")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
+  });
+
+  test("renders block-edit as readonly when no block is selected", () => {
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          mode: "block-edit",
+          selection: null,
+          fieldValues: { [fields[0].id]: "Анна" },
+          onFieldValueChange: vi.fn(),
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("textbox", { name: "Имя" })).not.toBeInTheDocument();
+    expect(screen.getByText("Анна")).toBeInTheDocument();
+  });
+
+  test("forwards selected block control changes through the field value callback", async () => {
+    const user = userEvent.setup();
+    const onFieldValueChange = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          mode: "block-edit",
+          selection: { kind: "block", id: block.id },
+          fieldValues: { [fields[0].id]: "Анна" },
+          onFieldValueChange,
+        })}
+      />,
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "Имя" }), "!");
+
+    expect(onFieldValueChange).toHaveBeenLastCalledWith(fields[0], "Анна!");
+  });
+
+  test("switches between block-edit controls and readonly values without leaking schema state", () => {
+    const sharedProps = canvasProps({
+      selection: { kind: "block", id: block.id },
+      fieldValues: { [fields[0].id]: "Анна" },
+      onFieldValueChange: vi.fn(),
+    });
+    const { rerender } = render(<CardWebLayoutCanvas {...sharedProps} mode="block-edit" />);
+
+    expect(screen.getByRole("textbox", { name: "Имя" })).toBeInTheDocument();
+
+    rerender(<CardWebLayoutCanvas {...sharedProps} mode="readonly" />);
+    expect(screen.queryByRole("textbox", { name: "Имя" })).not.toBeInTheDocument();
+    expect(screen.getByText("Анна")).toBeInTheDocument();
+
+    rerender(<CardWebLayoutCanvas {...sharedProps} mode="block-edit" selection={null} />);
+    expect(screen.queryByRole("textbox", { name: "Имя" })).not.toBeInTheDocument();
+    expect(screen.getByText("Анна")).toBeInTheDocument();
   });
 });
 

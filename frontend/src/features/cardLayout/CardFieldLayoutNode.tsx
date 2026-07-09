@@ -22,6 +22,7 @@ export type CardFieldLayoutNodeProps = {
   field: FormFieldRead | null;
   mode: CardLayoutRendererMode;
   selection: CardLayoutSelection;
+  valueEditing?: boolean;
   renderedValue?: ReactNode;
   value?: unknown;
   options?: FieldEditorOption[];
@@ -39,6 +40,7 @@ export function CardFieldLayoutNode({
   field,
   mode,
   selection,
+  valueEditing = false,
   renderedValue,
   value,
   options = [],
@@ -51,8 +53,10 @@ export function CardFieldLayoutNode({
   onFieldValueChange,
 }: CardFieldLayoutNodeProps) {
   const nodeId = field?.id ?? item.id;
-  const editing = Boolean(onCommitField) && selection?.kind === "field" && selection.id === nodeId;
-  const designMode = mode === "design" || mode === "block-edit";
+  const designMode = mode === "design";
+  const schemaEditing =
+    designMode && Boolean(onCommitField) && selection?.kind === "field" && selection.id === nodeId;
+  const blockValueEditing = mode === "block-edit" && valueEditing && Boolean(onFieldValueChange);
   const style: CSSProperties = {
     gridColumn: `${item.column} / span ${item.column_span}`,
     gridRow: `${item.row} / span ${item.row_span}`,
@@ -77,12 +81,12 @@ export function CardFieldLayoutNode({
 
   return (
     <article
-      className={`card-layout-field-node${editing ? " is-editing" : ""}`}
+      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}`}
       data-testid={`layout-field-${item.id}`}
       style={style}
       onClick={(event) => event.stopPropagation()}
     >
-      {editing && designMode && onCommitField ? (
+      {schemaEditing && onCommitField ? (
         <InlineFieldEditor
           field={field}
           onCommit={(draft) => {
@@ -114,18 +118,29 @@ export function CardFieldLayoutNode({
           </header>
           {!designMode ? (
             <div className="card-layout-field-value">
-              {renderedValue !== undefined
-                ? renderedValue
-                : renderFieldValue
-                  ? renderFieldValue({ field, item, value, mode })
-                  : defaultFieldValue({
-                      field,
-                      mode,
-                      value,
-                      options,
-                      fileRefOptions,
-                      onFieldValueChange,
-                    })}
+              {blockValueEditing
+                ? defaultFieldValue({
+                    field,
+                    mode,
+                    value,
+                    options,
+                    fileRefOptions,
+                    valueEditing: blockValueEditing,
+                    onFieldValueChange,
+                  })
+                : renderedValue !== undefined
+                  ? renderedValue
+                  : renderFieldValue
+                    ? renderFieldValue({ field, item, value, mode })
+                    : defaultFieldValue({
+                        field,
+                        mode,
+                        value,
+                        options,
+                        fileRefOptions,
+                        valueEditing: blockValueEditing,
+                        onFieldValueChange,
+                      })}
             </div>
           ) : null}
         </>
@@ -149,6 +164,7 @@ function defaultFieldValue({
   value,
   options,
   fileRefOptions,
+  valueEditing,
   onFieldValueChange,
 }: {
   field: FormFieldRead;
@@ -156,13 +172,14 @@ function defaultFieldValue({
   value: unknown;
   options: FieldEditorOption[];
   fileRefOptions: FieldEditorFileRefOption[];
+  valueEditing: boolean;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
 }) {
   if (field.field_type === "static_text") {
     const staticText = field.options_config_json?.static_text;
     return typeof staticText === "string" && staticText.trim() ? staticText : "Нет данных";
   }
-  if (mode === "public-edit" && onFieldValueChange) {
+  if ((mode === "public-edit" || valueEditing) && onFieldValueChange) {
     return (
       <FieldEditorControl
         fieldType={field.field_type}
