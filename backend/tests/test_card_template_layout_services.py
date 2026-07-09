@@ -16,6 +16,7 @@ from app.schemas.card_template_layouts import (
 from app.services import card_template_layout as layout_service
 from app.services.card_template_projection import (
     build_mapping_table,
+    expand_linked_card_layout,
     project_form_layout_to_a4,
     sync_print_view,
 )
@@ -574,6 +575,20 @@ def test_projection_maps_form_field_item_to_a4_geometry() -> None:
     assert items[0]["x_mm"] == 12
     assert items[0]["width_mm"] == 93
     assert items[0]["sync_status"] == "synced"
+
+
+def test_card_layout_item_expands_current_form_layout() -> None:
+    field_id = str(uuid4())
+
+    expanded = expand_linked_card_layout(
+        _form_layout(field_id, item_id="field-name"),
+        {"x_mm": 15.0, "y_mm": 30.0, "width_mm": 180.0, "height_mm": 220.0},
+    )
+
+    assert expanded[0]["source_item_id"] == "field-name"
+    assert expanded[0]["field_id"] == field_id
+    assert expanded[0]["x_mm"] >= 15.0
+    assert expanded[0]["y_mm"] >= 30.0
 
 
 def test_sync_print_view_preserves_manual_override_geometry() -> None:

@@ -57,6 +57,7 @@ class CardTemplatePrintViewItemRead(BaseModel):
     id: str
     source_item_id: str | None = None
     kind: str = "field"
+    card_template_id: UUID | None = None
     block_id: UUID | None = None
     field_id: UUID | None = None
     page: int = 1

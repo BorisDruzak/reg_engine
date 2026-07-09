@@ -19,6 +19,32 @@ class PrintViewSyncResult:
     sync_status: dict[str, Any]
 
 
+def expand_linked_card_layout(
+    form_layout: dict[str, Any],
+    rect: dict[str, float],
+) -> list[dict[str, Any]]:
+    column_mm = rect["width_mm"] / FORM_LAYOUT_COLUMNS
+    row_mm = rect["height_mm"] / 4
+    result: list[dict[str, Any]] = []
+    for section in _form_sections(form_layout):
+        section_x = rect["x_mm"] + (_positive_int(section.get("column"), 1) - 1) * column_mm
+        section_y = rect["y_mm"] + (_positive_int(section.get("row"), 1) - 1) * row_mm
+        for item in _form_items(section):
+            source_item_id = str(item.get("id") or "")
+            result.append(
+                {
+                    **item,
+                    "source_item_id": source_item_id,
+                    "x_mm": section_x + (_positive_int(item.get("column"), 1) - 1) * column_mm,
+                    "y_mm": section_y + (_positive_int(item.get("row"), 1) - 1) * row_mm,
+                    "width_mm": _positive_int(item.get("column_span"), FORM_LAYOUT_COLUMNS)
+                    * column_mm,
+                    "height_mm": _positive_int(item.get("row_span"), 1) * row_mm,
+                }
+            )
+    return result
+
+
 def project_form_layout_to_a4(
     form_layout: dict[str, Any],
     page_settings: dict[str, Any] | None = None,

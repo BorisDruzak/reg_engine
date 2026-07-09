@@ -6,6 +6,9 @@ CARD_PRINT_LAYOUT_COLUMNS = 12
 CARD_PRINT_REPEAT_MODES = {"first_instance_only", "repeat_section", "table_rows"}
 CARD_PRINT_PAGE_WIDTH_MM = 210.0
 CARD_PRINT_PAGE_HEIGHT_MM = 297.0
+CARD_PRINT_LINKED_CARD_WIDTH_MM = 186.0
+CARD_PRINT_LINKED_CARD_HEIGHT_MM = 273.0
+CARD_PRINT_MIN_LINKED_CARD_SCALE = 0.5
 _DECORATIVE_KINDS = {"divider", "line", "block", "container", "panel", "rectangle"}
 _OVERLAY_KINDS = {"divider", "line", "container", "panel", "rectangle", "image", "qr_code"}
 _FLOW_KINDS = {"field", "static_text", "heading", "metadata", "page_number", "print_date"}
@@ -24,6 +27,7 @@ _KNOWN_KINDS = {
     "print_date",
     "qr_code",
     "image",
+    "card_layout",
 }
 _STYLE_ALLOWED_VALUES = {
     "align": {"left", "center", "right"},
@@ -39,6 +43,10 @@ class CardPrintLayoutValidationResult:
     normalized_layout: dict[str, object]
     errors: list[str]
     warnings: list[str]
+
+
+class CardPrintLayoutError(ValueError):
+    """Raised while normalizing one linked card layout item."""
 
 
 def validate_card_print_layout(
@@ -113,7 +121,6 @@ def validate_card_print_layout(
             errors.append(f"Print layout item at index {index} must be an object.")
             continue
         normalized_item = dict(raw_item)
-        normalized_items.append(normalized_item)
         item_id = raw_item.get("id")
         if not isinstance(item_id, str) or not item_id.strip():
             errors.append(f"Print layout item at index {index} must have a stable id.")
@@ -125,19 +132,25 @@ def validate_card_print_layout(
         kind = raw_item.get("kind")
         if kind not in _KNOWN_KINDS:
             errors.append(f"Print layout item '{item_id}' has unsupported kind '{kind}'.")
+        if kind == "card_layout":
+            try:
+                normalized_item = _normalize_linked_card_item(raw_item)
+            except CardPrintLayoutError as exc:
+                errors.append(str(exc))
+        normalized_items.append(normalized_item)
 
-        page_number = _positive_int(raw_item.get("page"), default=1)
-        row = _positive_int(raw_item.get("row"), default=1)
-        column = _positive_int(raw_item.get("column"), default=1)
-        row_span = _positive_int(raw_item.get("row_span"), default=1)
-        column_span = _positive_int(raw_item.get("column_span"), default=1)
+        page_number = _positive_int(normalized_item.get("page"), default=1)
+        row = _positive_int(normalized_item.get("row"), default=1)
+        column = _positive_int(normalized_item.get("column"), default=1)
+        row_span = _positive_int(normalized_item.get("row_span"), default=1)
+        column_span = _positive_int(normalized_item.get("column_span"), default=1)
 
         if column + column_span - 1 > columns:
             errors.append(f"Print layout item '{item_id}' is outside the 12-column grid.")
         if row + row_span - 1 > max_rows:
             errors.append(f"Print layout item '{item_id}' is outside the A4 page height.")
 
-        repeat = raw_item.get("repeat")
+        repeat = normalized_item.get("repeat")
         if isinstance(repeat, dict):
             repeat_mode = repeat.get("mode")
             if repeat_mode is not None and repeat_mode not in CARD_PRINT_REPEAT_MODES:
@@ -146,7 +159,7 @@ def validate_card_print_layout(
                 )
 
         if kind == "field":
-            raw_field_id = raw_item.get("field_id")
+            raw_field_id = normalized_item.get("field_id")
             try:
                 field_id = UUID(str(raw_field_id))
             except (TypeError, ValueError):
@@ -156,7 +169,7 @@ def validate_card_print_layout(
                     errors.append(f"Unknown field_id for print layout item '{item_id}'.")
 
         if kind == "block":
-            raw_block_id = raw_item.get("block_id")
+            raw_block_id = normalized_item.get("block_id")
             if raw_block_id is not None:
                 try:
                     block_id = UUID(str(raw_block_id))
@@ -166,7 +179,7 @@ def validate_card_print_layout(
                     if allowed_block_ids is not None and block_id not in allowed_block_ids:
                         errors.append(f"Unknown block_id for print layout item '{item_id}'.")
 
-        style = raw_item.get("style")
+        style = normalized_item.get("style")
         if style is not None:
             if not isinstance(style, dict):
                 errors.append(f"Print layout item '{item_id}' style must be an object.")
@@ -174,7 +187,7 @@ def validate_card_print_layout(
                 _validate_item_style(style, item_id, errors)
 
         rect = _item_rect_mm(
-            raw_item,
+            normalized_item,
             row=row,
             column=column,
             row_span=row_span,
@@ -209,6 +222,13 @@ def validate_card_print_layout(
             errors.append(f"Print layout item '{item_id}' is outside the A4 page width.")
         if y_mm < 0 or y_mm + item_height_mm > height_mm:
             errors.append(f"Print layout item '{item_id}' is outside the A4 page height.")
+        if kind == "card_layout":
+            linked_scale = min(
+                item_width_mm / CARD_PRINT_LINKED_CARD_WIDTH_MM,
+                item_height_mm / CARD_PRINT_LINKED_CARD_HEIGHT_MM,
+            )
+            if linked_scale < CARD_PRINT_MIN_LINKED_CARD_SCALE:
+                errors.append(f"Print layout item '{item_id}' is below the readable text scale.")
 
         if kind in _DECORATIVE_KINDS:
             continue
@@ -258,6 +278,34 @@ def validate_card_print_layout(
         errors=errors,
         warnings=warnings,
     )
+
+
+def _normalize_linked_card_item(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "id": _required_string(item.get("id"), "Linked card item id is required."),
+        "kind": "card_layout",
+        "card_template_id": _required_uuid_string(item.get("card_template_id")),
+        "page": _positive_int(item.get("page"), default=1),
+        "x_mm": _non_negative_number(item.get("x_mm"), default=12.0),
+        "y_mm": _non_negative_number(item.get("y_mm"), default=12.0),
+        "width_mm": _positive_number(item.get("width_mm"), default=CARD_PRINT_LINKED_CARD_WIDTH_MM),
+        "height_mm": _positive_number(
+            item.get("height_mm"), default=CARD_PRINT_LINKED_CARD_HEIGHT_MM
+        ),
+    }
+
+
+def _required_string(value: object, message: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CardPrintLayoutError(message)
+    return value.strip()
+
+
+def _required_uuid_string(value: object) -> str:
+    try:
+        return str(UUID(str(value)))
+    except (TypeError, ValueError) as exc:
+        raise CardPrintLayoutError("Linked card template id is invalid.") from exc
 
 
 def _normalize_sections(

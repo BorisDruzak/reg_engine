@@ -104,6 +104,38 @@ def _section_layout(field_id: str, block_id: str | None = None) -> dict[str, obj
     }
 
 
+def _linked_layout(
+    card_template_id: str,
+    *,
+    x_mm: float = 12.0,
+    y_mm: float = 12.0,
+    width_mm: float = 186.0,
+    height_mm: float = 273.0,
+) -> dict[str, object]:
+    return {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8, "snap_mm": 2},
+        "items": [
+            {
+                "id": "linked-card",
+                "kind": "card_layout",
+                "card_template_id": card_template_id,
+                "page": 1,
+                "x_mm": x_mm,
+                "y_mm": y_mm,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+            }
+        ],
+    }
+
+
 def test_card_print_layout_validation_accepts_valid_a4_layout() -> None:
     field_id = uuid4()
 
@@ -219,6 +251,49 @@ def test_card_print_layout_validation_normalizes_legacy_items_to_sections_and_ov
     assert result.errors == []
     assert result.normalized_layout["sections"][0]["items"]
     assert result.normalized_layout["overlays"][0]["id"] == "legacy-divider"
+
+
+def test_card_print_layout_validation_normalizes_linked_card_item() -> None:
+    card_template_id = uuid4()
+
+    result = validate_card_print_layout(_linked_layout(str(card_template_id)))
+
+    assert result.errors == []
+    linked_item = result.normalized_layout["items"][0]
+    assert linked_item == {
+        "id": "linked-card",
+        "kind": "card_layout",
+        "card_template_id": str(card_template_id),
+        "page": 1,
+        "x_mm": 12.0,
+        "y_mm": 12.0,
+        "width_mm": 186.0,
+        "height_mm": 273.0,
+    }
+
+
+def test_card_print_layout_validation_rejects_linked_card_overflow() -> None:
+    result = validate_card_print_layout(_linked_layout(str(uuid4()), x_mm=190.0, width_mm=40.0))
+
+    assert any("outside the A4 page width" in error for error in result.errors)
+
+
+def test_card_print_layout_validation_rejects_unreadable_linked_card_scale() -> None:
+    result = validate_card_print_layout(_linked_layout(str(uuid4()), width_mm=40.0, height_mm=40.0))
+
+    assert any("readable text" in error for error in result.errors)
+
+
+def test_legacy_field_items_remain_valid() -> None:
+    field_id = uuid4()
+
+    normalized = validate_card_print_layout(
+        _valid_layout(str(field_id)),
+        allowed_field_ids={field_id},
+    )
+
+    assert normalized.errors == []
+    assert normalized.normalized_layout["sections"]
 
 
 def test_card_print_layout_validation_rejects_unknown_field_and_out_of_grid() -> None:

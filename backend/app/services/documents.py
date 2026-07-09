@@ -1,6 +1,7 @@
 import json
 import re
 from contextlib import suppress
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -30,6 +31,7 @@ from app.models import (
     Registry,
     StoredFile,
 )
+from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 from app.services.attachments import (
     AttachmentStorage,
     StoredObjectInfo,
@@ -37,6 +39,7 @@ from app.services.attachments import (
 )
 from app.services.audit import AuditService
 from app.services.card_print import CARD_PRINT_LAYOUT_VERSION, validate_card_print_layout
+from app.services.card_template_projection import expand_linked_card_layout
 from app.services.cards import (
     CardFieldRead,
     CardRead,
@@ -379,6 +382,31 @@ class DocumentService:
             version=version,
         )
         return version
+
+    def convert_print_view_to_linked_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        template_id: UUID,
+    ) -> DocumentTemplateVersion:
+        template = self._get_active_template(template_id)
+        if template.template_format != CARD_PRINT_LAYOUT_VERSION:
+            raise DocumentServiceError("Document template is not a card print layout template.")
+        self._require_schema_permission(actor_user_id, template.registry_id)
+        if template.card_template_id is None:
+            raise DocumentServiceError("Card print layout is not linked to a card template.")
+        current_version = self._latest_template_version(template.id)
+        if current_version is None or current_version.layout_json is None:
+            raise DocumentServiceError("Card print layout template version was not found.")
+        converted_layout = self._linked_card_conversion_layout(
+            current_version.layout_json,
+            card_template_id=template.card_template_id,
+        )
+        return self.create_card_print_template_version_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=template.id,
+            layout_json=converted_layout,
+        )
 
     def list_template_versions_for_actor(
         self,
@@ -1276,14 +1304,151 @@ class DocumentService:
             archive.writestr("word/document.xml", document_xml)
         return buffer.getvalue()
 
+    def _linked_card_conversion_layout(
+        self,
+        layout_json: dict[str, object],
+        *,
+        card_template_id: UUID,
+    ) -> dict[str, object]:
+        page = deepcopy(layout_json.get("page"))
+        if not isinstance(page, dict):
+            page = {"format": "A4", "width_mm": 210, "height_mm": 297}
+        margins = page.get("margin_mm")
+        if not isinstance(margins, dict):
+            margins = {"top": 12, "right": 12, "bottom": 12, "left": 12}
+        width_mm = self._layout_item_float(page, "width_mm", default=210)
+        height_mm = self._layout_item_float(page, "height_mm", default=297)
+        left_mm = self._layout_item_float(margins, "left", default=12)
+        right_mm = self._layout_item_float(margins, "right", default=12)
+        top_mm = self._layout_item_float(margins, "top", default=12)
+        bottom_mm = self._layout_item_float(margins, "bottom", default=12)
+        linked_item: dict[str, object] = {
+            "id": "linked-card-layout",
+            "kind": "card_layout",
+            "card_template_id": str(card_template_id),
+            "page": 1,
+            "x_mm": left_mm,
+            "y_mm": top_mm,
+            "width_mm": width_mm - left_mm - right_mm,
+            "height_mm": height_mm - top_mm - bottom_mm,
+        }
+        converted = {
+            key: deepcopy(value)
+            for key, value in layout_json.items()
+            if key not in {"items", "sections", "overlays"}
+        }
+        converted["version"] = CARD_PRINT_LAYOUT_VERSION
+        converted["page"] = page
+        converted["items"] = [
+            linked_item,
+            *self._print_only_card_layout_items(layout_json),
+        ]
+        return converted
+
+    def _expand_linked_card_layouts_for_generation(
+        self,
+        layout_json: dict[str, object],
+        context: _RenderContext,
+    ) -> dict[str, object]:
+        raw_items = layout_json.get("items")
+        items = (
+            [item for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
+        linked_items = [item for item in items if item.get("kind") == "card_layout"]
+        if not linked_items:
+            return layout_json
+
+        render_items: list[dict[str, object]] = []
+        for linked_item in linked_items:
+            try:
+                card_template_id = UUID(str(linked_item.get("card_template_id")))
+            except (TypeError, ValueError) as exc:
+                raise DocumentServiceError("Linked card template id is invalid.") from exc
+            card_template = self.session.get(CardTemplate, card_template_id)
+            if (
+                card_template is None
+                or card_template.archived_at is not None
+                or not card_template.is_active
+                or card_template.registry_id != context.card.registry_id
+                or card_template.id != context.card.card_template_id
+            ):
+                raise DocumentServiceError("Linked card template was not found for this card.")
+            field_schema = card_template.field_schema_json
+            raw_form_layout = (
+                field_schema.get("form_layout") if isinstance(field_schema, dict) else None
+            )
+            if not isinstance(raw_form_layout, dict):
+                raise DocumentServiceError("Linked card template form layout was not found.")
+            try:
+                form_layout = CardTemplateFormLayoutRead.model_validate(raw_form_layout).model_dump(
+                    mode="json"
+                )
+            except ValueError as exc:
+                raise DocumentServiceError("Linked card template form layout is invalid.") from exc
+            rect = {
+                "x_mm": self._layout_item_float(linked_item, "x_mm", default=12),
+                "y_mm": self._layout_item_float(linked_item, "y_mm", default=12),
+                "width_mm": self._layout_item_float(linked_item, "width_mm", default=186),
+                "height_mm": self._layout_item_float(linked_item, "height_mm", default=273),
+            }
+            page_number = self._layout_item_int(linked_item, "page", default=1)
+            for item in expand_linked_card_layout(form_layout, rect):
+                render_items.append({**item, "page": page_number})
+
+        render_items.extend(self._print_only_card_layout_items(layout_json))
+        render_layout = deepcopy(layout_json)
+        render_layout.pop("sections", None)
+        render_layout.pop("overlays", None)
+        render_layout["items"] = render_items
+        return render_layout
+
+    def _print_only_card_layout_items(
+        self,
+        layout_json: dict[str, object],
+    ) -> list[dict[str, object]]:
+        print_only: list[dict[str, object]] = []
+        seen_ids: set[str] = set()
+
+        def append_item(raw_item: object) -> None:
+            if not isinstance(raw_item, dict):
+                return
+            if raw_item.get("kind") in {"field", "block", "card_layout"}:
+                return
+            item_id = str(raw_item.get("id") or "")
+            if item_id and item_id in seen_ids:
+                return
+            print_only.append(deepcopy(raw_item))
+            if item_id:
+                seen_ids.add(item_id)
+
+        raw_items = layout_json.get("items")
+        if isinstance(raw_items, list):
+            for item in raw_items:
+                append_item(item)
+        raw_sections = layout_json.get("sections")
+        if isinstance(raw_sections, list):
+            for raw_section in raw_sections:
+                if not isinstance(raw_section, dict):
+                    continue
+                for item in self._card_print_flatten_section_items(raw_section):
+                    append_item(item)
+        raw_overlays = layout_json.get("overlays")
+        if isinstance(raw_overlays, list):
+            for overlay in raw_overlays:
+                append_item(overlay)
+        return print_only
+
     def _build_docx_from_card_print_layout(
         self,
         layout_json: dict[str, object],
         context: _RenderContext,
     ) -> bytes:
+        render_layout = self._expand_linked_card_layouts_for_generation(layout_json, context)
         body_parts: list[str] = []
         current_page = 1
-        for section in self._card_print_sections(layout_json):
+        for section in self._card_print_sections(render_layout):
             page_number = self._layout_item_int(section, "page", default=1)
             if page_number != current_page:
                 body_parts.append(self._paragraph_xml(""))
@@ -1297,7 +1462,7 @@ class DocumentService:
             return self._build_docx_package("".join(body_parts))
         lines: list[str] = []
         current_page = 1
-        for item in self._card_print_items(layout_json):
+        for item in self._card_print_items(render_layout):
             page_number = self._layout_item_int(item, "page", default=1)
             if page_number != current_page:
                 lines.append("")
@@ -1313,11 +1478,12 @@ class DocumentService:
         layout_json: dict[str, object],
         context: _RenderContext,
     ) -> bytes:
+        render_layout = self._expand_linked_card_layouts_for_generation(layout_json, context)
         buffer = BytesIO()
         page_width = float(A4[0])
         page_height = float(A4[1])
-        margins = self._card_print_margins(layout_json)
-        grid = layout_json.get("grid")
+        margins = self._card_print_margins(render_layout)
+        grid = render_layout.get("grid")
         if not isinstance(grid, dict):
             grid = {}
         row_height = float(grid.get("row_height_mm") or 8) * mm
@@ -1327,7 +1493,7 @@ class DocumentService:
         pdf_canvas = canvas.Canvas(buffer, pagesize=A4)
         pdf_canvas.setTitle(context.card.display_name)
 
-        items = self._card_print_items(layout_json)
+        items = self._card_print_items(render_layout)
         max_page = max(
             (self._layout_item_int(item, "page", default=1) for item in items),
             default=1,

@@ -1,5 +1,7 @@
 import os
 from collections.abc import Iterator
+from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -16,7 +18,17 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.models import AccessGrant, AuditEvent, Permission, Role, StoredFile, User, role_permissions
+from app.models import (
+    AccessGrant,
+    AuditEvent,
+    CardTemplate,
+    FormField,
+    Permission,
+    Role,
+    StoredFile,
+    User,
+    role_permissions,
+)
 from app.services.attachments import LocalFilesystemAttachmentStorage
 from app.services.cards import CardFieldRead, CardRead, CardService, FileRefValueRead
 from app.services.documents import DocumentService, DocumentServiceError, _RenderContext
@@ -500,6 +512,164 @@ def test_card_print_layout_docx_renders_sections_as_editable_word_tables() -> No
     assert isinstance(field_item, dict)
     field_value = card.fields["main.text"].value
     assert f"{field_item['label']}: {field_value}" in rendered_xml
+
+
+def test_linked_generation_uses_current_form_layout_without_persisting_expansion() -> None:
+    field_id = uuid4()
+    card_template_id = uuid4()
+    card = replace(_card_read_for_print_layout(field_id), card_template_id=card_template_id)
+    card_template = SimpleNamespace(
+        id=card_template_id,
+        registry_id=card.registry_id,
+        archived_at=None,
+        is_active=True,
+        field_schema_json={
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "section-main",
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 4,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "field-current",
+                                "kind": "field",
+                                "field_id": str(field_id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 6,
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    )
+
+    class FakeSession:
+        def get(self, model: type[object], object_id: UUID) -> object | None:
+            if model is CardTemplate and object_id == card_template_id:
+                return card_template
+            if model is FormField and object_id == field_id:
+                return SimpleNamespace(label="РўРµРєСЃС‚РѕРІРѕРµ РїРѕР»Рµ")
+            return None
+
+    layout = {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "linked-card",
+                "kind": "card_layout",
+                "card_template_id": str(card_template_id),
+                "page": 1,
+                "x_mm": 15.0,
+                "y_mm": 30.0,
+                "width_mm": 180.0,
+                "height_mm": 220.0,
+            }
+        ],
+        "overlays": [
+            {
+                "id": "signature-line",
+                "kind": "line",
+                "page": 1,
+                "x_mm": 15.0,
+                "y_mm": 260.0,
+                "width_mm": 80.0,
+                "height_mm": 1.0,
+            }
+        ],
+    }
+    persisted_layout = deepcopy(layout)
+    service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    render_context = _RenderContext(card=card)
+
+    render_layout = service._expand_linked_card_layouts_for_generation(layout, render_context)
+    docx_content = service._build_docx_from_card_print_layout(layout, render_context)
+    pdf_content = service._build_pdf_from_card_print_layout(layout, render_context)
+
+    assert layout == persisted_layout
+    assert render_layout["items"][0]["source_item_id"] == "field-current"
+    assert any(item["id"] == "signature-line" for item in render_layout["items"])
+    assert docx_content.startswith(b"PK")
+    with ZipFile(BytesIO(docx_content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    field_value = str(card.fields["main.text"].value)
+    assert field_value in rendered_xml
+    assert pdf_content.startswith(b"%PDF")
+    assert "".join(field_value.split()) in "".join(_extract_pdf_text(pdf_content).split())
+
+
+def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_previous(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    card_template_id = uuid4()
+    document_template_id = uuid4()
+    previous_layout = _card_print_layout(uuid4())
+    previous_layout["items"].append(
+        {
+            "id": "signature-line",
+            "kind": "line",
+            "page": 1,
+            "x_mm": 15.0,
+            "y_mm": 260.0,
+            "width_mm": 80.0,
+            "height_mm": 1.0,
+        }
+    )
+    previous_snapshot = deepcopy(previous_layout)
+    template = SimpleNamespace(
+        id=document_template_id,
+        registry_id=registry_id,
+        card_template_id=card_template_id,
+        template_format="card_print_layout_v1",
+    )
+    previous_version = SimpleNamespace(
+        id=uuid4(),
+        version_number=1,
+        layout_json=previous_layout,
+    )
+    created_payloads: list[dict[str, object]] = []
+    next_version = SimpleNamespace(id=uuid4(), version_number=2, layout_json=None)
+    service = DocumentService(SimpleNamespace(), storage=SimpleNamespace())  # type: ignore[arg-type]
+
+    monkeypatch.setattr(service, "_get_active_template", lambda _template_id: template)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "_latest_template_version", lambda _template_id: previous_version)
+
+    def create_version(**payload: object) -> object:
+        created_payloads.append(payload)
+        next_version.layout_json = payload["layout_json"]
+        return next_version
+
+    monkeypatch.setattr(service, "create_card_print_template_version_for_actor", create_version)
+
+    result = service.convert_print_view_to_linked_card_for_actor(
+        actor_user_id=actor_user_id,
+        template_id=document_template_id,
+    )
+
+    assert result is next_version
+    assert previous_version.layout_json == previous_snapshot
+    assert created_payloads[0]["actor_user_id"] == actor_user_id
+    assert created_payloads[0]["template_id"] == document_template_id
+    converted_layout = created_payloads[0]["layout_json"]
+    linked_items = [item for item in converted_layout["items"] if item["kind"] == "card_layout"]
+    assert linked_items[0]["card_template_id"] == str(card_template_id)
+    assert any(item["id"] == "signature-line" for item in converted_layout["items"])
 
 
 def test_docx_text_v1_renders_active_file_ref_as_safe_attachment_text() -> None:
