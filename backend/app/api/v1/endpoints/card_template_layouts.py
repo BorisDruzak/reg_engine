@@ -14,7 +14,11 @@ from app.schemas.card_template_layouts import (
     CardTemplatePrintViewRead,
     CardTemplatePrintViewUpdate,
 )
-from app.services.card_template_layout import CardTemplateLayoutError, CardTemplateLayoutService
+from app.services.card_template_layout import (
+    CardTemplateLayoutConflictError,
+    CardTemplateLayoutError,
+    CardTemplateLayoutService,
+)
 from app.services.documents import DocumentServiceError
 
 router = APIRouter(tags=["card-template-layouts"])
@@ -46,8 +50,11 @@ def update_card_template_form_layout(
         return _layout_service(session).update_form_layout_for_actor(
             actor_user_id=actor_user_id,
             card_template_id=template_id,
+            expected_revision=payload.expected_revision,
             form_layout=payload.form_layout,
         )
+    except CardTemplateLayoutConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
         raise_service_http_error(exc)
 

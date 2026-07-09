@@ -1,3 +1,5 @@
+import hashlib
+import json
 from typing import Any
 from uuid import UUID
 
@@ -37,10 +39,77 @@ from app.services.registry_schema import RegistrySchemaError
 
 CARD_TEMPLATE_LAYOUT_VERSION = "card_template_layout_v1"
 DEFAULT_OUTPUT_FILENAME = "{{ card.display_name }}.docx"
+QUARTER_COLUMN_SPANS = {3, 6, 9, 12}
 
 
 class CardTemplateLayoutError(ValueError):
     """Raised when card template layout operations reference invalid state."""
+
+
+class CardTemplateLayoutConflictError(CardTemplateLayoutError):
+    """Raised when an update is based on a stale layout revision."""
+
+
+def form_layout_revision(form_layout: dict[str, Any]) -> str:
+    canonical = json.dumps(form_layout, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _grid_rect(item: dict[str, Any]) -> tuple[int, int, int, int]:
+    left = int(item["column"])
+    top = int(item["row"])
+    return (
+        left,
+        top,
+        left + int(item["column_span"]),
+        top + int(item["row_span"]),
+    )
+
+
+def _grid_rects_overlap(
+    left: tuple[int, int, int, int],
+    right: tuple[int, int, int, int],
+) -> bool:
+    return not (
+        left[2] <= right[0] or right[2] <= left[0] or left[3] <= right[1] or right[3] <= left[1]
+    )
+
+
+def reject_overlaps(form_layout: dict[str, Any]) -> None:
+    sections = form_layout["sections"]
+    for index, section in enumerate(sections):
+        if any(
+            _grid_rects_overlap(_grid_rect(section), _grid_rect(other))
+            for other in sections[index + 1 :]
+        ):
+            raise CardTemplateLayoutError("Card blocks cannot overlap.")
+        items = section["items"]
+        for item_index, item in enumerate(items):
+            if any(
+                _grid_rects_overlap(_grid_rect(item), _grid_rect(other))
+                for other in items[item_index + 1 :]
+            ):
+                raise CardTemplateLayoutError("Fields inside a block cannot overlap.")
+
+
+def validate_form_layout_geometry(form_layout: dict[str, Any]) -> dict[str, Any]:
+    normalized = CardTemplateFormLayoutRead.model_validate(form_layout).model_dump(mode="json")
+    for section in normalized["sections"]:
+        if section["column_span"] not in QUARTER_COLUMN_SPANS:
+            raise CardTemplateLayoutError("Block width must use a quarter-grid span.")
+        if section["column"] + section["column_span"] - 1 > 12:
+            raise CardTemplateLayoutError("Block exceeds the card width.")
+        if section["row"] + section["row_span"] - 1 > 4:
+            raise CardTemplateLayoutError("Block exceeds the card height.")
+        for item in section["items"]:
+            if item["column_span"] not in QUARTER_COLUMN_SPANS:
+                raise CardTemplateLayoutError("Field width must use a quarter-grid span.")
+            if item["column"] + item["column_span"] - 1 > 12:
+                raise CardTemplateLayoutError("Field exceeds its block width.")
+            if item["row"] + item["row_span"] - 1 > 4:
+                raise CardTemplateLayoutError("Field exceeds its block height.")
+    reject_overlaps(normalized)
+    return normalized
 
 
 class CardTemplateLayoutService:
@@ -66,6 +135,7 @@ class CardTemplateLayoutService:
         print_views = self._print_views_for_template(template, form_layout)
         sync_status = self._layout_sync_status(form_layout, print_views, fields)
         return CardTemplateLayoutRead(
+            revision=form_layout_revision(form_layout),
             card_template_id=template.id,
             registry_id=template.registry_id,
             structure=CardTemplateStructureRead(
@@ -90,11 +160,16 @@ class CardTemplateLayoutService:
         *,
         actor_user_id: UUID,
         card_template_id: UUID,
+        expected_revision: str,
         form_layout: dict[str, Any],
     ) -> CardTemplateLayoutRead:
         template = self._get_active_card_template(card_template_id)
         self._require_schema_permission(actor_user_id, template.registry_id)
-        normalized = CardTemplateFormLayoutRead.model_validate(form_layout).model_dump(mode="json")
+        blocks, fields = self._template_structure(template)
+        current = self._form_layout(template, blocks, fields)
+        if expected_revision != form_layout_revision(current):
+            raise CardTemplateLayoutConflictError("Card layout changed. Reload before saving.")
+        normalized = validate_form_layout_geometry(form_layout)
         old_schema = dict(template.field_schema_json or {})
         template.field_schema_json = {**old_schema, "form_layout": normalized}
         template.updated_by = actor_user_id
@@ -408,6 +483,16 @@ class CardTemplateLayoutService:
             "overridden_items": [],
             "archived_field_items": [],
         }
+        if any(
+            int(section["row"]) + int(section.get("row_span", 1)) - 1 > 4
+            or any(
+                int(item["row"]) + int(item.get("row_span", 1)) - 1 > 4 for item in section["items"]
+            )
+            for section in form_layout["sections"]
+        ):
+            warnings.append(
+                "Сохранённый макет выходит за пределы 4 строк; преобразуйте его перед сохранением."
+            )
         for print_view in print_views:
             view_mapping = build_mapping_table(
                 form_layout,

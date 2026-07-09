@@ -24,18 +24,20 @@ class CardTemplateFormLayoutItemRead(BaseModel):
     id: str
     kind: str = "field"
     field_id: UUID | None = None
-    row: int = 1
-    column: int = 1
-    column_span: int = 12
+    row: int = Field(default=1, ge=1)
+    column: int = Field(default=1, ge=1, le=12)
+    row_span: int = Field(default=1, ge=1, le=4)
+    column_span: int = Field(default=12, ge=1, le=12)
     text: str | None = None
 
 
 class CardTemplateFormLayoutSectionRead(BaseModel):
     id: str
     block_id: UUID | None = None
-    row: int = 1
-    column: int = 1
-    column_span: int = 12
+    row: int = Field(default=1, ge=1)
+    column: int = Field(default=1, ge=1, le=12)
+    row_span: int = Field(default=1, ge=1, le=4)
+    column_span: int = Field(default=12, ge=1, le=12)
     items: list[CardTemplateFormLayoutItemRead] = Field(default_factory=list)
 
 
@@ -95,6 +97,7 @@ class CardTemplateExportSettingsRead(BaseModel):
 
 class CardTemplateLayoutRead(BaseModel):
     version: Literal["card_template_layout_v1"] = "card_template_layout_v1"
+    revision: str
     card_template_id: UUID
     registry_id: UUID
     structure: CardTemplateStructureRead
@@ -105,6 +108,7 @@ class CardTemplateLayoutRead(BaseModel):
 
 
 class CardTemplateLayoutUpdate(BaseModel):
+    expected_revision: str
     form_layout: dict[str, Any]
 
 
