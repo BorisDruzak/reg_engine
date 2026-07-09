@@ -116,7 +116,6 @@ function canvasProps(overrides: Partial<CardWebLayoutCanvasProps> = {}): CardWeb
     blocks: [block],
     fields,
     mode: "design",
-    selection: null,
     onSelectionChange: vi.fn(),
     onCreateBlock: vi.fn(),
     onInsertBlock: vi.fn(),
@@ -130,6 +129,91 @@ function canvasProps(overrides: Partial<CardWebLayoutCanvasProps> = {}): CardWeb
 }
 
 describe("CardWebLayoutCanvas", () => {
+  test("treats an explicit null selection as controlled", async () => {
+    const user = userEvent.setup();
+    const onSelectionChange = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          selection: null,
+          onSelectionChange,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+
+    expect(onSelectionChange).toHaveBeenCalledWith({ kind: "block", id: block.id });
+    expect(screen.queryByLabelText("Название блока")).not.toBeInTheDocument();
+  });
+
+  test("keeps a controlled selection derived from the prop after a canvas click", async () => {
+    const user = userEvent.setup();
+    const onCommitBlock = vi.fn();
+    const onSelectionChange = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          selection: { kind: "block", id: block.id },
+          onCommitBlock,
+          onSelectionChange,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("card-layout-canvas"));
+
+    expect(onCommitBlock).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    expect(onSelectionChange).toHaveBeenCalledWith(null);
+    expect(screen.getByLabelText("Название блока")).toBeInTheDocument();
+  });
+
+  test("does not restore an uncontrolled edit selection after leaving design mode", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<CardWebLayoutCanvas {...canvasProps()} />);
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    expect(screen.getByLabelText("Название блока")).toBeInTheDocument();
+
+    rerender(<CardWebLayoutCanvas {...canvasProps({ mode: "readonly" })} />);
+    expect(screen.queryByLabelText("Название блока")).not.toBeInTheDocument();
+
+    rerender(<CardWebLayoutCanvas {...canvasProps()} />);
+    expect(screen.queryByLabelText("Название блока")).not.toBeInTheDocument();
+  });
+
+  test("hides design actions that do not have callback boundaries", () => {
+    render(<CardWebLayoutCanvas layout={layout} mode="design" />);
+
+    expect(
+      screen.queryByRole("button", { name: "Создать блок в этой области" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Вставить существующий блок в эту область" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Создать поле в блоке ФИО" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
+  });
+
+  test("requires commit callbacks before opening inline editors", async () => {
+    const user = userEvent.setup();
+    render(
+      <CardWebLayoutCanvas
+        layout={layout}
+        mode="design"
+        onCommitBlock={vi.fn()}
+        onCommitField={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    expect(screen.getByLabelText("Название блока")).toBeInTheDocument();
+  });
+
   test("keeps the idle canvas contextual and exposes creation actions locally", () => {
     render(<CardWebLayoutCanvas {...canvasProps()} />);
 

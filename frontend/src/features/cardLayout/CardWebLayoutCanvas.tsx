@@ -39,12 +39,19 @@ export type CardWebLayoutCanvasProps = {
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
 };
 
-export function CardWebLayoutCanvas({
+export function CardWebLayoutCanvas({ mode, ...props }: CardWebLayoutCanvasProps) {
+  const designMode = mode === "design" || mode === "block-edit";
+  const selectionSessionKey = designMode ? "design" : mode;
+
+  return <CardWebLayoutCanvasSession key={selectionSessionKey} mode={mode} {...props} />;
+}
+
+function CardWebLayoutCanvasSession({
   layout,
   blocks = layout.structure.blocks,
   fields = layout.structure.fields,
   mode,
-  selection = null,
+  selection,
   renderedValues,
   fieldValues,
   fieldOptions,
@@ -61,22 +68,22 @@ export function CardWebLayoutCanvas({
   onCancelField,
   onFieldValueChange,
 }: CardWebLayoutCanvasProps) {
-  const externalSelectionKey = selection ? `${selection.kind}:${selection.id}` : "none";
-  const [selectionState, setSelectionState] = useState<{
-    externalKey: string;
-    activeSelection: CardLayoutSelection;
-  }>(() => ({ externalKey: externalSelectionKey, activeSelection: selection }));
-  if (selectionState.externalKey !== externalSelectionKey) {
-    setSelectionState({ externalKey: externalSelectionKey, activeSelection: selection });
-  }
-  const activeSelection = selectionState.activeSelection;
+  const selectionControlled = selection !== undefined;
+  const [uncontrolledSelection, setUncontrolledSelection] = useState<CardLayoutSelection>(null);
   const blocksById = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const designMode = mode === "design" || mode === "block-edit";
+  const activeSelection: CardLayoutSelection = designMode
+    ? selectionControlled
+      ? selection
+      : uncontrolledSelection
+    : null;
   const emptyPosition = useMemo(() => firstEmptyQuarterCell(layout), [layout]);
 
   function select(nextSelection: CardLayoutSelection) {
-    setSelectionState((current) => ({ ...current, activeSelection: nextSelection }));
+    if (!selectionControlled) {
+      setUncontrolledSelection(nextSelection);
+    }
     onSelectionChange?.(nextSelection);
   }
 
@@ -91,7 +98,6 @@ export function CardWebLayoutCanvas({
       className={`card-web-layout-canvas is-${mode}`}
       data-testid="card-layout-canvas"
       style={canvasStyle}
-      onClick={() => select(null)}
     >
       {layout.form_layout.sections.map((section) => (
         <CardBlockLayoutNode
@@ -116,7 +122,7 @@ export function CardWebLayoutCanvas({
           onFieldValueChange={onFieldValueChange}
         />
       ))}
-      {designMode && emptyPosition ? (
+      {designMode && emptyPosition && (onCreateBlock || onInsertBlock) ? (
         <div
           className="card-layout-empty-area-actions"
           data-testid="card-layout-empty-area"
@@ -126,22 +132,26 @@ export function CardWebLayoutCanvas({
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label="Создать блок в этой области"
-            onClick={() => onCreateBlock?.(emptyPosition)}
-          >
-            Создать блок
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label="Вставить существующий блок в эту область"
-            onClick={() => onInsertBlock?.(emptyPosition)}
-          >
-            Вставить существующий блок
-          </button>
+          {onCreateBlock ? (
+            <button
+              type="button"
+              className="ghost-button"
+              aria-label="Создать блок в этой области"
+              onClick={() => onCreateBlock(emptyPosition)}
+            >
+              Создать блок
+            </button>
+          ) : null}
+          {onInsertBlock ? (
+            <button
+              type="button"
+              className="ghost-button"
+              aria-label="Вставить существующий блок в эту область"
+              onClick={() => onInsertBlock(emptyPosition)}
+            >
+              Вставить существующий блок
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

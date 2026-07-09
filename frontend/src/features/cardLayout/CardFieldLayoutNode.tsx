@@ -51,7 +51,7 @@ export function CardFieldLayoutNode({
   onFieldValueChange,
 }: CardFieldLayoutNodeProps) {
   const nodeId = field?.id ?? item.id;
-  const editing = selection?.kind === "field" && selection.id === nodeId;
+  const editing = Boolean(onCommitField) && selection?.kind === "field" && selection.id === nodeId;
   const designMode = mode === "design" || mode === "block-edit";
   const style: CSSProperties = {
     gridColumn: `${item.column} / span ${item.column_span}`,
@@ -82,11 +82,11 @@ export function CardFieldLayoutNode({
       style={style}
       onClick={(event) => event.stopPropagation()}
     >
-      {editing && designMode ? (
+      {editing && designMode && onCommitField ? (
         <InlineFieldEditor
           field={field}
           onCommit={(draft) => {
-            onCommitField?.(draft);
+            onCommitField(draft);
             onSelect(null);
           }}
           onCancel={() => {
@@ -101,7 +101,7 @@ export function CardFieldLayoutNode({
               <strong>{field.label}</strong>
               <small>{fieldTypeLabel(field.field_type)}</small>
             </div>
-            {designMode ? (
+            {designMode && onCommitField ? (
               <button
                 type="button"
                 className="ghost-button"

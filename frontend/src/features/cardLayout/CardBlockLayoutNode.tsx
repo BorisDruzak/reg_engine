@@ -51,7 +51,7 @@ export function CardBlockLayoutNode({
 }: CardBlockLayoutNodeProps) {
   const nodeId = block?.id ?? section.id;
   const designMode = mode === "design" || mode === "block-edit";
-  const editing = selection?.kind === "block" && selection.id === nodeId;
+  const editing = Boolean(onCommitBlock) && selection?.kind === "block" && selection.id === nodeId;
   const style: CSSProperties = {
     gridColumn: `${section.column} / span ${section.column_span}`,
     gridRow: `${section.row} / span ${section.row_span}`,
@@ -65,11 +65,11 @@ export function CardBlockLayoutNode({
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
       onClick={(event) => event.stopPropagation()}
     >
-      {editing && block && designMode ? (
+      {editing && block && designMode && onCommitBlock ? (
         <InlineBlockEditor
           block={block}
           onCommit={(draft) => {
-            onCommitBlock?.(draft);
+            onCommitBlock(draft);
             onSelect(null);
           }}
           onCancel={() => {
@@ -84,24 +84,28 @@ export function CardBlockLayoutNode({
               <strong>{block?.title ?? "Блок недоступен"}</strong>
               {block?.is_repeatable ? <small>Повторяемый блок</small> : null}
             </div>
-            {block && designMode ? (
+            {block && designMode && (onCreateField || onCommitBlock) ? (
               <div className="row-actions">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-label={`Создать поле в блоке ${block.title}`}
-                  onClick={() => onCreateField?.(block.id)}
-                >
-                  Создать поле
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-label={`Изменить блок ${block.title}`}
-                  onClick={() => onSelect({ kind: "block", id: block.id })}
-                >
-                  Изменить блок
-                </button>
+                {onCreateField ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`Создать поле в блоке ${block.title}`}
+                    onClick={() => onCreateField(block.id)}
+                  >
+                    Создать поле
+                  </button>
+                ) : null}
+                {onCommitBlock ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`Изменить блок ${block.title}`}
+                    onClick={() => onSelect({ kind: "block", id: block.id })}
+                  >
+                    Изменить блок
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </header>
