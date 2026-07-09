@@ -498,26 +498,52 @@ export function organizationTypeLabel(value: string) {
   return labels[value] ?? value;
 }
 
+export const FIELD_TYPES = [
+  "text",
+  "number",
+  "date",
+  "datetime",
+  "bool",
+  "json",
+  "select",
+  "multi_select",
+  "card_ref",
+  "user_ref",
+  "organization_ref",
+  "org_unit_ref",
+  "registry_ref",
+  "file_ref",
+  "static_text",
+] as const;
+
+export type FieldType = (typeof FIELD_TYPES)[number];
+
+const fieldTypeLabels: Record<FieldType, string> = {
+  bool: "Да/нет",
+  card_ref: "Ссылка на карточку",
+  date: "Дата",
+  datetime: "Дата и время",
+  file_ref: "Файл",
+  json: "JSON",
+  static_text: "Нередактируемый текст",
+  multi_select: "Множественный выбор",
+  number: "Число",
+  organization_ref: "Ссылка на организацию",
+  org_unit_ref: "Ссылка на подразделение",
+  registry_ref: "Ссылка на реестр",
+  select: "Выбор",
+  text: "Текст",
+  user_ref: "Ссылка на пользователя",
+};
+
 export function fieldTypeLabel(value: string) {
-  const labels: Record<string, string> = {
-    bool: "Да/нет",
-    card_ref: "Ссылка на карточку",
-    date: "Дата",
-    datetime: "Дата и время",
-    file_ref: "Файл",
-    json: "JSON",
-    static_text: "Нередактируемый текст",
-    multi_select: "Множественный выбор",
-    number: "Число",
-    organization_ref: "Ссылка на организацию",
-    org_unit_ref: "Ссылка на подразделение",
-    registry_ref: "Ссылка на реестр",
-    select: "Выбор",
-    text: "Текст",
-    user_ref: "Ссылка на пользователя",
-  };
-  return labels[value] ?? value;
+  return fieldTypeLabels[value as FieldType] ?? value;
 }
+
+export const FIELD_TYPE_OPTIONS = FIELD_TYPES.map((value) => ({
+  value,
+  label: fieldTypeLabel(value),
+}));
 
 export function optionsSourceLabel(value: string | null | undefined) {
   const labels: Record<string, string> = {

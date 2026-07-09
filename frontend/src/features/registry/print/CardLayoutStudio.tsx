@@ -29,6 +29,7 @@ import type {
   ReferenceListRead,
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
+import { FIELD_TYPES, fieldTypeLabel } from "@/app/uiText";
 import { DataAlert } from "@/components/common/DataSurfaces";
 import { MutationFeedback } from "@/components/common/AdminMutation";
 
@@ -50,24 +51,6 @@ const blockFieldPaddingMm = 4;
 const blockFieldHeaderMm = 10;
 const blockFieldGapMm = 3;
 const blockFieldHeightMm = 12;
-
-const FIELD_TYPES = [
-  "text",
-  "number",
-  "date",
-  "datetime",
-  "bool",
-  "json",
-  "select",
-  "multi_select",
-  "card_ref",
-  "user_ref",
-  "organization_ref",
-  "org_unit_ref",
-  "registry_ref",
-  "file_ref",
-  "static_text",
-];
 
 export type CardLayoutStudioProps = {
   token: string;
@@ -1914,27 +1897,6 @@ function templateFieldIds(template: CardTemplateRead) {
 
 function usesReferenceList(fieldType: string) {
   return fieldType === "select" || fieldType === "multi_select";
-}
-
-function fieldTypeLabel(fieldType: string) {
-  const labels: Record<string, string> = {
-    text: "Текст",
-    number: "Число",
-    date: "Дата",
-    datetime: "Дата и время",
-    bool: "Да / нет",
-    json: "JSON",
-    select: "Выбор",
-    multi_select: "Множественный выбор",
-    card_ref: "Ссылка на карточку",
-    user_ref: "Пользователь",
-    organization_ref: "Организация",
-    org_unit_ref: "Подразделение",
-    registry_ref: "Реестр",
-    file_ref: "Файл",
-    static_text: "Информационный текст карточки",
-  };
-  return labels[fieldType] ?? fieldType;
 }
 
 function requiredModeLabel(requiredMode: string) {
