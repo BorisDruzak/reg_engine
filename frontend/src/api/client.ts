@@ -863,7 +863,10 @@ export async function updateCardTemplateFormLayout(
   return apiRequest<CardTemplateLayoutRead>(`/api/v1/card-templates/${templateId}/layout/form`, {
     method: "PATCH",
     token,
-    body: payload,
+    body: {
+      expected_revision: payload.expected_revision,
+      form_layout: payload.form_layout,
+    },
   });
 }
 

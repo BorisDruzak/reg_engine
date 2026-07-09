@@ -440,6 +440,7 @@ function kindLabel(kind: CardPrintLayoutItem["kind"]) {
     print_date: "Дата печати",
     qr_code: "QR-код",
     image: "Изображение",
+    card_layout: "Связанный макет карточки",
   };
   return labels[kind];
 }

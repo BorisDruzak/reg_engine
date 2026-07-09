@@ -728,7 +728,8 @@ export type CardPrintLayoutItem = {
     | "page_number"
     | "print_date"
     | "qr_code"
-    | "image";
+    | "image"
+    | "card_layout";
   page: number;
   row: number;
   column: number;
@@ -739,6 +740,7 @@ export type CardPrintLayoutItem = {
   width_mm?: number;
   height_mm?: number;
   source_item_id?: string | null;
+  card_template_id?: string;
   field_id?: string;
   block_id?: string;
   text?: string;
@@ -846,6 +848,7 @@ export type CardTemplateFormLayoutItemRead = {
   field_id?: string | null;
   row: number;
   column: number;
+  row_span: number;
   column_span: number;
   text?: string | null;
 };
@@ -855,6 +858,7 @@ export type CardTemplateFormLayoutSectionRead = {
   block_id?: string | null;
   row: number;
   column: number;
+  row_span: number;
   column_span: number;
   items: CardTemplateFormLayoutItemRead[];
 };
@@ -870,6 +874,7 @@ export type CardTemplatePrintViewItemRead = {
   id: string;
   source_item_id?: string | null;
   kind: string;
+  card_template_id?: string | null;
   block_id?: string | null;
   field_id?: string | null;
   page: number;
@@ -915,6 +920,7 @@ export type CardTemplateStructureRead = {
 
 export type CardTemplateLayoutRead = {
   version: "card_template_layout_v1";
+  revision: string;
   card_template_id: string;
   registry_id: string;
   structure: CardTemplateStructureRead;
@@ -925,6 +931,7 @@ export type CardTemplateLayoutRead = {
 };
 
 export type CardTemplateLayoutUpdatePayload = {
+  expected_revision: string;
   form_layout: CardTemplateFormLayoutRead;
 };
 
