@@ -105,7 +105,7 @@ class CardTemplateFormLayoutItemRead(BaseModel):
     id: str
     kind: str = "field"
     field_id: UUID | None = None
-    row: int = Field(default=1, ge=1, le=4)
+    row: int = Field(default=1, ge=1)
     column: int = Field(default=1, ge=1, le=12)
     row_span: int = Field(default=1, ge=1, le=4)
     column_span: int = Field(default=12, ge=1, le=12)
@@ -115,7 +115,7 @@ class CardTemplateFormLayoutItemRead(BaseModel):
 class CardTemplateFormLayoutSectionRead(BaseModel):
     id: str
     block_id: UUID | None = None
-    row: int = Field(default=1, ge=1, le=4)
+    row: int = Field(default=1, ge=1)
     column: int = Field(default=1, ge=1, le=12)
     row_span: int = Field(default=1, ge=1, le=4)
     column_span: int = Field(default=12, ge=1, le=12)
@@ -213,6 +213,11 @@ def validate_form_layout_geometry(form_layout: dict[str, Any]) -> dict[str, Any]
     reject_overlaps(normalized)
     return normalized
 ```
+
+The read path uses `CardTemplateFormLayoutRead` directly so legacy rows above
+four remain readable. The update path calls `validate_form_layout_geometry` and
+rejects them with a conversion-required error; `sync_status.warnings` reports
+the legacy overflow on reads.
 
 - [ ] **Step 5: Enforce optimistic revision conflicts in the service and endpoint**
 

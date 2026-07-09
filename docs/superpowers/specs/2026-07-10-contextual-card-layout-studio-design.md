@@ -39,8 +39,11 @@ The persisted web layout remains a logical grid, not DOM pixels:
   grid;
 - `row_span` defaults to `1` when reading existing layouts that do not contain
   it;
-- geometry is clamped to the owning 12-by-4 grid and overlapping placements
-  are rejected before save.
+- new or converted geometry is clamped to the owning 12-by-4 grid and
+  overlapping placements are rejected before save;
+- legacy layouts whose stored rows extend beyond the four-track grid remain
+  readable with an overflow warning and require explicit conversion before a
+  new quarter-grid save.
 
 One card layout is designed as one four-track composition intended to fit the
 usable area of one A4 page. The editor warns before save when content cannot fit
