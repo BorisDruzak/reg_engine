@@ -886,7 +886,7 @@ describe("CardWebLayoutCanvas", () => {
             items: [
               {
                 ...layout.form_layout.sections[0].items[0],
-                row: 3,
+                row: 1,
                 column: 1,
                 row_span: 1,
                 column_span: 6,
@@ -914,19 +914,32 @@ describe("CardWebLayoutCanvas", () => {
     installPointerCapture(fieldNode);
 
     dispatchPointer(fieldNode, "pointerdown", { pointerId: 124, clientX: 0, clientY: 0 });
-    dispatchPointer(fieldNode, "pointermove", { pointerId: 124, clientX: 0, clientY: 100 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 124, clientX: 100, clientY: 200 });
 
     expect(fieldNode).toHaveStyle({
-      gridColumn: "1 / span 6",
+      gridColumn: "2 / span 6",
+      gridRow: "3 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 124, clientX: 100, clientY: 300 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "2 / span 6",
       gridRow: "3 / span 1",
     });
     expect(screen.getByRole("status")).toHaveTextContent(
       "В выбранной строке нет свободного места для поля такого размера",
     );
 
-    dispatchPointer(fieldNode, "pointerup", { pointerId: 124, clientX: 0, clientY: 100 });
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 124, clientX: 100, clientY: 300 });
 
     expect(onGeometryCommit).not.toHaveBeenCalled();
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+
+    const otherFieldNode = screen.getByTestId("layout-field-field-active");
+    fireEvent.click(otherFieldNode);
+    expect(within(otherFieldNode).getByLabelText("Название поля")).toBeInTheDocument();
   });
 
   test("keeps an out-of-grid field preview out of an occupied row", () => {
@@ -1087,8 +1100,7 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
-  test("rejects collision and out-of-grid pointer commits with Russian feedback", async () => {
-    const user = userEvent.setup();
+  test("rejects invalid pointer commits and releases the geometry session", () => {
     const onGeometryCommit = vi.fn();
     render(
       <CardWebLayoutCanvas
@@ -1111,9 +1123,8 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Пересечение с другим блоком");
     dispatchPointer(moveHandle, "pointerup", { pointerId: 41, clientX: 700, clientY: 250 });
     expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Готово" })).toBeDisabled();
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Отмена изменения геометрии" }));
     const nextMoveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
     installPointerCapture(nextMoveHandle);
     dispatchPointer(nextMoveHandle, "pointerdown", {
@@ -1134,6 +1145,7 @@ describe("CardWebLayoutCanvas", () => {
       clientY: 50,
     });
     expect(onGeometryCommit).not.toHaveBeenCalled();
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
   });
 
   test("revalidates immediately when a controlled layout removes the active obstacle", () => {

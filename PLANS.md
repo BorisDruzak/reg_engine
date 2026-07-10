@@ -4225,3 +4225,28 @@ Live Browser proof:
   `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8m-field-drag\`:
   `block-grows-on-move.png`, `occupied-row-blocked.png`, and
   `upper-field-passes-full-row.png`.
+
+#### Pointer-session release follow-up
+
+Status: implemented and focused-tested locally; full gate, deployment, and
+renewed live Browser proof are pending.
+
+- A rejected pointer drop now releases capture and clears the geometry session
+  immediately. The preview returns to the saved layout instead of leaving a
+  disabled `Готово` panel and one permanently selected field.
+- This applies after both a direct invalid move and a move that first visited a
+  valid position before ending in an occupied or out-of-grid position. Invalid
+  geometry is never committed.
+- After the rejected drop, resize handles are restored for all fields and a
+  different field can open its inline editor without a manual page reload or
+  explicit geometry cancel action.
+- The focused renderer suite passes all 55 cases and the lower-level geometry
+  suite passes all 20 cases. The new regression first moves a field to a valid
+  rectangle, then into a fully occupied final row, releases the pointer, and
+  proves that the session is gone and another field is immediately editable.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `228 passed / 195 skipped`, frontend
+  `239 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  TypeScript, production build, and project-map checks are green. The verified
+  local bundle is `index-C2UZ2WDJ.js` (`561.19 kB`, `160.02 kB` gzip) with the
+  unchanged `index-Cl9DldkN.css`; the existing warnings remain unchanged.

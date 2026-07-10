@@ -273,13 +273,18 @@ export function useLayoutGeometrySession({
       event.stopPropagation();
       releasePointer();
       const current = sessionRef.current;
+      const invalidReason = current ? (boundaryReasonRef.current ?? validate(current)) : null;
+      if (invalidReason) {
+        clear();
+        return;
+      }
       if (current && rectEquals(current.original, current.preview)) {
         clear();
         return;
       }
       commit();
     },
-    [clear, commit, releasePointer],
+    [clear, commit, releasePointer, validate],
   );
 
   const pointerCancel = useCallback(
