@@ -650,6 +650,7 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     document_template_id = uuid4()
     first_field_id = uuid4()
     second_field_id = uuid4()
+    legacy_block_id = uuid4()
     previous_layout: dict[str, Any] = {
         "version": "card_print_layout_v1",
         "page": {
@@ -691,6 +692,16 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
                 "height_mm": 16.0,
                 "field_id": str(second_field_id),
                 "label": "Второе поле",
+            },
+            {
+                "id": "legacy-block",
+                "kind": "block",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 40.0,
+                "width_mm": 186.0,
+                "height_mm": 4.0,
+                "block_id": str(legacy_block_id),
             },
             {
                 "id": "legacy-static-note",
@@ -752,6 +763,26 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
                 "width_mm": 24.0,
                 "height_mm": 24.0,
                 "text": "QR-CARD-42",
+            },
+            {
+                "id": "legacy-line",
+                "kind": "line",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 124.0,
+                "width_mm": 186.0,
+                "height_mm": 1.0,
+                "style": {"border_color": "#1E293B"},
+            },
+            {
+                "id": "legacy-rectangle",
+                "kind": "rectangle",
+                "page": 1,
+                "x_mm": 108.0,
+                "y_mm": 58.0,
+                "width_mm": 90.0,
+                "height_mm": 62.0,
+                "style": {"border": "thin", "border_color": "#64748B"},
             },
         ],
         "overlays": [
@@ -884,7 +915,11 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
         "_card_print_allowed_field_ids",
         lambda **_payload: {first_field_id, second_field_id},
     )
-    monkeypatch.setattr(service, "_card_print_allowed_block_ids", lambda **_payload: set())
+    monkeypatch.setattr(
+        service,
+        "_card_print_allowed_block_ids",
+        lambda **_payload: {legacy_block_id},
+    )
     monkeypatch.setattr(
         service,
         "_create_card_print_template_version",
@@ -921,6 +956,8 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     assert overlay_ids == [
         "brand-image",
         "card-qr",
+        "legacy-line",
+        "legacy-rectangle",
         "legacy-heading",
         "legacy-static-note",
         "legacy-metadata",
@@ -928,6 +965,9 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
         "legacy-print-date",
     ]
     assert len(overlay_ids) == len(set(overlay_ids))
+    assert "legacy-first-field" not in overlay_ids
+    assert "legacy-second-field" not in overlay_ids
+    assert "legacy-block" not in overlay_ids
     overlays_by_id = {overlay["id"]: overlay for overlay in converted_overlays}
     assert overlays_by_id["legacy-heading"]["text"] == "Печатная форма карточки"
     assert overlays_by_id["legacy-static-note"]["text"] == "Служебная пометка"
@@ -936,6 +976,26 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     assert overlays_by_id["legacy-print-date"]["kind"] == "print_date"
     assert overlays_by_id["brand-image"]["alt"] == "Эмблема карточки"
     assert overlays_by_id["card-qr"]["text"] == "QR-CARD-42"
+    assert overlays_by_id["legacy-line"] == {
+        "id": "legacy-line",
+        "kind": "line",
+        "page": 1,
+        "x_mm": 12.0,
+        "y_mm": 124.0,
+        "width_mm": 186.0,
+        "height_mm": 1.0,
+        "style": {"border_color": "#1E293B"},
+    }
+    assert overlays_by_id["legacy-rectangle"] == {
+        "id": "legacy-rectangle",
+        "kind": "rectangle",
+        "page": 1,
+        "x_mm": 108.0,
+        "y_mm": 58.0,
+        "width_mm": 90.0,
+        "height_mm": 62.0,
+        "style": {"border": "thin", "border_color": "#64748B"},
+    }
     assert validate_card_print_layout(converted_layout).errors == []
     assert validate_card_print_layout(previous_version.layout_json).errors == []
 
@@ -974,6 +1034,109 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
             },
         }
     ]
+
+
+@pytest.mark.parametrize("overlay_kind", ["field", "block", "card_layout", "unknown"])
+def test_convert_print_view_rejects_unsupported_explicit_overlay_without_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    overlay_kind: str,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    card_template_id = uuid4()
+    document_template_id = uuid4()
+    previous_layout: dict[str, Any] = {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+        },
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [],
+        "overlays": [
+            {
+                "id": f"unsupported-{overlay_kind}",
+                "kind": overlay_kind,
+                "page": 1,
+                "x_mm": 20.0,
+                "y_mm": 20.0,
+                "width_mm": 40.0,
+                "height_mm": 8.0,
+            }
+        ],
+    }
+    previous_snapshot = deepcopy(previous_layout)
+    template = SimpleNamespace(
+        id=document_template_id,
+        registry_id=registry_id,
+        card_template_id=card_template_id,
+        template_format="card_print_layout_v1",
+    )
+    previous_version = SimpleNamespace(
+        id=uuid4(),
+        version_number=1,
+        layout_json=previous_layout,
+    )
+
+    class FakeSession:
+        def flush(self) -> None:
+            return None
+
+    service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
+    created_versions: list[dict[str, object]] = []
+    audit_events: list[dict[str, object]] = []
+    requested_version_numbers: list[UUID] = []
+
+    monkeypatch.setattr(service, "_get_active_template", lambda _template_id: template)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "_latest_template_version", lambda _template_id: previous_version)
+    monkeypatch.setattr(service, "_card_print_allowed_field_ids", lambda **_payload: set())
+    monkeypatch.setattr(service, "_card_print_allowed_block_ids", lambda **_payload: set())
+    monkeypatch.setattr(
+        service,
+        "_next_template_version_number",
+        lambda template_id: requested_version_numbers.append(template_id) or 2,
+    )
+    monkeypatch.setattr(
+        service,
+        "_create_card_print_template_version",
+        lambda **payload: created_versions.append(payload),
+    )
+
+    class FakeAuditService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **payload: object) -> None:
+            audit_events.append(payload)
+
+    monkeypatch.setattr("app.services.documents.AuditService", FakeAuditService)
+
+    converted_layout = service._linked_card_conversion_layout(
+        previous_layout,
+        card_template_id=card_template_id,
+    )
+    validation = validate_card_print_layout(converted_layout)
+
+    assert any(
+        f"overlay 'unsupported-{overlay_kind}' has unsupported kind '{overlay_kind}'" in error
+        for error in validation.errors
+    )
+    with pytest.raises(
+        DocumentServiceError,
+        match="Связанный макет карточки содержит недопустимые параметры",
+    ):
+        service.convert_print_view_to_linked_card_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=document_template_id,
+        )
+
+    assert previous_version.layout_json == previous_snapshot
+    assert requested_version_numbers == []
+    assert created_versions == []
+    assert audit_events == []
 
 
 def test_card_print_version_save_rejects_linked_template_identity_mismatch(

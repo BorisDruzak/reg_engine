@@ -3726,6 +3726,41 @@ Task 7 live follow-up review hardening:
   passed. This review follow-up remains local-only; no push or deployment was
   performed.
 
+Task 7 final conversion safety follow-up:
+
+- Final review found that the shared print-only splitter removed `field`,
+  `block`, and `card_layout` before validation even when they came from the
+  explicit `overlays[]` collection. As a result, malformed explicit overlays
+  could be silently discarded during conversion instead of causing the
+  existing safe linked-layout error.
+- The splitter now removes those structural kinds only when they come from
+  ordinary `items[]` or section items. Explicit overlays are retained long
+  enough for `_normalize_overlays` to reject `field`, `block`, `card_layout`,
+  and unknown kinds before version numbering, version creation, or audit.
+- A parametrized conversion-level regression verifies the validator error and
+  safe `DocumentServiceError` for all four unsupported explicit-overlay kinds.
+  It also verifies that the previous version remains byte-for-byte unchanged
+  and that failure requests neither a next version number nor a new version or
+  audit event.
+- The production-shaped conversion fixture now also contains an ordinary block
+  plus decorative line and rectangle items. Ordinary fields and the block are
+  removed, the decorative items and all supported dynamic/visual overlays are
+  preserved exactly once, and deterministic DOCX/PDF text is rendered without
+  duplicate occurrences.
+- Strict red/green verification first reported the expected three failures for
+  the silently removed structural kinds while the already-retained unknown kind
+  passed. After the one-condition splitter repair, all five selected conversion
+  cases passed. The full print/document/layout suite passed with ten expected
+  disposable PostgreSQL skips, and the full backend suite reported 219 passed /
+  175 skipped / one existing Starlette/httpx warning.
+- `ruff check .`, `ruff format --check .` (`138 files already formatted`), and
+  `mypy app` (`79 source files`) passed. The cumulative
+  `scripts/check.ps1 -SkipRemote` gate passed: backend 219 passed / 175 skipped,
+  frontend Vitest 161 passed / 25 skipped, the production frontend build
+  completed with the existing chunk-size advisory, and the project-map check
+  passed. This final safety follow-up remains local-only; no push or deployment
+  was performed.
+
 Known warnings and limitations:
 
 - PostgreSQL-backed regressions require a disposable `TEST_DATABASE_URL` whose

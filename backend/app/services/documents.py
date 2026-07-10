@@ -1466,7 +1466,7 @@ class DocumentService:
         def append_item(raw_item: object, *, explicit_overlay: bool = False) -> None:
             if not isinstance(raw_item, dict):
                 return
-            if raw_item.get("kind") in {"field", "block", "card_layout"}:
+            if not explicit_overlay and raw_item.get("kind") in {"field", "block", "card_layout"}:
                 return
             item_id = str(raw_item.get("id") or "")
             if item_id and item_id in seen_ids:
