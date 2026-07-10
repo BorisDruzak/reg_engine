@@ -40,6 +40,15 @@ const restrictedBlock: FormBlockRead = {
   position: 1,
 };
 
+const repeatableBlock: FormBlockRead = {
+  ...block,
+  id: "contacts",
+  code: "contacts",
+  title: "Контакты",
+  position: 2,
+  is_repeatable: true,
+};
+
 const fields: FormFieldRead[] = [
   field({ id: "first-name", code: "first_name", label: "Имя", position: 0 }),
   field({ id: "last-name", code: "last_name", label: "Фамилия", position: 1 }),
@@ -111,6 +120,13 @@ const fields: FormFieldRead[] = [
     field_type: "static_text",
     options_config_json: { static_text: "Проверьте сведения перед подтверждением" },
     position: 5,
+  }),
+  field({
+    id: "contact-value",
+    block_id: repeatableBlock.id,
+    code: "contact_value",
+    label: "Контакт",
+    position: 0,
   }),
 ];
 
@@ -302,6 +318,83 @@ describe("FilledCardLayout", () => {
     ).toBeInTheDocument();
   });
 
+  test("renders repeatable blocks only for their explicit instances", async () => {
+    const user = userEvent.setup();
+    const onEditBlock = vi.fn();
+    const repeatableLayout: CardTemplateLayoutRead = {
+      ...layout,
+      structure: {
+        blocks: [...layout.structure.blocks, repeatableBlock],
+        fields,
+      },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          ...layout.form_layout.sections,
+          {
+            id: repeatableBlock.id,
+            block_id: repeatableBlock.id,
+            row: 4,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
+            items: [layoutField("contact-value", 1, 1, 1, 12)],
+          },
+        ],
+      },
+    };
+    const repeatableInstances: CardBlockInstanceRead[] = [
+      ...blockInstances,
+      repeatableInstance("contact-instance-1", 0, "Первый контакт"),
+      repeatableInstance("contact-instance-2", 1, "Второй контакт"),
+    ];
+
+    render(
+      <FilledCardLayout
+        {...props({
+          layout: repeatableLayout,
+          blocks: [block, restrictedBlock, repeatableBlock],
+          blockInstances: repeatableInstances,
+          editableFieldIds: new Set(["contact-value"]),
+          onEditBlock,
+        })}
+      />,
+    );
+
+    expect(screen.queryByTestId("filled-block-contacts")).not.toBeInTheDocument();
+    const firstInstance = screen.getByTestId(
+      "filled-instance-contact-instance-1-block-contacts-contact-instance-1",
+    );
+    const secondInstance = screen.getByTestId(
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2",
+    );
+    expect(within(firstInstance).getByText("Первый контакт")).toBeInTheDocument();
+    expect(within(secondInstance).getByText("Второй контакт")).toBeInTheDocument();
+    expect(screen.getAllByText("Повторяемый блок")).toHaveLength(2);
+
+    await user.click(within(firstInstance).getByRole("button", { name: "Изменить блок Контакты" }));
+    expect(onEditBlock).toHaveBeenCalledWith(repeatableBlock.id, "contact-instance-1");
+  });
+
+  test("shows an edit action only when an editable field is visible in the section", () => {
+    const hiddenEditableFieldLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: layout.form_layout.sections.map((section) =>
+          section.block_id === block.id
+            ? { ...section, items: [layoutField("status", 1, 1, 1, 12)] }
+            : section,
+        ),
+      },
+    };
+
+    render(<FilledCardLayout {...props({ layout: hiddenEditableFieldLayout })} />);
+
+    expect(screen.getByTestId("filled-field-status")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
+  });
+
   test("marks the read surface for row-major mobile reflow without horizontal scrolling", () => {
     render(<FilledCardLayout {...props()} />);
 
@@ -310,6 +403,15 @@ describe("FilledCardLayout", () => {
     expect(globalStyles).toContain(".filled-card-layout .card-layout-responsive-grid");
     expect(globalStyles).toMatch(
       /\.filled-card-layout[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+    );
+    expect(globalStyles).toMatch(
+      /\.filled-card-primary,\s*\.filled-card-repeatable-instance\s*{[^}]*min-width:\s*0/,
+    );
+    expect(globalStyles).not.toMatch(
+      /\.filled-card-layout \.card-layout-responsive-field-grid\s*{[^}]*repeat\(2/,
+    );
+    expect(globalStyles).toMatch(
+      /\.card-layout-responsive-grid \.card-layout-responsive-field-grid > \.card-layout-field-node\s*{[^}]*grid-column:\s*1 \/ -1[^}]*grid-row:\s*auto/,
     );
   });
 });
@@ -362,5 +464,24 @@ function value(fieldId: string, fieldValue: unknown): FieldValueRead {
     block_instance_id: null,
     field_id: fieldId,
     value: fieldValue,
+  };
+}
+
+function repeatableInstance(
+  blockInstanceId: string,
+  ordinal: number,
+  fieldValue: string,
+): CardBlockInstanceRead {
+  return {
+    block_instance_id: blockInstanceId,
+    ordinal,
+    fields: {
+      contact_value: {
+        field_id: "contact-value",
+        code: "contact_value",
+        field_type: "text",
+        value: fieldValue,
+      },
+    },
   };
 }

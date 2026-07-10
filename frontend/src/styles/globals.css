@@ -1802,6 +1802,11 @@ tr:last-child td {
   gap: 12px;
 }
 
+.filled-card-primary,
+.filled-card-repeatable-instance {
+  min-width: 0;
+}
+
 .filled-card-layout .card-web-layout-canvas {
   min-width: 0;
   background: #f8fafc;
@@ -2651,14 +2656,6 @@ tr:last-child td {
   .filled-card-layout .card-layout-responsive-grid {
     grid-template-columns: minmax(0, 1fr) !important;
     width: 100%;
-  }
-
-  .filled-card-layout .card-layout-responsive-field-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  .filled-card-layout .card-layout-responsive-field-grid > .card-layout-field-node {
-    grid-column: auto !important;
   }
 
   .a4-linked-card-actions {

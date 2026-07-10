@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react";
 
 import type {
   CardBlockInstanceRead,
+  CardTemplateFormLayoutSectionRead,
   CardTemplateLayoutRead,
   FieldValueRead,
   FormBlockRead,
@@ -116,8 +117,11 @@ export function FilledCardLayout({
               responsive
               showGeometryDiagnostics={false}
               testIdPrefix={surface.blockInstanceId ? `filled-${surface.key}` : "filled"}
-              renderBlockActions={({ block }) => {
-                if (!block || !hasEditableField(block.id, fields, editableFieldIds)) {
+              renderBlockActions={({ block, section }) => {
+                if (
+                  !block ||
+                  !hasEditableSectionField(block.id, section, fieldsById, editableFieldIds)
+                ) {
                   return null;
                 }
                 return (
@@ -145,10 +149,20 @@ function buildSurfaces(
   fieldsById: ReadonlyMap<string, FormFieldRead>,
   blockInstances: CardBlockInstanceRead[],
 ): FilledCardSurface[] {
-  const surfaces: FilledCardSurface[] = [
-    { key: "primary", blockInstanceId: null, instanceOrdinal: null, layout },
-  ];
   const blocksById = new Map(blocks.map((block) => [block.id, block]));
+  const primarySections = layout.form_layout.sections.filter(
+    (section) => !section.block_id || !blocksById.get(section.block_id)?.is_repeatable,
+  );
+  const surfaces: FilledCardSurface[] = [];
+
+  if (primarySections.length > 0) {
+    surfaces.push({
+      key: "primary",
+      blockInstanceId: null,
+      instanceOrdinal: null,
+      layout: layoutWithSections(layout, primarySections),
+    });
+  }
 
   for (const instance of blockInstances) {
     if (!instance.block_instance_id) continue;
@@ -164,19 +178,32 @@ function buildSurfaces(
       blockInstanceId: instance.block_instance_id,
       instanceOrdinal: instance.ordinal,
       layout: {
-        ...layout,
+        ...layoutWithSections(layout, [
+          { ...section, id: `${section.id}-${instance.block_instance_id}` },
+        ]),
         structure: {
           blocks: [block],
           fields: layout.structure.fields.filter((field) => field.block_id === block.id),
-        },
-        form_layout: {
-          ...layout.form_layout,
-          sections: [{ ...section, id: `${section.id}-${instance.block_instance_id}` }],
         },
       },
     });
   }
   return surfaces;
+}
+
+function layoutWithSections(
+  layout: CardTemplateLayoutRead,
+  sections: CardTemplateFormLayoutSectionRead[],
+): CardTemplateLayoutRead {
+  const blockIds = new Set(sections.map((section) => section.block_id).filter(Boolean));
+  return {
+    ...layout,
+    structure: {
+      blocks: layout.structure.blocks.filter((block) => blockIds.has(block.id)),
+      fields: layout.structure.fields.filter((field) => blockIds.has(field.block_id)),
+    },
+    form_layout: { ...layout.form_layout, sections },
+  };
 }
 
 function inferInstanceBlockId(
@@ -218,14 +245,17 @@ function instanceKey(blockInstanceId: string | null) {
   return blockInstanceId ?? "primary";
 }
 
-function hasEditableField(
+function hasEditableSectionField(
   blockId: string,
-  fields: FormFieldRead[],
+  section: CardTemplateFormLayoutSectionRead,
+  fieldsById: ReadonlyMap<string, FormFieldRead>,
   editableFieldIds: ReadonlySet<string>,
 ) {
-  return fields.some(
-    (field) => field.block_id === blockId && field.is_active && editableFieldIds.has(field.id),
-  );
+  return section.items.some((item) => {
+    if (!item.field_id || !editableFieldIds.has(item.field_id)) return false;
+    const field = fieldsById.get(item.field_id);
+    return field?.block_id === blockId && field.is_active;
+  });
 }
 
 function renderReadValue(
