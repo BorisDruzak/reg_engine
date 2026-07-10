@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -19,6 +20,11 @@ let attachments: PublicLinkAttachmentListRead;
 let fetchCalls: { method: string; path: string; body: unknown }[];
 let editResponseMode: "success" | "deferred" | "error";
 let deferredEditResponses: Array<(response: Response) => void>;
+let statusResponseMode: "success" | "deferred";
+let deferredStatusResponses: Array<(response: Response) => void>;
+let lifecycleDenialPath: string | null;
+let uploadResponseMode: "success" | "deferred" | "error";
+let deferredUploadResponses: Array<(response: Response) => void>;
 
 beforeEach(() => {
   status = safeStatus("active");
@@ -32,6 +38,11 @@ beforeEach(() => {
   fetchCalls = [];
   editResponseMode = "success";
   deferredEditResponses = [];
+  statusResponseMode = "success";
+  deferredStatusResponses = [];
+  lifecycleDenialPath = null;
+  uploadResponseMode = "success";
+  deferredUploadResponses = [];
   vi.stubGlobal("fetch", vi.fn(handleFetch));
 });
 
@@ -69,6 +80,33 @@ describe("PublicLinkEditPage", () => {
     expect(within(attachmentsPanel!).getByText("Нет файлов")).toBeInTheDocument();
   });
 
+  test.each(["explicit block allowlist", "legacy link"])(
+    "renders static instructions from a %s preview without an editor",
+    async (source) => {
+      preview.form_layout.sections[0].items.push(
+        layoutItem("item-instruction", "field-instruction", 3, 1, 1, 12),
+      );
+      preview.blocks[0].instances[0].fields.push(
+        previewField(
+          "field-instruction",
+          "instruction",
+          `Инструкция ${source}`,
+          "static_text",
+          null,
+          { options_config_json: { static_text: "Заполните только доступные поля" } },
+        ),
+      );
+
+      renderPage();
+
+      expect(await screen.findByText("Заполните только доступные поля")).toBeInTheDocument();
+      expect(screen.getByText(`Инструкция ${source}`)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("textbox", { name: `Инструкция ${source}` }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
   test("serializes field autosaves and confirms only the latest local value", async () => {
     editResponseMode = "deferred";
     renderPage();
@@ -82,13 +120,15 @@ describe("PublicLinkEditPage", () => {
     expect(statusInput).toHaveValue("latest");
     expect(editCalls()).toHaveLength(1);
 
-    resolveNextEdit("first");
+    resolveNextEdit("first canonical");
     await waitFor(() => expect(editCalls()).toHaveLength(2));
+    expect(statusInput).toHaveValue("latest");
     expect(screen.getByText("Сохранение…")).toBeInTheDocument();
     expect(screen.queryByText("Все изменения сохранены")).not.toBeInTheDocument();
 
-    resolveNextEdit("latest");
+    resolveNextEdit("latest canonical");
     expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
+    expect(statusInput).toHaveValue("latest canonical");
     expect(editCalls().map((call) => (call.body as { value: unknown }).value)).toEqual([
       "first",
       "latest",
@@ -105,6 +145,23 @@ describe("PublicLinkEditPage", () => {
     expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
     expect(statusInput).toHaveValue("rejected locally");
     expect(screen.queryByText("Все изменения сохранены")).not.toBeInTheDocument();
+  });
+
+  test("reports save errors and recovery under React StrictMode without leaving submit locked", async () => {
+    editResponseMode = "error";
+    renderPage(undefined, true);
+    const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
+    const submitButton = screen.getByRole("button", { name: "Отправить на проверку" });
+
+    fireEvent.change(statusInput, { target: { value: "strict rejected" } });
+    expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
+    expect(submitButton).toBeDisabled();
+
+    editResponseMode = "success";
+    fireEvent.change(statusInput, { target: { value: "strict recovered" } });
+    expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
+    expect(statusInput).toHaveValue("strict recovered");
+    expect(submitButton).toBeEnabled();
   });
 
   test("renders and saves every explicit repeatable block instance in the same layout", async () => {
@@ -206,22 +263,124 @@ describe("PublicLinkEditPage", () => {
       });
     },
   );
+
+  test("does not render cached active card data while the authoritative status is revalidated", async () => {
+    statusResponseMode = "deferred";
+    const queryClient = renderPage((client) => {
+      client.setQueryData(["public-link-status", rawToken], safeStatus("active"));
+      client.setQueryData(["public-link-preview", rawToken], {
+        ...publicPreview(),
+        display_name: "PRIVATE STALE ACTIVE CARD",
+      });
+      client.setQueryData(["public-link-attachments", rawToken], {
+        ...attachments,
+        items: [
+          {
+            id: "private-stale-attachment",
+            card_id: "private-card",
+            title: "PRIVATE STALE ATTACHMENT",
+            description: null,
+            position: 0,
+            original_filename: "private.txt",
+            content_type: "text/plain",
+            content_length_bytes: 7,
+            scanner_status: "deferred",
+            created_at: "2026-07-10T10:00:00Z",
+            archived_at: null,
+          },
+        ],
+      });
+    });
+
+    expect(screen.queryByText("PRIVATE STALE ACTIVE CARD")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE STALE ATTACHMENT")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Публичный статус" })).not.toBeInTheDocument();
+
+    status = safeStatus("approved", { reviewed_at: "2026-07-10T11:00:00Z" });
+    resolveNextStatus();
+
+    expect(
+      await screen.findByRole("heading", { name: "Заполнение завершено" }),
+    ).toBeInTheDocument();
+    expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeUndefined();
+    expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
+  });
+
+  test.each([
+    ["field", "/api/v1/public-links/edit"],
+    ["attachment", "/api/v1/public-links/attachments/upload"],
+    ["submit", "/api/v1/public-links/submit"],
+  ] as const)(
+    "refreshes status and purges card caches when %s action is denied by the lifecycle",
+    async (action, denialPath) => {
+      lifecycleDenialPath = denialPath;
+      const queryClient = renderPage();
+      const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
+      await waitFor(() => {
+        expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeDefined();
+        expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeDefined();
+      });
+
+      if (action === "field") {
+        fireEvent.change(statusInput, { target: { value: "denied edit" } });
+      } else if (action === "attachment") {
+        fireEvent.change(screen.getByLabelText("Файл"), {
+          target: { files: [new File(["denied"], "denied.txt", { type: "text/plain" })] },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Загрузить файл" }));
+      } else {
+        fireEvent.click(screen.getByRole("button", { name: "Отправить на проверку" }));
+      }
+
+      expect(
+        await screen.findByRole("heading", { name: "Доступ к карточке закрыт" }),
+      ).toBeInTheDocument();
+      expect(statusCalls()).toHaveLength(2);
+      expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeUndefined();
+      expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
+    },
+  );
+
+  test("blocks submit during a delayed attachment upload and after failure until retry succeeds", async () => {
+    uploadResponseMode = "deferred";
+    renderPage();
+    await screen.findByRole("textbox", { name: "Публичный статус" });
+    const submitButton = screen.getByRole("button", { name: "Отправить на проверку" });
+    const uploadButton = screen.getByRole("button", { name: "Загрузить файл" });
+    fireEvent.change(screen.getByLabelText("Файл"), {
+      target: { files: [new File(["pending"], "pending.txt", { type: "text/plain" })] },
+    });
+
+    fireEvent.click(uploadButton);
+    await waitFor(() => expect(uploadCalls()).toHaveLength(1));
+    expect(submitButton).toBeDisabled();
+
+    resolveNextUpload(jsonResponse({ detail: "Upload failed" }, 400));
+    expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
+    expect(submitButton).toBeDisabled();
+
+    uploadResponseMode = "success";
+    fireEvent.click(uploadButton);
+    expect(await screen.findByText("Файл загружен")).toBeInTheDocument();
+    expect(submitButton).toBeEnabled();
+  });
 });
 
-function renderPage(setup?: (queryClient: QueryClient) => void) {
+function renderPage(setup?: (queryClient: QueryClient) => void, strict = false) {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
   setup?.(queryClient);
-  render(
+  const page: ReactNode = (
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/public/edit/${rawToken}`]}>
         <Routes>
           <Route path="/public/edit/:rawToken" element={<PublicLinkEditPage />} />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  render(strict ? <StrictMode>{page}</StrictMode> : page);
   return queryClient;
 }
 
@@ -231,9 +390,27 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
   const body =
     init?.body && !(init.body instanceof FormData) ? JSON.parse(String(init.body)) : null;
   fetchCalls.push({ method, path, body });
-  if (path === "/api/v1/public-links/status") return jsonResponse(status);
+  if (path === "/api/v1/public-links/status") {
+    if (statusResponseMode === "deferred") {
+      return new Promise<Response>((resolve) => deferredStatusResponses.push(resolve));
+    }
+    return jsonResponse(status);
+  }
   if (path === "/api/v1/public-links/preview") return jsonResponse(preview);
   if (path === "/api/v1/public-links/attachments") return jsonResponse(attachments);
+  if (path === lifecycleDenialPath) {
+    status = safeStatus("disabled");
+    return jsonResponse({ detail: "Public link is no longer editable" }, 409);
+  }
+  if (path === "/api/v1/public-links/attachments/upload") {
+    if (uploadResponseMode === "deferred") {
+      return new Promise<Response>((resolve) => deferredUploadResponses.push(resolve));
+    }
+    if (uploadResponseMode === "error") {
+      return jsonResponse({ detail: "Upload failed" }, 400);
+    }
+    return jsonResponse(publicAttachment(), 201);
+  }
   if (path === "/api/v1/public-links/edit") {
     if (editResponseMode === "deferred") {
       return new Promise<Response>((resolve) => deferredEditResponses.push(resolve));
@@ -258,10 +435,30 @@ function editCalls() {
   return fetchCalls.filter((call) => call.path === "/api/v1/public-links/edit");
 }
 
+function statusCalls() {
+  return fetchCalls.filter((call) => call.path === "/api/v1/public-links/status");
+}
+
+function uploadCalls() {
+  return fetchCalls.filter((call) => call.path === "/api/v1/public-links/attachments/upload");
+}
+
+function resolveNextUpload(response: Response) {
+  const resolve = deferredUploadResponses.shift();
+  if (!resolve) throw new Error("No deferred upload request");
+  resolve(response);
+}
+
 function resolveNextEdit(value: unknown) {
   const resolve = deferredEditResponses.shift();
   if (!resolve) throw new Error("No deferred edit request");
   resolve(jsonResponse({ value }));
+}
+
+function resolveNextStatus() {
+  const resolve = deferredStatusResponses.shift();
+  if (!resolve) throw new Error("No deferred status request");
+  resolve(jsonResponse(status));
 }
 
 function safeStatus(
@@ -277,6 +474,22 @@ function safeStatus(
     completed_public_fields: null,
     total_public_fields: null,
     ...overrides,
+  };
+}
+
+function publicAttachment() {
+  return {
+    id: "uploaded-attachment",
+    card_id: "card-public",
+    title: "pending.txt",
+    description: null,
+    position: 0,
+    original_filename: "pending.txt",
+    content_type: "text/plain",
+    content_length_bytes: 7,
+    scanner_status: "deferred",
+    created_at: "2026-07-10T10:00:00Z",
+    archived_at: null,
   };
 }
 

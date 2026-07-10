@@ -1135,14 +1135,35 @@ class PublicLinkService:
         return [
             (block, field_model)
             for block, field_model in rows
-            if self._public_link_allows(public_link.allowed_blocks_json, block.id)
-            and self._public_link_allows(public_link.allowed_fields_json, field_model.id)
-            and (template_field_ids is None or field_model.id in template_field_ids)
-            and (
-                (block.public_editable and field_model.public_editable)
-                or field_model.field_type == "static_text"
+            if self._public_schema_row_is_allowed(
+                public_link=public_link,
+                block=block,
+                field_model=field_model,
+                template_field_ids=template_field_ids,
             )
         ]
+
+    def _public_schema_row_is_allowed(
+        self,
+        *,
+        public_link: CardPublicLink,
+        block: FormBlock,
+        field_model: FormField,
+        template_field_ids: set[UUID] | None,
+    ) -> bool:
+        if not self._public_link_allows(public_link.allowed_blocks_json, block.id):
+            return False
+        if template_field_ids is not None and field_model.id not in template_field_ids:
+            return False
+        if field_model.field_type == "static_text":
+            if not self._public_link_uses_explicit_allowlists(public_link):
+                return True
+            return public_link.allowed_blocks_json is not None and block.public_editable
+        return (
+            self._public_link_allows(public_link.allowed_fields_json, field_model.id)
+            and block.public_editable
+            and field_model.public_editable
+        )
 
     def _ordered_public_blocks(
         self,

@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -21,7 +22,7 @@ import app.api.dependencies as api_dependencies
 from app.api.dependencies import get_db_session, raise_service_http_error
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, User
+from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, FormBlock, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
@@ -249,6 +250,73 @@ def test_public_link_review_service_declares_lifecycle_interface() -> None:
     }
 
     assert required_methods <= set(dir(PublicLinkService))
+
+
+def test_static_text_schema_selection_requires_a_selected_block_for_explicit_links() -> None:
+    service = object.__new__(PublicLinkService)
+    selected_block_id = uuid4()
+    other_block_id = uuid4()
+    editable_field_id = uuid4()
+    selected_static_id = uuid4()
+    other_static_id = uuid4()
+    selected_block = SimpleNamespace(id=selected_block_id, public_editable=True)
+    other_block = SimpleNamespace(id=other_block_id, public_editable=True)
+    editable_field = SimpleNamespace(
+        id=editable_field_id,
+        field_type="text",
+        public_editable=True,
+    )
+    selected_static = SimpleNamespace(
+        id=selected_static_id,
+        field_type="static_text",
+        public_editable=False,
+    )
+    other_static = SimpleNamespace(
+        id=other_static_id,
+        field_type="static_text",
+        public_editable=False,
+    )
+    template_field_ids = {editable_field_id, selected_static_id, other_static_id}
+    explicit_link = SimpleNamespace(
+        allowed_blocks_json={"ids": [str(selected_block_id)]},
+        allowed_fields_json={"ids": [str(editable_field_id)]},
+    )
+    field_only_link = SimpleNamespace(
+        allowed_blocks_json=None,
+        allowed_fields_json={"ids": [str(editable_field_id)]},
+    )
+    legacy_link = SimpleNamespace(allowed_blocks_json=None, allowed_fields_json=None)
+
+    assert service._public_schema_row_is_allowed(
+        public_link=explicit_link,
+        block=selected_block,
+        field_model=editable_field,
+        template_field_ids=template_field_ids,
+    )
+    assert service._public_schema_row_is_allowed(
+        public_link=explicit_link,
+        block=selected_block,
+        field_model=selected_static,
+        template_field_ids=template_field_ids,
+    )
+    assert not service._public_schema_row_is_allowed(
+        public_link=explicit_link,
+        block=other_block,
+        field_model=other_static,
+        template_field_ids=template_field_ids,
+    )
+    assert not service._public_schema_row_is_allowed(
+        public_link=field_only_link,
+        block=selected_block,
+        field_model=selected_static,
+        template_field_ids=template_field_ids,
+    )
+    assert service._public_schema_row_is_allowed(
+        public_link=legacy_link,
+        block=other_block,
+        field_model=other_static,
+        template_field_ids=None,
+    )
 
 
 def test_review_link_creation_captures_safe_baseline(
@@ -1441,6 +1509,159 @@ def test_public_preview_exposes_only_allowed_sanitized_form_layout(
         review_api_fixture.off_template_block_field_id,
     }:
         assert str(forbidden_id) not in serialized_preview
+
+
+def test_public_preview_keeps_static_text_only_for_selected_blocks_and_legacy_links(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    with Session(migrated_test_engine, expire_on_commit=False) as setup_session:
+        card = setup_session.get(Card, review_api_fixture.card_id)
+        assert card is not None
+        selected_block = setup_session.get(FormBlock, review_api_fixture.block_id)
+        assert selected_block is not None
+        schema_service = RegistrySchemaService(setup_session)
+        selected_static = schema_service.create_field_for_actor(
+            actor_user_id=review_api_fixture.admin_id,
+            block_id=selected_block.id,
+            code="selected-instruction",
+            label="Инструкция выбранного блока",
+            field_type="static_text",
+            options_config_json={"static_text": "Заполните выбранный блок"},
+            public_visible=True,
+            public_editable=False,
+        )
+        other_block = schema_service.create_block_for_actor(
+            actor_user_id=review_api_fixture.admin_id,
+            registry_id=card.registry_id,
+            code="other-public-instructions",
+            title="Другой публичный блок",
+            public_visible=True,
+            public_editable=True,
+        )
+        other_static = schema_service.create_field_for_actor(
+            actor_user_id=review_api_fixture.admin_id,
+            block_id=other_block.id,
+            code="other-instruction",
+            label="Инструкция другого блока",
+            field_type="static_text",
+            options_config_json={"static_text": "Не раскрывать для выбранного блока"},
+            public_visible=True,
+            public_editable=False,
+        )
+        template = setup_session.get(CardTemplate, card.card_template_id)
+        assert template is not None
+        template.field_schema_json = {
+            **template.field_schema_json,
+            "field_ids": [
+                *template.field_schema_json["field_ids"],
+                str(selected_static.id),
+                str(other_static.id),
+            ],
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "selected-public-block",
+                        "block_id": str(selected_block.id),
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 2,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "selected-value",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.field_id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 6,
+                            },
+                            {
+                                "id": "selected-instruction",
+                                "kind": "field",
+                                "field_id": str(selected_static.id),
+                                "row": 2,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 12,
+                            },
+                        ],
+                    },
+                    {
+                        "id": "other-public-block",
+                        "block_id": str(other_block.id),
+                        "row": 3,
+                        "column": 1,
+                        "row_span": 1,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "other-instruction",
+                                "kind": "field",
+                                "field_id": str(other_static.id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 12,
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+        setup_session.commit()
+        selected_static_id = selected_static.id
+        other_static_id = other_static.id
+
+    def create_and_preview(payload: dict[str, list[str]]) -> tuple[dict[str, object], str]:
+        created_response = transactional_api_client.post(
+            f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+            json=payload,
+            headers=_actor_headers(review_api_fixture.admin_id),
+        )
+        assert created_response.status_code == 201, created_response.text
+        raw_token = created_response.json()["raw_token"]
+        preview_response = transactional_api_client.post(
+            "/api/v1/public-links/preview",
+            json={"raw_token": raw_token},
+        )
+        assert preview_response.status_code == 200, preview_response.text
+        return preview_response.json(), raw_token
+
+    explicit_preview, explicit_token = create_and_preview(
+        {
+            "allowed_block_ids": [str(review_api_fixture.block_id)],
+            "allowed_field_ids": [str(review_api_fixture.field_id)],
+        }
+    )
+    explicit_serialized = json.dumps(explicit_preview, ensure_ascii=False)
+    assert str(selected_static_id) in explicit_serialized
+    assert "Заполните выбранный блок" in explicit_serialized
+    assert str(other_static_id) not in explicit_serialized
+    denied_static_edit = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": explicit_token,
+            "field_id": str(selected_static_id),
+            "value": "Нельзя изменить",
+        },
+    )
+    assert denied_static_edit.status_code == 403, denied_static_edit.text
+
+    field_only_preview, _ = create_and_preview(
+        {"allowed_field_ids": [str(review_api_fixture.field_id)]}
+    )
+    field_only_serialized = json.dumps(field_only_preview, ensure_ascii=False)
+    assert str(selected_static_id) not in field_only_serialized
+    assert str(other_static_id) not in field_only_serialized
+
+    legacy_preview, _ = create_and_preview({})
+    legacy_serialized = json.dumps(legacy_preview, ensure_ascii=False)
+    assert str(selected_static_id) in legacy_serialized
+    assert str(other_static_id) in legacy_serialized
 
 
 def test_public_link_lifecycle_api_flow_and_closed_status_privacy(

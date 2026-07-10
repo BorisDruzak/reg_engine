@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import { useParams } from "react-router-dom";
 
 import {
+  ApiError,
   downloadPublicLinkAttachmentContent,
   getPublicLinkStatus,
   listPublicLinkAttachments,
@@ -36,12 +37,16 @@ import {
 export function PublicLinkEditPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
   const queryClient = useQueryClient();
+  const [lifecycleRefreshing, setLifecycleRefreshing] = useState(false);
   const statusQuery = useQuery({
     queryKey: ["public-link-status", rawToken],
     queryFn: () => getPublicLinkStatus(rawToken),
     enabled: Boolean(rawToken),
   });
+  const statusAuthoritative =
+    statusQuery.isFetchedAfterMount && !statusQuery.isFetching && !lifecycleRefreshing;
   const editableStatus =
+    statusAuthoritative &&
     statusQuery.data?.can_edit === true &&
     ["active", "changes_requested"].includes(statusQuery.data.status);
   const previewQuery = useQuery({
@@ -57,6 +62,25 @@ export function PublicLinkEditPage() {
     queryClient.removeQueries({ queryKey: ["public-link-preview", rawToken], exact: true });
     queryClient.removeQueries({ queryKey: ["public-link-attachments", rawToken], exact: true });
   }, [editableStatus, queryClient, rawToken, statusQuery.data]);
+
+  async function handleLifecycleDenial(error: unknown) {
+    if (!(error instanceof ApiError) || (error.status !== 403 && error.status !== 409)) {
+      return false;
+    }
+    setLifecycleRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["public-link-preview", rawToken] }),
+        queryClient.cancelQueries({ queryKey: ["public-link-attachments", rawToken] }),
+      ]);
+      queryClient.removeQueries({ queryKey: ["public-link-preview", rawToken], exact: true });
+      queryClient.removeQueries({ queryKey: ["public-link-attachments", rawToken], exact: true });
+      await statusQuery.refetch();
+    } finally {
+      setLifecycleRefreshing(false);
+    }
+    return true;
+  }
 
   return (
     <main className="public-shell">
@@ -74,7 +98,7 @@ export function PublicLinkEditPage() {
         {!rawToken && <p className="data-alert">{uiText.publicTokenMissing}</p>}
         {statusQuery.error && <p className="data-alert">{errorText(statusQuery.error)}</p>}
         {previewQuery.error && <p className="data-alert">{errorText(previewQuery.error)}</p>}
-        {(statusQuery.isLoading || (editableStatus && previewQuery.isLoading)) && (
+        {(statusQuery.isFetching || (editableStatus && previewQuery.isLoading)) && (
           <p className="public-muted">{uiText.loadingCard}</p>
         )}
 
@@ -92,13 +116,14 @@ export function PublicLinkEditPage() {
             </header>
 
             <PublicEditableCard
+              onLifecycleDenial={handleLifecycleDenial}
               preview={previewQuery.data}
               rawToken={rawToken}
               status={statusQuery.data}
             />
           </div>
         )}
-        {statusQuery.data && !editableStatus && (
+        {statusAuthoritative && statusQuery.data && !editableStatus && (
           <PublicLinkStatusReceipt status={statusQuery.data} />
         )}
       </section>
@@ -107,27 +132,36 @@ export function PublicLinkEditPage() {
 }
 
 type PublicFieldSaveState = "idle" | "saving" | "saved" | "error";
+type PublicAttachmentUploadState = "idle" | "uploading" | "error";
 
 function PublicEditableCard({
   preview,
   rawToken,
   status,
+  onLifecycleDenial,
 }: {
   preview: PublicLinkPreviewRead;
   rawToken: string;
   status: PublicLinkSafeStatusRead;
+  onLifecycleDenial: (error: unknown) => Promise<boolean>;
 }) {
   const queryClient = useQueryClient();
   const [fieldSaveStates, setFieldSaveStates] = useState<Record<string, PublicFieldSaveState>>({});
+  const [attachmentUploadState, setAttachmentUploadState] =
+    useState<PublicAttachmentUploadState>("idle");
   const submitMutation = useMutation({
     mutationFn: () => submitPublicLink(rawToken),
     onSuccess: (nextStatus) => {
       queryClient.setQueryData(["public-link-status", rawToken], nextStatus);
     },
+    onError: (error) => {
+      void onLifecycleDenial(error);
+    },
   });
   const hasUnsavedFields = Object.values(fieldSaveStates).some(
     (saveState) => saveState === "saving" || saveState === "error",
   );
+  const hasPendingChanges = hasUnsavedFields || attachmentUploadState !== "idle";
 
   return (
     <div className="stack">
@@ -142,6 +176,7 @@ function PublicEditableCard({
         <p className="data-alert">{uiText.noEditablePublicFields}</p>
       ) : (
         <PublicCardLayout
+          onLifecycleDenial={onLifecycleDenial}
           preview={preview}
           rawToken={rawToken}
           onFieldSaveStateChange={(fieldKey, saveState) =>
@@ -151,7 +186,11 @@ function PublicEditableCard({
           }
         />
       )}
-      <PublicLinkAttachmentsPanel rawToken={rawToken} />
+      <PublicLinkAttachmentsPanel
+        onLifecycleDenial={onLifecycleDenial}
+        onUploadStateChange={setAttachmentUploadState}
+        rawToken={rawToken}
+      />
       <section className="data-panel public-submit-panel">
         <div>
           <h3>Проверка заполнения</h3>
@@ -162,14 +201,14 @@ function PublicEditableCard({
         <button
           type="button"
           className="primary-button"
-          disabled={submitMutation.isPending || hasUnsavedFields}
+          disabled={submitMutation.isPending || hasPendingChanges}
           onClick={() => submitMutation.mutate()}
         >
           {status.status === "changes_requested"
             ? "Повторно отправить на проверку"
             : "Отправить на проверку"}
         </button>
-        {hasUnsavedFields && <p className="inline-alert">Дождитесь сохранения всех изменений.</p>}
+        {hasPendingChanges && <p className="inline-alert">Дождитесь сохранения всех изменений.</p>}
         {submitMutation.error && <p className="inline-alert">{errorText(submitMutation.error)}</p>}
       </section>
     </div>
@@ -222,10 +261,12 @@ function publicStatusReceipt(status: PublicLinkSafeStatusRead["status"]) {
 function PublicCardLayout({
   preview,
   rawToken,
+  onLifecycleDenial,
   onFieldSaveStateChange,
 }: {
   preview: PublicLinkPreviewRead;
   rawToken: string;
+  onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
 }) {
   const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
@@ -235,6 +276,7 @@ function PublicCardLayout({
       {surfaces.map((surface) => (
         <PublicCardLayoutSurface
           key={surface.key}
+          onLifecycleDenial={onLifecycleDenial}
           onFieldSaveStateChange={onFieldSaveStateChange}
           rawToken={rawToken}
           surface={surface}
@@ -261,10 +303,12 @@ type PublicCardSurface = {
 function PublicCardLayoutSurface({
   surface,
   rawToken,
+  onLifecycleDenial,
   onFieldSaveStateChange,
 }: {
   surface: PublicCardSurface;
   rawToken: string;
+  onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
 }) {
   return (
@@ -299,6 +343,7 @@ function PublicCardLayoutSurface({
               blockInstanceId={context.blockInstanceId}
               field={context.field}
               instanceOrdinal={context.instanceOrdinal}
+              onLifecycleDenial={onLifecycleDenial}
               onSaveStateChange={onFieldSaveStateChange}
               rawToken={rawToken}
             />
@@ -467,7 +512,15 @@ function publicPreviewFieldsById(blocks: PublicLinkPreviewBlockRead[]) {
   return result;
 }
 
-function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
+function PublicLinkAttachmentsPanel({
+  rawToken,
+  onLifecycleDenial,
+  onUploadStateChange,
+}: {
+  rawToken: string;
+  onLifecycleDenial: (error: unknown) => Promise<boolean>;
+  onUploadStateChange: (state: PublicAttachmentUploadState) => void;
+}) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLFormElement>(null);
   const [title, setTitle] = useState("");
@@ -479,6 +532,11 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
     queryFn: () => listPublicLinkAttachments(rawToken),
     enabled: Boolean(rawToken),
   });
+  useEffect(() => {
+    if (attachmentsQuery.error) {
+      void onLifecycleDenial(attachmentsQuery.error);
+    }
+  }, [attachmentsQuery.error, onLifecycleDenial]);
   const canUploadAttachments = attachmentsQuery.data?.can_upload_attachments ?? true;
   const uploadMutation = useMutation({
     mutationFn: () => {
@@ -487,7 +545,9 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
       }
       return uploadPublicLinkAttachment(rawToken, { file, title });
     },
+    onMutate: () => onUploadStateChange("uploading"),
     onSuccess: async () => {
+      onUploadStateChange("idle");
       setMessage(uiText.fileUploaded);
       setLocalError(null);
       setTitle("");
@@ -495,7 +555,11 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
       formRef.current?.reset();
       await queryClient.invalidateQueries({ queryKey: ["public-link-attachments", rawToken] });
     },
-    onError: (error) => setLocalError(errorText(error)),
+    onError: (error) => {
+      onUploadStateChange("error");
+      setLocalError(errorText(error));
+      void onLifecycleDenial(error);
+    },
   });
   const downloadMutation = useMutation({
     mutationFn: (attachment: PublicLinkAttachmentRead) =>
@@ -505,7 +569,10 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
       setMessage(uiText.fileDownloaded);
       setLocalError(null);
     },
-    onError: (error) => setLocalError(errorText(error)),
+    onError: (error) => {
+      setLocalError(errorText(error));
+      void onLifecycleDenial(error);
+    },
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -546,6 +613,9 @@ function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
             onChange={(event) => {
               setFile(event.target.files?.[0] ?? null);
               setLocalError(null);
+              if (!uploadMutation.isPending) {
+                onUploadStateChange("idle");
+              }
             }}
           />
         </label>
@@ -623,6 +693,7 @@ function PublicFieldEditor({
   blockInstanceId,
   instanceOrdinal,
   field,
+  onLifecycleDenial,
   onSaveStateChange,
 }: {
   rawToken: string;
@@ -630,6 +701,7 @@ function PublicFieldEditor({
   blockInstanceId: string | null;
   instanceOrdinal: number;
   field: PublicLinkPreviewFieldRead;
+  onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
 }) {
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
@@ -640,12 +712,12 @@ function PublicFieldEditor({
   const savingRef = useRef(false);
   const mountedRef = useRef(true);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function drainSaveQueue() {
     if (savingRef.current) return;
@@ -655,7 +727,7 @@ function PublicFieldEditor({
       const pendingSave = queuedSaveRef.current;
       queuedSaveRef.current = null;
       try {
-        await updatePublicLinkFieldValue(
+        const savedFieldValue = await updatePublicLinkFieldValue(
           rawToken,
           field.field_id,
           pendingSave.value,
@@ -666,11 +738,15 @@ function PublicFieldEditor({
           pendingSave.version === latestVersionRef.current &&
           queuedSaveRef.current === null
         ) {
+          setRawValue(
+            initialEditorValue({ field_type: field.field_type, value: savedFieldValue.value }),
+          );
           setLocalError(null);
           setSaveState("saved");
           onSaveStateChange(fieldKey, "saved");
         }
       } catch (error) {
+        void onLifecycleDenial(error);
         if (
           mountedRef.current &&
           pendingSave.version === latestVersionRef.current &&
