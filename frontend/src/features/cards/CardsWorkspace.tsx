@@ -1,5 +1,11 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
   archivePublicLink,
@@ -24,6 +30,7 @@ import type {
   CardRead,
   CardSummaryRead,
   CardTemplateRead,
+  FieldValuesBulkUpdatePayload,
   FormBlockRead,
   FormFieldRead,
   OrganizationRead,
@@ -54,6 +61,7 @@ import { A4TemplateRenderer } from "@/features/registry/print/A4TemplateRenderer
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
+import { FilledCardLayout } from "./FilledCardLayout";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
   type FieldEditorState,
@@ -62,6 +70,7 @@ import {
   formatValue as formatEditorValue,
   initialEditorValue,
 } from "./fieldEditorUtils";
+import { useBlockEditor } from "./useBlockEditor";
 
 type CardWorkspaceTab = "fields" | "print" | "attachments" | "documents" | "links" | "history";
 
@@ -90,7 +99,6 @@ export function CardsWorkspace({
   card,
   schema,
   token,
-  currentUserId,
   organizations,
   selectedCardId,
   cardSearch,
@@ -111,7 +119,6 @@ export function CardsWorkspace({
   card: CardRead | null;
   schema: RegistrySchemaRead | null;
   token: string;
-  currentUserId: string;
   organizations: OrganizationRead[];
   selectedCardId: string;
   cardSearch: string;
@@ -136,10 +143,6 @@ export function CardsWorkspace({
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
-  const [dirtyCardIds, setDirtyCardIds] = useState<Set<string>>(() => new Set());
-  const [fieldEditorStates, setFieldEditorStates] = useState<Record<string, CardEditorPanelState>>(
-    {},
-  );
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
     initialCreateCardForm(organizations),
   );
@@ -149,6 +152,89 @@ export function CardsWorkspace({
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
+  );
+  const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
+  const editableFieldIds = useMemo(
+    () => new Set(fieldRows.map((field) => field.field.field_id)),
+    [fieldRows],
+  );
+  const saveBlockValues = useCallback(
+    async (payload: FieldValuesBulkUpdatePayload) => {
+      if (!card) throw new Error(uiText.notFound);
+      await updateCardFieldValues(token, card.id, payload);
+      setSuccessMessage(uiText.cardFieldsSaved);
+      await queryClient.invalidateQueries({ queryKey: ["card", token, card.id] });
+      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+    },
+    [card, queryClient, token],
+  );
+  const blockEditor = useBlockEditor({
+    fields: schema?.fields ?? [],
+    editableFieldIds,
+    saveValues: saveBlockValues,
+  });
+  const cancelBlockEditor = blockEditor.cancel;
+  useEffect(() => cancelBlockEditor(), [cancelBlockEditor, card?.id]);
+  const activeEditorState: CardEditorPanelState | null = card
+    ? {
+        isDirty: blockEditor.dirty,
+        isPending: blockEditor.pending,
+        error: Object.values(blockEditor.errors)[0] ?? null,
+        saved: successMessage === uiText.cardFieldsSaved,
+      }
+    : null;
+  const fileRefFieldRows = useMemo(
+    () => fieldRows.filter((field) => field.field.field_type === "file_ref"),
+    [fieldRows],
+  );
+  const referenceFields = useMemo(() => {
+    const unique = new Map<string, FormFieldRead>();
+    for (const field of fieldRows) {
+      if (
+        field.schema?.options_source_type === "reference_list" &&
+        ["select", "multi_select"].includes(field.field.field_type)
+      ) {
+        unique.set(field.schema.id, field.schema);
+      }
+    }
+    return Array.from(unique.values());
+  }, [fieldRows]);
+  const referenceQueries = useQueries({
+    queries: referenceFields.map((field) => ({
+      queryKey: ["card-field-reference-items", token, card?.id, field.id],
+      queryFn: () => {
+        if (!card) throw new Error(uiText.notFound);
+        return listCardFieldReferenceItems(token, card.id, field.id);
+      },
+      enabled: Boolean(token && card),
+    })),
+  });
+  const referenceOptions = useMemo(
+    () =>
+      Object.fromEntries(
+        referenceFields.map((field, index) => [
+          field.id,
+          referenceQueries[index]?.data?.items ?? [],
+        ]),
+      ),
+    [referenceFields, referenceQueries],
+  );
+  const cardBlockInstances = useMemo(
+    () => (card ? Object.values(card.blocks).flatMap((block) => block.instances) : []),
+    [card],
+  );
+  const publicLinksQuery = useQuery({
+    queryKey: ["public-links", token, card?.id],
+    queryFn: () => {
+      if (!card) throw new Error(uiText.notFound);
+      return listPublicLinks(token, card.id);
+    },
+    enabled: Boolean(token && card),
+  });
+  const completionLabel = cardCompletionLabel(fieldRows);
+  const publicLinksLabel = cardPublicLinksLabel(
+    publicLinksQuery.data?.items,
+    publicLinksQuery.error,
   );
   const visibleOpenCardIds = useMemo(
     () => openCardIds.filter((cardId) => cards.some((item) => item.id === cardId)),
@@ -160,7 +246,7 @@ export function CardsWorkspace({
       ...visibleOpenCardIds.map((cardId) => {
         const item = cards.find((cardItem) => cardItem.id === cardId);
         const title = item?.display_name ?? shortId(cardId);
-        const isDirty = dirtyCardIds.has(cardId) || hasCardDraft(currentUserId, cardId);
+        const isDirty = card?.id === cardId && blockEditor.dirty;
         return {
           id: `card:${cardId}` as CardShellTab,
           label: isDirty ? `${title} *` : title,
@@ -168,24 +254,7 @@ export function CardsWorkspace({
         };
       }),
     ],
-    [cards, currentUserId, dirtyCardIds, visibleOpenCardIds],
-  );
-  const activeEditorState: CardEditorPanelState | null = card
-    ? (fieldEditorStates[card.id] ?? {
-        isDirty: dirtyCardIds.has(card.id) || hasCardDraft(currentUserId, card.id),
-        isPending: false,
-        error: null,
-        saved: false,
-      })
-    : null;
-  const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
-  const bulkFieldRows = useMemo(
-    () => fieldRows.filter((field) => field.field.field_type !== "file_ref"),
-    [fieldRows],
-  );
-  const fileRefFieldRows = useMemo(
-    () => fieldRows.filter((field) => field.field.field_type === "file_ref"),
-    [fieldRows],
+    [blockEditor.dirty, card?.id, cards, visibleOpenCardIds],
   );
   const repeatableBlocks = useMemo(
     () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
@@ -200,7 +269,6 @@ export function CardsWorkspace({
         ),
     [schema?.templates],
   );
-  const bulkFieldFormId = card ? `bulk-card-values-form-${card.id}` : "";
   const createCardMutation = useMutation({
     mutationFn: () =>
       createOrganizationCard(token, cardForm.organizationId, {
@@ -240,11 +308,6 @@ export function CardsWorkspace({
       setArchiveTarget(null);
       const nextCardId = cards.find((item) => item.id !== archived.id)?.id ?? "";
       setOpenCardIds((current) => current.filter((cardId) => cardId !== archived.id));
-      setDirtyCardIds((current) => {
-        const next = new Set(current);
-        next.delete(archived.id);
-        return next;
-      });
       setActiveShellTab("list");
       onSelectCard(nextCardId);
       await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
@@ -384,22 +447,7 @@ export function CardsWorkspace({
       return;
     }
     const cardId = tabId.slice("card:".length);
-    const hasUnsavedChanges = dirtyCardIds.has(cardId) || hasCardDraft(currentUserId, cardId);
-    if (hasUnsavedChanges && !window.confirm(uiText.closeDirtyCardTabConfirmation)) {
-      return;
-    }
-
     setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
-    setDirtyCardIds((current) => {
-      const next = new Set(current);
-      next.delete(cardId);
-      return next;
-    });
-    setFieldEditorStates((current) => {
-      const next = { ...current };
-      delete next[cardId];
-      return next;
-    });
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -408,41 +456,6 @@ export function CardsWorkspace({
       setActiveShellTab("list");
       onSelectCard(cards.find((item) => item.id !== cardId)?.id ?? "");
     }
-  }
-
-  function handleCardDirtyChange(cardId: string, isDirty: boolean) {
-    setDirtyCardIds((current) => {
-      if (current.has(cardId) === isDirty) {
-        return current;
-      }
-      const next = new Set(current);
-      if (isDirty) {
-        next.add(cardId);
-      } else {
-        next.delete(cardId);
-      }
-      return next;
-    });
-  }
-
-  function handleCardEditorStateChange(cardId: string, nextState: CardEditorPanelState) {
-    setFieldEditorStates((current) => {
-      const previous = current[cardId];
-      if (
-        previous &&
-        previous.isDirty === nextState.isDirty &&
-        previous.isPending === nextState.isPending &&
-        previous.error === nextState.error &&
-        previous.saved === nextState.saved
-      ) {
-        return current;
-      }
-      return {
-        ...current,
-        [cardId]: nextState,
-      };
-    });
-    handleCardDirtyChange(cardId, nextState.isDirty);
   }
 
   function cardListDetail(item: CardSummaryRead) {
@@ -522,9 +535,8 @@ export function CardsWorkspace({
               card={card}
               selectedCard={selectedCard}
               editorState={activeEditorState}
-              fieldFormId={
-                activeTab === "fields" && bulkFieldRows.length > 0 ? bulkFieldFormId : undefined
-              }
+              completionLabel={completionLabel}
+              publicLinksLabel={publicLinksLabel}
               isActivating={activateCardMutation.isPending}
               canDownloadPrint={Boolean(selectedCardPrintView)}
               isDownloadingPrint={
@@ -607,25 +619,41 @@ export function CardsWorkspace({
           </Panel>
           {card && activeTab === "fields" && (
             <Panel title={uiText.cardFields}>
-              {bulkFieldRows.length > 0 && (
-                <BulkCardValuesForm
-                  key={fieldRows.map((field) => field.key).join("|")}
-                  card={card}
-                  fields={bulkFieldRows}
-                  token={token}
-                  currentUserId={currentUserId}
-                  formId={bulkFieldFormId}
-                  onEditorStateChange={handleCardEditorStateChange}
+              {cardTemplateLayoutQuery.isLoading && <p>{uiText.loadingCard}</p>}
+              <DataAlert error={cardTemplateLayoutQuery.error} />
+              {cardTemplateLayoutQuery.data ? (
+                <FilledCardLayout
+                  layout={cardTemplateLayoutQuery.data}
+                  blocks={cardTemplateLayoutQuery.data.structure.blocks}
+                  fields={cardTemplateLayoutQuery.data.structure.fields}
+                  blockInstances={cardBlockInstances}
+                  values={[]}
+                  editableFieldIds={editableFieldIds}
+                  blockEditor={blockEditor}
+                  referenceOptions={referenceOptions}
+                  onEditBlock={() => setSuccessMessage(null)}
+                  renderFileRefControl={({ field, blockInstanceId, readValue }) => {
+                    const fileRefField = fileRefFieldRows.find(
+                      (item) =>
+                        item.field.field_id === field.id &&
+                        item.blockInstanceId === blockInstanceId,
+                    );
+                    return fileRefField ? (
+                      <CardFieldEditor
+                        key={fileRefField.key}
+                        cardId={card.id}
+                        field={fileRefField}
+                        token={token}
+                      />
+                    ) : (
+                      readValue
+                    );
+                  }}
                 />
-              )}
-              {fileRefFieldRows.length > 0 && (
-                <div className="field-editor-list">
-                  {fileRefFieldRows.map((field) => (
-                    <CardFieldEditor key={field.key} cardId={card.id} field={field} token={token} />
-                  ))}
-                </div>
-              )}
-              {fieldRows.length === 0 && <p className="data-empty">{uiText.noData}</p>}
+              ) : null}
+              {!cardTemplateLayoutQuery.isLoading &&
+                !cardTemplateLayoutQuery.error &&
+                !cardTemplateLayoutQuery.data && <p className="data-empty">{uiText.noData}</p>}
             </Panel>
           )}
           {card && activeTab === "print" && (
@@ -732,7 +760,8 @@ function CardActionPanel({
   card,
   selectedCard,
   editorState,
-  fieldFormId,
+  completionLabel,
+  publicLinksLabel,
   isActivating,
   canDownloadPrint,
   isDownloadingPrint,
@@ -746,7 +775,8 @@ function CardActionPanel({
   card: CardRead;
   selectedCard: CardSummaryRead;
   editorState: CardEditorPanelState;
-  fieldFormId?: string;
+  completionLabel: string;
+  publicLinksLabel: string;
   isActivating: boolean;
   canDownloadPrint: boolean;
   isDownloadingPrint: boolean;
@@ -762,30 +792,12 @@ function CardActionPanel({
       <div className="card-action-status">
         <strong>{card.display_name}</strong>
         <span>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</span>
-        {editorState.error && (
-          <p className="inline-alert" role="alert">
-            {editorState.error}
-          </p>
-        )}
-        {!editorState.error && editorState.isDirty && (
-          <p className="inline-alert">{uiText.unsavedCardChanges}</p>
-        )}
-        {!editorState.error && !editorState.isDirty && editorState.saved && (
-          <p className="inline-success">{uiText.cardFieldsSaved}</p>
-        )}
+        <span>{completionLabel}</span>
+        <span>{publicLinksLabel}</span>
+        {editorState.isDirty && <p className="inline-alert">{uiText.unsavedCardChanges}</p>}
         <MutationFeedback error={actionError} successMessage={successMessage} />
       </div>
       <div className="row-actions card-action-buttons">
-        {fieldFormId && (
-          <button
-            type="submit"
-            form={fieldFormId}
-            className="primary-button"
-            disabled={editorState.isPending}
-          >
-            {editorState.isPending ? uiText.saving : uiText.saveAllFields}
-          </button>
-        )}
         {selectedCard.lifecycle_status === "draft" && (
           <button
             type="button"
@@ -1260,306 +1272,6 @@ function RepeatableBlockControls({
   );
 }
 
-function BulkCardValuesForm({
-  card,
-  fields,
-  token,
-  currentUserId,
-  formId,
-  onEditorStateChange,
-}: {
-  card: CardRead;
-  fields: EditableCardField[];
-  token: string;
-  currentUserId: string;
-  formId: string;
-  onEditorStateChange: (cardId: string, state: CardEditorPanelState) => void;
-}) {
-  const queryClient = useQueryClient();
-  const draftStorageKey = cardDraftStorageKey(currentUserId, card.id);
-  const [draftValues, setDraftValues] = useState<Record<string, FieldEditorState>>(() =>
-    loadCardDraft(draftStorageKey),
-  );
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const isDirty = Object.keys(draftValues).length > 0;
-
-  useEffect(() => {
-    saveCardDraft(draftStorageKey, draftValues);
-  }, [draftStorageKey, draftValues]);
-
-  const mutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        values: fields
-          .filter((field) => field.field.field_type !== "static_text")
-          .map((field) => ({
-            field_id: field.field.field_id,
-            value: coerceEditorValue(field.field.field_type, currentBulkValue(field, draftValues)),
-            block_instance_id: field.blockInstanceId,
-          })),
-      };
-      return updateCardFieldValues(token, card.id, payload);
-    },
-    onSuccess: async () => {
-      setSaved(true);
-      setDraftValues({});
-      await queryClient.invalidateQueries({ queryKey: ["card", token, card.id] });
-      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
-    },
-  });
-  const currentError = localError ?? (mutation.error ? errorText(mutation.error) : null);
-
-  useEffect(() => {
-    onEditorStateChange(card.id, {
-      isDirty,
-      isPending: mutation.isPending,
-      error: currentError,
-      saved,
-    });
-  }, [card.id, currentError, isDirty, mutation.isPending, onEditorStateChange, saved]);
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLocalError(null);
-    setSaved(false);
-    const missingRequiredFields = requiredMissingFieldLabels(fields, draftValues);
-    if (missingRequiredFields.length > 0) {
-      setLocalError(`${uiText.requiredFields}: ${missingRequiredFields.join(", ")}`);
-      return;
-    }
-    try {
-      mutation.mutate();
-    } catch (error) {
-      setLocalError(errorText(error));
-    }
-  }
-
-  const fieldGroups = groupedEditableFields(fields);
-
-  return (
-    <form
-      id={formId}
-      aria-label={uiText.bulkFieldValues}
-      className="bulk-field-form"
-      onSubmit={handleSubmit}
-    >
-      <header className="bulk-field-header">
-        <h4>{uiText.bulkFieldValues}</h4>
-      </header>
-      <div className="bulk-field-blocks">
-        {fieldGroups.map((group) => (
-          <section
-            key={group.blockId}
-            className="bulk-field-block"
-            aria-label={`${uiText.formBlock}: ${group.blockLabel}`}
-          >
-            <header className="bulk-field-block-header">
-              <h5>{group.blockLabel}</h5>
-            </header>
-            {group.rows.map((row) => (
-              <div key={row.row} className="bulk-field-grid" style={fieldColumnsStyle(row.columns)}>
-                {row.fields.map((field) => (
-                  <BulkFieldEditor
-                    key={field.key}
-                    cardId={card.id}
-                    field={field}
-                    token={token}
-                    value={currentBulkValue(field, draftValues)}
-                    onChange={(value) => {
-                      setDraftValues((current) => ({ ...current, [field.key]: value }));
-                      setSaved(false);
-                      setLocalError(null);
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
-      <footer className="card-editor-footer" aria-label={uiText.cardEditorFooter} />
-    </form>
-  );
-}
-
-function BulkFieldEditor({
-  cardId,
-  field,
-  token,
-  value,
-  onChange,
-}: {
-  cardId: string;
-  field: EditableCardField;
-  token: string;
-  value: FieldEditorState;
-  onChange: (value: FieldEditorState) => void;
-}) {
-  const isReferenceField =
-    field.schema?.options_source_type === "reference_list" &&
-    ["select", "multi_select"].includes(field.field.field_type);
-  const referenceItemsQuery = useQuery({
-    queryKey: ["card-field-reference-items", token, cardId, field.field.field_id],
-    queryFn: () => listCardFieldReferenceItems(token, cardId, field.field.field_id),
-    enabled: Boolean(token && cardId && isReferenceField),
-  });
-
-  if (field.field.field_type === "static_text") {
-    return (
-      <div
-        className={[
-          "field-editor-control",
-          "field-editor-static-text",
-          fieldEditorLayoutClassName(field),
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={fieldGridSpanStyle(field)}
-      >
-        <span>{field.label}</span>
-        <div className="field-editor-static-text-body">{staticTextContent(field)}</div>
-        <small>
-          {field.blockLabel} / {field.instanceLabel}
-        </small>
-      </div>
-    );
-  }
-
-  return (
-    <label
-      className={["field-editor-control", fieldEditorLayoutClassName(field)]
-        .filter(Boolean)
-        .join(" ")}
-      style={fieldGridSpanStyle(field)}
-    >
-      <span>{field.label}</span>
-      <div className="field-editor-widget">
-        <FieldEditorControl
-          fieldType={field.field.field_type}
-          label={field.label}
-          options={referenceItemsQuery.data?.items ?? []}
-          value={value}
-          onChange={onChange}
-        />
-      </div>
-      <small>
-        {field.blockLabel} / {field.instanceLabel}
-      </small>
-    </label>
-  );
-}
-
-function groupedEditableFields(fields: EditableCardField[]) {
-  const groups: {
-    blockId: string;
-    blockLabel: string;
-    rows: {
-      row: number;
-      columns: number;
-      fields: EditableCardField[];
-    }[];
-  }[] = [];
-  for (const field of fields) {
-    let group = groups.find((item) => item.blockId === field.blockId);
-    if (!group) {
-      group = {
-        blockId: field.blockId,
-        blockLabel: field.blockLabel,
-        rows: [],
-      };
-      groups.push(group);
-    }
-    const rowNumber = fieldLayoutRow(field, group.rows.length + 1);
-    let row = group.rows.find((item) => item.row === rowNumber);
-    if (!row) {
-      row = { row: rowNumber, columns: 1, fields: [] };
-      group.rows.push(row);
-    }
-    row.fields.push(field);
-    row.columns = Math.max(row.columns, fieldLayoutColumn(field, 1) + fieldColumnSpan(field) - 1);
-  }
-  for (const group of groups) {
-    group.rows.sort((left, right) => left.row - right.row);
-    for (const row of group.rows) {
-      row.columns = clampColumns(row.columns);
-      row.fields.sort(
-        (left, right) =>
-          fieldLayoutColumn(left, 1) - fieldLayoutColumn(right, 1) ||
-          (left.schema?.position ?? 0) - (right.schema?.position ?? 0),
-      );
-    }
-  }
-  return groups;
-}
-
-function fieldColumnsStyle(columns: number): CSSProperties {
-  return { "--field-editor-columns": String(clampColumns(columns)) } as CSSProperties;
-}
-
-function fieldGridSpanStyle(field: EditableCardField): CSSProperties {
-  const column = fieldLayoutColumn(field, 1);
-  const span = Math.min(fieldColumnSpan(field), maxVisualColumns - column + 1);
-  return { "--field-editor-column": `${column} / span ${span}` } as CSSProperties;
-}
-
-function fieldEditorLayoutClassName(field: EditableCardField) {
-  const labelPosition = displayConfigString(field.schema, "label_position", "top");
-  const separatorStyle = displayConfigString(field.schema, "separator_style", "none");
-  return [
-    `field-editor-control--label-${labelPosition}`,
-    separatorStyle !== "none" ? `field-editor-control--separator-${separatorStyle}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function staticTextContent(field: EditableCardField) {
-  const value = field.schema?.options_config_json?.static_text;
-  return typeof value === "string" && value.trim() ? value : uiText.empty;
-}
-
-function displayConfigString(schema: FormFieldRead | null, key: string, fallback: string) {
-  const value = schema?.display_config_json?.[key];
-  return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function displayConfigNumber(schema: FormFieldRead | null, key: string, fallback: number) {
-  const value = schema?.display_config_json?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-const maxVisualColumns = 5;
-const maxVisualRows = 50;
-
-function fieldLayoutRow(field: EditableCardField, fallback: number) {
-  return Math.min(
-    maxVisualRows,
-    Math.max(1, displayConfigNumber(field.schema, "layout_row", fallback)),
-  );
-}
-
-function fieldLayoutColumn(field: EditableCardField, fallback: number) {
-  return Math.min(
-    maxVisualColumns,
-    Math.max(1, displayConfigNumber(field.schema, "layout_column", fallback)),
-  );
-}
-
-function fieldColumnSpan(field: EditableCardField) {
-  return Math.min(
-    maxVisualColumns,
-    Math.max(1, displayConfigNumber(field.schema, "column_span", 1)),
-  );
-}
-
-function clampColumns(value: number | null | undefined) {
-  if (!Number.isFinite(value)) {
-    return 1;
-  }
-  return Math.min(maxVisualColumns, Math.max(1, Number(value)));
-}
-
 function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
   return {
     organizationId: organizations[0]?.id ?? "",
@@ -1567,39 +1279,6 @@ function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState
     publicViewEnabled: false,
     publicEditEnabled: false,
   };
-}
-
-function currentBulkValue(field: EditableCardField, draftValues: Record<string, FieldEditorState>) {
-  if (Object.prototype.hasOwnProperty.call(draftValues, field.key)) {
-    return draftValues[field.key];
-  }
-  return initialEditorValue(field.field);
-}
-
-function requiredMissingFieldLabels(
-  fields: EditableCardField[],
-  draftValues: Record<string, FieldEditorState>,
-) {
-  return fields
-    .filter((field) => field.schema?.required_mode === "required")
-    .filter((field) => field.field.field_type !== "static_text")
-    .filter((field) =>
-      isEditorValueEmpty(field.field.field_type, currentBulkValue(field, draftValues)),
-    )
-    .map((field) => field.label);
-}
-
-function isEditorValueEmpty(fieldType: string, value: FieldEditorState) {
-  if (fieldType === "bool") {
-    return false;
-  }
-  if (Array.isArray(value)) {
-    return value.length === 0;
-  }
-  if (typeof value === "string") {
-    return value.trim() === "";
-  }
-  return false;
 }
 
 function loadCardTabs(): { activeTab: CardShellTab; openCardIds: string[] } {
@@ -1628,44 +1307,6 @@ function loadCardTabs(): { activeTab: CardShellTab; openCardIds: string[] } {
 
 function saveCardTabs(state: { activeTab: CardShellTab; openCardIds: string[] }) {
   localStorage.setItem(cardTabsStorageKey, JSON.stringify(state));
-}
-
-function cardDraftStorageKey(currentUserId: string, cardId: string) {
-  return `reg_engine.card_draft.v1:${currentUserId}:${cardId}`;
-}
-
-function loadCardDraft(storageKey: string): Record<string, FieldEditorState> {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, FieldEditorState] => {
-        const value = entry[1];
-        return (
-          typeof value === "string" ||
-          typeof value === "boolean" ||
-          (Array.isArray(value) && value.every((item) => typeof item === "string"))
-        );
-      }),
-    );
-  } catch {
-    return {};
-  }
-}
-
-function saveCardDraft(storageKey: string, draftValues: Record<string, FieldEditorState>) {
-  if (Object.keys(draftValues).length === 0) {
-    localStorage.removeItem(storageKey);
-    return;
-  }
-  localStorage.setItem(storageKey, JSON.stringify(draftValues));
-}
-
-function hasCardDraft(currentUserId: string, cardId: string) {
-  return Object.keys(loadCardDraft(cardDraftStorageKey(currentUserId, cardId))).length > 0;
 }
 
 function initialPublicLinkForm(): PublicLinkFormState {
@@ -1711,6 +1352,37 @@ function publicLinkStatusLabel(publicLink: PublicLinkRead) {
     return "Активна";
   }
   return publicLink.status;
+}
+
+function cardCompletionLabel(fields: EditableCardField[]) {
+  const requiredFields = fields.filter(
+    (field) =>
+      field.schema?.is_active &&
+      field.schema.required_mode === "required" &&
+      field.field.field_type !== "static_text",
+  );
+  const completed = requiredFields.filter((field) =>
+    isCompletedCardValue(field.field.value),
+  ).length;
+  return `Обязательные поля: ${completed} из ${requiredFields.length} заполнено`;
+}
+
+function isCompletedCardValue(value: unknown) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function cardPublicLinksLabel(items: PublicLinkRead[] | undefined, error: Error | null) {
+  if (error) return "Публичные ссылки: статус недоступен";
+  if (!items) return "Публичные ссылки: загрузка";
+  const activeCount = items.filter(
+    (item) =>
+      !item.disabled_at && item.status === "active" && new Date(item.expires_at) > new Date(),
+  ).length;
+  if (activeCount === 1) return "Публичные ссылки: 1 активна";
+  return `Публичные ссылки: ${activeCount} активны`;
 }
 
 function publicLinkEditUrl(rawToken: string) {

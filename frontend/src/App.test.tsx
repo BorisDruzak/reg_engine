@@ -2401,6 +2401,14 @@ async function openExistingCardEditor(user: ReturnType<typeof userEvent.setup>) 
   await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
 }
 
+async function openCardBlockEditor(
+  user: ReturnType<typeof userEvent.setup>,
+  blockTitle = "Основной блок",
+) {
+  await user.click(await screen.findByRole("button", { name: `Изменить блок ${blockTitle}` }));
+  return screen.findByRole("region", { name: `Блок ${blockTitle}` });
+}
+
 async function openDefaultSchemaTemplateEditor(user: ReturnType<typeof userEvent.setup>) {
   const templateSection = await screen.findByRole("region", { name: "Шаблоны карточек" });
   const templateCard = within(templateSection)
@@ -2625,16 +2633,17 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.getAllByText("Статус").length).toBeGreaterThan(0);
   await openExistingCardEditor(user);
   expect((await screen.findAllByText("Карточка актива")).length).toBeGreaterThan(0);
-  expect(screen.getAllByDisplayValue("drafted").length).toBeGreaterThan(0);
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
+  const mainBlock = await openCardBlockEditor(user);
+  expect(within(mainBlock).getByDisplayValue("drafted")).toBeInTheDocument();
+  expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Сохранить Статус" })).not.toBeInTheDocument();
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  const approvedInput = within(bulkForm).getByLabelText("Подтверждено");
+  const approvedInput = within(mainBlock).getByLabelText("Подтверждено");
   await user.click(approvedInput);
-  await user.click(screen.getByRole("button", { name: "Сохранить все поля" }));
-  expect(await screen.findByText("Поля карточки сохранены")).toBeInTheDocument();
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
+  expect((await screen.findAllByText("Поля карточки сохранены")).length).toBeGreaterThan(0);
 
   await user.click(screen.getByRole("button", { name: "Аудит" }));
   expect(screen.getByText("Создание")).toBeInTheDocument();
@@ -2713,6 +2722,11 @@ test("auto-collapses the navigation in registry work and expands from sidebar in
 });
 
 test("renders refactored card workspace with focused tabs and simple metadata", async () => {
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.id === "99999999-9999-4999-8999-999999999999"
+      ? { ...field, required_mode: "required" }
+      : field,
+  );
   const user = userEvent.setup();
   render(<App />);
 
@@ -2736,6 +2750,21 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   expect(screen.getByText("Шаблон карточки")).toBeInTheDocument();
   expect(screen.getAllByText("Муниципальная карточка").length).toBeGreaterThan(0);
   expect(screen.getByRole("tab", { name: "Поля" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
+  const actionPanel = screen.getByRole("group", { name: "Панель действий карточки" });
+  expect(within(actionPanel).getByText("Обязательные поля: 1 из 1 заполнено")).toBeInTheDocument();
+  expect(within(actionPanel).getByText("Публичные ссылки: 2 активны")).toBeInTheDocument();
+  let mainBlock = await screen.findByTestId(
+    "filled-block-block-88888888-8888-4888-8888-888888888888",
+  );
+  await user.click(within(mainBlock).getByRole("button", { name: "Изменить блок Основной блок" }));
+  mainBlock = await screen.findByTestId("filled-block-block-88888888-8888-4888-8888-888888888888");
+  expect(within(mainBlock).getByLabelText("Статус")).toHaveValue("drafted");
+  expect(
+    within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Массовое сохранение полей")).not.toBeInTheDocument();
+  await user.click(within(mainBlock).getByRole("button", { name: "Отмена блока Основной блок" }));
   expect(screen.getByRole("tab", { name: "Вложения" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Публичные ссылки" })).toBeInTheDocument();
@@ -2751,7 +2780,7 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   expect(screen.queryByText("Данные карточки")).not.toBeInTheDocument();
 });
 
-test("renders static text schema fields without sending them in bulk card saves", async () => {
+test("renders static text schema fields without sending them in block saves", async () => {
   enableStaticTextSchema();
   const user = userEvent.setup();
   render(<App />);
@@ -2761,15 +2790,15 @@ test("renders static text schema fields without sending them in bulk card saves"
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await openExistingCardEditor(user);
 
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  expect(within(bulkForm).getByText("Пояснение")).toBeInTheDocument();
-  expect(within(bulkForm).getByText("Текст подсказки для карточки")).toBeInTheDocument();
-  expect(within(bulkForm).queryByLabelText("Пояснение")).not.toBeInTheDocument();
+  const mainBlock = await openCardBlockEditor(user);
+  expect(within(mainBlock).getByText("Пояснение")).toBeInTheDocument();
+  expect(within(mainBlock).getByText("Текст подсказки для карточки")).toBeInTheDocument();
+  expect(within(mainBlock).queryByLabelText("Пояснение")).not.toBeInTheDocument();
 
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(screen.getByRole("button", { name: "Сохранить все поля" }));
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
 
   await waitFor(() => {
     const bulkCall = vi
@@ -2789,9 +2818,9 @@ test("renders static text schema fields without sending them in bulk card saves"
   });
 });
 
-test("opens card editor in tabs and restores unsaved draft after remount", async () => {
+test("marks a card tab dirty while an inline block draft is open", async () => {
   const user = userEvent.setup();
-  const { unmount } = render(<App />);
+  render(<App />);
 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
@@ -2810,8 +2839,8 @@ test("opens card editor in tabs and restores unsaved draft after remount", async
     "aria-selected",
     "true",
   );
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const mainBlock = await openCardBlockEditor(user);
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "несохраненный текст");
 
@@ -2821,20 +2850,17 @@ test("opens card editor in tabs and restores unsaved draft after remount", async
   );
   expect(screen.getByText("Есть несохраненные изменения")).toBeInTheDocument();
 
-  unmount();
-  render(<App />);
-
-  expect(await screen.findByRole("button", { name: "Карточки" })).toHaveClass("is-active");
-  expect(await screen.findByRole("tab", { name: "Карточка актива *" })).toHaveAttribute(
+  await user.click(within(mainBlock).getByRole("button", { name: "Отмена блока Основной блок" }));
+  expect(screen.getByRole("tab", { name: "Карточка актива" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  expect(await screen.findByDisplayValue("несохраненный текст")).toBeInTheDocument();
+  expect(screen.queryByText("Есть несохраненные изменения")).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue("несохраненный текст")).not.toBeInTheDocument();
 });
 
 test("warns before closing a dirty card tab", async () => {
   const user = userEvent.setup();
-  const confirmClose = vi.spyOn(window, "confirm").mockReturnValue(false);
   render(<App />);
 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
@@ -2843,18 +2869,20 @@ test("warns before closing a dirty card tab", async () => {
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
   await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
 
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const mainBlock = await openCardBlockEditor(user);
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "несохраненный текст");
   await user.click(screen.getByRole("button", { name: "Закрыть вкладку Карточка актива" }));
 
-  expect(confirmClose).toHaveBeenCalledWith(
-    "Есть несохраненные изменения. Закрыть вкладку без сохранения?",
-  );
+  let decision = await screen.findByRole("dialog", { name: "Несохранённые изменения" });
+  await user.click(within(decision).getByRole("button", { name: "Продолжить редактирование" }));
   expect(screen.getByRole("tab", { name: "Карточка актива *" })).toBeInTheDocument();
+  expect(screen.getByDisplayValue("несохраненный текст")).toBeInTheDocument();
 
-  confirmClose.mockReturnValue(true);
+  await user.click(screen.getByRole("button", { name: "Закрыть вкладку Карточка актива" }));
+  decision = await screen.findByRole("dialog", { name: "Несохранённые изменения" });
+  await user.click(within(decision).getByRole("button", { name: "Не сохранять" }));
   await user.click(screen.getByRole("button", { name: "Закрыть вкладку Карточка актива" }));
 
   expect(screen.queryByRole("tab", { name: "Карточка актива *" })).not.toBeInTheDocument();
@@ -2876,8 +2904,10 @@ test("shows card editor actions in the sticky card panel", async () => {
 
   const actionPanel = await screen.findByRole("group", { name: "Панель действий карточки" });
   expect(
-    within(actionPanel).getByRole("button", { name: "Сохранить все поля" }),
-  ).toBeInTheDocument();
+    within(actionPanel).queryByRole("button", { name: "Сохранить все поля" }),
+  ).not.toBeInTheDocument();
+  expect(within(actionPanel).getByText("Обязательные поля: 0 из 0 заполнено")).toBeInTheDocument();
+  expect(within(actionPanel).getByText("Публичные ссылки: 2 активны")).toBeInTheDocument();
   expect(
     within(actionPanel).getByRole("button", { name: "Активировать карточку Карточка актива" }),
   ).toBeInTheDocument();
@@ -2887,13 +2917,13 @@ test("shows card editor actions in the sticky card panel", async () => {
   expect(
     screen.queryByRole("button", { name: "Редактировать карточку Карточка актива" }),
   ).not.toBeInTheDocument();
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
   expect(
-    within(bulkForm).queryByRole("button", { name: "Сохранить все поля" }),
-  ).not.toBeInTheDocument();
+    await screen.findByRole("button", { name: "Изменить блок Основной блок" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
 });
 
-test("shows required field errors in the card action panel before bulk save", async () => {
+test("shows required field errors before saving an inline block", async () => {
   schemaFieldItems = schemaFieldItems.map((field) =>
     field.id === "99999999-9999-4999-8999-999999999999"
       ? {
@@ -2918,12 +2948,12 @@ test("shows required field errors in the card action panel before bulk save", as
         String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
         init?.method === "PATCH",
     ).length;
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const mainBlock = await openCardBlockEditor(user);
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
-  await user.click(screen.getByRole("button", { name: "Сохранить все поля" }));
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
 
-  expect(await screen.findByText("Заполните обязательные поля: Статус")).toBeInTheDocument();
+  expect(await screen.findByText("Заполните обязательные поля")).toBeInTheDocument();
   expect(
     vi
       .mocked(fetch)
@@ -4615,7 +4645,7 @@ test("adds template bool and date filters from inline search tag choices", async
   });
 });
 
-test("creates archives cards and manages repeatable blocks with bulk save", async () => {
+test("creates archives cards and manages repeatable blocks with inline saves", async () => {
   enableRepeatableDetailsSchema();
   const user = userEvent.setup();
   render(<App />);
@@ -4668,15 +4698,20 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
   );
   expect(await screen.findByText("Экземпляр блока создан")).toBeInTheDocument();
 
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  const statusInput = within(bulkForm).getByLabelText("Статус");
+  const mainBlock = await openCardBlockEditor(user);
+  const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
-  await user.click(within(bulkForm).getByLabelText("Подтверждено"));
-  await user.type(within(bulkForm).getByLabelText("Комментарий"), "Комментарий по карточке");
-  await user.click(screen.getByRole("button", { name: "Сохранить все поля" }));
+  await user.click(within(mainBlock).getByLabelText("Подтверждено"));
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
 
-  expect(await screen.findByText("Поля карточки сохранены")).toBeInTheDocument();
+  const detailsBlock = await openCardBlockEditor(user, "Детали карточки");
+  await user.type(within(detailsBlock).getByLabelText("Комментарий"), "Комментарий по карточке");
+  await user.click(
+    within(detailsBlock).getByRole("button", { name: "Сохранить блок Детали карточки" }),
+  );
+
+  expect((await screen.findAllByText("Поля карточки сохранены")).length).toBeGreaterThan(0);
   await user.click(
     screen.getByRole("button", {
       name: "Архивировать экземпляр блока Детали карточки экземпляр 1",
@@ -4739,16 +4774,19 @@ test("creates archives cards and manages repeatable blocks with bulk save", asyn
       ),
     ).toBe(true);
 
-    const bulkCall = fetchMock.mock.calls.find(
-      ([input, init]) =>
-        String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/values") &&
-        init?.method === "PATCH",
-    );
-    expect(bulkCall).toBeTruthy();
-    const bulkBody = JSON.parse(String(bulkCall?.[1]?.body ?? "{}")) as {
-      values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
-    };
-    expect(bulkBody.values).toEqual(
+    const savedValues = fetchMock.mock.calls
+      .filter(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/values") &&
+          init?.method === "PATCH",
+      )
+      .flatMap(([, init]) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
+        };
+        return body.values;
+      });
+    expect(savedValues).toEqual(
       expect.arrayContaining([
         {
           field_id: "99999999-9999-4999-8999-999999999999",
@@ -4810,8 +4848,8 @@ test("loads card field reference options through card organization scope", async
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await openExistingCardEditor(user);
 
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  expect(await within(bulkForm).findByRole("option", { name: "Активен" })).toBeInTheDocument();
+  const mainBlock = await openCardBlockEditor(user);
+  expect(await within(mainBlock).findByRole("option", { name: "Активен" })).toBeInTheDocument();
 
   await waitFor(() => {
     const fetchMock = vi.mocked(fetch);
@@ -6434,8 +6472,8 @@ test("selects and clears file_ref fields from existing card attachments", async 
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await openExistingCardEditor(user);
 
-  const bulkForm = await screen.findByRole("form", { name: "Массовое сохранение полей" });
-  expect(within(bulkForm).queryByLabelText("Файл карточки")).not.toBeInTheDocument();
+  await openCardBlockEditor(user);
+  expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
 
   const saveButton = await screen.findByRole("button", { name: "Сохранить Файл карточки" });
   const fieldForm = saveButton.closest("form");
@@ -6465,8 +6503,15 @@ test("selects and clears file_ref fields from existing card attachments", async 
     ).toBe(true);
   });
 
-  await user.click(within(fieldForm as HTMLElement).getByRole("button", { name: "Очистить файл" }));
-  await user.click(saveButton);
+  const refreshedSaveButton = await screen.findByRole("button", {
+    name: "Сохранить Файл карточки",
+  });
+  const refreshedFieldForm = refreshedSaveButton.closest("form");
+  expect(refreshedFieldForm).toBeTruthy();
+  await user.click(
+    within(refreshedFieldForm as HTMLElement).getByRole("button", { name: "Очистить файл" }),
+  );
+  await user.click(refreshedSaveButton);
 
   await waitFor(() => {
     const fileRefCalls = vi.mocked(fetch).mock.calls.filter(([input, init]) => {
@@ -6505,6 +6550,7 @@ test("shows file_ref empty and archived states in Russian UI", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await openExistingCardEditor(user);
+  await openCardBlockEditor(user);
 
   const saveButton = await screen.findByRole("button", { name: "Сохранить Файл карточки" });
   const fieldForm = saveButton.closest("form");

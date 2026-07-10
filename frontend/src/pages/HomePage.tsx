@@ -429,7 +429,6 @@ export function HomePage() {
             card={cardReadQuery.data ?? null}
             schema={registrySchemaQuery.data ?? null}
             token={token}
-            currentUserId={currentUser?.id ?? "unknown"}
             organizations={organizationsQuery.data?.items ?? []}
             selectedCardId={activeCardId}
             cardSearch={cardSearch}
