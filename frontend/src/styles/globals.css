@@ -1649,7 +1649,6 @@ tr:last-child td {
 
 .card-layout-studio-header,
 .card-layout-a4-controls,
-.a4-linked-card-actions,
 .a4-linked-card-legacy-notice {
   display: flex;
   flex-wrap: wrap;
@@ -1990,7 +1989,6 @@ tr:last-child td {
 }
 
 .card-layout-a4-controls,
-.a4-linked-card-actions,
 .a4-linked-card-legacy-notice {
   padding: 10px;
   border: 1px solid #d9dee7;
@@ -2002,9 +2000,46 @@ tr:last-child td {
   min-width: min(220px, 100%);
 }
 
-.a4-linked-card-actions {
-  justify-content: flex-start;
+.a4-linked-card-action-menu {
+  width: fit-content;
+  max-width: 100%;
   margin-bottom: 8px;
+}
+
+.a4-linked-card-action-menu summary {
+  width: fit-content;
+  padding: 9px 12px;
+  border: 1px solid #c8d3df;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #17324d;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.a4-linked-card-action-menu ul {
+  display: grid;
+  gap: 4px;
+  width: min(320px, calc(100vw - 64px));
+  max-height: 22rem;
+  margin: 6px 0 0;
+  padding: 6px;
+  border: 1px solid #c8d3df;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.a4-linked-card-action-menu li,
+.a4-linked-card-action-menu button {
+  width: 100%;
+}
+
+.a4-linked-card-action-menu button {
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .a4-linked-card-legacy-notice > div {
@@ -2057,8 +2092,7 @@ tr:last-child td {
   padding: 2px;
 }
 
-.a4-linked-card-move-handle,
-.a4-linked-card-edit-button {
+.a4-linked-card-move-handle {
   position: absolute;
   z-index: 5;
 }
@@ -2074,13 +2108,6 @@ tr:last-child td {
   background: #ffffff;
   color: #0f66d0;
   cursor: move;
-}
-
-.a4-linked-card-edit-button {
-  right: 40px;
-  bottom: 6px;
-  max-width: calc(100% - 48px);
-  background: rgba(255, 255, 255, 0.94);
 }
 
 .a4-template-dialog-backdrop {
@@ -2698,15 +2725,6 @@ tr:last-child td {
   .filled-card-layout .card-layout-responsive-grid {
     grid-template-columns: minmax(0, 1fr) !important;
     width: 100%;
-  }
-
-  .a4-linked-card-actions {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-  }
-
-  .a4-linked-card-actions button {
-    flex: none;
   }
 
   .a4-template-toolbar,

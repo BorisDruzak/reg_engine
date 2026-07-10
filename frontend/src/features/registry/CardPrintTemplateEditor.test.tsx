@@ -10,6 +10,7 @@ import type {
   FormBlockRead,
   FormFieldRead,
 } from "@/api/types";
+import { A4LinkedCardCanvas } from "@/features/cardLayout/A4LinkedCardCanvas";
 
 import { CardPrintTemplateEditor } from "./CardPrintTemplateEditor";
 import { RegistriesAndSchema } from "./RegistriesAndSchema";
@@ -460,7 +461,7 @@ test("owns geometry undo and redo history without duplicating commands", async (
   expect(screen.getByRole("button", { name: "Повторить изменение" })).toBeDisabled();
 });
 
-test("A4 stage contains one linked card rectangle, routes internal editing back, and keeps overlays", async () => {
+test("A4 stage uses a print element list, keeps one linked card rectangle, and removes the inner layout button", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
@@ -474,7 +475,25 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
   expect(screen.queryByRole("button", { name: /Переместить поле/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Изменить размер поля/ })).not.toBeInTheDocument();
 
+  expect(
+    screen.queryByRole("button", { name: "Редактировать внутренний макет" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Добавить заголовок" })).not.toBeVisible();
+  await user.click(screen.getByText("Добавить печатный элемент"));
+  for (const actionLabel of [
+    "Добавить заголовок",
+    "Добавить печатный текст",
+    "Добавить панель",
+    "Добавить прямоугольник",
+    "Добавить линию",
+    "Добавить дату печати",
+    "Добавить номер страницы",
+    "Добавить название карточки",
+  ]) {
+    expect(screen.getByRole("button", { name: actionLabel })).toBeVisible();
+  }
   await user.click(screen.getByRole("button", { name: "Добавить заголовок" }));
+  expect(screen.getByRole("button", { name: "Добавить заголовок" })).not.toBeVisible();
   expect(screen.getAllByText("Заголовок").length).toBeGreaterThan(0);
   await user.click(screen.getByTestId("a4-linked-card-item"));
   const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
@@ -496,11 +515,33 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
     expect.arrayContaining([expect.objectContaining({ kind: "heading" })]),
   );
 
-  await user.click(screen.getByRole("button", { name: "Редактировать внутренний макет" }));
-  expect(screen.getByRole("tab", { name: "Макет карточки" })).toHaveAttribute(
-    "aria-selected",
-    "true",
+  await user.click(screen.getByText("Добавить печатный элемент"));
+  expect(screen.getByRole("button", { name: "Добавить печатный текст" })).toBeVisible();
+});
+
+test("print element list disables every action while the editor is busy", async () => {
+  const user = userEvent.setup();
+  const printLayout = linkedPrintLayout();
+  const cardLayout = unifiedLayoutPayload(printLayout);
+  render(
+    <A4LinkedCardCanvas
+      layout={printLayout}
+      cardLayout={cardLayout}
+      blocks={cardLayout.structure.blocks}
+      fields={cardLayout.structure.fields}
+      zoom={0.75}
+      showGrid={false}
+      selectedItemId={null}
+      legacy={false}
+      disabled
+    />,
   );
+
+  await user.click(screen.getByText("Добавить печатный элемент"));
+  expect(screen.getAllByRole("button", { name: /^Добавить / })).toHaveLength(8);
+  for (const action of screen.getAllByRole("button", { name: /^Добавить / })) {
+    expect(action).toBeDisabled();
+  }
 });
 
 test("hides the forced-off legacy grid toggle and resizes the linked A4 item from the keyboard", async () => {
@@ -597,7 +638,7 @@ test("existing field edits send type reference visibility list and static-text c
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
   await user.clear(screen.getByLabelText("Технический код"));
   await user.type(screen.getByLabelText("Технический код"), "status_v2");
   await user.clear(screen.getByLabelText("Название поля"));
@@ -628,7 +669,7 @@ test("existing field edits send type reference visibility list and static-text c
     }),
   );
 
-  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус заявки" }));
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
   await user.selectOptions(screen.getByLabelText("Тип поля"), "static_text");
   await user.type(screen.getByLabelText("Текст"), "Только для чтения");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -643,7 +684,7 @@ test("existing field edits send type reference visibility list and static-text c
     }),
   );
 
-  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус заявки" }));
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
   await user.selectOptions(screen.getByLabelText("Тип поля"), "text");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -665,7 +706,7 @@ test("keeps the field editor open with its technical code when update fails", as
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
   const code = screen.getByLabelText("Технический код");
   await user.clear(code);
   await user.type(code, "duplicate_code");
@@ -688,7 +729,7 @@ test("clears select-only source and options when an existing field changes to te
     options_config_json: { allow_empty: false },
   });
 
-  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
   await user.selectOptions(screen.getByLabelText("Тип поля"), "text");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 

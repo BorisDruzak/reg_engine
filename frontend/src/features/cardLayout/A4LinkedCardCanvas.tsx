@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import type {
   CardPrintLayout,
   CardTemplateLayoutRead,
@@ -21,7 +23,6 @@ export type A4LinkedCardCanvasProps = {
   onSelectItem?: (itemId: string | null) => void;
   onChangeLayout?: (layout: CardPrintLayout) => void;
   onAddPrintItem?: (kind: PrintOnlyItemKind) => void;
-  onEditCardLayout?: () => void;
   onConvertLegacy?: () => void;
 };
 
@@ -61,9 +62,10 @@ export function A4LinkedCardCanvas({
   onSelectItem,
   onChangeLayout,
   onAddPrintItem,
-  onEditCardLayout,
   onConvertLegacy,
 }: A4LinkedCardCanvasProps) {
+  const printActionsRef = useRef<HTMLDetailsElement>(null);
+
   return (
     <section className="a4-linked-card-stage" aria-label="Печатная форма A4">
       {readonly ? null : legacy ? (
@@ -85,19 +87,26 @@ export function A4LinkedCardCanvas({
           </button>
         </div>
       ) : (
-        <div className="a4-linked-card-actions" role="toolbar" aria-label="Печатные элементы A4">
-          {printOnlyActions.map((action) => (
-            <button
-              key={action.kind}
-              type="button"
-              className="ghost-button"
-              disabled={disabled}
-              onClick={() => onAddPrintItem?.(action.kind)}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
+        <details ref={printActionsRef} className="a4-linked-card-action-menu">
+          <summary>Добавить печатный элемент</summary>
+          <ul aria-label="Печатные элементы A4">
+            {printOnlyActions.map((action) => (
+              <li key={action.kind}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onAddPrintItem?.(action.kind);
+                    printActionsRef.current?.removeAttribute("open");
+                  }}
+                >
+                  {action.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       <A4LayoutRenderer
         layout={layout}
@@ -111,7 +120,6 @@ export function A4LinkedCardCanvas({
         selectedItemId={legacy || readonly || disabled ? null : selectedItemId}
         onSelectItem={legacy || readonly || disabled ? undefined : onSelectItem}
         onChangeLayout={legacy || readonly || disabled ? undefined : onChangeLayout}
-        onEditLinkedCard={readonly || disabled ? undefined : onEditCardLayout}
       />
     </section>
   );

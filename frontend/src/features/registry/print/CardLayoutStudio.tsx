@@ -1193,7 +1193,6 @@ function CardLayoutStudioSession({
             onSelectItem={setSelectedPrintItemId}
             onChangeLayout={setPrintLayout}
             onAddPrintItem={addPrintItem}
-            onEditCardLayout={() => setStage("layout")}
             onConvertLegacy={() => void convertLegacyPrintView()}
           />
           {selectedPrintItem && selectedPrintItem.kind !== "card_layout" ? (

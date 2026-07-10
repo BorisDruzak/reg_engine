@@ -63,7 +63,6 @@ export type A4LayoutRendererProps = {
   onChangeLayout?: (layout: CardPrintLayout) => void;
   onDropField?: (fieldId: string, point: { x_mm: number; y_mm: number }) => void;
   onDropBlock?: (blockId: string, point: { x_mm: number; y_mm: number }) => void;
-  onEditLinkedCard?: () => void;
 };
 
 export type A4RendererMode = "design" | "preview" | "fill" | "readonly";
@@ -94,7 +93,6 @@ export function A4LayoutRenderer({
   onChangeLayout,
   onDropField,
   onDropBlock,
-  onEditLinkedCard,
 }: A4LayoutRendererProps) {
   const normalizedLayout = useMemo(() => normalizeLayoutGeometry(layout), [layout]);
   const renderedItems = useMemo(
@@ -355,7 +353,6 @@ export function A4LayoutRenderer({
                   original: ensureItemGeometry(item, normalizedLayout),
                 });
               }}
-              onEditLinkedCard={onEditLinkedCard}
             />
           ))}
         </div>
@@ -379,7 +376,6 @@ function A4TemplateElement({
   onHover,
   onDragStart,
   onResizeStart,
-  onEditLinkedCard,
 }: {
   item: CardPrintLayoutItem;
   field: FormFieldRead | null;
@@ -395,7 +391,6 @@ function A4TemplateElement({
   onHover: (hovered: boolean) => void;
   onDragStart: (event: React.PointerEvent<HTMLElement>) => void;
   onResizeStart: (event: React.PointerEvent<HTMLElement>, edge: string) => void;
-  onEditLinkedCard?: () => void;
 }) {
   const rect = itemRectFromMm(item);
   const style = item.style ?? {};
@@ -469,19 +464,6 @@ function A4TemplateElement({
             }}
           >
             ⠿
-          </button>
-        ) : null}
-        {onEditLinkedCard ? (
-          <button
-            type="button"
-            className="a4-linked-card-edit-button ghost-button"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onEditLinkedCard();
-            }}
-          >
-            Редактировать внутренний макет
           </button>
         ) : null}
         {mode === "design" && selected ? (
