@@ -3798,8 +3798,8 @@ Known warnings and limitations:
 
 ## Phase 8K: Filled Card Workspace
 
-Status: implemented and locally verified on 2026-07-10; deployment remains a
-separate checkpoint.
+Status: complete on `main`, pushed, deployed, and live Browser-verified on
+2026-07-10 through checkpoint `8782f806`. No database migration was required.
 
 Goal:
 
@@ -3844,8 +3844,41 @@ Implementation checkpoint:
   not configured and execute only against a disposable database ending in
   `_test`. Vite retains the existing main-chunk advisory (`540.87 kB`,
   `153.73 kB` gzip); bundle splitting is outside Phase 8K.
-- This is a local implementation/documentation checkpoint only. No push,
-  deployment, server smoke, or live Browser validation is claimed for Phase 8K.
+
+Deployment and live Browser proof:
+
+- `main`, `origin/main`, and the configured server checkout were synchronized
+  through `8782f806`. Backend/server checks passed, the frontend artifact was
+  rebuilt and deployed, the service restarted cleanly, and same-origin
+  frontend/API smoke checks passed. The deployed assets are
+  `index-B1mnt7tC.js` and `index-DnvFeTec.css`.
+- The live flow `Карточки -> заполненная карточка -> Поля` rendered saved values
+  in the configured desktop geometry. There is no global `Редактировать`, no
+  default mass-edit surface, and no editor below the card. `Изменить блок ФИО`
+  opened typed controls directly inside that block.
+- `Отмена` restored the initial draft without a write. A real block save
+  displayed `Поля карточки сохранены`; the temporary live-test value was then
+  removed and the field verified again as `Не заполнено`. Clicking another tab
+  with a dirty block opened the three-way dialog `Сохранить / Не сохранять /
+  Продолжить редактирование`.
+- `Печатная форма`, `Вложения`, `Документы`, `Публичные ссылки`, and `История`
+  opened successfully. Header DOCX and PDF actions completed with the visible
+  confirmations `DOCX печатной формы скачан` and
+  `PDF печатной формы скачан`.
+- At desktop width the canvas and all blocks remained inside the workspace. At
+  `420 x 900`, every block and field reflowed to `grid-column: 1 / -1` in
+  row-major order. Live inspection initially found a page-level overflow from
+  the non-shrinking card action button group; the TDD repair `8782f806` stacks
+  and constrains that group. The repeated deployed measurement passed with
+  `document.scrollWidth = body.scrollWidth = 420`, action buttons `358`, and
+  card canvas `384` pixels.
+- Evidence screenshots `phase8k-filled-card-desktop.png`,
+  `phase8k-filled-card-mobile-420.png`, and
+  `phase8k-filled-card-mobile-blocks.png` are stored outside Git with the local
+  run artifacts. The final Browser console reported zero errors/warnings. The
+  captured post-deploy HTML, JS/CSS assets, auth, registry, organization, card,
+  card-presentation, public-link, reference-item, and card-list responses all
+  returned HTTP `200`; no response at or above `400` was observed.
 
 ## Phase 8L: Public Link Review Lifecycle
 
