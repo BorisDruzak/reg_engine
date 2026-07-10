@@ -4274,3 +4274,36 @@ Live Browser proof:
   zero geometry targets, and zero console warnings/errors.
 - Browser evidence is stored outside Git at
   `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-11-phase8m-pointer-release\rejected-drop-next-field-editable.png`.
+
+#### Adaptive free-interval dragging follow-up
+
+Status: implemented and locally verified; production deployment and live
+browser proof are pending.
+
+- Design-mode field surfaces disable native text selection only while they are
+  directly draggable. Opening the inline editor restores normal text
+  selection and removes the grab cursor.
+- A moved field now targets the nearest free horizontal interval under the
+  pointer. If the interval is narrower than the field, only the moved field is
+  reduced to the largest supported width (`9`, `6`, or `3` columns) that fits;
+  existing fields keep their saved geometry.
+- A fully occupied row remains unavailable, but it no longer traps movement.
+  Pointer and keyboard movement search in the real vertical direction and can
+  place the field in the first free row above or below it.
+- The resolver carries the actual horizontal and vertical movement direction.
+  Repeated pointer events at the same occupied row therefore keep one stable
+  preview instead of alternating between rows.
+- Out-of-grid movement keeps the last valid preview and boundary error; a
+  clamped coordinate cannot trigger an adaptive placement or overlap.
+- The focused renderer/geometry suites pass all 79 cases. The regressions
+  cover text-selection suppression, adaptive shrink without changing the
+  obstacle, preference for the narrow interval under the pointer, stable
+  repeated movement, full-row traversal in both directions, and rejected
+  boundary/collision drops.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `228 passed / 195 skipped`, frontend
+  `243 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  TypeScript, production build, and project-map checks are green. The existing
+  Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
+  The verified local bundle is `index-Druk2Pxs.js` (`562.28 kB`, `160.54 kB`
+  gzip) with `index-Cl9DldkN.css`.

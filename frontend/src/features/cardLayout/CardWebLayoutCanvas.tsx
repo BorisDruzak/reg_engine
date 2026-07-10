@@ -18,7 +18,7 @@ import type {
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
 import { LayoutLivePreview } from "./LayoutLivePreview";
-import { rectsOverlap, snapQuarterRect } from "./layoutGeometry";
+import { QUARTER_COLUMN_SPANS, rectsOverlap, snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect } from "./layoutGeometry";
 import { applyLayoutGeometryPreview, useLayoutGeometrySession } from "./useLayoutGeometrySession";
 import type {
@@ -119,8 +119,21 @@ function CardWebLayoutCanvasSession({
     [layout],
   );
   const resolveGeometry = useCallback(
-    (session: LayoutGeometrySession, previous: LayoutGeometrySession | null) =>
-      resolveFieldMove(layout, session, previous),
+    (
+      session: LayoutGeometrySession,
+      previous: LayoutGeometrySession | null,
+      boundaryReason: string | null,
+      verticalDirection: number,
+      horizontalDirection: number,
+    ) =>
+      resolveFieldMove(
+        layout,
+        session,
+        previous,
+        boundaryReason,
+        verticalDirection,
+        horizontalDirection,
+      ),
     [layout],
   );
   const handleGeometryCommit = useCallback(
@@ -310,9 +323,19 @@ function resolveFieldMove(
   layout: CardTemplateLayoutRead,
   session: LayoutGeometrySession,
   previous: LayoutGeometrySession | null,
+  boundaryReason: string | null,
+  verticalDirection: number,
+  horizontalDirection: number,
 ): LayoutGeometryResolution {
   if (session.targetKind !== "field" || session.operation !== "move") {
     return { session };
+  }
+  const lastPreview =
+    previous?.targetId === session.targetId && previous.targetKind === session.targetKind
+      ? previous.preview
+      : session.original;
+  if (boundaryReason) {
+    return { session: { ...session, preview: lastPreview } };
   }
   const owner = layout.form_layout.sections.find((section) =>
     section.items.some((item) => item.id === session.targetId),
@@ -324,11 +347,12 @@ function resolveFieldMove(
   if (!obstacles.some((obstacle) => rectsOverlap(session.preview, obstacle))) {
     return { session };
   }
-  const lastPreview =
-    previous?.targetId === session.targetId && previous.targetKind === session.targetKind
-      ? previous.preview
-      : session.original;
-  const availablePlacement = nearestAvailablePlacement(session.preview, lastPreview, obstacles);
+  const availablePlacement = nearestAvailablePlacement(
+    session.preview,
+    verticalDirection,
+    horizontalDirection,
+    obstacles,
+  );
   if (availablePlacement) {
     return {
       session: {
@@ -345,40 +369,132 @@ function resolveFieldMove(
 
 function nearestAvailablePlacement(
   preview: LayoutRect,
-  previous: LayoutRect,
+  verticalDirection: number,
+  horizontalDirection: number,
   obstacles: LayoutRect[],
 ): LayoutRect | null {
-  const sameRowColumn = nearestAvailableColumn(preview, obstacles);
-  if (sameRowColumn !== null) {
-    return { ...preview, column: sameRowColumn };
+  const sameRowPlacement = nearestAvailableRect(preview, obstacles, horizontalDirection);
+  if (sameRowPlacement) {
+    return sameRowPlacement;
   }
-  const direction = Math.sign(preview.row - previous.row);
+  const direction = Math.sign(verticalDirection);
   if (direction === 0) {
     return null;
   }
   const maximumRow = 4 - preview.rowSpan + 1;
   for (let row = preview.row + direction; row >= 1 && row <= maximumRow; row += direction) {
     const candidate = { ...preview, row };
-    const column = nearestAvailableColumn(candidate, obstacles);
-    if (column !== null) {
-      return { ...candidate, column };
+    const placement = nearestAvailableRect(candidate, obstacles, horizontalDirection);
+    if (placement) {
+      return placement;
     }
   }
   return null;
 }
 
-function nearestAvailableColumn(preview: LayoutRect, obstacles: LayoutRect[]) {
-  const maximumColumn = 12 - preview.columnSpan + 1;
-  const candidates = Array.from({ length: maximumColumn }, (_, index) => index + 1).sort(
-    (left, right) =>
-      Math.abs(left - preview.column) - Math.abs(right - preview.column) || left - right,
+function nearestAvailableRect(
+  preview: LayoutRect,
+  obstacles: LayoutRect[],
+  horizontalDirection: number,
+) {
+  const intervals = freeColumnIntervals(preview, obstacles).filter(
+    (interval) => interval.end - interval.start + 1 >= QUARTER_COLUMN_SPANS[0],
   );
-  return (
-    candidates.find((column) => {
-      const candidate = { ...preview, column };
-      return obstacles.every((obstacle) => !rectsOverlap(candidate, obstacle));
-    }) ?? null
-  );
+  const previewEnd = preview.column + preview.columnSpan - 1;
+  const previewCenter = (preview.column + previewEnd) / 2;
+  intervals.sort((left, right) => {
+    const overlapDifference =
+      intervalOverlap(right, preview.column, previewEnd) -
+      intervalOverlap(left, preview.column, previewEnd);
+    if (overlapDifference !== 0) {
+      return overlapDifference;
+    }
+    const distanceDifference =
+      intervalDistance(left, preview.column, previewEnd) -
+      intervalDistance(right, preview.column, previewEnd);
+    if (distanceDifference !== 0) {
+      return distanceDifference;
+    }
+    const directionDifference =
+      intervalDirectionPenalty(left, previewCenter, horizontalDirection) -
+      intervalDirectionPenalty(right, previewCenter, horizontalDirection);
+    if (directionDifference !== 0) {
+      return directionDifference;
+    }
+    return right.end - right.start - (left.end - left.start) || left.start - right.start;
+  });
+  const interval = intervals[0];
+  if (!interval) {
+    return null;
+  }
+  const intervalWidth = interval.end - interval.start + 1;
+  const columnSpan = [...QUARTER_COLUMN_SPANS]
+    .reverse()
+    .find((span) => span <= preview.columnSpan && span <= intervalWidth);
+  if (!columnSpan) {
+    return null;
+  }
+  const column = Math.min(interval.end - columnSpan + 1, Math.max(interval.start, preview.column));
+  return { ...preview, column, columnSpan };
+}
+
+type FreeColumnInterval = { start: number; end: number };
+
+function freeColumnIntervals(preview: LayoutRect, obstacles: LayoutRect[]) {
+  const occupied = Array.from({ length: 12 }, () => false);
+  for (const obstacle of obstacles) {
+    const rowsOverlap =
+      preview.row < obstacle.row + obstacle.rowSpan && obstacle.row < preview.row + preview.rowSpan;
+    if (!rowsOverlap) {
+      continue;
+    }
+    for (
+      let column = obstacle.column;
+      column < obstacle.column + obstacle.columnSpan;
+      column += 1
+    ) {
+      occupied[column - 1] = true;
+    }
+  }
+  const intervals: FreeColumnInterval[] = [];
+  let start: number | null = null;
+  for (let index = 0; index <= occupied.length; index += 1) {
+    if (index < occupied.length && !occupied[index]) {
+      start ??= index + 1;
+      continue;
+    }
+    if (start !== null) {
+      intervals.push({ start, end: index });
+      start = null;
+    }
+  }
+  return intervals;
+}
+
+function intervalOverlap(interval: FreeColumnInterval, start: number, end: number) {
+  return Math.max(0, Math.min(interval.end, end) - Math.max(interval.start, start) + 1);
+}
+
+function intervalDistance(interval: FreeColumnInterval, start: number, end: number) {
+  if (interval.end < start) {
+    return start - interval.end;
+  }
+  if (interval.start > end) {
+    return interval.start - end;
+  }
+  return 0;
+}
+
+function intervalDirectionPenalty(
+  interval: FreeColumnInterval,
+  previewCenter: number,
+  horizontalDirection: number,
+) {
+  if (horizontalDirection === 0) {
+    return 0;
+  }
+  const intervalCenter = (interval.start + interval.end) / 2;
+  return Math.sign(intervalCenter - previewCenter) === Math.sign(horizontalDirection) ? 0 : 1;
 }
 
 function toLayoutRect(rect: {

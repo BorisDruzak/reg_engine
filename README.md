@@ -69,9 +69,12 @@ Target system:
   saved again.
 - Mouse pointer capture supports moving and eight-direction resizing. Fields
   open their inline editor on click or Enter/Space, move after a six-pixel
-  hold-and-drag threshold, and resize from unobtrusive edge/corner zones; no
-  separate field edit or move buttons are rendered. Arrow keys move the active
-  item and `Shift + стрелки` resizes it. `Готово` commits one geometry command,
+  hold-and-drag threshold without selecting text, and resize from unobtrusive
+  edge/corner zones; no separate field edit or move buttons are rendered. A
+  moved field uses the nearest free interval, shrinks only itself when that
+  interval is narrower, and can pass a fully occupied row to the first free row
+  above or below. Arrow keys move the active item and `Shift + стрелки` resizes
+  it. `Готово` commits one geometry command,
   while `Escape` or `Отмена` restores the starting rectangle. Undo and redo
   operate on the same revision-safe save path.
 - Block and field creation, insertion, and editing are disclosed in context

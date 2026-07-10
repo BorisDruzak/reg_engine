@@ -90,10 +90,14 @@ export function CardFieldLayoutNode({
     selection?.kind === "field" &&
     selection.id === nodeId;
   const blockValueEditing = mode === "block-edit" && valueEditing && Boolean(onFieldValueChange);
+  const directInteraction =
+    designMode && Boolean(onCommitField) && !schemaEditing && !blockValueEditing;
   const style: CSSProperties = {
     gridColumn: `${item.column} / span ${item.column_span}`,
     gridRow: `${item.row} / span ${item.row_span}`,
     position: "relative",
+    userSelect: directInteraction ? "none" : undefined,
+    WebkitUserSelect: directInteraction ? "none" : undefined,
   };
   const geometryTargetDescriptor: LayoutGeometryTarget = {
     targetId: item.id,
@@ -222,7 +226,7 @@ export function CardFieldLayoutNode({
 
   return (
     <article
-      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${designMode && onCommitField ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}`}
+      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}`}
       data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
       tabIndex={designMode && onCommitField ? 0 : undefined}

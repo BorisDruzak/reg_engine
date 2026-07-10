@@ -59,6 +59,9 @@ type UseLayoutGeometrySessionOptions = {
   resolve?: (
     session: LayoutGeometrySession,
     previous: LayoutGeometrySession | null,
+    boundaryReason: string | null,
+    verticalDirection: number,
+    horizontalDirection: number,
   ) => LayoutGeometryResolution;
   validate: (session: LayoutGeometrySession) => string | null;
 };
@@ -81,9 +84,20 @@ export function useLayoutGeometrySession({
   const pointerRef = useRef<PointerCaptureSession | null>(null);
 
   const publish = useCallback(
-    (nextSession: LayoutGeometrySession, nextBoundaryReason: string | null = null) => {
+    (
+      nextSession: LayoutGeometrySession,
+      nextBoundaryReason: string | null = null,
+      verticalDirection = 0,
+      horizontalDirection = 0,
+    ) => {
       const resolution = resolve
-        ? resolve(nextSession, sessionRef.current)
+        ? resolve(
+            nextSession,
+            sessionRef.current,
+            nextBoundaryReason,
+            verticalDirection,
+            horizontalDirection,
+          )
         : { session: nextSession };
       const resolvedBoundaryReason = nextBoundaryReason ?? resolution.invalidReason ?? null;
       sessionRef.current = resolution.session;
@@ -247,6 +261,8 @@ export function useLayoutGeometrySession({
         publish(
           nextSession,
           isMoveOutOfGrid(pointer.base, requestedColumn, requestedRow) ? OUT_OF_GRID_MESSAGE : null,
+          Math.sign(requestedRow - pointer.base.row),
+          Math.sign(requestedColumn - pointer.base.column),
         );
         return;
       }
@@ -375,6 +391,8 @@ export function useLayoutGeometrySession({
           preview: moveRect(base.preview, requestedColumn, requestedRow),
         },
         isMoveOutOfGrid(base.preview, requestedColumn, requestedRow) ? OUT_OF_GRID_MESSAGE : null,
+        direction.row,
+        direction.column,
       );
     },
     [publish],

@@ -650,6 +650,19 @@ describe("CardWebLayoutCanvas", () => {
     expect(within(fieldNode).getByLabelText("Название поля")).toBeInTheDocument();
   });
 
+  test("prevents native text selection on the field drag surface", async () => {
+    const user = userEvent.setup();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    expect(fieldNode).toHaveStyle({ userSelect: "none" });
+
+    await user.click(fieldNode);
+
+    expect(within(fieldNode).getByLabelText("Название поля")).toBeInTheDocument();
+    expect(fieldNode.style.userSelect).toBe("");
+  });
+
   test("starts a field surface drag only after the six pixel threshold", () => {
     const onGeometryCommit = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
@@ -787,6 +800,129 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
+  test("shrinks only the moved field to the largest free width in the target row", () => {
+    const onGeometryCommit = vi.fn();
+    const narrowGapLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 2,
+                column: 1,
+                row_span: 1,
+                column_span: 9,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(<CardWebLayoutCanvas {...canvasProps({ layout: narrowGapLayout, onGeometryCommit })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const occupiedFieldNode = screen.getByTestId("layout-field-field-active");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 127, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 127, clientX: 0, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "10 / span 3",
+      gridRow: "2 / span 1",
+    });
+    expect(occupiedFieldNode).toHaveStyle({
+      gridColumn: "1 / span 9",
+      gridRow: "2 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 127, clientX: 0, clientY: 100 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 2, column: 10, rowSpan: 1, columnSpan: 3 },
+    });
+  });
+
+  test("prefers the narrow free interval under the pointer over the field's old space", () => {
+    const onGeometryCommit = vi.fn();
+    const sameRowGapLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 1,
+                column: 7,
+                row_span: 1,
+                column_span: 3,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas {...canvasProps({ layout: sameRowGapLayout, onGeometryCommit })} />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const occupiedFieldNode = screen.getByTestId("layout-field-field-active");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 100);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 129, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 129, clientX: 600, clientY: 0 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "10 / span 3",
+      gridRow: "1 / span 1",
+    });
+    expect(occupiedFieldNode).toHaveStyle({
+      gridColumn: "7 / span 3",
+      gridRow: "1 / span 1",
+    });
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 129, clientX: 600, clientY: 0 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 1, column: 10, rowSpan: 1, columnSpan: 3 },
+    });
+  });
+
   test("moves an upper field below a fully occupied intermediate row", () => {
     const onGeometryCommit = vi.fn();
     const fullRowField: FormFieldRead = {
@@ -864,12 +1000,79 @@ describe("CardWebLayoutCanvas", () => {
     expect(fieldGrid!.style.minHeight).toBe("9rem");
     expect(screen.getByRole("status")).toHaveClass("is-valid");
 
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 126, clientX: 0, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "3 / span 1",
+    });
+
     dispatchPointer(fieldNode, "pointerup", { pointerId: 126, clientX: 0, clientY: 100 });
 
     expect(onGeometryCommit).toHaveBeenCalledWith({
       target: { id: fields[0].id, kind: "field" },
       before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
       after: { row: 3, column: 1, rowSpan: 1, columnSpan: 6 },
+    });
+  });
+
+  test("moves a lower field above a fully occupied intermediate row", () => {
+    const onGeometryCommit = vi.fn();
+    const layoutWithFullIntermediateRow: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 4,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 3,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({ layout: layoutWithFullIntermediateRow, onGeometryCommit })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 400);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 128, clientX: 0, clientY: 300 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 128, clientX: 0, clientY: 200 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "2 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 128, clientX: 0, clientY: 200 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 4, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 2, column: 1, rowSpan: 1, columnSpan: 6 },
     });
   });
 
