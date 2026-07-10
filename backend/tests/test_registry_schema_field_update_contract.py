@@ -11,6 +11,17 @@ from app.schemas.registries import FormBlockUpdate, FormFieldUpdate
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
 
+@pytest.fixture(autouse=True)
+def _isolate_schema_contract_tests_from_card_lifecycle_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        RegistrySchemaService,
+        "_synchronize_card_lifecycles",
+        lambda _self, *, registry_id, actor_user_id: None,
+    )
+
+
 def _field(*, block_id):
     return FormField(
         id=uuid4(),

@@ -3,8 +3,9 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
-from uuid import UUID
+from types import SimpleNamespace
+from typing import Any, cast
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -39,6 +40,49 @@ from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
+
+
+class _FlushOnlySession:
+    def flush(self) -> None:
+        pass
+
+
+def test_automatic_lifecycle_marks_complete_card_active_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CardService(cast(Session, _FlushOnlySession()))
+    monkeypatch.setattr(
+        service,
+        "_missing_required_field_labels",
+        lambda _card, *, include_publish_required: [] if include_publish_required else [],
+        raising=False,
+    )
+    card = SimpleNamespace(id=uuid4(), lifecycle_status="draft")
+
+    changed = service.synchronize_card_lifecycle(card, audit_transition=False)
+
+    assert changed is True
+    assert card.lifecycle_status == "active"
+
+
+def test_automatic_lifecycle_marks_incomplete_active_card_draft_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CardService(cast(Session, _FlushOnlySession()))
+    monkeypatch.setattr(
+        service,
+        "_missing_required_field_labels",
+        lambda _card, *, include_publish_required: (
+            ["Обязательное поле"] if include_publish_required else []
+        ),
+        raising=False,
+    )
+    card = SimpleNamespace(id=uuid4(), lifecycle_status="active")
+
+    changed = service.synchronize_card_lifecycle(card, audit_transition=False)
+
+    assert changed is True
+    assert card.lifecycle_status == "draft"
 
 
 def _require_test_database_url() -> str:
@@ -1026,7 +1070,156 @@ def test_required_field_mode_is_saved_and_enforced_on_bulk_save(db_session: Sess
     assert saved[0].value_text == "filled"
 
 
-def test_card_activation_validates_publish_required_fields(db_session: Session) -> None:
+def test_card_without_mandatory_fields_is_active_after_creation(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Complete by default",
+    )
+
+    assert card.lifecycle_status == "active"
+
+
+def test_new_mandatory_schema_field_recalculates_existing_card_lifecycle(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Existing complete card",
+    )
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="new_mandatory_block",
+        title="New mandatory block",
+    )
+
+    assert card.lifecycle_status == "active"
+
+    schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="new_mandatory_field",
+        label="New mandatory field",
+        field_type="text",
+        required_mode="required_on_publish",
+    )
+
+    assert card.lifecycle_status == "draft"
+
+
+def test_publish_required_field_drives_automatic_draft_active_draft_lifecycle(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="automatic_lifecycle",
+        title="Automatic lifecycle",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="mandatory_text",
+        label="Mandatory text",
+        field_type="text",
+        required_mode="required_on_publish",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Automatic lifecycle card",
+    )
+
+    assert card.lifecycle_status == "draft"
+
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="filled",
+    )
+    assert card.lifecycle_status == "active"
+
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="",
+    )
+    assert card.lifecycle_status == "draft"
+
+    lifecycle_events = list(
+        db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.object_type == "card",
+                AuditEvent.object_id == card.id,
+                AuditEvent.action == "lifecycle_sync",
+            )
+        ).all()
+    )
+    assert [event.new_data_json["lifecycle_status"] for event in lifecycle_events] == [
+        "active",
+        "draft",
+    ]
+
+
+def test_incomplete_required_card_can_save_other_draft_values(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="incremental_draft",
+        title="Incremental draft",
+    )
+    schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="required_text",
+        label="Required text",
+        field_type="text",
+        required_mode="required",
+    )
+    optional_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="optional_text",
+        label="Optional text",
+        field_type="text",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Incremental draft card",
+    )
+
+    saved = card_service.set_field_values_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        values=[BulkFieldValueInput(field_id=optional_field.id, value="partial")],
+    )
+
+    assert saved[0].value_text == "partial"
+    assert card.lifecycle_status == "draft"
+
+
+def test_manual_lifecycle_update_cannot_override_required_field_completeness(
+    db_session: Session,
+) -> None:
     context = _phase_1d_context(db_session)
     schema_service = RegistrySchemaService(db_session)
     card_service = CardService(db_session)
@@ -1051,12 +1244,12 @@ def test_card_activation_validates_publish_required_fields(db_session: Session) 
         display_name="Publish card",
     )
 
-    with pytest.raises(InvalidFieldValueError, match="Publish text"):
-        card_service.update_card_for_actor(
-            actor_user_id=context["org_admin"].id,
-            card_id=card.id,
-            lifecycle_status="active",
-        )
+    incomplete = card_service.update_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        lifecycle_status="active",
+    )
+    assert incomplete.lifecycle_status == "draft"
 
     card_service.set_field_values_for_actor(
         actor_user_id=context["org_admin"].id,
@@ -1065,10 +1258,12 @@ def test_card_activation_validates_publish_required_fields(db_session: Session) 
             BulkFieldValueInput(field_id=field.id, value="ready"),
         ],
     )
+    assert card.lifecycle_status == "active"
+
     updated = card_service.update_card_for_actor(
         actor_user_id=context["org_admin"].id,
         card_id=card.id,
-        lifecycle_status="active",
+        lifecycle_status="draft",
     )
 
     assert updated.lifecycle_status == "active"

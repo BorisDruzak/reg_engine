@@ -638,6 +638,10 @@ class RegistrySchemaService:
             registry_id=block.registry_id,
             actor_user_id=actor_user_id,
         )
+        self._synchronize_card_lifecycles(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
         return block
 
     def create_field_for_actor(
@@ -723,6 +727,10 @@ class RegistrySchemaService:
             },
         )
         self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
+        self._synchronize_card_lifecycles(
             registry_id=block.registry_id,
             actor_user_id=actor_user_id,
         )
@@ -915,6 +923,10 @@ class RegistrySchemaService:
             registry_id=block.registry_id,
             actor_user_id=actor_user_id,
         )
+        self._synchronize_card_lifecycles(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
         return field
 
     def archive_field_for_actor(
@@ -938,6 +950,10 @@ class RegistrySchemaService:
             object_id=field.id,
         )
         self.ensure_base_card_template_for_registry(
+            registry_id=block.registry_id,
+            actor_user_id=actor_user_id,
+        )
+        self._synchronize_card_lifecycles(
             registry_id=block.registry_id,
             actor_user_id=actor_user_id,
         )
@@ -1112,6 +1128,10 @@ class RegistrySchemaService:
                 "is_active": template.is_active,
             },
         )
+        self._synchronize_card_lifecycles(
+            registry_id=template.registry_id,
+            actor_user_id=actor_user_id,
+        )
         return template
 
     def archive_card_template_for_actor(
@@ -1136,6 +1156,19 @@ class RegistrySchemaService:
             object_id=template.id,
         )
         return template
+
+    def _synchronize_card_lifecycles(
+        self,
+        *,
+        registry_id: UUID,
+        actor_user_id: UUID,
+    ) -> None:
+        from app.services.cards import CardService
+
+        CardService(self.session).synchronize_registry_card_lifecycles(
+            registry_id=registry_id,
+            actor_user_id=actor_user_id,
+        )
 
     def _require_schema_permission(self, actor_user_id: UUID, registry_id: UUID) -> None:
         permissions = PermissionService(self.session)

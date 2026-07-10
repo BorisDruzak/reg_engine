@@ -177,6 +177,7 @@ class CardService:
                 "registry_id": str(registry_id),
                 "organization_id": str(organization_id),
                 "card_template_id": str(card.card_template_id),
+                "lifecycle_status": card.lifecycle_status,
             },
         )
         return card
@@ -243,6 +244,11 @@ class CardService:
         self.session.flush()
         if template is not None and apply_template_defaults:
             self._apply_card_template_defaults(card, template, actor_user_id=created_by)
+        self.synchronize_card_lifecycle(
+            card,
+            actor_user_id=created_by,
+            audit_transition=False,
+        )
         return card
 
     def list_visible_cards(
@@ -583,6 +589,7 @@ class CardService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
+        synchronize_lifecycle: bool = True,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -625,6 +632,8 @@ class CardService:
             object_id=field_value.id,
             new_data_json={"card_id": str(card.id), "field_id": str(field_model.id)},
         )
+        if synchronize_lifecycle:
+            self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return field_value
 
     def set_field_values_for_actor(
@@ -643,10 +652,11 @@ class CardService:
                     field_id=item.field_id,
                     value=item.value,
                     block_instance_id=item.block_instance_id,
+                    synchronize_lifecycle=False,
                 )
                 for item in values
             ]
-            self._validate_required_fields_for_card(card, include_publish_required=False)
+            self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return field_values
 
     def validate_field_value_for_actor(
@@ -735,6 +745,10 @@ class CardService:
         )
         self._apply_assignment(field_value, assignment, actor_user_id=None)
         self.session.flush()
+        self.synchronize_card_lifecycle(
+            card,
+            actor_public_link_id=actor_public_link_id,
+        )
         return field_value
 
     def update_card_for_actor(
@@ -769,15 +783,12 @@ class CardService:
         if update_org_unit:
             self._validate_org_unit_for_organization(org_unit_id, card.organization_id)
             card.org_unit_id = org_unit_id
-        if lifecycle_status is not None:
-            if lifecycle_status == "active":
-                self._validate_required_fields_for_card(card, include_publish_required=True)
-            card.lifecycle_status = lifecycle_status
         if public_view_enabled is not None:
             card.public_view_enabled = public_view_enabled
         if public_edit_enabled is not None:
             card.public_edit_enabled = public_edit_enabled
         card.updated_by = actor_user_id
+        self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -1054,6 +1065,7 @@ class CardService:
             object_id=block_instance.id,
             new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
         )
+        self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return block_instance
 
     def archive_block_instance_for_actor(
@@ -1090,6 +1102,7 @@ class CardService:
             object_id=block_instance.id,
             new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
         )
+        self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return block_instance
 
     def _require_card_permission(
@@ -1407,6 +1420,23 @@ class CardService:
         *,
         include_publish_required: bool,
     ) -> None:
+        missing_labels = self._missing_required_field_labels(
+            card,
+            include_publish_required=include_publish_required,
+        )
+        if missing_labels:
+            raise InvalidFieldValueError("Required fields are empty: " + ", ".join(missing_labels))
+
+    def _missing_required_field_labels(
+        self,
+        card: Card,
+        *,
+        include_publish_required: bool,
+    ) -> list[str]:
+        template = self.session.get(CardTemplate, card.card_template_id)
+        if template is None:
+            raise CardServiceError("Card template was not found.")
+        template_field_ids = self._template_field_ids(template)
         required_modes = {"required"}
         if include_publish_required:
             required_modes.add("required_on_publish")
@@ -1414,11 +1444,12 @@ class CardService:
         schema_rows = [
             (block, field_model)
             for block, field_model in self._active_schema_rows_for_registry(card.registry_id)
-            if field_model.required_mode in required_modes
+            if field_model.id in template_field_ids
+            and field_model.required_mode in required_modes
             and field_model.field_type != "static_text"
         ]
         if not schema_rows:
-            return
+            return []
 
         field_ids = [field_model.id for _, field_model in schema_rows]
         field_values = list(
@@ -1461,10 +1492,97 @@ class CardService:
             ):
                 missing_labels.append(field_model.label)
 
-        if missing_labels:
-            raise InvalidFieldValueError(
-                "Required fields are empty: " + ", ".join(sorted(set(missing_labels)))
+        return sorted(set(missing_labels))
+
+    def synchronize_card_lifecycle(
+        self,
+        card: Card,
+        *,
+        actor_user_id: UUID | None = None,
+        actor_public_link_id: UUID | None = None,
+        audit_transition: bool = True,
+    ) -> bool:
+        if card.lifecycle_status in {"archived", "superseded"}:
+            return False
+        missing_labels = self._missing_required_field_labels(
+            card,
+            include_publish_required=True,
+        )
+        next_status = "draft" if missing_labels else "active"
+        if next_status == card.lifecycle_status:
+            return False
+        old_status = card.lifecycle_status
+        card.lifecycle_status = next_status
+        self.session.flush()
+        if audit_transition:
+            self._record_lifecycle_transition(
+                card,
+                old_status=old_status,
+                actor_user_id=actor_user_id,
+                actor_public_link_id=actor_public_link_id,
             )
+        return True
+
+    def _record_lifecycle_transition(
+        self,
+        card: Card,
+        *,
+        old_status: str,
+        actor_user_id: UUID | None,
+        actor_public_link_id: UUID | None,
+    ) -> None:
+        event_data = {
+            "lifecycle_status": card.lifecycle_status,
+            "previous_lifecycle_status": old_status,
+        }
+        audit_service = AuditService(self.session)
+        if actor_public_link_id is not None:
+            audit_service.record_public_link_event(
+                actor_public_link_id=actor_public_link_id,
+                action="lifecycle_sync",
+                object_type="card",
+                object_id=card.id,
+                old_data_json={"lifecycle_status": old_status},
+                new_data_json=event_data,
+            )
+            return
+        if actor_user_id is not None:
+            audit_service.record_user_event(
+                actor_user_id=actor_user_id,
+                action="lifecycle_sync",
+                object_type="card",
+                object_id=card.id,
+                old_data_json={"lifecycle_status": old_status},
+                new_data_json=event_data,
+            )
+            return
+        audit_service.record_system_event(
+            action="lifecycle_sync",
+            object_type="card",
+            object_id=card.id,
+            old_data_json={"lifecycle_status": old_status},
+            new_data_json=event_data,
+        )
+
+    def synchronize_registry_card_lifecycles(
+        self,
+        *,
+        registry_id: UUID,
+        actor_user_id: UUID,
+    ) -> int:
+        cards = list(
+            self.session.scalars(
+                select(Card).where(
+                    Card.registry_id == registry_id,
+                    Card.lifecycle_status.in_(("draft", "active")),
+                )
+            ).all()
+        )
+        return sum(
+            1
+            for card in cards
+            if self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
+        )
 
     def _field_assignment_is_empty(self, assignment: _FieldAssignment) -> bool:
         if assignment.item_ids:

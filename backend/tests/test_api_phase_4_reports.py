@@ -699,7 +699,7 @@ def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
     assert len(rows) == 1
     assert rows[0]["id"] == str(context["child_card"].id)
     assert rows[0]["display_name"] == "Visible report card"
-    assert rows[0]["lifecycle_status"] == "draft"
+    assert rows[0]["lifecycle_status"] == "active"
     assert "Hidden sibling report card" not in csv_text
 
     audit_actions = set(
@@ -943,7 +943,7 @@ def test_xlsx_registry_report_runs_are_scoped_stored_and_downloadable(
     )
     assert rows[1][0] == str(context["child_card"].id)
     assert rows[1][4] == "Visible report card"
-    assert rows[1][5] == "draft"
+    assert rows[1][5] == "active"
     flattened = "\n".join(str(cell) for row in rows for cell in row if cell is not None)
     assert "Hidden sibling report card" not in flattened
 
@@ -1154,7 +1154,7 @@ def test_registry_and_period_report_runs_are_scoped_stored_and_audited(
     assert period_payload["report_type"] == "period_summary"
     assert period_payload["summary_json"] == {
         "card_count": 1,
-        "lifecycle_status_counts": {"draft": 1},
+        "lifecycle_status_counts": {"active": 1},
     }
 
     audit_actions = set(
