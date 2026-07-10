@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-10 08:58:00 +05:00
+- Generated: 2026-07-10 14:53:13 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -198,6 +198,7 @@
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`
 - `docs/superpowers/plans/2026-07-02-card-organization-tag-search.md`
 - `docs/superpowers/plans/2026-07-02-card-unified-tag-search.md`
+- `docs/superpowers/plans/2026-07-10-card-workspace-quality-repair.md`
 - `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
@@ -249,6 +250,7 @@
 - `frontend/src/features/cardLayout/LayoutLivePreview.tsx`
 - `frontend/src/features/cardLayout/useLayoutGeometrySession.ts`
 - `frontend/src/features/cards/.gitkeep`
+- `frontend/src/features/cards/BlockFieldControl.tsx`
 - `frontend/src/features/cards/CardAttachmentsPanel.tsx`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
@@ -256,7 +258,10 @@
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.test.ts`
 - `frontend/src/features/cards/fieldEditorUtils.ts`
+- `frontend/src/features/cards/FilledCardLayout.test.tsx`
+- `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
 - `frontend/src/features/overview/Overview.tsx`

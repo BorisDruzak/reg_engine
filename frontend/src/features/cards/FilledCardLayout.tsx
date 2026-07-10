@@ -45,11 +45,15 @@ export type FilledCardFileRefControlContext = {
   readValue: ReactNode;
 };
 
+export type FilledCardBlockInstanceRead = CardBlockInstanceRead & {
+  block_id: string;
+};
+
 export type FilledCardLayoutProps = {
   layout: CardTemplateLayoutRead;
   blocks: FormBlockRead[];
   fields: FormFieldRead[];
-  blockInstances: CardBlockInstanceRead[];
+  blockInstances: FilledCardBlockInstanceRead[];
   values: FieldValueRead[];
   editableFieldIds: ReadonlySet<string>;
   activeBlock?: { blockId: string; blockInstanceId: string | null } | null;
@@ -61,7 +65,8 @@ export type FilledCardLayoutProps = {
 
 type FilledCardSurface = {
   key: string;
-  blockInstanceId: string | null;
+  surfaceInstanceId: string | null;
+  blockInstanceIds: ReadonlyMap<string, string | null>;
   instanceOrdinal: number | null;
   layout: CardTemplateLayoutRead;
 };
@@ -81,8 +86,8 @@ export function FilledCardLayout({
 }: FilledCardLayoutProps) {
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const surfaces = useMemo(
-    () => buildSurfaces(layout, blocks, fieldsById, blockInstances),
-    [blockInstances, blocks, fieldsById, layout],
+    () => buildSurfaces(layout, blocks, blockInstances),
+    [blockInstances, blocks, layout],
   );
   const valuesByInstance = useMemo(
     () => buildValuesByInstance(blockInstances, values),
@@ -104,7 +109,9 @@ export function FilledCardLayout({
       const clickedSurface = event.target.closest<HTMLElement>("[data-filled-card-instance]");
       if (
         clickedBlock?.dataset.layoutBlockId === activeTarget.blockId &&
-        clickedSurface?.dataset.filledCardInstance === (activeTarget.blockInstanceId ?? "primary")
+        (clickedSurface?.dataset.filledCardInstance === "primary" ||
+          clickedSurface?.dataset.filledCardInstance ===
+            (activeTarget.blockInstanceId ?? "primary"))
       ) {
         return;
       }
@@ -133,19 +140,23 @@ export function FilledCardLayout({
         }}
       >
         {surfaces.map((surface) => {
-          const surfaceValues =
-            valuesByInstance.get(instanceKey(surface.blockInstanceId)) ?? new Map();
           const fieldValues = Object.fromEntries(
-            fields.map((field) => [field.id, surfaceValues.get(field.id)]),
+            fields.map((field) => [field.id, surfaceFieldValue(surface, field, valuesByInstance)]),
           );
           const renderedValues = Object.fromEntries(
             fields.map((field) => [
               field.id,
-              renderReadValue(field, surfaceValues.get(field.id), referenceOptions[field.id] ?? []),
+              renderReadValue(
+                field,
+                surfaceFieldValue(surface, field, valuesByInstance),
+                referenceOptions[field.id] ?? [],
+              ),
             ]),
           );
           const editorTarget =
-            blockEditor?.target?.blockInstanceId === surface.blockInstanceId
+            blockEditor?.target &&
+            surface.blockInstanceIds.get(blockEditor.target.blockId) ===
+              blockEditor.target.blockInstanceId
               ? blockEditor.target
               : null;
           const firstEditableId =
@@ -154,7 +165,8 @@ export function FilledCardLayout({
               : undefined;
           const surfaceActiveBlock = blockEditor
             ? editorTarget
-            : activeBlock?.blockInstanceId === surface.blockInstanceId
+            : activeBlock &&
+                surface.blockInstanceIds.get(activeBlock.blockId) === activeBlock.blockInstanceId
               ? activeBlock
               : null;
 
@@ -162,9 +174,11 @@ export function FilledCardLayout({
             <section
               key={surface.key}
               className={
-                surface.blockInstanceId ? "filled-card-repeatable-instance" : "filled-card-primary"
+                surface.surfaceInstanceId
+                  ? "filled-card-repeatable-instance"
+                  : "filled-card-primary"
               }
-              data-filled-card-instance={surface.blockInstanceId ?? "primary"}
+              data-filled-card-instance={surface.surfaceInstanceId ?? "primary"}
               aria-label={
                 surface.instanceOrdinal === null
                   ? "Основные данные карточки"
@@ -188,13 +202,11 @@ export function FilledCardLayout({
                 fieldValues={fieldValues}
                 responsive
                 showGeometryDiagnostics={false}
-                testIdPrefix={surface.blockInstanceId ? `filled-${surface.key}` : "filled"}
+                testIdPrefix={surface.surfaceInstanceId ? `filled-${surface.key}` : "filled"}
                 renderFieldValue={({ field, mode }) => {
-                  const readValue = renderReadValue(
-                    field,
-                    surfaceValues.get(field.id),
-                    referenceOptions[field.id] ?? [],
-                  );
+                  const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
+                  const value = surfaceFieldValue(surface, field, valuesByInstance);
+                  const readValue = renderReadValue(field, value, referenceOptions[field.id] ?? []);
                   if (
                     mode !== "block-edit" ||
                     !blockEditor ||
@@ -219,8 +231,8 @@ export function FilledCardLayout({
                         field.field_type === "file_ref" && editableFieldIds.has(field.id)
                           ? renderFileRefControl?.({
                               field,
-                              blockInstanceId: surface.blockInstanceId,
-                              value: surfaceValues.get(field.id),
+                              blockInstanceId,
+                              value,
                               readValue,
                             })
                           : undefined
@@ -245,8 +257,11 @@ export function FilledCardLayout({
                   ) {
                     return null;
                   }
+                  const blockInstanceId = surface.blockInstanceIds.get(block.id) ?? null;
+                  const blockValues =
+                    valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
                   const editorActive =
-                    blockEditor?.key === blockEditorKey(block.id, surface.blockInstanceId);
+                    blockEditor?.key === blockEditorKey(block.id, blockInstanceId);
                   if (editorActive && blockEditor) {
                     return (
                       <div className="row-actions filled-card-block-edit-actions">
@@ -282,11 +297,11 @@ export function FilledCardLayout({
                       className="ghost-button filled-card-edit-block"
                       aria-label={`Изменить блок ${block.title}`}
                       onClick={() => {
-                        onEditBlock?.(block.id, surface.blockInstanceId);
+                        onEditBlock?.(block.id, blockInstanceId);
                         blockEditor?.open(
                           block.id,
-                          surface.blockInstanceId,
-                          sectionValues(section, surfaceValues),
+                          blockInstanceId,
+                          sectionValues(section, blockValues),
                         );
                       }}
                     >
@@ -366,10 +381,15 @@ function firstEditableFieldId(layout: CardTemplateLayoutRead, editor: BlockEdito
 function buildSurfaces(
   layout: CardTemplateLayoutRead,
   blocks: FormBlockRead[],
-  fieldsById: ReadonlyMap<string, FormFieldRead>,
-  blockInstances: CardBlockInstanceRead[],
+  blockInstances: FilledCardBlockInstanceRead[],
 ): FilledCardSurface[] {
   const blocksById = new Map(blocks.map((block) => [block.id, block]));
+  const instancesByBlockId = new Map<string, FilledCardBlockInstanceRead[]>();
+  for (const instance of blockInstances) {
+    const instances = instancesByBlockId.get(instance.block_id) ?? [];
+    instances.push(instance);
+    instancesByBlockId.set(instance.block_id, instances);
+  }
   const primarySections = layout.form_layout.sections.filter(
     (section) => !section.block_id || !blocksById.get(section.block_id)?.is_repeatable,
   );
@@ -378,7 +398,14 @@ function buildSurfaces(
   if (primarySections.length > 0) {
     surfaces.push({
       key: "primary",
-      blockInstanceId: null,
+      surfaceInstanceId: null,
+      blockInstanceIds: new Map(
+        primarySections.flatMap((section) => {
+          if (!section.block_id) return [];
+          const instance = instancesByBlockId.get(section.block_id)?.[0];
+          return [[section.block_id, instance?.block_instance_id ?? null] as const];
+        }),
+      ),
       instanceOrdinal: null,
       layout: layoutWithSections(layout, primarySections),
     });
@@ -386,16 +413,16 @@ function buildSurfaces(
 
   for (const instance of blockInstances) {
     if (!instance.block_instance_id) continue;
-    const blockId = inferInstanceBlockId(instance, fieldsById);
-    const block = blockId ? blocksById.get(blockId) : null;
-    const section = blockId
-      ? layout.form_layout.sections.find((candidate) => candidate.block_id === blockId)
-      : null;
+    const block = blocksById.get(instance.block_id);
+    const section = layout.form_layout.sections.find(
+      (candidate) => candidate.block_id === instance.block_id,
+    );
     if (!block?.is_repeatable || !section) continue;
 
     surfaces.push({
       key: `instance-${instance.block_instance_id}`,
-      blockInstanceId: instance.block_instance_id,
+      surfaceInstanceId: instance.block_instance_id,
+      blockInstanceIds: new Map([[instance.block_id, instance.block_instance_id]]),
       instanceOrdinal: instance.ordinal,
       layout: {
         ...layoutWithSections(layout, [
@@ -426,18 +453,10 @@ function layoutWithSections(
   };
 }
 
-function inferInstanceBlockId(
-  instance: CardBlockInstanceRead,
-  fieldsById: ReadonlyMap<string, FormFieldRead>,
+function buildValuesByInstance(
+  blockInstances: FilledCardBlockInstanceRead[],
+  values: FieldValueRead[],
 ) {
-  for (const field of Object.values(instance.fields)) {
-    const schemaField = fieldsById.get(field.field_id);
-    if (schemaField) return schemaField.block_id;
-  }
-  return null;
-}
-
-function buildValuesByInstance(blockInstances: CardBlockInstanceRead[], values: FieldValueRead[]) {
   const result = new Map<string, Map<string, unknown>>();
   for (const instance of blockInstances) {
     const instanceValues = valueMap(result, instance.block_instance_id);
@@ -449,6 +468,15 @@ function buildValuesByInstance(blockInstances: CardBlockInstanceRead[], values: 
     valueMap(result, value.block_instance_id).set(value.field_id, value.value);
   }
   return result;
+}
+
+function surfaceFieldValue(
+  surface: FilledCardSurface,
+  field: FormFieldRead,
+  valuesByInstance: ReadonlyMap<string, ReadonlyMap<string, unknown>>,
+) {
+  const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
+  return valuesByInstance.get(instanceKey(blockInstanceId))?.get(field.id);
 }
 
 function valueMap(result: Map<string, Map<string, unknown>>, blockInstanceId: string | null) {

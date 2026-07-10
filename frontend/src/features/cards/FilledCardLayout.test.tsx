@@ -6,7 +6,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
 
 import type {
-  CardBlockInstanceRead,
   CardTemplateLayoutRead,
   FieldValueRead,
   FieldValuesBulkUpdatePayload,
@@ -14,7 +13,11 @@ import type {
   FormFieldRead,
 } from "@/api/types";
 
-import { FilledCardLayout, type FilledCardLayoutProps } from "./FilledCardLayout";
+import {
+  FilledCardLayout,
+  type FilledCardBlockInstanceRead,
+  type FilledCardLayoutProps,
+} from "./FilledCardLayout";
 import { useBlockEditor } from "./useBlockEditor";
 
 const globalStyles = readFileSync("src/styles/globals.css", "utf8");
@@ -198,15 +201,31 @@ const values: FieldValueRead[] = [
   value("related-card", "card-42"),
 ];
 
-const blockInstances: CardBlockInstanceRead[] = [
+const blockInstances: FilledCardBlockInstanceRead[] = [
   {
+    block_id: block.id,
     block_instance_id: null,
     ordinal: 0,
     fields: Object.fromEntries(
-      fields.map((item) => [
-        item.code,
-        { field_id: item.id, code: item.code, field_type: item.field_type, value: null },
-      ]),
+      fields
+        .filter((item) => item.block_id === block.id)
+        .map((item) => [
+          item.code,
+          { field_id: item.id, code: item.code, field_type: item.field_type, value: null },
+        ]),
+    ),
+  },
+  {
+    block_id: restrictedBlock.id,
+    block_instance_id: null,
+    ordinal: 0,
+    fields: Object.fromEntries(
+      fields
+        .filter((item) => item.block_id === restrictedBlock.id)
+        .map((item) => [
+          item.code,
+          { field_id: item.id, code: item.code, field_type: item.field_type, value: null },
+        ]),
     ),
   },
 ];
@@ -345,7 +364,7 @@ describe("FilledCardLayout", () => {
         ],
       },
     };
-    const repeatableInstances: CardBlockInstanceRead[] = [
+    const repeatableInstances: FilledCardBlockInstanceRead[] = [
       ...blockInstances,
       repeatableInstance("contact-instance-1", 0, "Первый контакт"),
       repeatableInstance("contact-instance-2", 1, "Второй контакт"),
@@ -433,6 +452,94 @@ describe("FilledCardLayout", () => {
     );
     expect(saveValues).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+  });
+
+  test("maps each non-repeatable block to its production UUID instance", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const openFileRef = vi.fn();
+    const productionInstances: FilledCardBlockInstanceRead[] = [
+      {
+        block_id: block.id,
+        block_instance_id: "fio-instance-uuid",
+        ordinal: 0,
+        fields: {
+          first_name: {
+            field_id: "first-name",
+            code: "first_name",
+            field_type: "text",
+            value: "Иван",
+          },
+          attachment: {
+            field_id: "attachment",
+            code: "attachment",
+            field_type: "file_ref",
+            value: {
+              attachment_id: "attachment-1",
+              title: "Заявление",
+              original_filename: "request.pdf",
+              archived_at: null,
+            },
+          },
+        },
+      },
+      {
+        block_id: restrictedBlock.id,
+        block_instance_id: "service-instance-uuid",
+        ordinal: 0,
+        fields: {
+          note: {
+            field_id: "note",
+            code: "note",
+            field_type: "text",
+            value: "Существующее примечание",
+          },
+        },
+      },
+    ];
+
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{
+          blockInstances: productionInstances,
+          values: [],
+          editableFieldIds: new Set(["first-name", "attachment"]),
+          renderFileRefControl: ({ field, blockInstanceId }) => (
+            <button type="button" onClick={() => openFileRef(field.id, blockInstanceId)}>
+              Выбрать вложение для поля «{field.label}»
+            </button>
+          ),
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("filled-field-first-name")).toHaveTextContent("Иван");
+    expect(screen.getByTestId("filled-field-note")).toHaveTextContent("Существующее примечание");
+    expect(screen.getByTestId("filled-field-attachment")).toHaveTextContent(
+      "Заявление (request.pdf)",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    const firstName = screen.getByLabelText("Имя");
+    expect(firstName).toHaveValue("Иван");
+    await user.click(screen.getByRole("button", { name: "Выбрать вложение для поля «Документ»" }));
+    expect(openFileRef).toHaveBeenCalledWith("attachment", "fio-instance-uuid");
+    await user.clear(firstName);
+    await user.type(firstName, "Пётр");
+    await user.click(screen.getByRole("button", { name: "Сохранить блок ФИО" }));
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [
+          {
+            field_id: "first-name",
+            value: "Пётр",
+            block_instance_id: "fio-instance-uuid",
+          },
+        ],
+      }),
+    );
   });
 
   test("uses the block editor target as the sole active state when the hook is supplied", async () => {
@@ -1011,8 +1118,9 @@ function repeatableInstance(
   blockInstanceId: string,
   ordinal: number,
   fieldValue: string,
-): CardBlockInstanceRead {
+): FilledCardBlockInstanceRead {
   return {
+    block_id: repeatableBlock.id,
     block_instance_id: blockInstanceId,
     ordinal,
     fields: {

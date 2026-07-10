@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -572,6 +572,8 @@ let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
 let reportTemplateItems: ReportTemplateRead[];
 let reportRunItems: ReportRunRead[];
 let cardCanManage: boolean;
+let primaryBlockInstanceId: string | null;
+let generatedContentInterceptor: ((url: string) => Promise<Response>) | null;
 
 beforeEach(() => {
   localStorage.clear();
@@ -617,6 +619,8 @@ beforeEach(() => {
   reportTemplateItems = [...apiPayloads.reportTemplates.items];
   reportRunItems = [];
   cardCanManage = true;
+  primaryBlockInstanceId = null;
+  generatedContentInterceptor = null;
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   vi.stubGlobal(
     "fetch",
@@ -1704,6 +1708,9 @@ beforeEach(() => {
         url.endsWith("/api/v1/generated-documents/abab1212-1212-4212-8212-121212121212/content") ||
         url.endsWith("/api/v1/generated-documents/cdcd5656-5656-4656-8656-565656565656/content")
       ) {
+        if (generatedContentInterceptor) {
+          return generatedContentInterceptor(url);
+        }
         const isDocx = url.includes("abab1212");
         return new Response(isDocx ? "docx-bytes" : "pdf-bytes", {
           status: 200,
@@ -2215,6 +2222,9 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")) {
         return jsonResponse(currentCardRead());
       }
+      if (url.endsWith("/api/v1/cards/bbbb2222-2222-4222-8222-222222222222")) {
+        return jsonResponse(currentCardRead("bbbb2222-2222-4222-8222-222222222222"));
+      }
       if (url.endsWith("/api/v1/audit-events?limit=20")) {
         if (denyAdminReadQueries) {
           return jsonResponse({ detail: "Forbidden" }, { status: 403 });
@@ -2254,7 +2264,7 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
       ...apiPayloads.cardRead.blocks.main,
       instances: [
         {
-          block_instance_id: null,
+          block_instance_id: primaryBlockInstanceId,
           ordinal: 0,
           fields: {
             status: {
@@ -2469,6 +2479,31 @@ async function openCardBlockEditor(
 ) {
   await user.click(await screen.findByRole("button", { name: `Изменить блок ${blockTitle}` }));
   return screen.findByRole("region", { name: `Блок ${blockTitle}` });
+}
+
+function addSecondCardFixture() {
+  cardItems = [
+    ...cardItems,
+    {
+      ...apiPayloads.cards.items[0],
+      id: "bbbb2222-2222-4222-8222-222222222222",
+      display_name: "Вторая карточка",
+      list_fields: [],
+    },
+  ];
+  cardValueStateById["bbbb2222-2222-4222-8222-222222222222"] = {
+    status: "second",
+    approved: false,
+    repeatableNotes: [],
+    fileRef: null,
+  };
+}
+
+async function openTwoCardEditors(user: ReturnType<typeof userEvent.setup>) {
+  await openExistingCardEditor(user);
+  await user.click(screen.getByRole("tab", { name: "Список карточек" }));
+  await user.dblClick(await screen.findByRole("button", { name: /Вторая карточка/ }));
+  await user.click(screen.getByRole("tab", { name: "Карточка актива" }));
 }
 
 async function openDefaultSchemaTemplateEditor(user: ReturnType<typeof userEvent.setup>) {
@@ -2787,7 +2822,9 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   schemaFieldItems = schemaFieldItems.map((field) =>
     field.id === "99999999-9999-4999-8999-999999999999"
       ? { ...field, required_mode: "required" }
-      : field,
+      : field.id === "99999999-9999-4999-8999-999999999998"
+        ? { ...field, required_mode: "required_on_publish" }
+        : field,
   );
   const user = userEvent.setup();
   render(<App />);
@@ -2814,7 +2851,7 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   expect(screen.getByRole("tab", { name: "Поля" })).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
   const actionPanel = screen.getByRole("group", { name: "Панель действий карточки" });
-  expect(within(actionPanel).getByText("Обязательные поля: 1 из 1 заполнено")).toBeInTheDocument();
+  expect(within(actionPanel).getByText("Обязательные поля: 2 из 2 заполнено")).toBeInTheDocument();
   expect(within(actionPanel).getByText("Публичные ссылки: 2 активны")).toBeInTheDocument();
   const docxButton = within(actionPanel).getByRole("button", { name: "Скачать DOCX" });
   const pdfButton = within(actionPanel).getByRole("button", { name: "Скачать PDF" });
@@ -2890,6 +2927,7 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
 
 test("renders card values without mutation controls for a read-only actor", async () => {
   enableFileRefSchema();
+  enableRepeatableDetailsSchema();
   cardCanManage = false;
   const user = userEvent.setup();
   render(<App />);
@@ -2905,6 +2943,29 @@ test("renders card values without mutation controls for a read-only actor", asyn
   ).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Сохранить Файл карточки" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Очистить файл" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Публичные ссылки" })).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Вложения" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Документы" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Печатная форма" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Активировать карточку Карточка актива" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Архивировать карточку Карточка актива" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Скачать DOCX" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Скачать PDF" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Добавить экземпляр блока Детали карточки" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Публичные ссылки:/)).not.toBeInTheDocument();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/public-links"),
+      ),
+  ).toBe(false);
   expect(
     vi
       .mocked(fetch)
@@ -2914,6 +2975,147 @@ test("renders card values without mutation controls for a read-only actor", asyn
           init?.method === "PATCH",
       ),
   ).toBe(false);
+});
+
+test("preserves and saves a non-repeatable block through its production UUID instance", async () => {
+  primaryBlockInstanceId = "eeee1111-1111-4111-8111-111111111111";
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openExistingCardEditor(user);
+
+  expect((await screen.findAllByText("drafted")).length).toBeGreaterThan(0);
+  const mainBlock = await openCardBlockEditor(user);
+  const status = within(mainBlock).getByLabelText("Статус");
+  expect(status).toHaveValue("drafted");
+  await user.clear(status);
+  await user.type(status, "published");
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
+
+  await waitFor(() => {
+    const updateCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([input, init]) =>
+          String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") &&
+          init?.method === "PATCH",
+      );
+    expect(updateCall).toBeTruthy();
+    const body = JSON.parse(String(updateCall?.[1]?.body ?? "{}")) as {
+      values: { field_id: string; value: unknown; block_instance_id: string | null }[];
+    };
+    expect(body.values).toContainEqual({
+      field_id: "99999999-9999-4999-8999-999999999999",
+      value: "published",
+      block_instance_id: "eeee1111-1111-4111-8111-111111111111",
+    });
+  });
+});
+
+test("refreshes list-display values after saving an inline block", async () => {
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.id === "99999999-9999-4999-8999-999999999999"
+      ? { ...field, is_list_display: true }
+      : field,
+  );
+  primaryBlockInstanceId = "eeee1111-1111-4111-8111-111111111111";
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openExistingCardEditor(user);
+
+  const mainBlock = await openCardBlockEditor(user);
+  const status = within(mainBlock).getByLabelText("Статус");
+  await user.clear(status);
+  await user.type(status, "published");
+  await user.click(within(mainBlock).getByRole("button", { name: "Сохранить блок Основной блок" }));
+  await user.click(screen.getByRole("tab", { name: "Список карточек" }));
+
+  expect(await screen.findByText(/Статус: published/)).toBeInTheDocument();
+});
+
+test("clears selected-card success feedback on a direct shell-card switch", async () => {
+  addSecondCardFixture();
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openTwoCardEditors(user);
+
+  await user.click(screen.getByRole("button", { name: "Скачать DOCX" }));
+  expect(await screen.findByText("DOCX печатной формы скачан")).toBeInTheDocument();
+  await user.click(screen.getByRole("tab", { name: "Вторая карточка" }));
+
+  expect(screen.queryByText("DOCX печатной формы скачан")).not.toBeInTheDocument();
+});
+
+test("clears selected-card mutation errors on a direct shell-card switch", async () => {
+  addSecondCardFixture();
+  generatedContentInterceptor = async () => jsonResponse({ detail: "Forbidden" }, { status: 403 });
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openTwoCardEditors(user);
+
+  await user.click(screen.getByRole("button", { name: "Скачать DOCX" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Действие недоступно");
+  await user.click(screen.getByRole("tab", { name: "Вторая карточка" }));
+
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+test("ignores late card mutation feedback after a direct shell-card switch", async () => {
+  addSecondCardFixture();
+  let resolveContent: ((response: Response) => void) | undefined;
+  let markRequested: (() => void) | undefined;
+  const requested = new Promise<void>((resolve) => {
+    markRequested = resolve;
+  });
+  generatedContentInterceptor = async () => {
+    markRequested?.();
+    return new Promise<Response>((resolve) => {
+      resolveContent = resolve;
+    });
+  };
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openTwoCardEditors(user);
+
+  await user.click(screen.getByRole("button", { name: "Скачать DOCX" }));
+  await requested;
+  await user.click(screen.getByRole("tab", { name: "Вторая карточка" }));
+  await act(async () => {
+    resolveContent?.(
+      new Response("docx-bytes", {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "X-Document-Filename": "card.docx",
+        },
+      }),
+    );
+  });
+  await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled());
+
+  expect(screen.queryByText("DOCX печатной формы скачан")).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Панель действий карточки" })).toHaveTextContent(
+    "Вторая карточка",
+  );
 });
 
 test("renders static text schema fields without sending them in block saves", async () => {

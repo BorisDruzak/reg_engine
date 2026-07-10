@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   archivePublicLink,
@@ -61,7 +61,7 @@ import { A4TemplateRenderer } from "@/features/registry/print/A4TemplateRenderer
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
-import { FilledCardLayout } from "./FilledCardLayout";
+import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
 import {
   type FieldEditorState,
@@ -84,13 +84,6 @@ const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
 ];
 
 type CardShellTab = "list" | `card:${string}`;
-
-type CardEditorPanelState = {
-  isDirty: boolean;
-  isPending: boolean;
-  error: string | null;
-  saved: boolean;
-};
 
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
 
@@ -143,6 +136,13 @@ export function CardsWorkspace({
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
+  const activeShellCardId = activeShellTab.startsWith("card:")
+    ? activeShellTab.slice("card:".length)
+    : null;
+  const activeCardIdRef = useRef<string | null>(activeShellCardId);
+  useEffect(() => {
+    activeCardIdRef.current = activeShellCardId;
+  }, [activeShellCardId]);
   const [cardForm, setCardForm] = useState<CardFormState>(() =>
     initialCreateCardForm(organizations),
   );
@@ -164,10 +164,12 @@ export function CardsWorkspace({
   const saveBlockValues = useCallback(
     async (payload: FieldValuesBulkUpdatePayload) => {
       if (!card) throw new Error(uiText.notFound);
-      await updateCardFieldValues(token, card.id, payload);
-      setSuccessMessage(uiText.cardFieldsSaved);
-      await queryClient.invalidateQueries({ queryKey: ["card", token, card.id] });
-      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
+      const cardId = card.id;
+      await updateCardFieldValues(token, cardId, payload);
+      await invalidateCardQueries(queryClient, token, card.registry_id, cardId);
+      if (activeCardIdRef.current === cardId) {
+        setSuccessMessage(uiText.cardFieldsSaved);
+      }
     },
     [card, queryClient, token],
   );
@@ -178,14 +180,6 @@ export function CardsWorkspace({
   });
   const cancelBlockEditor = blockEditor.cancel;
   useEffect(() => cancelBlockEditor(), [cancelBlockEditor, card?.id]);
-  const activeEditorState: CardEditorPanelState | null = card
-    ? {
-        isDirty: blockEditor.dirty,
-        isPending: blockEditor.pending,
-        error: Object.values(blockEditor.errors)[0] ?? null,
-        saved: successMessage === uiText.cardFieldsSaved,
-      }
-    : null;
   const fileRefFieldRows = useMemo(
     () => fieldRows.filter((field) => field.field.field_type === "file_ref"),
     [fieldRows],
@@ -223,7 +217,12 @@ export function CardsWorkspace({
     [referenceFields, referenceQueries],
   );
   const cardBlockInstances = useMemo(
-    () => (card ? Object.values(card.blocks).flatMap((block) => block.instances) : []),
+    (): FilledCardBlockInstanceRead[] =>
+      card
+        ? Object.values(card.blocks).flatMap((block) =>
+            block.instances.map((instance) => ({ ...instance, block_id: block.block_id })),
+          )
+        : [],
     [card],
   );
   const publicLinksQuery = useQuery({
@@ -232,12 +231,16 @@ export function CardsWorkspace({
       if (!card) throw new Error(uiText.notFound);
       return listPublicLinks(token, card.id);
     },
-    enabled: Boolean(token && card),
+    enabled: Boolean(token && card?.can_manage),
   });
   const completionLabel = cardCompletionLabel(fieldRows);
-  const publicLinksLabel = cardPublicLinksLabel(
-    publicLinksQuery.data?.items,
-    publicLinksQuery.error,
+  const publicLinksLabel = card?.can_manage
+    ? cardPublicLinksLabel(publicLinksQuery.data?.items, publicLinksQuery.error)
+    : null;
+  const availableCardWorkspaceTabs = useMemo(
+    () =>
+      card?.can_manage ? cardWorkspaceTabs : cardWorkspaceTabs.filter((tab) => tab.id !== "links"),
+    [card?.can_manage],
   );
   const visibleOpenCardIds = useMemo(
     () => openCardIds.filter((cardId) => cards.some((item) => item.id === cardId)),
@@ -300,42 +303,52 @@ export function CardsWorkspace({
       });
     },
     onSuccess: async (updated) => {
-      setSuccessMessage(uiText.cardActivated);
       await invalidateCardQueries(queryClient, token, updated.registry_id, updated.id);
+      if (activeCardIdRef.current === updated.id) {
+        setSuccessMessage(uiText.cardActivated);
+      }
     },
   });
   const archiveCardMutation = useMutation({
     mutationFn: (target: CardSummaryRead) => archiveCard(token, target.id),
     onSuccess: async (archived) => {
+      await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
+      if (activeCardIdRef.current !== archived.id) {
+        return;
+      }
       setSuccessMessage(uiText.cardArchived);
       setArchiveTarget(null);
       const nextCardId = cards.find((item) => item.id !== archived.id)?.id ?? "";
       setOpenCardIds((current) => current.filter((cardId) => cardId !== archived.id));
       setActiveShellTab("list");
+      activeCardIdRef.current = null;
       onSelectCard(nextCardId);
-      await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
     },
   });
   const createBlockInstanceMutation = useMutation({
-    mutationFn: (blockId: string) => {
+    mutationFn: async (blockId: string) => {
       if (!card) {
         throw new Error(uiText.notFound);
       }
-      return createCardBlockInstance(token, card.id, blockId);
+      const instance = await createCardBlockInstance(token, card.id, blockId);
+      return { instance, registryId: card.registry_id };
     },
-    onSuccess: async () => {
-      setSuccessMessage(uiText.blockInstanceCreated);
-      if (card) {
-        await invalidateCardQueries(queryClient, token, card.registry_id, card.id);
+    onSuccess: async ({ instance, registryId }) => {
+      await invalidateCardQueries(queryClient, token, registryId, instance.card_id);
+      if (activeCardIdRef.current === instance.card_id) {
+        setSuccessMessage(uiText.blockInstanceCreated);
       }
     },
   });
   const archiveBlockInstanceMutation = useMutation({
     mutationFn: (blockInstanceId: string) => archiveCardBlockInstance(token, blockInstanceId),
-    onSuccess: async () => {
-      setSuccessMessage(uiText.blockInstanceArchived);
-      if (card) {
-        await invalidateCardQueries(queryClient, token, card.registry_id, card.id);
+    onSuccess: async (instance) => {
+      const registryId = cards.find((item) => item.id === instance.card_id)?.registry_id;
+      if (registryId) {
+        await invalidateCardQueries(queryClient, token, registryId, instance.card_id);
+      }
+      if (activeCardIdRef.current === instance.card_id) {
+        setSuccessMessage(uiText.blockInstanceArchived);
       }
     },
   });
@@ -364,11 +377,16 @@ export function CardsWorkspace({
           title: selectedCardPrintView.name,
         },
       );
-      return downloadGeneratedDocumentContent(token, generated.document.id);
+      return {
+        cardId: card.id,
+        download: await downloadGeneratedDocumentContent(token, generated.document.id),
+      };
     },
-    onSuccess: ({ blob, filename }) => {
+    onSuccess: ({ cardId, download: { blob, filename } }) => {
       triggerBrowserDownload(blob, filename);
-      setSuccessMessage("DOCX печатной формы скачан");
+      if (activeCardIdRef.current === cardId) {
+        setSuccessMessage("DOCX печатной формы скачан");
+      }
     },
   });
   const downloadCardPrintPdfMutation = useMutation({
@@ -380,13 +398,27 @@ export function CardsWorkspace({
         print_view_id: selectedCardPrintView.id,
         title: `${selectedCardPrintView.name} PDF`,
       });
-      return downloadGeneratedDocumentContent(token, generated.document.id);
+      return {
+        cardId: card.id,
+        download: await downloadGeneratedDocumentContent(token, generated.document.id),
+      };
     },
-    onSuccess: ({ blob, filename }) => {
+    onSuccess: ({ cardId, download: { blob, filename } }) => {
       triggerBrowserDownload(blob, filename);
-      setSuccessMessage("PDF печатной формы скачан");
+      if (activeCardIdRef.current === cardId) {
+        setSuccessMessage("PDF печатной формы скачан");
+      }
     },
   });
+
+  function resetSelectedCardMutationState() {
+    activateCardMutation.reset();
+    archiveCardMutation.reset();
+    createBlockInstanceMutation.reset();
+    archiveBlockInstanceMutation.reset();
+    downloadCardPrintDocxMutation.reset();
+    downloadCardPrintPdfMutation.reset();
+  }
 
   useEffect(() => {
     saveCardTabs({
@@ -402,10 +434,12 @@ export function CardsWorkspace({
     });
     setCardFormMode("create");
     setActiveShellTab("list");
+    activeCardIdRef.current = null;
     setActiveTab("fields");
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
+    resetSelectedCardMutationState();
   }
 
   function handleCardFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -428,20 +462,28 @@ export function CardsWorkspace({
   function openCardEditor(cardId: string) {
     setOpenCardIds((current) => (current.includes(cardId) ? current : [...current, cardId]));
     setActiveShellTab(`card:${cardId}`);
+    activeCardIdRef.current = cardId;
     setActiveTab("fields");
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
+    resetSelectedCardMutationState();
     onSelectCard(cardId);
   }
 
   function handleShellTabChange(tabId: CardShellTab) {
+    const cardId = tabId.startsWith("card:") ? tabId.slice("card:".length) : null;
     setActiveShellTab(tabId);
+    activeCardIdRef.current = cardId;
+    setActiveTab("fields");
     setCardFormMode(null);
     setArchiveTarget(null);
-    if (tabId.startsWith("card:")) {
-      onSelectCard(tabId.slice("card:".length));
+    setSuccessMessage(null);
+    setLocalError(null);
+    resetSelectedCardMutationState();
+    if (cardId) {
+      onSelectCard(cardId);
     }
   }
 
@@ -455,8 +497,10 @@ export function CardsWorkspace({
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
+    resetSelectedCardMutationState();
     if (activeShellTab === tabId) {
       setActiveShellTab("list");
+      activeCardIdRef.current = null;
       onSelectCard(cards.find((item) => item.id !== cardId)?.id ?? "");
     }
   }
@@ -533,11 +577,12 @@ export function CardsWorkspace({
         </Panel>
       ) : (
         <div className="stack">
-          {card && selectedCard && activeEditorState && (
+          {card && selectedCard && (
             <CardActionPanel
               card={card}
               selectedCard={selectedCard}
-              editorState={activeEditorState}
+              isDirty={blockEditor.dirty}
+              canManage={card.can_manage}
               completionLabel={completionLabel}
               publicLinksLabel={publicLinksLabel}
               isActivating={activateCardMutation.isPending}
@@ -594,7 +639,7 @@ export function CardsWorkspace({
                     <dd>{selectedCard.public_edit_enabled ? uiText.yes : uiText.no}</dd>
                   </div>
                 </dl>
-                {repeatableBlocks.length > 0 && (
+                {card.can_manage && repeatableBlocks.length > 0 && (
                   <RepeatableBlockControls
                     blocks={repeatableBlocks}
                     card={card}
@@ -606,11 +651,13 @@ export function CardsWorkspace({
                     }
                   />
                 )}
-                <MutationFeedback
-                  error={createBlockInstanceMutation.error ?? archiveBlockInstanceMutation.error}
-                />
+                {card.can_manage ? (
+                  <MutationFeedback
+                    error={createBlockInstanceMutation.error ?? archiveBlockInstanceMutation.error}
+                  />
+                ) : null}
                 <WorkspaceTabs
-                  tabs={cardWorkspaceTabs}
+                  tabs={availableCardWorkspaceTabs}
                   activeTab={activeTab}
                   ariaLabel={uiText.cardSections}
                   onChange={setActiveTab}
@@ -677,7 +724,9 @@ export function CardsWorkspace({
           {card && activeTab === "documents" && (
             <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
           )}
-          {card && activeTab === "links" && <PublicLinksPanel cardId={card.id} token={token} />}
+          {card?.can_manage && activeTab === "links" && (
+            <PublicLinksPanel cardId={card.id} token={token} />
+          )}
           {card && activeTab === "history" && (
             <Panel title={uiText.cardHistory}>
               <p className="data-empty">{uiText.noData}</p>
@@ -685,7 +734,7 @@ export function CardsWorkspace({
           )}
         </div>
       )}
-      {archiveTarget && (
+      {archiveTarget && card?.can_manage && (
         <AdminMutationDialog title={uiText.archiveCard}>
           <ArchiveConfirmation
             entityLabel={uiText.archiveCard}
@@ -766,7 +815,8 @@ type CardFormState = {
 function CardActionPanel({
   card,
   selectedCard,
-  editorState,
+  isDirty,
+  canManage,
   completionLabel,
   publicLinksLabel,
   isActivating,
@@ -781,9 +831,10 @@ function CardActionPanel({
 }: {
   card: CardRead;
   selectedCard: CardSummaryRead;
-  editorState: CardEditorPanelState;
+  isDirty: boolean;
+  canManage: boolean;
   completionLabel: string;
-  publicLinksLabel: string;
+  publicLinksLabel: string | null;
   isActivating: boolean;
   canDownloadPrint: boolean;
   isDownloadingPrint: boolean;
@@ -800,12 +851,12 @@ function CardActionPanel({
         <strong>{card.display_name}</strong>
         <span>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</span>
         <span>{completionLabel}</span>
-        <span>{publicLinksLabel}</span>
-        {editorState.isDirty && <p className="inline-alert">{uiText.unsavedCardChanges}</p>}
+        {publicLinksLabel ? <span>{publicLinksLabel}</span> : null}
+        {isDirty && <p className="inline-alert">{uiText.unsavedCardChanges}</p>}
         <MutationFeedback error={actionError} successMessage={successMessage} />
       </div>
       <div className="row-actions card-action-buttons">
-        {selectedCard.lifecycle_status === "draft" && (
+        {canManage && selectedCard.lifecycle_status === "draft" && (
           <button
             type="button"
             className="primary-button"
@@ -816,30 +867,34 @@ function CardActionPanel({
             {uiText.activateCard}
           </button>
         )}
-        <button
-          type="button"
-          className="ghost-button"
-          disabled={!canDownloadPrint || isDownloadingPrint}
-          onClick={onDownloadPrintDocx}
-        >
-          Скачать DOCX
-        </button>
-        <button
-          type="button"
-          className="ghost-button"
-          disabled={!canDownloadPrint || isDownloadingPrint}
-          onClick={onDownloadPrintPdf}
-        >
-          Скачать PDF
-        </button>
-        <button
-          type="button"
-          className="danger-button"
-          aria-label={`${uiText.archiveCard} ${card.display_name}`}
-          onClick={onArchive}
-        >
-          {uiText.archive}
-        </button>
+        {canManage ? (
+          <>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!canDownloadPrint || isDownloadingPrint}
+              onClick={onDownloadPrintDocx}
+            >
+              Скачать DOCX
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!canDownloadPrint || isDownloadingPrint}
+              onClick={onDownloadPrintPdf}
+            >
+              Скачать PDF
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              aria-label={`${uiText.archiveCard} ${card.display_name}`}
+              onClick={onArchive}
+            >
+              {uiText.archive}
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -1365,7 +1420,7 @@ function cardCompletionLabel(fields: EditableCardField[]) {
   const requiredFields = fields.filter(
     (field) =>
       field.schema?.is_active &&
-      field.schema.required_mode === "required" &&
+      ["required", "required_on_publish"].includes(field.schema.required_mode) &&
       field.field.field_type !== "static_text",
   );
   const completed = requiredFields.filter((field) =>
