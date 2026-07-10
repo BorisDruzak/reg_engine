@@ -11,9 +11,12 @@ import {
 import type {
   CardPrintLayout,
   CardPrintLayoutItem,
+  CardPrintOverlayItem,
+  CardTemplateLayoutRead,
   FormBlockRead,
   FormFieldRead,
 } from "@/api/types";
+import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import {
   A4_HEIGHT_MM,
@@ -54,11 +57,13 @@ export type A4LayoutRendererProps = {
   showTechnicalData: boolean;
   fieldValues?: Record<string, unknown>;
   metadataValues?: Record<string, string>;
+  linkedCardLayout?: CardTemplateLayoutRead;
   selectedItemId?: string | null;
   onSelectItem?: (itemId: string | null) => void;
   onChangeLayout?: (layout: CardPrintLayout) => void;
   onDropField?: (fieldId: string, point: { x_mm: number; y_mm: number }) => void;
   onDropBlock?: (blockId: string, point: { x_mm: number; y_mm: number }) => void;
+  onEditLinkedCard?: () => void;
 };
 
 export type A4RendererMode = "design" | "preview" | "fill" | "readonly";
@@ -83,30 +88,48 @@ export function A4LayoutRenderer({
   showTechnicalData,
   fieldValues = {},
   metadataValues = {},
+  linkedCardLayout,
   selectedItemId = null,
   onSelectItem,
   onChangeLayout,
   onDropField,
   onDropBlock,
+  onEditLinkedCard,
 }: A4LayoutRendererProps) {
   const normalizedLayout = useMemo(() => normalizeLayoutGeometry(layout), [layout]);
+  const renderedItems = useMemo(
+    () => mergeLayoutItemsAndOverlays(normalizedLayout),
+    [normalizedLayout],
+  );
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [copiedItem, setCopiedItem] = useState<CardPrintLayoutItem | null>(null);
   const scale = DEFAULT_PX_PER_MM * zoom;
   const interactive = mode === "design";
   const effectiveShowTechnicalData = showTechnicalData && interactive;
-  const selectedItem = normalizedLayout.items.find((item) => item.id === selectedItemId) ?? null;
+  const selectedItem = renderedItems.find((item) => item.id === selectedItemId) ?? null;
 
   const updateItem = useCallback(
     (nextItem: CardPrintLayoutItem) => {
       if (!onChangeLayout) {
         return;
       }
-      onChangeLayout({
-        ...normalizedLayout,
-        items: normalizedLayout.items.map((item) => (item.id === nextItem.id ? nextItem : item)),
-      });
+      const overlayItem = normalizedLayout.overlays?.some((item) => item.id === nextItem.id);
+      onChangeLayout(
+        overlayItem
+          ? {
+              ...normalizedLayout,
+              overlays: normalizedLayout.overlays?.map((item) =>
+                item.id === nextItem.id ? printItemAsOverlay(nextItem) : item,
+              ),
+            }
+          : {
+              ...normalizedLayout,
+              items: normalizedLayout.items.map((item) =>
+                item.id === nextItem.id ? nextItem : item,
+              ),
+            },
+      );
     },
     [normalizedLayout, onChangeLayout],
   );
@@ -163,6 +186,7 @@ export function A4LayoutRenderer({
       onChangeLayout({
         ...normalizedLayout,
         items: normalizedLayout.items.filter((item) => item.id !== selectedItem.id),
+        overlays: normalizedLayout.overlays?.filter((item) => item.id !== selectedItem.id),
       });
       onSelectItem?.(null);
     }
@@ -278,13 +302,14 @@ export function A4LayoutRenderer({
           }}
         >
           <div className="a4-page-margin" aria-hidden="true" />
-          {normalizedLayout.items.map((item) => (
+          {renderedItems.map((item) => (
             <A4TemplateElement
               key={item.id}
               item={item}
               field={fields.find((field) => field.id === item.field_id) ?? null}
               value={item.field_id ? fieldValues[item.field_id] : undefined}
               metadataValues={metadataValues}
+              linkedCardLayout={linkedCardLayout}
               scale={scale}
               mode={mode}
               showTechnicalData={effectiveShowTechnicalData}
@@ -322,6 +347,7 @@ export function A4LayoutRenderer({
                   original: ensureItemGeometry(item, normalizedLayout),
                 });
               }}
+              onEditLinkedCard={onEditLinkedCard}
             />
           ))}
         </div>
@@ -335,6 +361,7 @@ function A4TemplateElement({
   field,
   value,
   metadataValues,
+  linkedCardLayout,
   scale,
   mode,
   showTechnicalData,
@@ -344,11 +371,13 @@ function A4TemplateElement({
   onHover,
   onDragStart,
   onResizeStart,
+  onEditLinkedCard,
 }: {
   item: CardPrintLayoutItem;
   field: FormFieldRead | null;
   value: unknown;
   metadataValues: Record<string, string>;
+  linkedCardLayout?: CardTemplateLayoutRead;
   scale: number;
   mode: A4RendererMode;
   showTechnicalData: boolean;
@@ -356,8 +385,9 @@ function A4TemplateElement({
   hovered: boolean;
   onSelect: () => void;
   onHover: (hovered: boolean) => void;
-  onDragStart: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onDragStart: (event: React.PointerEvent<HTMLElement>) => void;
   onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, edge: string) => void;
+  onEditLinkedCard?: () => void;
 }) {
   const rect = itemRectFromMm(item);
   const style = item.style ?? {};
@@ -385,6 +415,71 @@ function A4TemplateElement({
   const showLabel = item.kind === "field" && item.show_label !== false;
   const technicalText = showTechnicalData && field ? field.code : null;
   const readonly = mode !== "design";
+
+  if (item.kind === "card_layout" && linkedCardLayout) {
+    return (
+      <div
+        className={[
+          "a4-template-element",
+          "a4-template-element--card_layout",
+          selected ? "is-selected" : "",
+          hovered ? "is-hovered" : "",
+          readonly ? "is-readonly" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        data-testid="a4-linked-card-item"
+        style={{ ...itemStyleFromMm(item, scale), ...contentStyle }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+        onMouseEnter={() => onHover(true)}
+        onMouseLeave={() => onHover(false)}
+      >
+        <div className="a4-linked-card-renderer">
+          <CardLayoutRenderer layout={linkedCardLayout} mode="preview" />
+        </div>
+        {mode === "design" ? (
+          <button
+            type="button"
+            className="a4-linked-card-move-handle"
+            aria-label="Переместить связанный макет карточки"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              onDragStart(event);
+            }}
+          >
+            ⠿
+          </button>
+        ) : null}
+        {onEditLinkedCard ? (
+          <button
+            type="button"
+            className="a4-linked-card-edit-button ghost-button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditLinkedCard();
+            }}
+          >
+            Редактировать внутренний макет
+          </button>
+        ) : null}
+        {mode === "design" && selected ? (
+          <span className="a4-resize-handles" aria-hidden="true">
+            {RESIZE_HANDLES.map((edge) => (
+              <span
+                key={edge}
+                className={`a4-resize-handle a4-resize-handle--${edge}`}
+                onPointerDown={(event) => onResizeStart(event, edge)}
+              />
+            ))}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <button
@@ -479,4 +574,38 @@ function nextDuplicateId(itemId: string, items: CardPrintLayoutItem[]) {
     candidate = `${itemId}-copy-${index}`;
   }
   return candidate;
+}
+
+function mergeLayoutItemsAndOverlays(layout: CardPrintLayout): CardPrintLayoutItem[] {
+  const seen = new Set(layout.items.map((item) => item.id));
+  return [
+    ...layout.items,
+    ...(layout.overlays ?? [])
+      .filter((overlay) => !seen.has(overlay.id))
+      .map((overlay) => overlayAsPrintItem(overlay)),
+  ];
+}
+
+function overlayAsPrintItem(overlay: CardPrintOverlayItem): CardPrintLayoutItem {
+  return {
+    ...overlay,
+    row: 1,
+    column: 1,
+    row_span: 1,
+    column_span: 1,
+  };
+}
+
+function printItemAsOverlay(item: CardPrintLayoutItem): CardPrintOverlayItem {
+  return {
+    id: item.id,
+    kind: item.kind as CardPrintOverlayItem["kind"],
+    page: item.page,
+    x_mm: item.x_mm ?? 0,
+    y_mm: item.y_mm ?? 0,
+    width_mm: item.width_mm ?? 1,
+    height_mm: item.height_mm ?? 1,
+    text: item.text,
+    style: item.style,
+  };
 }

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
@@ -20,6 +21,9 @@ from app.services.card_template_projection import (
     project_form_layout_to_a4,
     sync_print_view,
 )
+from app.services.documents import DocumentServiceError
+from app.services.permissions import PermissionDeniedError
+from app.services.registry_schema import merge_card_template_field_ids
 
 
 def _form_layout(field_id: str, *, item_id: str = "field-name") -> dict[str, object]:
@@ -53,6 +57,20 @@ def _page_settings() -> dict[str, object]:
         "width_mm": 210,
         "height_mm": 297,
         "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
+    }
+
+
+def test_updating_template_field_ids_preserves_form_layout() -> None:
+    form_layout = _form_layout(str(uuid4()))
+
+    merged = merge_card_template_field_ids(
+        {"field_ids": ["old-field"], "form_layout": form_layout},
+        ["new-field"],
+    )
+
+    assert merged == {
+        "field_ids": ["new-field"],
+        "form_layout": form_layout,
     }
 
 
@@ -561,6 +579,147 @@ def test_form_layout_endpoint_maps_geometry_error_to_russian_422(
         exc_info.value.detail
         == "Макет карточки содержит недопустимые размеры или расположение элементов."
     )
+
+
+def test_convert_print_view_endpoint_creates_a_new_linked_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    card_template_id = uuid4()
+    document_template_id = uuid4()
+    version_id = uuid4()
+    created_at = datetime.now(UTC)
+    conversion_calls: list[dict[str, object]] = []
+
+    class LayoutService:
+        def read_layout_for_actor(self, **payload: object) -> SimpleNamespace:
+            assert payload == {
+                "actor_user_id": actor_user_id,
+                "card_template_id": card_template_id,
+            }
+            return SimpleNamespace(
+                print_views=[
+                    SimpleNamespace(
+                        id=str(document_template_id),
+                        document_template_id=document_template_id,
+                    )
+                ]
+            )
+
+    class DocumentService:
+        def convert_print_view_to_linked_card_for_actor(
+            self,
+            **payload: object,
+        ) -> SimpleNamespace:
+            conversion_calls.append(payload)
+            return SimpleNamespace(
+                id=version_id,
+                template_id=document_template_id,
+                version_number=2,
+                template_format="card_print_layout_v1",
+                layout_json={
+                    "version": "card_print_layout_v1",
+                    "items": [{"id": "linked", "kind": "card_layout"}],
+                },
+                original_filename=None,
+                content_type=None,
+                content_length_bytes=None,
+                created_at=created_at,
+                archived_at=None,
+            )
+
+    monkeypatch.setattr(layout_endpoints, "_layout_service", lambda _session: LayoutService())
+    monkeypatch.setattr(layout_endpoints, "_document_service", lambda _session: DocumentService())
+
+    result = layout_endpoints.convert_card_template_print_view_to_linked_card(
+        template_id=card_template_id,
+        print_view_id=str(document_template_id),
+        session=cast(Session, object()),
+        actor_user_id=actor_user_id,
+    )
+
+    assert result.id == version_id
+    assert result.version_number == 2
+    assert conversion_calls == [
+        {
+            "actor_user_id": actor_user_id,
+            "template_id": document_template_id,
+        }
+    ]
+
+
+def test_convert_print_view_endpoint_rejects_virtual_or_unknown_views_in_russian(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class LayoutService:
+        def read_layout_for_actor(self, **_payload: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                print_views=[SimpleNamespace(id="default-a4", document_template_id=None)]
+            )
+
+    monkeypatch.setattr(layout_endpoints, "_layout_service", lambda _session: LayoutService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        layout_endpoints.convert_card_template_print_view_to_linked_card(
+            template_id=uuid4(),
+            print_view_id="default-a4",
+            session=cast(Session, object()),
+            actor_user_id=uuid4(),
+        )
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "Сначала сохраните печатное представление."
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "detail"),
+    [
+        (PermissionDeniedError("Недостаточно прав."), 403, "Недостаточно прав."),
+        (
+            DocumentServiceError("Версия печатной формы карточки не найдена."),
+            422,
+            "Версия печатной формы карточки не найдена.",
+        ),
+    ],
+)
+def test_convert_print_view_endpoint_maps_permission_and_service_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    status_code: int,
+    detail: str,
+) -> None:
+    document_template_id = uuid4()
+
+    class LayoutService:
+        def read_layout_for_actor(self, **_payload: object) -> SimpleNamespace:
+            if isinstance(error, PermissionDeniedError):
+                raise error
+            return SimpleNamespace(
+                print_views=[
+                    SimpleNamespace(
+                        id=str(document_template_id),
+                        document_template_id=document_template_id,
+                    )
+                ]
+            )
+
+    class DocumentService:
+        def convert_print_view_to_linked_card_for_actor(self, **_payload: object) -> None:
+            raise error
+
+    monkeypatch.setattr(layout_endpoints, "_layout_service", lambda _session: LayoutService())
+    monkeypatch.setattr(layout_endpoints, "_document_service", lambda _session: DocumentService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        layout_endpoints.convert_card_template_print_view_to_linked_card(
+            template_id=uuid4(),
+            print_view_id=str(document_template_id),
+            session=cast(Session, object()),
+            actor_user_id=uuid4(),
+        )
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.detail == detail
 
 
 def test_projection_maps_form_field_item_to_a4_geometry() -> None:

@@ -915,6 +915,20 @@ export async function syncCardTemplatePrintView(
   );
 }
 
+export async function convertCardTemplatePrintViewToLinkedCard(
+  token: string,
+  templateId: string,
+  printViewId: string,
+) {
+  return apiRequest<DocumentTemplateVersionRead>(
+    `/api/v1/card-templates/${templateId}/layout/print-views/${printViewId}/convert-linked-card`,
+    {
+      method: "POST",
+      token,
+    },
+  );
+}
+
 export async function readCardPrintTemplate(token: string, templateId: string) {
   return apiRequest<DocumentTemplateRead>(`/api/v1/card-print-templates/${templateId}`, { token });
 }

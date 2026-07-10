@@ -1,262 +1,262 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import type { CardPrintLayout, FormFieldRead } from "@/api/types";
+import type {
+  CardPrintLayout,
+  CardTemplateFormLayoutRead,
+  CardTemplateLayoutRead,
+  FormBlockRead,
+  FormFieldRead,
+} from "@/api/types";
 
 import { CardPrintTemplateEditor } from "./CardPrintTemplateEditor";
 import { RegistriesAndSchema } from "./RegistriesAndSchema";
-import { A4LayoutRenderer } from "./print/A4LayoutRenderer";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-test("saves an A4 print view through the unified card template layout API", async () => {
+test("renders exactly three Russian stages and contextual canvas actions without permanent panels", async () => {
+  vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
+
+  renderEditor();
+
+  const stageTabs = within(await screen.findByRole("tablist", { name: "Этапы макета карточки" }))
+    .getAllByRole("tab")
+    .map((tab) => tab.textContent);
+  expect(stageTabs).toEqual(["Макет карточки", "Печатная форма A4", "Предпросмотр"]);
+  expect(screen.getByRole("tab", { name: "Макет карточки" })).toHaveAttribute(
+    "data-stage-id",
+    "layout",
+  );
+  expect(screen.getByRole("tab", { name: "Печатная форма A4" })).toHaveAttribute(
+    "data-stage-id",
+    "a4",
+  );
+  expect(screen.getByRole("tab", { name: "Предпросмотр" })).toHaveAttribute(
+    "data-stage-id",
+    "preview",
+  );
+  expect(screen.queryByLabelText("Палитра элементов")).not.toBeInTheDocument();
+  expect(screen.queryByRole("complementary", { name: /Свойства/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Создать блок в этой области" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Вставить существующий блок в эту область" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Создать поле в блоке Основной блок" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "DOCX" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "PDF" })).toBeInTheDocument();
+});
+
+test("creates a block inside the canvas and saves its placement with the current revision", async () => {
   const user = userEvent.setup();
-  const fetchMock = createEditorFetchMock((payload) => {
-    expect(payload.layout_json).toEqual(
-      expect.objectContaining({
-        version: "card_print_layout_v1",
-        items: expect.arrayContaining([
-          expect.objectContaining({
-            kind: "field",
-            field_id: "field-1",
-          }),
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Создать блок в этой области" }));
+  const title = screen.getByLabelText("Название блока");
+  expect(title).toHaveValue("Новый блок");
+  await user.clear(title);
+  await user.type(title, "Контакты");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.createdBlockPayloads).toHaveLength(1));
+  expect(api.createdBlockPayloads[0]).toEqual(expect.objectContaining({ title: "Контакты" }));
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0]).toEqual(
+    expect.objectContaining({
+      expected_revision: "revision-1",
+      form_layout: expect.objectContaining({
+        sections: expect.arrayContaining([
+          expect.objectContaining({ block_id: "block-created", row_span: 1, column_span: 3 }),
         ]),
       }),
-    );
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
-      <CardPrintTemplateEditor
-        token="token"
-        registryId="registry-1"
-        cardTemplate={{
-          id: "template-1",
-          registry_id: "registry-1",
-          code: "municipal",
-          name: "Муниципальная карточка",
-          description: null,
-          position: 0,
-          field_schema_json: { field_ids: ["field-1"] },
-          default_values_json: [],
-          is_active: true,
-        }}
-        blocks={[
-          {
-            id: "block-1",
-            registry_id: "registry-1",
-            code: "main",
-            title: "Основной блок",
-            description: null,
-            position: 0,
-            is_repeatable: false,
-            is_active: true,
-            public_visible: true,
-            public_editable: false,
-          },
-        ]}
-        fields={[
-          {
-            id: "field-1",
-            block_id: "block-1",
-            code: "status",
-            label: "Статус",
-            description: null,
-            field_type: "text",
-            position: 0,
-            required_mode: "not_required",
-            options_source_type: null,
-            options_source_id: null,
-            options_config_json: null,
-            display_config_json: null,
-            is_active: true,
-            is_list_display: false,
-            public_visible: true,
-            public_editable: false,
-          },
-        ]}
-      />
-    </QueryClientProvider>,
-  );
-
-  expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
-  ).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Статус" }));
-  await user.click(screen.getByRole("button", { name: "Сохранить" }));
-
-  expect(await screen.findByText("Печатное представление сохранено")).toBeInTheDocument();
-  await waitFor(() => {
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input).endsWith("/api/v1/card-templates/template-1/layout/print-views") &&
-          init?.method === "POST",
-      ),
-    ).toBe(true);
-  });
-});
-
-test("adds an existing field by mouse drag from the palette to the A4 canvas", async () => {
-  vi.stubGlobal("fetch", createEditorFetchMock());
-
-  renderEditor();
-
-  const paletteField = await screen.findByRole("button", { name: "Статус" });
-  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
-  expect(
-    screen.queryByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
-  ).not.toBeInTheDocument();
-
-  const dataTransfer = createDataTransfer();
-  fireEvent.dragStart(paletteField, { dataTransfer });
-  fireEvent.dragOver(canvas, { clientX: 140, clientY: 150, dataTransfer });
-  fireEvent.drop(canvas, { clientX: 140, clientY: 150, dataTransfer });
-
-  expect(
-    await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
-  ).toBeInTheDocument();
-});
-
-test("downloads blank DOCX and PDF files from the current unsaved A4 layout", async () => {
-  const user = userEvent.setup();
-  const fetchMock = createEditorFetchMock();
-  vi.stubGlobal("fetch", fetchMock);
-  stubBrowserDownload();
-
-  renderEditor();
-
-  await user.click(await screen.findByRole("button", { name: "Статус" }));
-  await user.click(screen.getByRole("button", { name: "DOCX" }));
-
-  await waitFor(() => {
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input).endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx") &&
-          init?.method === "POST",
-      ),
-    ).toBe(true);
-  });
-
-  await user.click(screen.getByRole("button", { name: "PDF" }));
-
-  await waitFor(() => {
-    expect(
-      fetchMock.mock.calls.some(
-        ([input, init]) =>
-          String(input).endsWith("/api/v1/registries/registry-1/card-print-templates/blank-pdf") &&
-          init?.method === "POST",
-      ),
-    ).toBe(true);
-  });
-
-  expect(
-    fetchMock.mock.calls.some(
-      ([input, init]) =>
-        String(input).endsWith("/api/v1/registries/registry-1/card-print-templates") &&
-        init?.method === "POST",
-    ),
-  ).toBe(false);
-});
-
-test("adds an existing data block to the A4 canvas by click and mouse drag", async () => {
-  const user = userEvent.setup();
-  vi.stubGlobal("fetch", createEditorFetchMock());
-
-  renderEditor();
-
-  const paletteBlock = await screen.findByRole("button", { name: "Основной блок" });
-  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
-
-  await user.click(paletteBlock);
-  expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(2);
-  expect(
-    await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Подтверждено.*Да/ })).toBeInTheDocument();
-
-  const dataTransfer = createDataTransfer();
-  fireEvent.dragStart(paletteBlock, { dataTransfer });
-  fireEvent.dragOver(canvas, { clientX: 190, clientY: 210, dataTransfer });
-  fireEvent.drop(canvas, { clientX: 190, clientY: 210, dataTransfer });
-
-  expect(screen.getAllByRole("button", { name: /Основной блок/ })).toHaveLength(3);
-  expect(screen.getAllByRole("button", { name: /Статус.*Иванов Иван Иванович/ })).toHaveLength(2);
-  expect(screen.getAllByRole("button", { name: /Подтверждено.*Да/ })).toHaveLength(2);
-});
-
-test("renders the A4 editor as a visual workspace with technical settings hidden", async () => {
-  const user = userEvent.setup();
-  vi.stubGlobal("fetch", createEditorFetchMock());
-
-  renderEditor();
-
-  expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Имя файла")).not.toBeInTheDocument();
-  expect(screen.queryByText("{status}")).not.toBeInTheDocument();
-  expect(screen.queryByText("Иванов Иван Иванович")).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Статус" }));
-
-  expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Настройки шаблона" }));
-
-  expect(screen.getByLabelText("Технический код")).toBeInTheDocument();
-  expect(screen.getByLabelText("Имя файла")).toBeInTheDocument();
-});
-
-test("moves elements with mouse and keyboard while saving millimeter geometry only", async () => {
-  const user = userEvent.setup();
-  let savedLayout: { items: Record<string, unknown>[] } | null = null;
-  const fetchMock = createEditorFetchMock((payload) => {
-    savedLayout = payload.layout_json as { items: Record<string, unknown>[] };
-  });
-  vi.stubGlobal("fetch", fetchMock);
-
-  renderEditor();
-
-  await user.click(await screen.findByRole("button", { name: "Статус" }));
-  const statusElement = await screen.findByRole("button", { name: /Статус.*Иванов Иван Иванович/ });
-  await user.click(statusElement);
-  fireEvent.pointerDown(statusElement, { clientX: 120, clientY: 120, pointerId: 1 });
-  fireEvent.pointerMove(document, { clientX: 150, clientY: 136, pointerId: 1 });
-  fireEvent.pointerUp(document, { clientX: 150, clientY: 136, pointerId: 1 });
-  fireEvent.keyDown(screen.getByLabelText("A4 канвас печатного шаблона"), {
-    key: "ArrowRight",
-  });
-  await user.click(screen.getByRole("button", { name: "Сохранить" }));
-
-  await waitFor(() => expect(savedLayout).not.toBeNull());
-  const layout = savedLayout as unknown as { items: Record<string, unknown>[] };
-  const movedItem = layout.items.find((item) => item.field_id === "field-1");
-  expect(movedItem).toEqual(
-    expect.objectContaining({
-      x_mm: expect.any(Number),
-      y_mm: expect.any(Number),
-      width_mm: expect.any(Number),
-      height_mm: expect.any(Number),
     }),
   );
-  expect(JSON.stringify(movedItem)).not.toContain("_px");
 });
 
-test("renders the selected card template with the unified CardLayoutStudio directly", async () => {
+test("creates a field inline with a real canonical type and persists the layout", async () => {
   const user = userEvent.setup();
-  vi.stubGlobal("fetch", createEditorFetchMock());
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
 
+  await user.click(
+    await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
+  );
+  const label = screen.getByLabelText("Название поля");
+  await user.clear(label);
+  await user.type(label, "Настройки JSON");
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "json");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
+  expect(api.createdFieldPayloads[0]).toEqual(
+    expect.objectContaining({ label: "Настройки JSON", field_type: "json" }),
+  );
+  expect(api.templateUpdatePayloads).toEqual([
+    expect.objectContaining({
+      field_schema_json: expect.objectContaining({
+        field_ids: ["field-1", "field-created"],
+      }),
+    }),
+  ]);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
+  expect(api.formSavePayloads[0].form_layout.sections[0].items).toEqual(
+    expect.arrayContaining([expect.objectContaining({ field_id: "field-created" })]),
+  );
+});
+
+test("inserts an existing block through a contextual chooser and saves once", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(
+    await screen.findByRole("button", { name: "Вставить существующий блок в эту область" }),
+  );
+  const chooser = screen.getByRole("dialog", { name: "Вставка существующего блока" });
+  await user.selectOptions(within(chooser).getByLabelText("Блок"), "block-2");
+  await user.click(within(chooser).getByRole("button", { name: "Вставить" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
+  expect(api.formSavePayloads[0].form_layout.sections).toEqual(
+    expect.arrayContaining([expect.objectContaining({ block_id: "block-2" })]),
+  );
+});
+
+test("saves geometry through the shared pointer session and preview uses the latest draft", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  move.focus();
+  await user.keyboard("{ArrowRight}");
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+  expect(screen.getByRole("region", { name: "Предпросмотр веб-карточки" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Готово" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
+  expect(api.formSavePayloads[0].form_layout.sections[0].column).toBe(2);
+
+  await user.click(screen.getByRole("tab", { name: "Предпросмотр" }));
+  for (const block of screen.getAllByTestId("layout-block-block-block-1")) {
+    expect(block).toHaveStyle({ gridColumn: "2 / span 6" });
+  }
+  expect(screen.queryByRole("button", { name: /Переместить блок/ })).not.toBeInTheDocument();
+});
+
+test("retains an optimistic draft on 409 and exposes reload cancel and explicit retry", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ conflictOnFirstFormSave: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  move.focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(screen.getByRole("button", { name: "Готово" }));
+
+  expect(
+    await screen.findByText(
+      "Макет изменён другим пользователем. Обновите данные перед сохранением.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+  expect(screen.getByRole("button", { name: "Обновить данные" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Отменить локальные изменения" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Повторить сохранение" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads.map((payload) => payload.expected_revision)).toEqual([
+    "revision-1",
+    "revision-2",
+  ]);
+  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
+  expect((await screen.findAllByText("Макет карточки сохранён")).length).toBeGreaterThan(0);
+});
+
+test("A4 stage contains one linked card rectangle, routes internal editing back, and keeps overlays", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Печатная форма A4" }));
+  expect(screen.getAllByTestId("a4-linked-card-item")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: /Переместить поле/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Изменить размер поля/ })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Добавить заголовок" }));
+  expect(screen.getAllByText("Заголовок").length).toBeGreaterThan(0);
+  await user.click(screen.getByRole("button", { name: "Сохранить печатную форму" }));
+  await waitFor(() => expect(api.printSavePayloads).toHaveLength(1));
+  const savedItems = [
+    ...api.printSavePayloads[0].layout_json.items,
+    ...(api.printSavePayloads[0].layout_json.overlays ?? []),
+  ];
+  expect(savedItems.filter((item) => item.kind === "card_layout")).toHaveLength(1);
+  expect(savedItems).toEqual(
+    expect.arrayContaining([expect.objectContaining({ kind: "heading" })]),
+  );
+
+  await user.click(screen.getByRole("button", { name: "Редактировать внутренний макет" }));
+  expect(screen.getByRole("tab", { name: "Макет карточки" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("preserves blank DOCX and PDF actions with the linked A4 draft", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  stubBrowserDownload();
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "DOCX" }));
+  await user.click(screen.getByRole("button", { name: "PDF" }));
+
+  await waitFor(() => expect(api.blankDownloadPayloads).toHaveLength(2));
+  for (const payload of api.blankDownloadPayloads) {
+    expect(payload.layout_json.items.filter((item) => item.kind === "card_layout")).toHaveLength(1);
+  }
+});
+
+test("converts a saved legacy print view through the real API and then shows the linked item", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ legacyPrintView: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Печатная форма A4" }));
+  expect(screen.queryByTestId("a4-linked-card-item")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Преобразовать в связанный макет" }));
+
+  await waitFor(() => expect(api.conversionCalls).toBe(1));
+  expect(await screen.findByTestId("a4-linked-card-item")).toBeInTheDocument();
+  expect(screen.getAllByText("Создана новая версия связанного макета").length).toBeGreaterThan(0);
+});
+
+test("opens the contextual studio directly from the selected template", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
   const { container } = renderRegistrySchemaEditor();
 
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
@@ -266,198 +266,165 @@ test("renders the selected card template with the unified CardLayoutStudio direc
     "aria-selected",
     "true",
   );
-  expect(await screen.findByRole("region", { name: /A4/ })).toBeInTheDocument();
-  expect(screen.getByRole("region", { name: "Веб-структура шаблона карточки" })).toBeInTheDocument();
-  expect(screen.queryByRole("tab", { name: "Веб-форма" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("tab", { name: "Печатная форма A4" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Печатный шаблон A4" })).not.toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Редактор макета карточки" })).toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Экспорт" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
 });
 
-test("shows one selected field properties panel with web and A4 sections", async () => {
-  const user = userEvent.setup();
-  vi.stubGlobal("fetch", createEditorFetchMock());
+type FormSavePayload = {
+  expected_revision: string;
+  form_layout: CardTemplateFormLayoutRead;
+};
 
-  const { container } = renderEditor();
+type PrintSavePayload = {
+  layout_json: CardPrintLayout;
+};
 
-  await user.click(await screen.findByRole("button", { name: "Статус" }));
-  expect(screen.getByRole("region", { name: "Свойства выбранного элемента шаблона" })).toBeInTheDocument();
-  for (const tabName of [
-    "Данные",
-    "Веб-форма",
-    "Печатная форма A4",
-    "Внешний вид",
-    "Доступ / публичность",
-    "Техническое",
-  ]) {
-    expect(screen.getByRole("tab", { name: tabName })).toBeInTheDocument();
-  }
+function createEditorFetchMock(
+  options: {
+    conflictOnFirstFormSave?: boolean;
+    legacyPrintView?: boolean;
+  } = {},
+) {
+  let layout = unifiedLayoutPayload(
+    options.legacyPrintView ? legacyPrintLayout() : emptyPrintLayout(),
+  );
+  let formSaveAttempts = 0;
+  const formSavePayloads: FormSavePayload[] = [];
+  const printSavePayloads: PrintSavePayload[] = [];
+  const createdBlockPayloads: Record<string, unknown>[] = [];
+  const createdFieldPayloads: Record<string, unknown>[] = [];
+  const templateUpdatePayloads: Record<string, unknown>[] = [];
+  const blankDownloadPayloads: Array<{ layout_json: CardPrintLayout }> = [];
+  let conversionCalls = 0;
 
-  await user.click(screen.getByRole("tab", { name: "Печатная форма A4" }));
-  expect(screen.getByText("Размещение на A4")).toBeInTheDocument();
-  await user.click(screen.getByLabelText("Показать технические данные"));
-  expect(container.querySelector(".a4-page--grid")).not.toBeNull();
-  expect(screen.getByText(/Технический код: status/)).toBeInTheDocument();
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
+    if (
+      url.endsWith("/api/v1/card-templates/template-1/layout") &&
+      (!init?.method || init.method === "GET")
+    ) {
+      return jsonResponse(layout);
+    }
+    if (url.endsWith("/api/v1/card-templates/template-1/layout/form")) {
+      const payload = body as FormSavePayload;
+      formSavePayloads.push(payload);
+      formSaveAttempts += 1;
+      if (options.conflictOnFirstFormSave && formSaveAttempts === 1) {
+        layout = { ...layout, revision: "revision-2" };
+        return jsonResponse({ detail: "Card layout changed. Reload before saving." }, 409);
+      }
+      layout = {
+        ...layout,
+        revision: `revision-${formSaveAttempts + 1}`,
+        form_layout: payload.form_layout,
+      };
+      return jsonResponse(layout);
+    }
+    if (url.endsWith("/api/v1/registries/registry-1/blocks")) {
+      createdBlockPayloads.push(body);
+      const created = blockFixture("block-created", String(body.title ?? "Новый блок"));
+      layout = {
+        ...layout,
+        structure: { ...layout.structure, blocks: [...layout.structure.blocks, created] },
+      };
+      return jsonResponse(created, 201);
+    }
+    if (url.endsWith("/api/v1/blocks/block-1/fields")) {
+      createdFieldPayloads.push(body);
+      const created = fieldFixture(
+        "field-created",
+        "block-1",
+        String(body.label ?? "Новое поле"),
+        String(body.field_type ?? "text"),
+      );
+      layout = {
+        ...layout,
+        structure: { ...layout.structure, fields: [...layout.structure.fields, created] },
+      };
+      return jsonResponse(created, 201);
+    }
+    if (url.endsWith("/api/v1/card-templates/template-1") && init?.method === "PATCH") {
+      templateUpdatePayloads.push(body);
+      return jsonResponse(cardTemplateFixture());
+    }
+    if (url.endsWith("/api/v1/card-templates/template-1/layout/print-views")) {
+      const payload = body as PrintSavePayload;
+      printSavePayloads.push(payload);
+      const printView = printViewFixture(payload.layout_json, true);
+      layout = { ...layout, print_views: [printView] };
+      return jsonResponse(printView, 201);
+    }
+    if (url.endsWith("/api/v1/card-templates/template-1/layout/print-views/print-template-1")) {
+      const payload = body as PrintSavePayload;
+      printSavePayloads.push(payload);
+      const printView = printViewFixture(payload.layout_json, true);
+      layout = { ...layout, print_views: [printView] };
+      return jsonResponse(printView);
+    }
+    if (
+      url.endsWith(
+        "/api/v1/card-templates/template-1/layout/print-views/print-template-1/convert-linked-card",
+      )
+    ) {
+      conversionCalls += 1;
+      const converted = linkedPrintLayout();
+      layout = { ...layout, print_views: [printViewFixture(converted, true)] };
+      return jsonResponse({
+        id: "print-version-2",
+        template_id: "print-template-1",
+        version_number: 2,
+        template_format: "card_print_layout_v1",
+        layout_json: converted,
+        original_filename: null,
+        content_type: null,
+        content_length_bytes: null,
+        created_at: "2026-07-10T00:00:00Z",
+        archived_at: null,
+      });
+    }
+    if (url.endsWith("/api/v1/registries/registry-1/reference-lists")) {
+      return jsonResponse({ items: [] });
+    }
+    if (
+      url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx") ||
+      url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-pdf")
+    ) {
+      blankDownloadPayloads.push(body as { layout_json: CardPrintLayout });
+      const pdf = url.endsWith("blank-pdf");
+      return new Response(new Blob([pdf ? "%PDF blank" : "PK blank"]), {
+        status: 200,
+        headers: { "X-Document-Filename": pdf ? "blank.pdf" : "blank.docx" },
+      });
+    }
+    return jsonResponse({ detail: "not found" }, 404);
+  });
 
-  await user.click(screen.getByRole("tab", { name: "Предпросмотр карточки" }));
-  expect(screen.queryByLabelText("Палитра элементов")).not.toBeInTheDocument();
-  expect(container.querySelector(".a4-page--grid")).toBeNull();
-  expect(screen.queryByText(/Технический код: status/)).not.toBeInTheDocument();
-});
-
-test("A4LayoutRenderer design mode selects items and preview hides technical data", async () => {
-  const user = userEvent.setup();
-  const onSelectItem = vi.fn();
-  const layout: CardPrintLayout = {
-    version: "card_print_layout_v1",
-    page: {
-      format: "A4",
-      width_mm: 210,
-      height_mm: 297,
-      margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+  return {
+    fetchMock,
+    formSavePayloads,
+    printSavePayloads,
+    createdBlockPayloads,
+    createdFieldPayloads,
+    templateUpdatePayloads,
+    blankDownloadPayloads,
+    get conversionCalls() {
+      return conversionCalls;
     },
-    grid: { columns: 12, row_height_mm: 8 },
-    items: [
-      {
-        id: "item-1",
-        kind: "field",
-        page: 1,
-        row: 1,
-        column: 1,
-        row_span: 1,
-        column_span: 4,
-        field_id: "field-1",
-        label: "Статус",
-        x_mm: 20,
-        y_mm: 20,
-        width_mm: 70,
-        height_mm: 12,
-      },
-    ],
   };
-  const fields: FormFieldRead[] = [
-    {
-      id: "field-1",
-      block_id: "block-1",
-      code: "status",
-      label: "Статус",
-      description: null,
-      field_type: "text",
-      position: 0,
-      required_mode: "not_required",
-      options_source_type: null,
-      options_source_id: null,
-      options_config_json: null,
-      display_config_json: null,
-      is_active: true,
-      is_list_display: false,
-      public_visible: true,
-      public_editable: false,
-    },
-  ];
-
-  const { rerender, container } = render(
-    <A4LayoutRenderer
-      layout={layout}
-      fields={fields}
-      mode="design"
-      zoom={0.75}
-      showGrid
-      showTechnicalData
-      selectedItemId={null}
-      onSelectItem={onSelectItem}
-    />,
-  );
-
-  await user.click(screen.getByRole("button", { name: /Статус/ }));
-  expect(onSelectItem).toHaveBeenCalledWith("item-1");
-  expect(container.querySelector(".a4-page--grid")).not.toBeNull();
-  expect(screen.getByText(/Технический код: status/)).toBeInTheDocument();
-
-  rerender(
-    <A4LayoutRenderer
-      layout={layout}
-      fields={fields}
-      mode="preview"
-      zoom={0.75}
-      showGrid
-      showTechnicalData
-    />,
-  );
-
-  expect(container.querySelector(".a4-page--grid")).toBeNull();
-  expect(screen.queryByText(/Технический код: status/)).not.toBeInTheDocument();
-});
-
-function jsonResponse(payload: unknown, status = 200) {
-  return Promise.resolve(
-    new Response(JSON.stringify(payload), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
 }
 
-function unifiedLayoutPayload(layout: CardPrintLayout = createEmptyPrintLayout()) {
+function unifiedLayoutPayload(printLayout: CardPrintLayout): CardTemplateLayoutRead {
+  const saved = printLayout.items.some((item) => item.kind === "field");
   return {
     version: "card_template_layout_v1",
+    revision: "revision-1",
     card_template_id: "template-1",
     registry_id: "registry-1",
     structure: {
-      blocks: [
-        {
-          id: "block-1",
-          registry_id: "registry-1",
-          code: "main",
-          title: "Основной блок",
-          description: null,
-          position: 0,
-          is_repeatable: false,
-          is_active: true,
-          public_visible: true,
-          public_editable: false,
-          layout_columns: 1,
-          display_config_json: null,
-        },
-      ],
-      fields: [
-        {
-          id: "field-1",
-          block_id: "block-1",
-          code: "status",
-          label: "Статус",
-          description: null,
-          field_type: "text",
-          position: 0,
-          required_mode: "not_required",
-          options_source_type: null,
-          options_source_id: null,
-          options_config_json: null,
-          display_config_json: null,
-          is_active: true,
-          is_list_display: false,
-          public_visible: true,
-          public_editable: false,
-        },
-        {
-          id: "field-2",
-          block_id: "block-1",
-          code: "approved",
-          label: "Подтверждено",
-          description: null,
-          field_type: "bool",
-          position: 1,
-          required_mode: "not_required",
-          options_source_type: null,
-          options_source_id: null,
-          options_config_json: null,
-          display_config_json: null,
-          is_active: true,
-          is_list_display: false,
-          public_visible: true,
-          public_editable: false,
-        },
-      ],
+      blocks: [blockFixture("block-1", "Основной блок")],
+      fields: [fieldFixture("field-1", "block-1", "Статус", "text")],
     },
     form_layout: {
       columns: 12,
@@ -467,7 +434,8 @@ function unifiedLayoutPayload(layout: CardPrintLayout = createEmptyPrintLayout()
           block_id: "block-1",
           row: 1,
           column: 1,
-          column_span: 12,
+          row_span: 2,
+          column_span: 6,
           items: [
             {
               id: "field-field-1",
@@ -475,55 +443,56 @@ function unifiedLayoutPayload(layout: CardPrintLayout = createEmptyPrintLayout()
               field_id: "field-1",
               row: 1,
               column: 1,
-              column_span: 12,
-            },
-            {
-              id: "field-field-2",
-              kind: "field",
-              field_id: "field-2",
-              row: 2,
-              column: 1,
-              column_span: 12,
+              row_span: 1,
+              column_span: 6,
             },
           ],
         },
       ],
     },
     print_views: [
-      {
-        id: "default-a4",
-        name: "Основная A4",
-        is_default: true,
-        document_template_id: null,
-        current_version_id: null,
-        source: "form_layout",
-        page: layout.page,
-        items: layout.items,
-        layout_json: layout,
-        output_filename_template: "{{ card.display_name }}.docx",
-      },
+      saved ? printViewFixture(printLayout, true) : printViewFixture(printLayout, false),
     ],
     export_settings: {
-      default_print_view_id: "default-a4",
+      default_print_view_id: saved ? "print-template-1" : "default-a4",
       output_filename_template: "{{ card.display_name }}.docx",
       formats: ["docx", "pdf"],
     },
-    sync_status: {
-      has_errors: false,
-      errors: [],
-      warnings: [],
-      mapping: {
-        missing_print_items: [],
-        missing_source_items: [],
-        manual_items: [],
-        overridden_items: [],
-        archived_field_items: [],
-      },
-    },
+    sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
   };
 }
 
-function createEmptyPrintLayout(): CardPrintLayout {
+function printViewFixture(layout: CardPrintLayout, saved: boolean) {
+  return {
+    id: saved ? "print-template-1" : "default-a4",
+    name: "Основная A4",
+    is_default: true,
+    document_template_id: saved ? "print-template-1" : null,
+    current_version_id: saved ? "print-version-1" : null,
+    source: "form_layout" as const,
+    page: layout.page,
+    items: layout.items.map((item) => ({
+      id: item.id,
+      source_item_id: item.source_item_id ?? null,
+      kind: item.kind,
+      card_template_id: item.card_template_id ?? null,
+      block_id: item.block_id ?? null,
+      field_id: item.field_id ?? null,
+      page: item.page,
+      x_mm: item.x_mm ?? 0,
+      y_mm: item.y_mm ?? 0,
+      width_mm: item.width_mm ?? 0,
+      height_mm: item.height_mm ?? 0,
+      override: item.override ?? false,
+      sync_status: item.sync_status ?? "synced",
+      text: item.text ?? null,
+    })),
+    layout_json: layout,
+    output_filename_template: "{{ card.display_name }}.docx",
+  };
+}
+
+function emptyPrintLayout(): CardPrintLayout {
   return {
     version: "card_print_layout_v1",
     page: {
@@ -533,165 +502,111 @@ function createEmptyPrintLayout(): CardPrintLayout {
       margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
     },
     grid: { columns: 12, row_height_mm: 8, snap_mm: 2 },
+    sections: [],
+    overlays: [],
     items: [],
   };
 }
 
-function createEditorFetchMock(onSave?: (payload: Record<string, unknown>) => void) {
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    if (url.endsWith("/api/v1/card-templates/template-1/layout")) {
-      return jsonResponse(unifiedLayoutPayload());
-    }
-    if (url.endsWith("/api/v1/card-templates/template-1/layout/print-views")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-      onSave?.(payload);
-      const layout = payload.layout_json as CardPrintLayout;
-      return jsonResponse(
-        {
-          id: "print-template-1",
-          name: "Основная A4",
-          is_default: true,
-          document_template_id: "print-template-1",
-          current_version_id: "print-version-1",
-          source: "form_layout",
-          page: layout.page,
-          items: layout.items,
-          layout_json: layout,
-          output_filename_template: "{{ card.display_name }}.docx",
-        },
-        201,
-      );
-    }
-    if (
-      url.endsWith("/api/v1/registries/registry-1/card-print-templates?card_template_id=template-1")
-    ) {
-      return jsonResponse({ items: [] });
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/reference-lists")) {
-      return jsonResponse({ items: [] });
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-      onSave?.(payload);
-      return jsonResponse({
-        id: "print-template-1",
-        registry_id: "registry-1",
-        card_template_id: "template-1",
-        code: "municipal_print",
-        name: "Муниципальная карточка: печать",
-        description: null,
-        template_format: "card_print_layout_v1",
-        output_filename_template: "{{ card.display_name }}.docx",
-        output_content_type:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        is_active: true,
-        current_version_id: "print-version-1",
-        current_version_number: 1,
-        current_layout_json: payload.layout_json,
-        created_at: "2026-07-04T00:00:00Z",
-        archived_at: null,
-      });
-    }
-    if (url.endsWith("/api/v1/card-print-templates/print-template-1/versions")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-      onSave?.(payload);
-      return jsonResponse({
-        id: "print-version-2",
-        template_id: "print-template-1",
-        version_number: 2,
-        template_format: "card_print_layout_v1",
-        template_body: null,
-        layout_json: payload.layout_json,
-        original_filename: null,
-        content_type: null,
-        content_length_bytes: null,
-        created_at: "2026-07-04T00:00:00Z",
-        archived_at: null,
-      });
-    }
-    if (url.endsWith("/api/v1/card-print-templates/print-template-1/blank-docx")) {
-      return Promise.resolve(
-        new Response(new Blob(["PK blank docx"]), {
-          status: 200,
-          headers: { "X-Document-Filename": "blank.docx" },
-        }),
-      );
-    }
-    if (url.endsWith("/api/v1/card-print-templates/print-template-1/blank-pdf")) {
-      return Promise.resolve(
-        new Response(new Blob(["%PDF blank"]), {
-          status: 200,
-          headers: { "X-Document-Filename": "blank.pdf" },
-        }),
-      );
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as {
-        card_template_id: string;
-        layout_json: { items: { kind: string; field_id?: string }[] };
-      };
-      expect(init?.method).toBe("POST");
-      expect(payload.card_template_id).toBe("template-1");
-      expect(payload.layout_json.items).toEqual(
-        expect.arrayContaining([expect.objectContaining({ kind: "field", field_id: "field-1" })]),
-      );
-      return Promise.resolve(
-        new Response(new Blob(["PK blank current layout"]), {
-          status: 200,
-          headers: { "X-Document-Filename": "blank.docx" },
-        }),
-      );
-    }
-    if (url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-pdf")) {
-      const payload = JSON.parse(String(init?.body ?? "{}")) as {
-        card_template_id: string;
-        layout_json: { items: { kind: string; field_id?: string }[] };
-      };
-      expect(init?.method).toBe("POST");
-      expect(payload.card_template_id).toBe("template-1");
-      expect(payload.layout_json.items).toEqual(
-        expect.arrayContaining([expect.objectContaining({ kind: "field", field_id: "field-1" })]),
-      );
-      return Promise.resolve(
-        new Response(new Blob(["%PDF blank current layout"]), {
-          status: 200,
-          headers: { "X-Document-Filename": "blank.pdf" },
-        }),
-      );
-    }
-    return jsonResponse({ detail: "not found" }, 404);
-  });
-}
-
-function createDataTransfer(): DataTransfer {
-  const data = new Map<string, string>();
+function linkedPrintLayout(): CardPrintLayout {
   return {
-    effectAllowed: "",
-    dropEffect: "",
-    files: [] as unknown as FileList,
-    items: [] as unknown as DataTransferItemList,
-    types: [] as unknown as readonly string[],
-    clearData: vi.fn(() => data.clear()),
-    getData: vi.fn((type: string) => data.get(type) ?? ""),
-    setData: vi.fn((type: string, value: string) => {
-      data.set(type, value);
-      return undefined;
-    }),
-    setDragImage: vi.fn(),
-  } as unknown as DataTransfer;
+    ...emptyPrintLayout(),
+    items: [
+      {
+        id: "linked-card-layout",
+        kind: "card_layout",
+        card_template_id: "template-1",
+        page: 1,
+        row: 1,
+        column: 1,
+        row_span: 1,
+        column_span: 12,
+        x_mm: 12,
+        y_mm: 12,
+        width_mm: 186,
+        height_mm: 273,
+      },
+    ],
+  };
 }
 
-function stubBrowserDownload() {
-  Object.defineProperty(URL, "createObjectURL", {
-    configurable: true,
-    value: vi.fn(() => "blob:reg-engine-test"),
-  });
-  Object.defineProperty(URL, "revokeObjectURL", {
-    configurable: true,
-    value: vi.fn(),
-  });
-  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+function legacyPrintLayout(): CardPrintLayout {
+  return {
+    ...emptyPrintLayout(),
+    items: [
+      {
+        id: "legacy-field",
+        kind: "field",
+        field_id: "field-1",
+        page: 1,
+        row: 1,
+        column: 1,
+        row_span: 1,
+        column_span: 6,
+        x_mm: 12,
+        y_mm: 12,
+        width_mm: 93,
+        height_mm: 12,
+      },
+    ],
+  };
+}
+
+function blockFixture(id: string, title: string): FormBlockRead {
+  return {
+    id,
+    registry_id: "registry-1",
+    code: id,
+    title,
+    description: null,
+    position: id === "block-1" ? 0 : 1,
+    is_repeatable: false,
+    is_active: true,
+    public_visible: true,
+    public_editable: false,
+    layout_columns: 1,
+    display_config_json: null,
+  };
+}
+
+function fieldFixture(
+  id: string,
+  blockId: string,
+  label: string,
+  fieldType: string,
+): FormFieldRead {
+  return {
+    id,
+    block_id: blockId,
+    code: id,
+    label,
+    description: null,
+    field_type: fieldType,
+    position: 0,
+    required_mode: "not_required",
+    options_source_type: null,
+    options_source_id: null,
+    options_config_json: null,
+    display_config_json: null,
+    is_active: true,
+    is_list_display: false,
+    public_visible: true,
+    public_editable: false,
+  };
+}
+
+function cardTemplateFixture() {
+  return {
+    id: "template-1",
+    registry_id: "registry-1",
+    code: "municipal",
+    name: "Муниципальная карточка",
+    description: null,
+    position: 0,
+    field_schema_json: { field_ids: ["field-1"] },
+    default_values_json: [],
+    is_active: true,
+  };
 }
 
 function renderEditor() {
@@ -702,75 +617,12 @@ function renderEditor() {
       <CardPrintTemplateEditor
         token="token"
         registryId="registry-1"
-        cardTemplate={{
-          id: "template-1",
-          registry_id: "registry-1",
-          code: "municipal",
-          name: "Муниципальная карточка",
-          description: null,
-          position: 0,
-          field_schema_json: { field_ids: ["field-1", "field-2"] },
-          default_values_json: [],
-          is_active: true,
-        }}
+        cardTemplate={cardTemplateFixture()}
         blocks={[
-          {
-            id: "block-1",
-            registry_id: "registry-1",
-            code: "main",
-            title: "Основной блок",
-            description: null,
-            position: 0,
-            is_repeatable: false,
-            is_active: true,
-            public_visible: true,
-            public_editable: false,
-          },
+          blockFixture("block-1", "Основной блок"),
+          blockFixture("block-2", "Дополнительный блок"),
         ]}
-        fields={[
-          {
-            id: "field-1",
-            block_id: "block-1",
-            code: "status",
-            label: "Статус",
-            description: null,
-            field_type: "text",
-            position: 0,
-            required_mode: "not_required",
-            options_source_type: null,
-            options_source_id: null,
-            options_config_json: null,
-            display_config_json: null,
-            is_active: true,
-            is_list_display: false,
-            public_visible: true,
-            public_editable: false,
-          },
-          {
-            id: "field-2",
-            block_id: "block-1",
-            code: "approved",
-            label: "Подтверждено",
-            description: null,
-            field_type: "bool",
-            position: 1,
-            required_mode: "not_required",
-            options_source_type: null,
-            options_source_id: null,
-            options_config_json: null,
-            display_config_json: {
-              column_span: 1,
-              layout_row: 1,
-              layout_column: 2,
-              label_position: "top",
-              separator_style: "none",
-            },
-            is_active: true,
-            is_list_display: false,
-            public_visible: true,
-            public_editable: false,
-          },
-        ]}
+        fields={[fieldFixture("field-1", "block-1", "Статус", "text")]}
       />
     </QueryClientProvider>,
   );
@@ -811,55 +663,34 @@ function renderRegistrySchemaEditor() {
             owner_organization_id: null,
             is_default_for_owner_tree: false,
           },
-          blocks: [
-            {
-              id: "block-1",
-              registry_id: "registry-1",
-              code: "main",
-              title: "Основной блок",
-              description: null,
-              position: 0,
-              is_repeatable: false,
-              is_active: true,
-              public_visible: true,
-              public_editable: false,
-            },
-          ],
-          fields: [
-            {
-              id: "field-1",
-              block_id: "block-1",
-              code: "status",
-              label: "Статус",
-              description: null,
-              field_type: "text",
-              position: 0,
-              required_mode: "not_required",
-              options_source_type: null,
-              options_source_id: null,
-              options_config_json: null,
-              display_config_json: null,
-              is_active: true,
-              is_list_display: false,
-              public_visible: true,
-              public_editable: false,
-            },
-          ],
+          blocks: [blockFixture("block-1", "Основной блок")],
+          fields: [fieldFixture("field-1", "block-1", "Статус", "text")],
           templates: [
             {
-              id: "template-1",
-              registry_id: "registry-1",
+              ...cardTemplateFixture(),
               code: "base_template",
               name: "Базовый шаблон",
-              description: null,
-              position: 0,
               field_schema_json: { field_ids: ["field-1"] },
-              default_values_json: [],
-              is_active: true,
             },
           ],
         }}
       />
     </QueryClientProvider>,
   );
+}
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function stubBrowserDownload() {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:reg-engine-test"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
 }

@@ -1,11 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
 
 import {
+  ApiError,
+  convertCardTemplatePrintViewToLinkedCard,
   createCardTemplatePrintView,
   createFormBlock,
   createFormField,
-  createReferenceList,
   downloadBlankCardPrintLayoutDocx,
   downloadBlankCardPrintLayoutPdf,
   downloadGeneratedDocumentContent,
@@ -13,14 +14,18 @@ import {
   generateCardTemplateLayoutPdf,
   getCardTemplateLayout,
   listReferenceLists,
-  syncCardTemplatePrintView,
-  updateCardTemplatePrintView,
   updateCardTemplate,
+  updateCardTemplateFormLayout,
+  updateCardTemplatePrintView,
+  updateFormBlock,
+  updateFormField,
 } from "@/api/client";
 import type {
   CardPrintLayout,
   CardPrintLayoutItem,
-  CardPrintLayoutItemStyle,
+  CardPrintOverlayItem,
+  CardTemplateFormLayoutRead,
+  CardTemplateLayoutRead,
   CardTemplatePrintViewRead,
   CardTemplateRead,
   FormBlockRead,
@@ -29,28 +34,29 @@ import type {
   ReferenceListRead,
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
-import { FIELD_TYPES, fieldTypeLabel } from "@/app/uiText";
 import { DataAlert } from "@/components/common/DataSurfaces";
-import { MutationFeedback } from "@/components/common/AdminMutation";
-
-import { A4TemplatePalette } from "./A4TemplatePalette";
-import { A4TemplatePropertiesPanel } from "./A4TemplatePropertiesPanel";
-import { A4LayoutRenderer, type A4RendererMode } from "./A4LayoutRenderer";
-import { A4TemplateToolbar } from "./A4TemplateToolbar";
+import { A4LinkedCardCanvas } from "@/features/cardLayout/A4LinkedCardCanvas";
+import type { PrintOnlyItemKind } from "@/features/cardLayout/A4LinkedCardCanvas";
 import {
-  A4_WIDTH_MM,
+  createLinkedCardPrintItem,
+  isLinkedCardPrintLayout,
+} from "@/features/cardLayout/a4LinkedCardLayout";
+import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
+import type { CardLayoutSelection } from "@/features/cardLayout/CardLayoutRenderer";
+import type { CardLayoutCreatePosition } from "@/features/cardLayout/CardWebLayoutCanvas";
+import type { LayoutGeometryCommand } from "@/features/cardLayout/useLayoutGeometrySession";
+
+import { A4TemplatePropertiesPanel } from "./A4TemplatePropertiesPanel";
+import {
   createEmptyCardPrintLayout,
   ensureItemGeometry,
   normalizeLayoutGeometry,
 } from "./printLayoutGeometry";
 import { validatePrintLayout } from "./printLayoutValidation";
 
-const defaultOutputFilename = "{{ card.display_name }}.docx";
-const blockFieldGridColumns = 5;
-const blockFieldPaddingMm = 4;
-const blockFieldHeaderMm = 10;
-const blockFieldGapMm = 3;
-const blockFieldHeightMm = 12;
+const DEFAULT_OUTPUT_FILENAME = "{{ card.display_name }}.docx";
+const STALE_LAYOUT_MESSAGE =
+  "Макет изменён другим пользователем. Обновите данные перед сохранением.";
 
 export type CardLayoutStudioProps = {
   token: string;
@@ -64,35 +70,48 @@ export type CardLayoutStudioProps = {
   onSchemaChanged?: () => Promise<void> | void;
 };
 
-type FieldDialogState = {
-  label: string;
-  fieldType: string;
-  blockId: string;
-  required: boolean;
-  publicVisible: boolean;
-  publicEditable: boolean;
-  isListDisplay: boolean;
-  referenceListId: string;
-  newReferenceListName: string;
-};
+type StudioStage = "layout" | "a4" | "preview";
 
-type BlockDialogState = {
-  title: string;
-  repeatable: boolean;
-  repeatMode: "first_instance_only" | "repeat_section" | "table_rows";
-  publicVisible: boolean;
-  publicEditable: boolean;
-};
-
-type StudioMode = "layout" | "preview" | "settings";
-
-const studioModes: { id: StudioMode; label: string }[] = [
+const stages: Array<{ id: StudioStage; label: string }> = [
   { id: "layout", label: "Макет карточки" },
-  { id: "preview", label: "Предпросмотр карточки" },
-  { id: "settings", label: "Экспорт" },
+  { id: "a4", label: "Печатная форма A4" },
+  { id: "preview", label: "Предпросмотр" },
 ];
 
-export function CardLayoutStudio({
+type FormSaveRequest = {
+  formLayout: CardTemplateFormLayoutRead;
+  expectedRevision: string;
+};
+
+type InsertBlockDialogState = {
+  position: CardLayoutCreatePosition;
+  blockId: string;
+};
+
+export function CardLayoutStudio(props: CardLayoutStudioProps) {
+  const layoutQuery = useQuery({
+    queryKey: ["card-template-layout", props.token, props.cardTemplate.id],
+    queryFn: () => getCardTemplateLayout(props.token, props.cardTemplate.id),
+    enabled: Boolean(props.token && props.cardTemplate.id),
+  });
+
+  if (!layoutQuery.data) {
+    return (
+      <section
+        className="card-layout-studio"
+        role="region"
+        aria-label={`Редактор макета карточки ${props.cardTemplate.name}`}
+      >
+        <DataAlert error={layoutQuery.error} />
+        {!layoutQuery.error ? <p className="data-empty">Загрузка макета карточки…</p> : null}
+      </section>
+    );
+  }
+
+  return <CardLayoutStudioSession {...props} initialLayout={layoutQuery.data} />;
+}
+
+function CardLayoutStudioSession({
   token,
   registryId,
   cardTemplate,
@@ -102,1831 +121,1149 @@ export function CardLayoutStudio({
   selectedCardId = null,
   onClose,
   onSchemaChanged,
-}: CardLayoutStudioProps) {
+  initialLayout,
+}: CardLayoutStudioProps & { initialLayout: CardTemplateLayoutRead }) {
   const queryClient = useQueryClient();
-  const initialPrintViewAppliedRef = useRef(false);
-  const hasLocalPrintLayoutEditsRef = useRef(false);
-  const [createdFields, setCreatedFields] = useState<FormFieldRead[]>([]);
-  const [createdBlocks, setCreatedBlocks] = useState<FormBlockRead[]>([]);
-  const allBlocks = useMemo(() => [...blocks, ...createdBlocks], [blocks, createdBlocks]);
-  const allFields = useMemo(() => [...fields, ...createdFields], [fields, createdFields]);
-  const availableFields = useMemo(
-    () =>
-      cardTemplateFields(
-        cardTemplate,
-        allFields,
-        allBlocks,
-        new Set(createdFields.map((field) => field.id)),
-      ),
-    [allBlocks, allFields, cardTemplate, createdFields],
+  const initialDraft = useMemo(
+    () => mergeExternalStructure(initialLayout, blocks, fields),
+    [blocks, fields, initialLayout],
   );
-  const availableFieldsByBlockId = useMemo(() => {
-    const grouped = new Map<string, FormFieldRead[]>();
-    for (const field of availableFields) {
-      grouped.set(field.block_id, [...(grouped.get(field.block_id) ?? []), field]);
-    }
-    for (const [blockId, blockFields] of grouped) {
-      grouped.set(
-        blockId,
-        [...blockFields].sort((left, right) => left.position - right.position),
-      );
-    }
-    return grouped;
-  }, [availableFields]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [name, setName] = useState(`${cardTemplate.name}: печать`);
-  const [code, setCode] = useState(
-    generateTechnicalCode(`${cardTemplate.code}-print`, "print", []),
-  );
-  const [description, setDescription] = useState("");
-  const [outputFilenameTemplate, setOutputFilenameTemplate] = useState(defaultOutputFilename);
-  const [layout, setLayout] = useState<CardPrintLayout>(() => createEmptyCardPrintLayout());
-  const [history, setHistory] = useState<CardPrintLayout[]>([]);
-  const [future, setFuture] = useState<CardPrintLayout[]>([]);
-  const [zoom, setZoom] = useState(0.75);
-  const [showGrid, setShowGrid] = useState(true);
-  const [showTechnicalData, setShowTechnicalData] = useState(false);
-  const [studioMode, setStudioMode] = useState<StudioMode>("layout");
+  const [stage, setStage] = useState<StudioStage>("layout");
+  const [draftLayout, setDraftLayout] = useState(initialDraft);
+  const [baselineLayout, setBaselineLayout] = useState(initialDraft);
+  const [expectedRevision, setExpectedRevision] = useState(initialDraft.revision);
+  const [selection, setSelection] = useState<CardLayoutSelection>(null);
+  const [failedFormLayout, setFailedFormLayout] = useState<CardTemplateFormLayoutRead | null>(null);
+  const [formSavePending, setFormSavePending] = useState(false);
+  const [schemaPending, setSchemaPending] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [insertDialog, setInsertDialog] = useState<InsertBlockDialogState | null>(null);
+  const [printViews, setPrintViews] = useState(initialDraft.print_views);
+  const initialPrintView = printViews[0];
+  const [selectedPrintView, setSelectedPrintView] = useState(initialPrintView);
+  const [printLayout, setPrintLayout] = useState(() =>
+    preparePrintLayout(initialPrintView, cardTemplate.id),
+  );
+  const [printName, setPrintName] = useState(initialPrintView?.name ?? "Основная A4");
+  const [outputFilename, setOutputFilename] = useState(
+    initialPrintView?.output_filename_template || DEFAULT_OUTPUT_FILENAME,
+  );
+  const [selectedPrintItemId, setSelectedPrintItemId] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(0.75);
+  const [showGrid, setShowGrid] = useState(true);
+  const [printPending, setPrintPending] = useState(false);
+  const [conversionPending, setConversionPending] = useState(false);
   const [lastGenerated, setLastGenerated] = useState<GeneratedDocumentRead | null>(null);
-  const [fieldDialog, setFieldDialog] = useState<FieldDialogState | null>(null);
-  const [blockDialog, setBlockDialog] = useState<BlockDialogState | null>(null);
-
-  const layoutQuery = useQuery({
-    queryKey: ["card-template-layout", token, cardTemplate.id],
-    queryFn: () => getCardTemplateLayout(token, cardTemplate.id),
-    enabled: Boolean(token && cardTemplate.id),
-  });
+  const temporaryBlockIds = useRef(new Set<string>());
+  const temporaryFieldIds = useRef(new Set<string>());
+  const temporaryCounter = useRef(0);
+  const localStructure = useRef(initialDraft.structure);
+  const templateFieldIds = useRef(
+    new Set(
+      Array.isArray(cardTemplate.field_schema_json?.field_ids)
+        ? cardTemplate.field_schema_json.field_ids.map(String)
+        : [],
+    ),
+  );
   const referenceListsQuery = useQuery({
     queryKey: ["reference-lists", token, registryId],
     queryFn: () => listReferenceLists(token, registryId),
     enabled: Boolean(token && registryId && !referenceLists),
   });
 
-  const printViews = useMemo(() => layoutQuery.data?.print_views ?? [], [layoutQuery.data]);
-  const selectedPrintView =
-    printViews.find((printView) => printView.id === selectedTemplateId) ?? null;
+  const allBlocks = useMemo(
+    () => mergeById(blocks, draftLayout.structure.blocks),
+    [blocks, draftLayout.structure.blocks],
+  );
+  const allFields = useMemo(
+    () => mergeById(fields, draftLayout.structure.fields),
+    [draftLayout.structure.fields, fields],
+  );
+  const unusedBlocks = useMemo(() => {
+    const used = new Set(
+      draftLayout.form_layout.sections
+        .map((section) => section.block_id)
+        .filter((value): value is string => Boolean(value)),
+    );
+    return allBlocks.filter((block) => !used.has(block.id) && block.is_active);
+  }, [allBlocks, draftLayout.form_layout.sections]);
   const effectiveReferenceLists = referenceLists ?? referenceListsQuery.data?.items ?? [];
-  const selectedItem = layout.items.find((item) => item.id === selectedItemId) ?? null;
-  const selectedField = selectedItem?.field_id
-    ? availableFields.find((field) => field.id === selectedItem.field_id) ?? null
-    : null;
-  const selectedBlock = selectedItem?.block_id
-    ? allBlocks.find((block) => block.id === selectedItem.block_id) ?? null
-    : null;
-  const selectedTemplateElement =
-    selectedField && selectedItem
-      ? { kind: "field" as const, field: selectedField, item: selectedItem }
-      : selectedBlock && selectedItem
-        ? { kind: "block" as const, block: selectedBlock, item: selectedItem }
-        : null;
-  const validationIssues = useMemo(
-    () => validatePrintLayout(layout, availableFields, allBlocks, name, outputFilenameTemplate),
-    [allBlocks, availableFields, layout, name, outputFilenameTemplate],
-  );
-  const validationErrors = validationIssues.filter((issue) => issue.level === "error");
+  const legacyPrintView =
+    Boolean(selectedPrintView?.document_template_id) &&
+    !isLinkedCardPrintLayout(printLayout) &&
+    hasLegacyCardComposition(printLayout);
+  const selectedPrintItem = findPrintItem(printLayout, selectedPrintItemId);
 
-  const applyPrintView = useCallback(
-    (printView: CardTemplatePrintViewRead) => {
-      hasLocalPrintLayoutEditsRef.current = false;
-      const nextLayout = normalizeLayoutGeometry(
-        printView.layout_json ?? createEmptyCardPrintLayout(),
-      );
-      setSelectedTemplateId(printView.id);
-      setSelectedItemId(nextLayout.items[0]?.id ?? null);
-      setName(printView.name);
-      setCode(generateTechnicalCode(`${cardTemplate.code}-print`, "print", []));
-      setDescription("");
-      setOutputFilenameTemplate(printView.output_filename_template || defaultOutputFilename);
-      setLayout(nextLayout);
-      setHistory([]);
-      setFuture([]);
-      setLocalMessage(null);
-      setLocalError(null);
-    },
-    [cardTemplate.code],
-  );
-
-  useEffect(() => {
-    if (
-      initialPrintViewAppliedRef.current ||
-      hasLocalPrintLayoutEditsRef.current ||
-      printViews.length === 0
-    ) {
-      return;
-    }
-    applyPrintView(printViews[0]);
-    initialPrintViewAppliedRef.current = true;
-  }, [applyPrintView, printViews]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const normalizedLayout = normalizeLayoutGeometry(layout);
-      const issues = validatePrintLayout(
-        normalizedLayout,
-        availableFields,
-        allBlocks,
-        name,
-        outputFilenameTemplate,
-      );
-      const errors = issues.filter((issue) => issue.level === "error");
-      if (errors.length > 0) {
-        throw new Error(errors[0].message);
-      }
-      const cleanName = name.trim();
-      const cleanOutput = outputFilenameTemplate.trim();
-      if (selectedTemplateId && selectedPrintView?.document_template_id) {
-        const updated = await updateCardTemplatePrintView(
-          token,
-          cardTemplate.id,
-          selectedTemplateId,
-          {
-            name: cleanName,
-            is_default: true,
-            layout_json: normalizedLayout,
-            output_filename_template: cleanOutput,
-          },
-        );
-        return { printView: updated };
-      }
-      const created = await createCardTemplatePrintView(token, cardTemplate.id, {
-        name: cleanName,
-        is_default: true,
-        layout_json: normalizedLayout,
-        output_filename_template: cleanOutput,
-      });
-      return { printView: created };
-    },
-    onMutate: () => {
-      setLocalError(null);
-      setLocalMessage(null);
-    },
-    onSuccess: async (result) => {
-      setLocalMessage("Печатное представление сохранено");
-      await queryClient.invalidateQueries({
-        queryKey: ["card-template-layout", token, cardTemplate.id],
-      });
-      setSelectedTemplateId(result.printView.id);
-      setOutputFilenameTemplate(result.printView.output_filename_template || defaultOutputFilename);
-      setLayout((current) => normalizeLayoutGeometry(current));
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const generateDocxMutation = useMutation<GeneratedDocumentRead | null>({
-    mutationFn: async () => {
-      if (selectedCardId) {
-        const { printView } = await saveMutation.mutateAsync();
-        const generated = await generateCardTemplateLayoutDocx(
-          token,
-          selectedCardId,
-          cardTemplate.id,
-          {
-            print_view_id: printView.id,
-            title: name,
-          },
-        );
-        return generated.document;
-      }
-      const download = await downloadBlankCardPrintLayoutDocx(
-        token,
-        registryId,
-        blankLayoutDownloadPayload(),
-      );
-      triggerBrowserDownload(download.blob, download.filename);
-      return null;
-    },
-    onSuccess: (generated) => {
-      if (generated) {
-        setLastGenerated(generated);
-        setLocalMessage("DOCX сформирован");
-      } else {
-        setLocalMessage("Пустой DOCX скачан");
-      }
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const generatePdfMutation = useMutation<GeneratedDocumentRead | null>({
-    mutationFn: async () => {
-      if (selectedCardId) {
-        const { printView } = await saveMutation.mutateAsync();
-        const generated = await generateCardTemplateLayoutPdf(
-          token,
-          selectedCardId,
-          cardTemplate.id,
-          {
-            print_view_id: printView.id,
-            title: name,
-          },
-        );
-        return generated.document;
-      }
-      const download = await downloadBlankCardPrintLayoutPdf(
-        token,
-        registryId,
-        blankLayoutDownloadPayload(),
-      );
-      triggerBrowserDownload(download.blob, download.filename);
-      return null;
-    },
-    onSuccess: (generated) => {
-      if (generated) {
-        setLastGenerated(generated);
-        setLocalMessage("PDF сформирован");
-      } else {
-        setLocalMessage("Пустой PDF скачан");
-      }
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const downloadLastMutation = useMutation({
-    mutationFn: async () => {
-      if (!lastGenerated) {
-        throw new Error("Нет сформированного файла для скачивания.");
-      }
-      return downloadGeneratedDocumentContent(token, lastGenerated.id);
-    },
-    onSuccess: ({ blob, filename }) => {
-      triggerBrowserDownload(blob, filename);
-      setLocalMessage("Документ скачан");
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const syncPrintViewMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedTemplateId || !selectedPrintView?.document_template_id) {
-        throw new Error("Сначала сохраните печатное представление.");
-      }
-      return syncCardTemplatePrintView(token, cardTemplate.id, selectedTemplateId);
-    },
-    onSuccess: async (printView) => {
-      applyPrintView(printView);
-      await queryClient.invalidateQueries({
-        queryKey: ["card-template-layout", token, cardTemplate.id],
-      });
-      setLocalMessage("Печатное представление синхронизировано");
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const createFieldMutation = useMutation({
-    mutationFn: async (state: FieldDialogState) => {
-      const cleanLabel = state.label.trim();
-      if (!cleanLabel) {
-        throw new Error("Укажите название поля.");
-      }
-      const blockId = state.blockId || allBlocks[0]?.id;
-      if (!blockId) {
-        throw new Error("Сначала создайте блок данных.");
-      }
-      let referenceListId = state.referenceListId || null;
-      if (usesReferenceList(state.fieldType) && state.newReferenceListName.trim()) {
-        const createdReferenceList = await createReferenceList(token, registryId, {
-          code: generateTechnicalCode(state.newReferenceListName, "ref", []),
-          name: state.newReferenceListName.trim(),
-        });
-        referenceListId = createdReferenceList.id;
-      }
-      const field = await createFormField(token, blockId, {
-        code: generateTechnicalCode(
-          cleanLabel,
-          "field",
-          allFields.map((field) => field.code),
-        ),
-        label: cleanLabel,
-        field_type: state.fieldType,
-        required_mode: state.required ? "required" : "not_required",
-        public_visible: state.publicVisible,
-        public_editable: state.publicEditable,
-        is_list_display: state.isListDisplay,
-        options_source_type:
-          usesReferenceList(state.fieldType) && referenceListId ? "reference_list" : null,
-        options_source_id:
-          usesReferenceList(state.fieldType) && referenceListId ? referenceListId : null,
-      });
-      await appendFieldToCardTemplate(field.id);
-      return field;
-    },
-    onSuccess: async (field) => {
-      setCreatedFields((current) => [...current, field]);
-      addItem(createFieldItem(field, layout.items));
-      setFieldDialog(null);
-      await queryClient.invalidateQueries({ queryKey: ["reference-lists", token, registryId] });
-      await onSchemaChanged?.();
-      setLocalMessage("Поле создано и добавлено на A4");
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const createBlockMutation = useMutation({
-    mutationFn: async (state: BlockDialogState) => {
-      const cleanTitle = state.title.trim();
-      if (!cleanTitle) {
-        throw new Error("Укажите название блока.");
-      }
-      return createFormBlock(token, registryId, {
-        code: generateTechnicalCode(
-          cleanTitle,
-          "block",
-          allBlocks.map((block) => block.code),
-        ),
-        title: cleanTitle,
-        position: allBlocks.length,
-        is_repeatable: state.repeatable,
-        public_visible: state.publicVisible,
-        public_editable: state.publicEditable,
-        display_config_json: {
-          print_repeat_mode: state.repeatMode,
-        },
-      });
-    },
-    onSuccess: async (block) => {
-      setCreatedBlocks((current) => [...current, block]);
-      addItem(
-        createBlockItem(block, layout.items, blockDialog?.repeatMode ?? "first_instance_only"),
-      );
-      setBlockDialog(null);
-      await onSchemaChanged?.();
-      setLocalMessage("Блок создан и добавлен на A4");
-    },
-    onError: (error) => setLocalError(error instanceof Error ? error.message : String(error)),
-  });
-
-  const saveStatus = saveStatusText(
-    saveMutation.isPending ? "saving" : "idle",
-    localMessage,
-    validationErrors.length,
-  );
-  const rendererMode: A4RendererMode = studioMode === "preview" ? "preview" : "design";
-  const isDesignMode = studioMode === "layout";
-
-  async function appendFieldToCardTemplate(fieldId: string) {
-    const currentFieldIds = templateFieldIds(cardTemplate);
-    if (currentFieldIds.includes(fieldId)) {
-      return;
-    }
-    await updateCardTemplate(token, cardTemplate.id, {
-      field_schema_json: {
-        ...cardTemplate.field_schema_json,
-        field_ids: [...currentFieldIds, fieldId],
-      },
-    });
-  }
-
-  function commitLayout(nextLayout: CardPrintLayout) {
-    hasLocalPrintLayoutEditsRef.current = true;
-    setHistory((current) => [...current.slice(-24), layout]);
-    setFuture([]);
-    setLayout(normalizeLayoutGeometry(markManualGeometryChanges(layout, nextLayout)));
-    setLocalMessage(null);
-  }
-
-  function addItems(items: CardPrintLayoutItem[]) {
-    const nextItems = [...layout.items];
-    let selectedId: string | null = null;
-    for (const item of items) {
-      const normalizedItem = ensureItemGeometry(item, { ...layout, items: nextItems });
-      nextItems.push(normalizedItem);
-      selectedId = normalizedItem.id;
-    }
-    commitLayout({ ...layout, items: nextItems });
-    setSelectedItemId(selectedId);
-  }
-
-  function addItem(item: CardPrintLayoutItem) {
-    addItems([item]);
-  }
-
-  function addExistingFieldAt(fieldId: string, point: { x_mm: number; y_mm: number }) {
-    const field = availableFields.find((candidate) => candidate.id === fieldId);
-    if (!field) {
-      setLocalError("Поле не найдено в текущем шаблоне карточки.");
-      return;
-    }
-    addItem(
-      createFieldItem(field, layout.items, {
-        x_mm: point.x_mm,
-        y_mm: point.y_mm,
-        width_mm: 78,
-        height_mm: 12,
-      }),
-    );
-  }
-
-  function addExistingBlock(block: FormBlockRead) {
-    addItems(
-      createBlockItems(block, availableFields, layout.items, printRepeatModeForBlock(block)),
-    );
-  }
-
-  function addExistingBlockAt(blockId: string, point: { x_mm: number; y_mm: number }) {
-    const block = allBlocks.find((candidate) => candidate.id === blockId);
-    if (!block) {
-      setLocalError("Блок не найден в текущем реестре.");
-      return;
-    }
-    addItems(
-      createBlockItems(block, availableFields, layout.items, printRepeatModeForBlock(block), {
-        x_mm: point.x_mm,
-        y_mm: point.y_mm,
-        width_mm: A4_WIDTH_MM - 30,
-        height_mm: 42,
-      }),
-    );
-  }
-
-  function blankLayoutDownloadPayload() {
-    const normalizedLayout = validateCurrentLayout();
-    return {
-      name: name.trim(),
-      card_template_id: cardTemplate.id,
-      layout_json: normalizedLayout,
-      output_filename_template: outputFilenameTemplate.trim(),
-    };
-  }
-
-  function validateCurrentLayout() {
-    const normalizedLayout = normalizeLayoutGeometry(layout);
-    const issues = validatePrintLayout(
-      normalizedLayout,
-      availableFields,
-      allBlocks,
-      name,
-      outputFilenameTemplate,
-    );
-    const errors = issues.filter((issue) => issue.level === "error");
-    if (errors.length > 0) {
-      throw new Error(errors[0].message);
-    }
-    return normalizedLayout;
-  }
-
-  function updateSelectedItem(patch: Partial<CardPrintLayoutItem>) {
-    if (!selectedItem) {
-      return;
-    }
-    const nextPatch = hasGeometryPatch(patch) ? { ...patch, override: true } : patch;
-    commitLayout({
-      ...layout,
-      items: layout.items.map((item) =>
-        item.id === selectedItem.id ? ensureItemGeometry({ ...item, ...nextPatch }, layout) : item,
-      ),
-    });
-  }
-
-  function removeSelectedItem() {
-    if (!selectedItem) {
-      return;
-    }
-    commitLayout({ ...layout, items: layout.items.filter((item) => item.id !== selectedItem.id) });
-    setSelectedItemId(null);
-  }
-
-  function undo() {
-    const previous = history.at(-1);
-    if (!previous) {
-      return;
-    }
-    setFuture((current) => [layout, ...current]);
-    setHistory((current) => current.slice(0, -1));
-    setLayout(previous);
-  }
-
-  function redo() {
-    const next = future[0];
-    if (!next) {
-      return;
-    }
-    setHistory((current) => [...current, layout]);
-    setFuture((current) => current.slice(1));
-    setLayout(next);
-  }
-
-  function startNewTemplate() {
-    hasLocalPrintLayoutEditsRef.current = false;
-    setSelectedTemplateId(null);
-    setSelectedItemId(null);
-    setName(`${cardTemplate.name}: A4`);
-    setCode(generateTechnicalCode(`${cardTemplate.code}-print`, "print", []));
-    setDescription("");
-    setOutputFilenameTemplate(defaultOutputFilename);
-    setLayout(createEmptyCardPrintLayout());
-    setHistory([]);
-    setFuture([]);
-    setLocalMessage(null);
+  async function persistFormLayout(request: FormSaveRequest) {
+    setFormSavePending(true);
     setLocalError(null);
+    setLocalMessage(null);
+    try {
+      const saved = await updateCardTemplateFormLayout(token, cardTemplate.id, {
+        expected_revision: request.expectedRevision,
+        form_layout: request.formLayout,
+      });
+      const merged = {
+        ...saved,
+        structure: mergeStructure(saved.structure, localStructure.current),
+        form_layout: request.formLayout,
+      };
+      localStructure.current = merged.structure;
+      setDraftLayout(merged);
+      setBaselineLayout(merged);
+      setExpectedRevision(saved.revision);
+      setFailedFormLayout(null);
+      setLocalMessage("Макет карточки сохранён");
+      queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], saved);
+    } catch (error) {
+      setFailedFormLayout(request.formLayout);
+      setLocalError(
+        error instanceof ApiError && error.status === 409
+          ? STALE_LAYOUT_MESSAGE
+          : `Не сохранено. ${errorMessage(error)}`,
+      );
+    } finally {
+      setFormSavePending(false);
+    }
   }
 
-  function loadPrintTemplate(templateId: string) {
-    if (!templateId) {
-      startNewTemplate();
-      return;
-    }
-    const printView = printViews.find((candidate) => candidate.id === templateId);
-    if (!printView) {
-      return;
-    }
-    applyPrintView(printView);
+  function saveNextFormLayout(formLayout: CardTemplateFormLayoutRead) {
+    setDraftLayout((current) => ({ ...current, form_layout: formLayout }));
+    void persistFormLayout({ formLayout, expectedRevision });
   }
+
+  async function reloadFormLayout() {
+    setFormSavePending(true);
+    try {
+      const latest = await getCardTemplateLayout(token, cardTemplate.id);
+      const merged = mergeExternalStructure(latest, blocks, fields);
+      localStructure.current = merged.structure;
+      setDraftLayout(merged);
+      setBaselineLayout(merged);
+      setExpectedRevision(latest.revision);
+      setFailedFormLayout(null);
+      setLocalError(null);
+      setLocalMessage("Данные макета обновлены");
+      queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], latest);
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setFormSavePending(false);
+    }
+  }
+
+  function cancelLocalFormChanges() {
+    localStructure.current = baselineLayout.structure;
+    setDraftLayout(baselineLayout);
+    setExpectedRevision(baselineLayout.revision);
+    setFailedFormLayout(null);
+    setLocalError(null);
+    setLocalMessage("Локальные изменения отменены");
+    setSelection(null);
+  }
+
+  async function retryFormSave() {
+    if (!failedFormLayout) return;
+    setFormSavePending(true);
+    try {
+      const latest = await getCardTemplateLayout(token, cardTemplate.id);
+      setExpectedRevision(latest.revision);
+      await persistFormLayout({
+        formLayout: failedFormLayout,
+        expectedRevision: latest.revision,
+      });
+    } catch (error) {
+      setLocalError(errorMessage(error));
+      setFormSavePending(false);
+    }
+  }
+
+  function handleGeometryCommit(command: LayoutGeometryCommand) {
+    saveNextFormLayout(applyGeometryCommand(draftLayout.form_layout, command));
+  }
+
+  function startCreateBlock(position: CardLayoutCreatePosition) {
+    const temporaryId = nextTemporaryId("block");
+    const block: FormBlockRead = {
+      id: temporaryId,
+      registry_id: registryId,
+      code: generateTechnicalCode(
+        "Новый блок",
+        "block",
+        allBlocks.map((item) => item.code),
+      ),
+      title: "Новый блок",
+      description: null,
+      position: allBlocks.length,
+      is_repeatable: false,
+      is_active: true,
+      public_visible: true,
+      public_editable: false,
+      layout_columns: 1,
+      display_config_json: null,
+    };
+    const next = {
+      ...draftLayout,
+      structure: {
+        ...draftLayout.structure,
+        blocks: [...draftLayout.structure.blocks, block],
+      },
+      form_layout: {
+        ...draftLayout.form_layout,
+        sections: [
+          ...draftLayout.form_layout.sections,
+          {
+            id: `layout-${temporaryId}`,
+            block_id: temporaryId,
+            ...position,
+            items: [],
+          },
+        ],
+      },
+    };
+    temporaryBlockIds.current.add(temporaryId);
+    localStructure.current = next.structure;
+    setDraftLayout(next);
+    setSelection({ kind: "block", id: temporaryId });
+  }
+
+  async function commitBlock(block: FormBlockRead) {
+    setSchemaPending(true);
+    setLocalError(null);
+    try {
+      if (temporaryBlockIds.current.has(block.id)) {
+        const created = await createFormBlock(token, registryId, {
+          code: block.code,
+          title: block.title,
+          description: block.description,
+          position: block.position,
+          is_repeatable: block.is_repeatable,
+          public_visible: block.public_visible,
+          public_editable: block.public_editable,
+          layout_columns: block.layout_columns,
+          display_config_json: block.display_config_json,
+        });
+        const next = replaceBlock(draftLayout, block.id, created);
+        temporaryBlockIds.current.delete(block.id);
+        localStructure.current = next.structure;
+        setDraftLayout(next);
+        await persistFormLayout({ formLayout: next.form_layout, expectedRevision });
+        await onSchemaChanged?.();
+        return;
+      }
+      const updated = await updateFormBlock(token, block.id, {
+        title: block.title,
+        description: block.description,
+        position: block.position,
+        layout_columns: block.layout_columns,
+        display_config_json: block.display_config_json,
+      });
+      const nextStructure = {
+        ...draftLayout.structure,
+        blocks: draftLayout.structure.blocks.map((item) =>
+          item.id === updated.id ? updated : item,
+        ),
+      };
+      localStructure.current = nextStructure;
+      setDraftLayout((current) => ({ ...current, structure: nextStructure }));
+      setLocalMessage("Блок сохранён");
+      await onSchemaChanged?.();
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setSchemaPending(false);
+    }
+  }
+
+  function cancelBlock(blockId: string) {
+    if (!temporaryBlockIds.current.delete(blockId)) return;
+    const next = removeTemporaryBlock(draftLayout, blockId);
+    localStructure.current = next.structure;
+    setDraftLayout(next);
+  }
+
+  function startCreateField(blockId: string) {
+    const section = draftLayout.form_layout.sections.find((item) => item.block_id === blockId);
+    if (!section) return;
+    const temporaryId = nextTemporaryId("field");
+    const itemId = `layout-${temporaryId}`;
+    const field: FormFieldRead = {
+      id: temporaryId,
+      block_id: blockId,
+      code: generateTechnicalCode(
+        "Новое поле",
+        "field",
+        allFields.map((item) => item.code),
+      ),
+      label: "Новое поле",
+      description: null,
+      field_type: "text",
+      position: allFields.filter((item) => item.block_id === blockId).length,
+      required_mode: "not_required",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: null,
+      display_config_json: null,
+      is_active: true,
+      is_list_display: false,
+      public_visible: true,
+      public_editable: false,
+    };
+    const position = firstEmptyFieldPosition(section.items);
+    const next = {
+      ...draftLayout,
+      structure: {
+        ...draftLayout.structure,
+        fields: [...draftLayout.structure.fields, field],
+      },
+      form_layout: {
+        ...draftLayout.form_layout,
+        sections: draftLayout.form_layout.sections.map((item) =>
+          item.id === section.id
+            ? {
+                ...item,
+                items: [
+                  ...item.items,
+                  {
+                    id: itemId,
+                    kind: "field",
+                    field_id: temporaryId,
+                    ...position,
+                    text: null,
+                  },
+                ],
+              }
+            : item,
+        ),
+      },
+    };
+    temporaryFieldIds.current.add(temporaryId);
+    localStructure.current = next.structure;
+    setDraftLayout(next);
+    setSelection({ kind: "field", id: temporaryId });
+  }
+
+  async function commitField(field: FormFieldRead) {
+    setSchemaPending(true);
+    setLocalError(null);
+    try {
+      if (temporaryFieldIds.current.has(field.id)) {
+        const created = await createFormField(token, field.block_id, {
+          code: field.code,
+          label: field.label,
+          field_type: field.field_type,
+          description: field.description,
+          position: field.position,
+          required_mode: field.required_mode,
+          options_source_type: field.options_source_type,
+          options_source_id: field.options_source_id,
+          options_config_json: field.options_config_json,
+          display_config_json: field.display_config_json,
+          is_list_display: field.is_list_display,
+          public_visible: field.public_visible,
+          public_editable: field.public_editable,
+        });
+        await appendFieldsToTemplate([created.id]);
+        const next = replaceField(draftLayout, field.id, created);
+        temporaryFieldIds.current.delete(field.id);
+        localStructure.current = next.structure;
+        setDraftLayout(next);
+        await persistFormLayout({ formLayout: next.form_layout, expectedRevision });
+        await onSchemaChanged?.();
+        return;
+      }
+      const updated = await updateFormField(token, field.id, {
+        label: field.label,
+        description: field.description,
+        position: field.position,
+        required_mode: field.required_mode,
+        options_config_json: field.options_config_json,
+        display_config_json: field.display_config_json,
+        is_active: field.is_active,
+        is_list_display: field.is_list_display,
+      });
+      const nextStructure = {
+        ...draftLayout.structure,
+        fields: draftLayout.structure.fields.map((item) =>
+          item.id === updated.id ? updated : item,
+        ),
+      };
+      localStructure.current = nextStructure;
+      setDraftLayout((current) => ({ ...current, structure: nextStructure }));
+      setLocalMessage("Поле сохранено");
+      await onSchemaChanged?.();
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setSchemaPending(false);
+    }
+  }
+
+  function cancelField(fieldId: string) {
+    if (!temporaryFieldIds.current.delete(fieldId)) return;
+    const next = removeTemporaryField(draftLayout, fieldId);
+    localStructure.current = next.structure;
+    setDraftLayout(next);
+  }
+
+  function openInsertBlock(position: CardLayoutCreatePosition) {
+    setInsertDialog({ position, blockId: unusedBlocks[0]?.id ?? "" });
+  }
+
+  async function insertExistingBlock() {
+    if (!insertDialog?.blockId) return;
+    const block = allBlocks.find((item) => item.id === insertDialog.blockId);
+    if (!block) return;
+    const blockFields = allFields.filter((field) => field.block_id === block.id && field.is_active);
+    setSchemaPending(true);
+    try {
+      await appendFieldsToTemplate(blockFields.map((field) => field.id));
+      const nextFormLayout: CardTemplateFormLayoutRead = {
+        ...draftLayout.form_layout,
+        sections: [
+          ...draftLayout.form_layout.sections,
+          {
+            id: `block-${block.id}`,
+            block_id: block.id,
+            ...insertDialog.position,
+            items: blockFields.map((field, index) => ({
+              id: `field-${field.id}`,
+              kind: "field",
+              field_id: field.id,
+              row: Math.floor(index / 2) + 1,
+              column: index % 2 === 0 ? 1 : 7,
+              row_span: 1,
+              column_span: 6,
+              text: null,
+            })),
+          },
+        ],
+      };
+      setInsertDialog(null);
+      saveNextFormLayout(nextFormLayout);
+      await onSchemaChanged?.();
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setSchemaPending(false);
+    }
+  }
+
+  async function appendFieldsToTemplate(fieldIds: string[]) {
+    const missing = fieldIds.filter((fieldId) => !templateFieldIds.current.has(fieldId));
+    if (missing.length === 0) return;
+    const nextIds = [...templateFieldIds.current, ...missing];
+    await updateCardTemplate(token, cardTemplate.id, {
+      field_schema_json: { field_ids: nextIds },
+    });
+    templateFieldIds.current = new Set(nextIds);
+  }
+
+  async function savePrintDraft() {
+    setPrintPending(true);
+    setLocalError(null);
+    try {
+      const normalized = normalizeLayoutGeometry(printLayout);
+      const errors = validatePrintLayout(
+        normalized,
+        allFields,
+        allBlocks,
+        printName,
+        outputFilename,
+      ).filter((issue) => issue.level === "error");
+      if (errors[0]) throw new Error(errors[0].message);
+      const payload = {
+        name: printName.trim(),
+        is_default: true,
+        layout_json: normalized,
+        output_filename_template: outputFilename.trim(),
+      };
+      const saved = selectedPrintView?.document_template_id
+        ? await updateCardTemplatePrintView(token, cardTemplate.id, selectedPrintView.id, payload)
+        : await createCardTemplatePrintView(token, cardTemplate.id, payload);
+      setSelectedPrintView(saved);
+      setPrintViews((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setPrintLayout(normalized);
+      setLocalMessage("Печатная форма сохранена");
+      return saved;
+    } catch (error) {
+      setLocalError(errorMessage(error));
+      return null;
+    } finally {
+      setPrintPending(false);
+    }
+  }
+
+  function addPrintItem(kind: PrintOnlyItemKind) {
+    const item = createPrintOnlyItem(kind, printLayout);
+    if (isOverlayKind(item.kind)) {
+      const overlay = printItemToOverlay(item);
+      setPrintLayout((current) => ({
+        ...current,
+        overlays: [...(current.overlays ?? []), overlay],
+      }));
+    } else {
+      setPrintLayout((current) => ({ ...current, items: [...current.items, item] }));
+    }
+    setSelectedPrintItemId(item.id);
+    setLocalMessage(null);
+  }
+
+  function updateSelectedPrintItem(patch: Partial<CardPrintLayoutItem>) {
+    if (!selectedPrintItem) return;
+    setPrintLayout((current) => ({
+      ...current,
+      items: current.items.map((item) =>
+        item.id === selectedPrintItem.id
+          ? ensureItemGeometry({ ...item, ...patch, override: true }, current)
+          : item,
+      ),
+      overlays: current.overlays?.map((item) =>
+        item.id === selectedPrintItem.id
+          ? printItemToOverlay({ ...overlayToPrintItem(item), ...patch, override: true })
+          : item,
+      ),
+    }));
+  }
+
+  function removeSelectedPrintItem() {
+    if (!selectedPrintItem || selectedPrintItem.kind === "card_layout") return;
+    setPrintLayout((current) => ({
+      ...current,
+      items: current.items.filter((item) => item.id !== selectedPrintItem.id),
+      overlays: current.overlays?.filter((item) => item.id !== selectedPrintItem.id),
+    }));
+    setSelectedPrintItemId(null);
+  }
+
+  async function convertLegacyPrintView() {
+    if (!selectedPrintView?.document_template_id) {
+      setLocalError("Сначала сохраните печатное представление.");
+      return;
+    }
+    setConversionPending(true);
+    setLocalError(null);
+    try {
+      await convertCardTemplatePrintViewToLinkedCard(token, cardTemplate.id, selectedPrintView.id);
+      const latest = await getCardTemplateLayout(token, cardTemplate.id);
+      const converted =
+        latest.print_views.find((item) => item.id === selectedPrintView.id) ??
+        latest.print_views[0];
+      setPrintViews(latest.print_views);
+      setSelectedPrintView(converted);
+      setPrintLayout(preparePrintLayout(converted, cardTemplate.id));
+      setSelectedPrintItemId(null);
+      setLocalMessage("Создана новая версия связанного макета");
+      queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], latest);
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setConversionPending(false);
+    }
+  }
+
+  async function generate(format: "docx" | "pdf") {
+    setPrintPending(true);
+    setLocalError(null);
+    try {
+      if (selectedCardId) {
+        const printView = await savePrintDraft();
+        if (!printView) return;
+        const generated =
+          format === "docx"
+            ? await generateCardTemplateLayoutDocx(token, selectedCardId, cardTemplate.id, {
+                print_view_id: printView.id,
+                title: printName,
+              })
+            : await generateCardTemplateLayoutPdf(token, selectedCardId, cardTemplate.id, {
+                print_view_id: printView.id,
+                title: printName,
+              });
+        setLastGenerated(generated.document);
+        setLocalMessage(`${format.toUpperCase()} сформирован`);
+        return;
+      }
+      const payload = {
+        name: printName.trim(),
+        card_template_id: cardTemplate.id,
+        layout_json: normalizeLayoutGeometry(printLayout),
+        output_filename_template: outputFilename.trim(),
+      };
+      const download =
+        format === "docx"
+          ? await downloadBlankCardPrintLayoutDocx(token, registryId, payload)
+          : await downloadBlankCardPrintLayoutPdf(token, registryId, payload);
+      triggerBrowserDownload(download.blob, download.filename);
+      setLocalMessage(`Пустой ${format.toUpperCase()} скачан`);
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    } finally {
+      setPrintPending(false);
+    }
+  }
+
+  async function downloadLast() {
+    if (!lastGenerated) return;
+    try {
+      const download = await downloadGeneratedDocumentContent(token, lastGenerated.id);
+      triggerBrowserDownload(download.blob, download.filename);
+      setLocalMessage("Документ скачан");
+    } catch (error) {
+      setLocalError(errorMessage(error));
+    }
+  }
+
+  function loadPrintView(printViewId: string) {
+    const next = printViews.find((item) => item.id === printViewId);
+    if (!next) return;
+    setSelectedPrintView(next);
+    setPrintName(next.name);
+    setOutputFilename(next.output_filename_template || DEFAULT_OUTPUT_FILENAME);
+    setPrintLayout(preparePrintLayout(next, cardTemplate.id));
+    setSelectedPrintItemId(null);
+  }
+
+  function nextTemporaryId(kind: "block" | "field") {
+    temporaryCounter.current += 1;
+    return `draft-${kind}-${temporaryCounter.current}`;
+  }
+
+  const busy = formSavePending || schemaPending || printPending || conversionPending;
 
   return (
     <section
-      className="card-print-editor a4-template-editor"
+      className="card-layout-studio"
       role="region"
-      aria-label={`Редактор печатного шаблона A4 ${cardTemplate.name}`}
+      aria-label={`Редактор макета карточки ${cardTemplate.name}`}
+      aria-busy={busy}
     >
-      <A4TemplateToolbar
-        templateName={name}
-        saveStatus={saveStatus}
-        zoom={zoom}
-        showGrid={showGrid}
-        previewMode={studioMode === "preview"}
-        canGenerate={
-          validationErrors.length === 0 &&
-          !saveMutation.isPending &&
-          !generateDocxMutation.isPending &&
-          !generatePdfMutation.isPending
-        }
-        canDownloadLast={Boolean(lastGenerated)}
-        onTemplateNameChange={setName}
-        onZoomChange={setZoom}
-        onToggleGrid={() => setShowGrid((current) => !current)}
-        onTogglePreview={() =>
-          setStudioMode((current) => (current === "preview" ? "layout" : "preview"))
-        }
-        onOpenSettings={() => setStudioMode("settings")}
-        onSave={() => saveMutation.mutate()}
-        onGenerateDocx={() => generateDocxMutation.mutate()}
-        onGeneratePdf={() => generatePdfMutation.mutate()}
-        onDownloadLast={() => downloadLastMutation.mutate()}
-      />
-      <MutationFeedback
-        error={localError ? new Error(localError) : null}
-        successMessage={localMessage}
-      />
-      <DataAlert error={layoutQuery.error ?? referenceListsQuery.error} />
-
-      <div className="card-layout-studio-tabs" role="tablist" aria-label="Режимы редактора шаблона">
-        {studioModes.map((studioModeOption) => (
-          <button
-            key={studioModeOption.id}
-            type="button"
-            role="tab"
-            aria-selected={studioMode === studioModeOption.id}
-            className={studioMode === studioModeOption.id ? "is-active" : ""}
-            onClick={() => setStudioMode(studioModeOption.id)}
-          >
-            {studioModeOption.label}
-          </button>
-        ))}
-        {onClose && (
-          <button type="button" className="ghost-button" onClick={onClose}>
-            Закрыть
-          </button>
-        )}
-      </div>
-
-      <div className="a4-template-subbar">
-        <label>
-          Печатное представление
-          <select
-            value={selectedTemplateId ?? ""}
-            onChange={(event) => loadPrintTemplate(event.currentTarget.value)}
-          >
-            {!selectedTemplateId && <option value="">Новое представление</option>}
-            {printViews.map((printView) => (
-              <option key={printView.id} value={printView.id}>
-                {printView.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={showTechnicalData}
-            onChange={(event) => setShowTechnicalData(event.currentTarget.checked)}
-          />
-          Показать технические данные
-        </label>
-        <div className="row-actions">
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={history.length === 0}
-            onClick={undo}
-          >
-            Отменить
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={future.length === 0}
-            onClick={redo}
-          >
-            Повторить
-          </button>
-          <button type="button" className="ghost-button" onClick={startNewTemplate}>
-            + Добавить представление
-          </button>
-        </div>
-      </div>
-
-      <section className="card-layout-sync-panel" aria-label="Синхронизация шаблона карточки">
+      <header className="card-layout-studio-header">
         <div>
-          <strong>Связь структуры и A4</strong>
-          {layoutQuery.data?.sync_status.has_errors ? (
-            <span className="inline-alert">Есть ошибки A4</span>
-          ) : (layoutQuery.data?.sync_status.warnings.length ?? 0) > 0 ? (
-            <span className="muted-text">Есть предупреждения синхронизации</span>
-          ) : (
-            <span className="inline-success">Синхронизировано</span>
-          )}
+          <h3>{cardTemplate.name}</h3>
+          <span className="card-layout-studio-save-status">
+            {formSavePending
+              ? "Сохранение…"
+              : (localMessage ?? (localError ? "Не сохранено" : "Сохранено"))}
+          </span>
         </div>
-        <div className="card-layout-sync-details">
-          {layoutQuery.data?.sync_status.errors.map((error) => (
-            <span key={error} className="inline-alert">
-              {error}
-            </span>
-          ))}
-          {layoutQuery.data?.sync_status.warnings.map((warning) => (
-            <span key={warning} className="muted-text">
-              {warning}
-            </span>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="ghost-button"
-          disabled={
-            syncPrintViewMutation.isPending ||
-            !selectedTemplateId ||
-            !selectedPrintView?.document_template_id
-          }
-          onClick={() => syncPrintViewMutation.mutate()}
-        >
-          Синхронизировать автоматически
-        </button>
-      </section>
-
-      {studioMode === "settings" && (
-        <aside className="a4-template-settings" aria-label="Экспорт шаблона">
-          <div className="a4-template-settings-header">
-            <h4>Экспорт</h4>
-            <button type="button" className="ghost-button" onClick={() => setStudioMode("layout")}>
+        <div className="row-actions" role="toolbar" aria-label="Действия макета карточки">
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={busy}
+            onClick={() => void generate("docx")}
+          >
+            DOCX
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={busy}
+            onClick={() => void generate("pdf")}
+          >
+            PDF
+          </button>
+          {lastGenerated ? (
+            <button type="button" className="ghost-button" onClick={() => void downloadLast()}>
+              Скачать
+            </button>
+          ) : null}
+          {onClose ? (
+            <button type="button" className="ghost-button" onClick={onClose}>
               Закрыть
             </button>
-          </div>
-          <label>
-            Технический код
-            <input value={code} onChange={(event) => setCode(event.currentTarget.value)} />
-          </label>
-          <label>
-            Имя файла
-            <input
-              value={outputFilenameTemplate}
-              onChange={(event) => setOutputFilenameTemplate(event.currentTarget.value)}
-            />
-          </label>
-          <label>
-            Описание
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-            />
-          </label>
-        </aside>
-      )}
-
-      {studioMode === "layout" && (
-        <div className="card-layout-unified-workspace">
-          <aside className="card-layout-unified-left">
-            <section className="card-layout-structure" aria-label="Веб-структура шаблона карточки">
-              <header className="card-layout-structure-header">
-                <div>
-                  <h4>Макет карточки</h4>
-                  <span>Одна структура для заполнения в вебе и печати на A4</span>
-                </div>
-                <div className="row-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() =>
-                      setBlockDialog({
-                        title: "",
-                        repeatable: false,
-                        repeatMode: "first_instance_only",
-                        publicVisible: true,
-                        publicEditable: false,
-                      })
-                    }
-                  >
-                    + Новый блок данных
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() =>
-                      setFieldDialog({
-                        label: "",
-                        fieldType: "text",
-                        blockId: allBlocks[0]?.id ?? "",
-                        required: false,
-                        publicVisible: true,
-                        publicEditable: false,
-                        isListDisplay: false,
-                        referenceListId: "",
-                        newReferenceListName: "",
-                      })
-                    }
-                  >
-                    + Новое поле данных
-                  </button>
-                </div>
-              </header>
-              <div className="card-layout-structure-list">
-                {allBlocks.map((block) => {
-                  const blockFields = availableFieldsByBlockId.get(block.id) ?? [];
-                  return (
-                    <article key={block.id} className="card-layout-structure-block">
-                      <header>
-                        <div>
-                          <h5>{block.title}</h5>
-                          <span>Технический код: {block.code}</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => addExistingBlock(block)}
-                        >
-                          На A4
-                        </button>
-                      </header>
-                      {blockFields.length > 0 ? (
-                        <div className="card-layout-structure-fields">
-                          {blockFields.map((field) => (
-                            <div key={field.id} className="card-layout-structure-field">
-                              <div>
-                                <strong>{field.label}</strong>
-                                <span>
-                                  {fieldTypeLabel(field.field_type)} /{" "}
-                                  {requiredModeLabel(field.required_mode)}
-                                </span>
-                                <small>
-                                  {field.public_visible
-                                    ? "Видно в публичной ссылке"
-                                    : "Скрыто в публичной ссылке"}
-                                </small>
-                              </div>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => addItem(createFieldItem(field, layout.items))}
-                              >
-                                На A4
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="muted-text">В блоке пока нет полей текущего шаблона.</p>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <A4TemplatePalette
-              blocks={allBlocks}
-              fields={availableFields}
-              showTechnicalData={showTechnicalData}
-              onAddExistingBlock={addExistingBlock}
-              onAddExistingField={(field) => addItem(createFieldItem(field, layout.items))}
-              onAddHeading={() => addItem(createTextItem("heading", "Заголовок", layout.items))}
-              onAddStaticText={() => addItem(createTextItem("static_text", "Текст", layout.items))}
-              onAddPanel={() => addItem(createDecorItem("panel", layout.items))}
-              onAddRectangle={() => addItem(createDecorItem("rectangle", layout.items))}
-              onAddDivider={() => addItem(createDecorItem("divider", layout.items))}
-              onAddPrintDate={() => addItem(createServiceItem("print_date", layout.items))}
-              onAddPageNumber={() => addItem(createServiceItem("page_number", layout.items))}
-              onAddMetadata={(key) => addItem(createMetadataItem(key, layout.items))}
-              onOpenNewField={() =>
-                setFieldDialog({
-                  label: "",
-                  fieldType: "text",
-                  blockId: allBlocks[0]?.id ?? "",
-                  required: false,
-                  publicVisible: true,
-                  publicEditable: false,
-                  isListDisplay: false,
-                  referenceListId: "",
-                  newReferenceListName: "",
-                })
-              }
-              onOpenNewBlock={() =>
-                setBlockDialog({
-                  title: "",
-                  repeatable: false,
-                  repeatMode: "first_instance_only",
-                  publicVisible: true,
-                  publicEditable: false,
-                })
-              }
-            />
-          </aside>
-
-          <main className="a4-template-canvas-column">
-            <A4LayoutRenderer
-              layout={layout}
-              fields={availableFields}
-              blocks={allBlocks}
-              mode={rendererMode}
-              zoom={zoom}
-              showGrid={showGrid}
-              showTechnicalData={showTechnicalData}
-              selectedItemId={selectedItemId}
-              onSelectItem={setSelectedItemId}
-              onChangeLayout={commitLayout}
-              onDropField={addExistingFieldAt}
-              onDropBlock={addExistingBlockAt}
-            />
-            {validationIssues.length > 0 && (
-              <div className="a4-template-validation" role="status">
-                {validationIssues.map((issue, index) => (
-                  <span key={`${issue.message}-${index}`} className={`is-${issue.level}`}>
-                    {issue.message}
-                  </span>
-                ))}
-              </div>
-            )}
-          </main>
-
-          {selectedTemplateElement ? (
-            <UnifiedTemplatePropertiesPanel
-              selectedElement={selectedTemplateElement}
-              showTechnicalData={showTechnicalData}
-              onUpdateItem={updateSelectedItem}
-              onDeleteItem={removeSelectedItem}
-            />
-          ) : (
-            <A4TemplatePropertiesPanel
-              item={selectedItem}
-              fields={availableFields}
-              showTechnicalData={showTechnicalData}
-              onUpdateItem={updateSelectedItem}
-              onDeleteItem={removeSelectedItem}
-            />
-          )}
+          ) : null}
         </div>
-      )}
+      </header>
 
-      {studioMode === "preview" && (
-        <div className={`a4-template-workbench ${studioMode === "preview" ? "is-preview" : ""}`}>
-          <main className="a4-template-canvas-column">
-            <A4LayoutRenderer
-              layout={layout}
-              fields={availableFields}
-              blocks={allBlocks}
-              mode={rendererMode}
-              zoom={zoom}
-              showGrid={isDesignMode ? showGrid : false}
-              showTechnicalData={isDesignMode ? showTechnicalData : false}
-              selectedItemId={isDesignMode ? selectedItemId : null}
-              onSelectItem={isDesignMode ? setSelectedItemId : undefined}
-              onChangeLayout={isDesignMode ? commitLayout : undefined}
-              onDropField={isDesignMode ? addExistingFieldAt : undefined}
-              onDropBlock={isDesignMode ? addExistingBlockAt : undefined}
-            />
-          </main>
-        </div>
-      )}
+      {localError ? (
+        <section className="card-layout-studio-recovery" aria-label="Восстановление макета">
+          <p className="data-alert">{localError}</p>
+          {failedFormLayout ? (
+            <div className="row-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => void reloadFormLayout()}
+              >
+                Обновить данные
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busy}
+                onClick={cancelLocalFormChanges}
+              >
+                Отменить локальные изменения
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy}
+                onClick={() => void retryFormSave()}
+              >
+                Повторить сохранение
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+      {localMessage ? <p className="inline-success">{localMessage}</p> : null}
+      <DataAlert error={referenceListsQuery.error} />
 
-      {fieldDialog && (
-        <FieldDialog
-          state={fieldDialog}
-          blocks={allBlocks}
-          referenceLists={effectiveReferenceLists}
-          isPending={createFieldMutation.isPending}
-          onChange={setFieldDialog}
-          onCancel={() => setFieldDialog(null)}
-          onSubmit={() => createFieldMutation.mutate(fieldDialog)}
-        />
-      )}
-      {blockDialog && (
-        <BlockDialog
-          state={blockDialog}
-          isPending={createBlockMutation.isPending}
-          onChange={setBlockDialog}
-          onCancel={() => setBlockDialog(null)}
-          onSubmit={() => createBlockMutation.mutate(blockDialog)}
-        />
-      )}
-    </section>
-  );
-}
-
-type UnifiedTemplateElement =
-  | { kind: "field"; field: FormFieldRead; item: CardPrintLayoutItem }
-  | { kind: "block"; block: FormBlockRead; item: CardPrintLayoutItem };
-
-type UnifiedPropertyTab = "data" | "web" | "print" | "appearance" | "access" | "technical";
-
-const unifiedPropertyTabs: { key: UnifiedPropertyTab; label: string }[] = [
-  { key: "data", label: "Данные" },
-  { key: "web", label: "Веб-форма" },
-  { key: "print", label: "Печатная форма A4" },
-  { key: "appearance", label: "Внешний вид" },
-  { key: "access", label: "Доступ / публичность" },
-  { key: "technical", label: "Техническое" },
-];
-
-function UnifiedTemplatePropertiesPanel({
-  selectedElement,
-  showTechnicalData,
-  onUpdateItem,
-  onDeleteItem,
-}: {
-  selectedElement: UnifiedTemplateElement;
-  showTechnicalData: boolean;
-  onUpdateItem: (patch: Partial<CardPrintLayoutItem>) => void;
-  onDeleteItem: () => void;
-}) {
-  const [activeTab, setActiveTab] = useState<UnifiedPropertyTab>("data");
-  const item = selectedElement.item;
-  const style = item.style ?? {};
-  const title = selectedElement.kind === "field" ? selectedElement.field.label : selectedElement.block.title;
-
-  return (
-    <aside
-      className="a4-template-properties card-layout-unified-properties"
-      role="region"
-      aria-label="Свойства выбранного элемента шаблона"
-    >
-      <h4>Свойства выбранного элемента</h4>
-      <strong>{title}</strong>
-      <div className="a4-template-tabs" role="tablist" aria-label="Разделы свойств шаблона">
-        {unifiedPropertyTabs.map((tab) => (
+      <div className="card-layout-studio-tabs" role="tablist" aria-label="Этапы макета карточки">
+        {stages.map((item) => (
           <button
-            key={tab.key}
+            key={item.id}
             type="button"
             role="tab"
-            aria-selected={activeTab === tab.key}
-            className={activeTab === tab.key ? "is-active" : ""}
-            onClick={() => setActiveTab(tab.key)}
+            data-stage-id={item.id}
+            aria-selected={stage === item.id}
+            className={stage === item.id ? "is-active" : ""}
+            onClick={() => {
+              setStage(item.id);
+              setSelection(null);
+              setSelectedPrintItemId(null);
+            }}
           >
-            {tab.label}
+            {item.label}
           </button>
         ))}
       </div>
 
-      <div className="a4-template-property-body">
-        {activeTab === "data" && selectedElement.kind === "field" && (
-          <>
-            <label>
-              Тип поля
-              <input value={fieldTypeLabel(selectedElement.field.field_type)} readOnly />
-            </label>
-            <label>
-              Название поля
-              <input value={selectedElement.field.label} readOnly />
-            </label>
-            <label>
-              Обязательность
-              <input value={requiredModeLabel(selectedElement.field.required_mode)} readOnly />
-            </label>
-            <label>
-              Подпись на A4
-              <input
-                value={item.label ?? ""}
-                onChange={(event) => onUpdateItem({ label: event.currentTarget.value })}
-              />
-            </label>
-          </>
-        )}
-        {activeTab === "data" && selectedElement.kind === "block" && (
-          <>
-            <label>
-              Тип элемента
-              <input value="Блок данных" readOnly />
-            </label>
-            <label>
-              Название блока
-              <input value={selectedElement.block.title} readOnly />
-            </label>
-            <label>
-              Повторяемость
-              <input
-                value={selectedElement.block.is_repeatable ? "Повторяющийся" : "Обычный блок"}
-                readOnly
-              />
-            </label>
-          </>
-        )}
+      {stage === "layout" ? (
+        <CardLayoutRenderer
+          layout={draftLayout}
+          blocks={allBlocks}
+          fields={allFields}
+          referenceLists={effectiveReferenceLists}
+          mode="design"
+          selection={selection}
+          onSelectionChange={setSelection}
+          onCreateBlock={startCreateBlock}
+          onInsertBlock={openInsertBlock}
+          onCreateField={startCreateField}
+          onCommitBlock={(block) => void commitBlock(block)}
+          onCancelBlock={cancelBlock}
+          onCommitField={(field) => void commitField(field)}
+          onCancelField={cancelField}
+          onGeometryCommit={handleGeometryCommit}
+        />
+      ) : null}
 
-        {activeTab === "web" && (
-          <>
-            <h5>Размещение в веб-форме</h5>
-            {selectedElement.kind === "field" ? (
-              <div className="card-layout-property-summary">
-                <span>Блок: {selectedElement.field.block_id}</span>
-                <span>Порядок: {selectedElement.field.position + 1}</span>
-                <span>
-                  Сетка: строка {printFieldLayoutRow(selectedElement.field, selectedElement.field.position + 1)},
-                  колонка {printFieldLayoutColumn(selectedElement.field, 1)}, ширина{" "}
-                  {printFieldColumnSpan(selectedElement.field)}
-                </span>
-              </div>
-            ) : (
-              <div className="card-layout-property-summary">
-                <span>Порядок блока: {selectedElement.block.position + 1}</span>
-                <span>
-                  Повторения:{" "}
-                  {selectedElement.block.is_repeatable ? "разрешены" : "не используются"}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
-        {activeTab === "print" && (
-          <>
-            <h5>Размещение на A4</h5>
-            <div className="a4-template-property-grid">
-              <NumberField
-                label="X, мм"
-                value={item.x_mm ?? 0}
-                min={0}
-                max={210}
-                onChange={(x_mm) => onUpdateItem({ x_mm })}
-              />
-              <NumberField
-                label="Y, мм"
-                value={item.y_mm ?? 0}
-                min={0}
-                max={297}
-                onChange={(y_mm) => onUpdateItem({ y_mm })}
-              />
-              <NumberField
-                label="Ширина, мм"
-                value={item.width_mm ?? 20}
-                min={1}
-                max={210}
-                onChange={(width_mm) => onUpdateItem({ width_mm })}
-              />
-              <NumberField
-                label="Высота, мм"
-                value={item.height_mm ?? 8}
-                min={1}
-                max={297}
-                onChange={(height_mm) => onUpdateItem({ height_mm })}
-              />
-            </div>
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={item.show_label !== false}
-                onChange={(event) => onUpdateItem({ show_label: event.currentTarget.checked })}
-              />
-              Показывать подпись на A4
-            </label>
-          </>
-        )}
-
-        {activeTab === "appearance" && (
-          <>
+      {stage === "a4" ? (
+        <div className="card-layout-a4-workspace">
+          <div className="card-layout-a4-controls">
             <label>
-              Шрифт
+              Печатное представление
               <select
-                value={style.font_family ?? "Inter"}
-                onChange={(event) =>
-                  onUpdateItem({ style: { ...style, font_family: event.currentTarget.value } })
-                }
+                value={selectedPrintView?.id ?? ""}
+                onChange={(event) => loadPrintView(event.currentTarget.value)}
               >
-                <option value="Inter">Inter</option>
-                <option value="Arial">Arial</option>
-                <option value="Times New Roman">Times New Roman</option>
-              </select>
-            </label>
-            <div className="a4-template-property-grid">
-              <NumberField
-                label="Размер"
-                value={style.font_size ?? 10}
-                min={6}
-                max={32}
-                onChange={(font_size) => onUpdateItem({ style: { ...style, font_size } })}
-              />
-              <NumberField
-                label="Отступ, мм"
-                value={style.padding_mm ?? 1.5}
-                min={0}
-                max={10}
-                step={0.5}
-                onChange={(padding_mm) => onUpdateItem({ style: { ...style, padding_mm } })}
-              />
-            </div>
-            <label>
-              Граница
-              <select
-                value={style.border ?? "thin"}
-                onChange={(event) =>
-                  onUpdateItem({
-                    style: {
-                      ...style,
-                      border: event.currentTarget.value as CardPrintLayoutItemStyle["border"],
-                    },
-                  })
-                }
-              >
-                <option value="none">Нет</option>
-                <option value="thin">Тонкая</option>
-                <option value="medium">Средняя</option>
-              </select>
-            </label>
-          </>
-        )}
-
-        {activeTab === "access" && (
-          <>
-            <h5>Публичность и доступ</h5>
-            {selectedElement.kind === "field" ? (
-              <div className="card-layout-property-summary">
-                <span>
-                  Публичная ссылка:{" "}
-                  {selectedElement.field.public_visible ? "поле видно" : "поле скрыто"}
-                </span>
-                <span>
-                  Публичное редактирование:{" "}
-                  {selectedElement.field.public_editable ? "разрешено" : "запрещено"}
-                </span>
-                <span>
-                  Список карточек:{" "}
-                  {selectedElement.field.is_list_display ? "показывать" : "не показывать"}
-                </span>
-              </div>
-            ) : (
-              <div className="card-layout-property-summary">
-                <span>
-                  Публичная ссылка:{" "}
-                  {selectedElement.block.public_visible ? "блок виден" : "блок скрыт"}
-                </span>
-                <span>
-                  Публичное редактирование:{" "}
-                  {selectedElement.block.public_editable ? "разрешено" : "запрещено"}
-                </span>
-              </div>
-            )}
-          </>
-        )}
-
-        {activeTab === "technical" && (
-          <>
-            <label>
-              Технический код
-              <input
-                value={
-                  selectedElement.kind === "field"
-                    ? selectedElement.field.code
-                    : selectedElement.block.code
-                }
-                readOnly
-              />
-            </label>
-            <label>
-              ID элемента A4
-              <input value={item.id} readOnly />
-            </label>
-            <label>
-              Источник синхронизации
-              <input value={item.source_item_id ?? "Не задан"} readOnly />
-            </label>
-            <label>
-              Ручное положение
-              <input value={item.override ? "Да" : "Нет"} readOnly />
-            </label>
-            {showTechnicalData && (
-              <label>
-                JSON A4
-                <textarea value={JSON.stringify(item, null, 2)} readOnly />
-              </label>
-            )}
-          </>
-        )}
-      </div>
-
-      <button type="button" className="danger-button" onClick={onDeleteItem}>
-        Удалить элемент с A4
-      </button>
-    </aside>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label>
-      {label}
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) =>
-          onChange(Math.min(max, Math.max(min, Number(event.currentTarget.value) || min)))
-        }
-      />
-    </label>
-  );
-}
-
-function FieldDialog({
-  state,
-  blocks,
-  referenceLists,
-  isPending,
-  onChange,
-  onCancel,
-  onSubmit,
-}: {
-  state: FieldDialogState;
-  blocks: FormBlockRead[];
-  referenceLists: { id: string; name: string }[];
-  isPending: boolean;
-  onChange: (state: FieldDialogState) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  const referenceBacked = usesReferenceList(state.fieldType);
-  return (
-    <div className="admin-dialog-backdrop">
-      <div
-        className="admin-dialog a4-template-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Создание поля"
-      >
-        <h4>Создание поля</h4>
-        <label>
-          Название поля
-          <input
-            value={state.label}
-            onChange={(event) => onChange({ ...state, label: event.currentTarget.value })}
-          />
-        </label>
-        <label>
-          Тип поля
-          <select
-            value={state.fieldType}
-            onChange={(event) => onChange({ ...state, fieldType: event.currentTarget.value })}
-          >
-            {FIELD_TYPES.map((fieldType) => (
-              <option key={fieldType} value={fieldType}>
-                {fieldTypeLabel(fieldType)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Блок
-          <select
-            value={state.blockId}
-            onChange={(event) => onChange({ ...state, blockId: event.currentTarget.value })}
-          >
-            {blocks.map((block) => (
-              <option key={block.id} value={block.id}>
-                {block.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        {referenceBacked && (
-          <>
-            <label>
-              Справочник
-              <select
-                value={state.referenceListId}
-                onChange={(event) =>
-                  onChange({
-                    ...state,
-                    referenceListId: event.currentTarget.value,
-                    newReferenceListName: "",
-                  })
-                }
-              >
-                <option value="">Создать или выбрать позже</option>
-                {referenceLists.map((referenceList) => (
-                  <option key={referenceList.id} value={referenceList.id}>
-                    {referenceList.name}
+                {printViews.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Новый справочник
+              Название печатной формы
               <input
-                value={state.newReferenceListName}
-                onChange={(event) =>
-                  onChange({
-                    ...state,
-                    newReferenceListName: event.currentTarget.value,
-                    referenceListId: "",
-                  })
-                }
+                value={printName}
+                onChange={(event) => setPrintName(event.currentTarget.value)}
               />
             </label>
-          </>
-        )}
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.required}
-            onChange={(event) => onChange({ ...state, required: event.currentTarget.checked })}
+            <label>
+              Масштаб
+              <select value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))}>
+                <option value={0.5}>50%</option>
+                <option value={0.75}>75%</option>
+                <option value={1}>100%</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setShowGrid((current) => !current)}
+            >
+              {showGrid ? "Скрыть сетку" : "Показать сетку"}
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy || legacyPrintView}
+              onClick={() => void savePrintDraft()}
+            >
+              Сохранить печатную форму
+            </button>
+            <details>
+              <summary>Параметры файла</summary>
+              <label>
+                Имя файла
+                <input
+                  value={outputFilename}
+                  onChange={(event) => setOutputFilename(event.currentTarget.value)}
+                />
+              </label>
+            </details>
+          </div>
+          <A4LinkedCardCanvas
+            layout={printLayout}
+            cardLayout={draftLayout}
+            blocks={allBlocks}
+            fields={allFields}
+            zoom={zoom}
+            showGrid={showGrid}
+            selectedItemId={selectedPrintItemId}
+            legacy={legacyPrintView}
+            converting={conversionPending}
+            onSelectItem={setSelectedPrintItemId}
+            onChangeLayout={setPrintLayout}
+            onAddPrintItem={addPrintItem}
+            onEditCardLayout={() => setStage("layout")}
+            onConvertLegacy={() => void convertLegacyPrintView()}
           />
-          Обязательное поле
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.isListDisplay}
-            onChange={(event) => onChange({ ...state, isListDisplay: event.currentTarget.checked })}
-          />
-          Показывать в списке
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.publicVisible}
-            onChange={(event) => onChange({ ...state, publicVisible: event.currentTarget.checked })}
-          />
-          Публичное поле
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.publicEditable}
-            onChange={(event) =>
-              onChange({ ...state, publicEditable: event.currentTarget.checked })
-            }
-          />
-          Публичное редактирование
-        </label>
-        <div className="row-actions">
-          <button type="button" className="ghost-button" onClick={onCancel}>
-            Отмена
-          </button>
-          <button type="button" className="primary-button" disabled={isPending} onClick={onSubmit}>
-            Создать поле
-          </button>
+          {selectedPrintItem && selectedPrintItem.kind !== "card_layout" ? (
+            <A4TemplatePropertiesPanel
+              item={selectedPrintItem}
+              fields={allFields}
+              showTechnicalData={false}
+              onUpdateItem={updateSelectedPrintItem}
+              onDeleteItem={removeSelectedPrintItem}
+            />
+          ) : null}
         </div>
-      </div>
-    </div>
-  );
-}
+      ) : null}
 
-function BlockDialog({
-  state,
-  isPending,
-  onChange,
-  onCancel,
-  onSubmit,
-}: {
-  state: BlockDialogState;
-  isPending: boolean;
-  onChange: (state: BlockDialogState) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <div className="admin-dialog-backdrop">
-      <div
-        className="admin-dialog a4-template-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Создание блока"
-      >
-        <h4>Создание блока</h4>
-        <label>
-          Название блока
-          <input
-            value={state.title}
-            onChange={(event) => onChange({ ...state, title: event.currentTarget.value })}
+      {stage === "preview" ? (
+        <div className="card-layout-preview-stage">
+          <CardLayoutRenderer
+            layout={draftLayout}
+            blocks={allBlocks}
+            fields={allFields}
+            mode="preview"
           />
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.repeatable}
-            onChange={(event) => onChange({ ...state, repeatable: event.currentTarget.checked })}
+          <A4LinkedCardCanvas
+            layout={printLayout}
+            cardLayout={draftLayout}
+            blocks={allBlocks}
+            fields={allFields}
+            zoom={0.5}
+            showGrid={false}
+            selectedItemId={null}
+            readonly
+            legacy={legacyPrintView}
+            onSelectItem={() => undefined}
+            onChangeLayout={() => undefined}
+            onAddPrintItem={() => undefined}
+            onEditCardLayout={() => setStage("layout")}
+            onConvertLegacy={() => setStage("a4")}
           />
-          Повторяющийся блок
-        </label>
-        <label>
-          Печать повторений
-          <select
-            value={state.repeatMode}
-            onChange={(event) =>
-              onChange({
-                ...state,
-                repeatMode: event.currentTarget.value as BlockDialogState["repeatMode"],
-              })
-            }
+        </div>
+      ) : null}
+
+      {insertDialog ? (
+        <div className="a4-template-dialog-backdrop" role="presentation">
+          <section
+            className="a4-template-dialog"
+            role="dialog"
+            aria-label="Вставка существующего блока"
           >
-            <option value="first_instance_only">Только первый экземпляр</option>
-            <option value="repeat_section">Повторять секцию</option>
-            <option value="table_rows">Строки таблицы</option>
-          </select>
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.publicVisible}
-            onChange={(event) => onChange({ ...state, publicVisible: event.currentTarget.checked })}
-          />
-          Публичный блок
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={state.publicEditable}
-            onChange={(event) =>
-              onChange({ ...state, publicEditable: event.currentTarget.checked })
-            }
-          />
-          Публичное редактирование
-        </label>
-        <div className="row-actions">
-          <button type="button" className="ghost-button" onClick={onCancel}>
-            Отмена
-          </button>
-          <button type="button" className="primary-button" disabled={isPending} onClick={onSubmit}>
-            Создать блок
-          </button>
+            <h4>Вставить существующий блок</h4>
+            <label>
+              Блок
+              <select
+                value={insertDialog.blockId}
+                onChange={(event) =>
+                  setInsertDialog({ ...insertDialog, blockId: event.currentTarget.value })
+                }
+              >
+                {unusedBlocks.map((block) => (
+                  <option key={block.id} value={block.id}>
+                    {block.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!insertDialog.blockId || busy}
+                onClick={() => void insertExistingBlock()}
+              >
+                Вставить
+              </button>
+              <button type="button" className="ghost-button" onClick={() => setInsertDialog(null)}>
+                Отмена
+              </button>
+            </div>
+          </section>
         </div>
-      </div>
-    </div>
+      ) : null}
+
+      <span className="visually-hidden" aria-live="polite">
+        {effectiveReferenceLists.length} справочников доступно.{" "}
+        {busy ? "Выполняется сохранение." : ""}
+      </span>
+    </section>
   );
 }
 
-function markManualGeometryChanges(
-  previousLayout: CardPrintLayout,
-  nextLayout: CardPrintLayout,
-): CardPrintLayout {
-  const previousItems = new Map(previousLayout.items.map((item) => [item.id, item]));
-  return {
-    ...nextLayout,
-    items: nextLayout.items.map((item) => {
-      const previousItem = previousItems.get(item.id);
-      if (!previousItem || !geometryChanged(previousItem, item)) {
-        return item;
-      }
-      return { ...item, override: true };
-    }),
-  };
-}
-
-function hasGeometryPatch(patch: Partial<CardPrintLayoutItem>) {
-  return ["x_mm", "y_mm", "width_mm", "height_mm", "row", "column", "row_span", "column_span"].some(
-    (key) => key in patch,
-  );
-}
-
-function geometryChanged(previousItem: CardPrintLayoutItem, nextItem: CardPrintLayoutItem) {
-  return (
-    previousItem.x_mm !== nextItem.x_mm ||
-    previousItem.y_mm !== nextItem.y_mm ||
-    previousItem.width_mm !== nextItem.width_mm ||
-    previousItem.height_mm !== nextItem.height_mm ||
-    previousItem.row !== nextItem.row ||
-    previousItem.column !== nextItem.column ||
-    previousItem.row_span !== nextItem.row_span ||
-    previousItem.column_span !== nextItem.column_span
-  );
-}
-
-function createFieldItem(
-  field: FormFieldRead,
-  items: CardPrintLayoutItem[],
-  rect = nextRect(items, 78, 12),
-): CardPrintLayoutItem {
-  return {
-    id: createLayoutItemId("field", items),
-    kind: "field",
-    page: 1,
-    row: 1,
-    column: 1,
-    row_span: 2,
-    column_span: 6,
-    field_id: field.id,
-    label: field.label,
-    show_label: true,
-    style: { border: "thin", padding_mm: 1.5, label_position: "top", overflow: "wrap" },
-    ...rect,
-  };
-}
-
-function createBlockItem(
-  block: FormBlockRead,
-  items: CardPrintLayoutItem[],
-  repeatMode: BlockDialogState["repeatMode"],
-  rect = nextRect(items, A4_WIDTH_MM - 30, 42),
-): CardPrintLayoutItem {
-  return {
-    id: createLayoutItemId("block", items),
-    kind: "block",
-    page: 1,
-    row: 1,
-    column: 1,
-    row_span: 6,
-    column_span: 12,
-    block_id: block.id,
-    label: block.title,
-    text: block.title,
-    repeat: { mode: repeatMode },
-    style: { border: "thin", background_color: "#f8fafc", padding_mm: 3 },
-    ...rect,
-  };
-}
-
-function createBlockItems(
-  block: FormBlockRead,
+function mergeExternalStructure(
+  layout: CardTemplateLayoutRead,
+  blocks: FormBlockRead[],
   fields: FormFieldRead[],
-  items: CardPrintLayoutItem[],
-  repeatMode: BlockDialogState["repeatMode"],
-  rect = nextRect(items, A4_WIDTH_MM - 30, 42),
-): CardPrintLayoutItem[] {
-  const blockFields = fields
-    .filter((field) => field.block_id === block.id)
-    .sort(compareFieldsByVisualPlacement);
-  const maxRow = blockFields.reduce(
-    (max, field, index) => Math.max(max, printFieldLayoutRow(field, index + 1)),
-    0,
-  );
-  const computedHeight =
-    maxRow > 0
-      ? blockFieldPaddingMm * 2 +
-        blockFieldHeaderMm +
-        maxRow * blockFieldHeightMm +
-        Math.max(0, maxRow - 1) * blockFieldGapMm
-      : 42;
-  const blockRect = {
-    ...rect,
-    height_mm: Math.max(rect.height_mm, computedHeight),
+): CardTemplateLayoutRead {
+  return {
+    ...layout,
+    structure: {
+      blocks: mergeById(layout.structure.blocks, blocks),
+      fields: mergeById(layout.structure.fields, fields),
+    },
   };
-  const createdItems: CardPrintLayoutItem[] = [];
-  const accumulatedItems = [...items];
-  const blockItem = createBlockItem(block, accumulatedItems, repeatMode, blockRect);
-  createdItems.push(blockItem);
-  accumulatedItems.push(blockItem);
+}
 
-  for (const [index, field] of blockFields.entries()) {
-    const fieldRect = fieldRectInsideBlock(blockRect, field, index);
-    const fieldItem = createFieldItem(field, accumulatedItems, fieldRect);
-    createdItems.push(fieldItem);
-    accumulatedItems.push(fieldItem);
+function mergeStructure(
+  server: CardTemplateLayoutRead["structure"],
+  local: CardTemplateLayoutRead["structure"],
+) {
+  return {
+    blocks: mergeById(server.blocks, local.blocks),
+    fields: mergeById(server.fields, local.fields),
+  };
+}
+
+function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
+  const result = new Map(primary.map((item) => [item.id, item]));
+  for (const item of secondary) result.set(item.id, item);
+  return [...result.values()];
+}
+
+function applyGeometryCommand(
+  layout: CardTemplateFormLayoutRead,
+  command: LayoutGeometryCommand,
+): CardTemplateFormLayoutRead {
+  if (command.target.kind === "block") {
+    return {
+      ...layout,
+      sections: layout.sections.map((section) =>
+        section.id === command.target.id
+          ? {
+              ...section,
+              row: command.after.row,
+              column: command.after.column,
+              row_span: command.after.rowSpan,
+              column_span: command.after.columnSpan,
+            }
+          : section,
+      ),
+    };
   }
-
-  return createdItems;
-}
-
-function createTextItem(
-  kind: "heading" | "static_text",
-  text: string,
-  items: CardPrintLayoutItem[],
-  rect = nextRect(items, kind === "heading" ? 120 : 70, kind === "heading" ? 12 : 14),
-): CardPrintLayoutItem {
   return {
-    id: createLayoutItemId(kind, items),
-    kind,
-    page: 1,
-    row: 1,
-    column: 1,
-    row_span: 2,
-    column_span: kind === "heading" ? 12 : 6,
-    text,
-    style: {
-      font_size: kind === "heading" ? 14 : 10,
-      bold: kind === "heading",
-      align: kind === "heading" ? "center" : "left",
-      border: "none",
-      padding_mm: 1.5,
-    },
-    ...rect,
+    ...layout,
+    sections: layout.sections.map((section) => ({
+      ...section,
+      items: section.items.map((item) =>
+        item.id === command.target.id
+          ? {
+              ...item,
+              row: command.after.row,
+              column: command.after.column,
+              row_span: command.after.rowSpan,
+              column_span: command.after.columnSpan,
+            }
+          : item,
+      ),
+    })),
   };
 }
 
-function createDecorItem(
-  kind: "panel" | "rectangle" | "divider",
-  items: CardPrintLayoutItem[],
-): CardPrintLayoutItem {
-  const line = kind === "divider";
+function replaceBlock(
+  layout: CardTemplateLayoutRead,
+  temporaryId: string,
+  block: FormBlockRead,
+): CardTemplateLayoutRead {
   return {
-    id: createLayoutItemId(kind, items),
-    kind,
-    page: 1,
-    row: 1,
-    column: 1,
-    row_span: line ? 1 : 4,
-    column_span: line ? 12 : 6,
-    style: {
-      border: line ? "none" : "thin",
-      background_color: line ? "transparent" : "#ffffff",
-      padding_mm: 1,
+    ...layout,
+    structure: {
+      ...layout.structure,
+      blocks: layout.structure.blocks.map((item) => (item.id === temporaryId ? block : item)),
     },
-    ...nextRect(items, line ? 160 : 80, line ? 4 : 28),
+    form_layout: {
+      ...layout.form_layout,
+      sections: layout.form_layout.sections.map((section) =>
+        section.block_id === temporaryId
+          ? { ...section, id: `block-${block.id}`, block_id: block.id }
+          : section,
+      ),
+    },
   };
 }
 
-function createServiceItem(
-  kind: "print_date" | "page_number",
-  items: CardPrintLayoutItem[],
-): CardPrintLayoutItem {
+function replaceField(
+  layout: CardTemplateLayoutRead,
+  temporaryId: string,
+  field: FormFieldRead,
+): CardTemplateLayoutRead {
   return {
-    id: createLayoutItemId(kind, items),
+    ...layout,
+    structure: {
+      ...layout.structure,
+      fields: layout.structure.fields.map((item) => (item.id === temporaryId ? field : item)),
+    },
+    form_layout: {
+      ...layout.form_layout,
+      sections: layout.form_layout.sections.map((section) => ({
+        ...section,
+        items: section.items.map((item) =>
+          item.field_id === temporaryId
+            ? { ...item, id: `field-${field.id}`, field_id: field.id }
+            : item,
+        ),
+      })),
+    },
+  };
+}
+
+function removeTemporaryBlock(layout: CardTemplateLayoutRead, blockId: string) {
+  return {
+    ...layout,
+    structure: {
+      ...layout.structure,
+      blocks: layout.structure.blocks.filter((item) => item.id !== blockId),
+    },
+    form_layout: {
+      ...layout.form_layout,
+      sections: layout.form_layout.sections.filter((section) => section.block_id !== blockId),
+    },
+  };
+}
+
+function removeTemporaryField(layout: CardTemplateLayoutRead, fieldId: string) {
+  return {
+    ...layout,
+    structure: {
+      ...layout.structure,
+      fields: layout.structure.fields.filter((item) => item.id !== fieldId),
+    },
+    form_layout: {
+      ...layout.form_layout,
+      sections: layout.form_layout.sections.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => item.field_id !== fieldId),
+      })),
+    },
+  };
+}
+
+function firstEmptyFieldPosition(items: CardTemplateFormLayoutRead["sections"][number]["items"]) {
+  for (let row = 1; row <= 4; row += 1) {
+    for (const column of [1, 4, 7, 10]) {
+      const collides = items.some(
+        (item) =>
+          column < item.column + item.column_span &&
+          column + 3 > item.column &&
+          row < item.row + item.row_span &&
+          row + 1 > item.row,
+      );
+      if (!collides) return { row, column, row_span: 1 as const, column_span: 3 as const };
+    }
+  }
+  return { row: 4, column: 10, row_span: 1 as const, column_span: 3 as const };
+}
+
+function preparePrintLayout(
+  printView: CardTemplatePrintViewRead | undefined,
+  cardTemplateId: string,
+) {
+  const layout = normalizeLayoutGeometry(printView?.layout_json ?? createEmptyCardPrintLayout());
+  if (isLinkedCardPrintLayout(layout) || hasLegacyCardComposition(layout)) return layout;
+  return { ...layout, items: [createLinkedCardPrintItem(cardTemplateId), ...layout.items] };
+}
+
+function hasLegacyCardComposition(layout: CardPrintLayout) {
+  return (
+    layout.items.some((item) => item.kind === "field" || item.kind === "block") ||
+    (layout.sections ?? []).some((section) => section.items.some((item) => item.kind === "field"))
+  );
+}
+
+function createPrintOnlyItem(
+  kind: PrintOnlyItemKind,
+  layout: CardPrintLayout,
+): CardPrintLayoutItem {
+  const index = layout.items.length + (layout.overlays?.length ?? 0) + 1;
+  const labels: Record<PrintOnlyItemKind, string> = {
+    heading: "Заголовок",
+    static_text: "Печатный текст",
+    panel: "Панель",
+    rectangle: "Прямоугольник",
+    divider: "Линия",
+    print_date: "Дата печати",
+    page_number: "Номер страницы",
+    metadata: "Название карточки",
+  };
+  const overlay = isOverlayKind(kind);
+  return {
+    id: `print-${kind}-${index}`,
     kind,
     page: 1,
     row: 1,
     column: 1,
     row_span: 1,
-    column_span: 4,
-    label: kind === "print_date" ? "Дата печати" : "Номер страницы",
-    style: { border: "none", font_size: 8, padding_mm: 1 },
-    ...nextRect(items, 42, 8),
+    column_span: kind === "heading" ? 12 : 6,
+    x_mm: overlay ? 18 : kind === "page_number" ? 170 : 18,
+    y_mm: overlay ? 12 : 274,
+    width_mm: kind === "page_number" ? 22 : kind === "heading" ? 174 : 80,
+    height_mm: kind === "divider" ? 1 : 9,
+    text: labels[kind],
+    label: labels[kind],
+    metadata_key: kind === "metadata" ? "card.display_name" : undefined,
   };
 }
 
-function createMetadataItem(key: string, items: CardPrintLayoutItem[]): CardPrintLayoutItem {
+function isOverlayKind(kind: CardPrintLayoutItem["kind"] | PrintOnlyItemKind) {
+  return ["heading", "static_text", "panel", "rectangle", "divider"].includes(kind);
+}
+
+function printItemToOverlay(item: CardPrintLayoutItem): CardPrintOverlayItem {
   return {
-    id: createLayoutItemId("metadata", items),
-    kind: "metadata",
-    page: 1,
+    id: item.id,
+    kind: item.kind as CardPrintOverlayItem["kind"],
+    page: item.page,
+    x_mm: item.x_mm ?? 0,
+    y_mm: item.y_mm ?? 0,
+    width_mm: item.width_mm ?? 1,
+    height_mm: item.height_mm ?? 1,
+    text: item.text,
+    style: item.style,
+  };
+}
+
+function overlayToPrintItem(item: CardPrintOverlayItem): CardPrintLayoutItem {
+  return {
+    ...item,
     row: 1,
     column: 1,
-    row_span: 2,
-    column_span: 6,
-    metadata_key: key,
-    style: { border: "thin", padding_mm: 1.5 },
-    ...nextRect(items, 70, 12),
+    row_span: 1,
+    column_span: 1,
   };
 }
 
-function nextRect(items: CardPrintLayoutItem[], width_mm: number, height_mm: number) {
-  const maxBottom = items.reduce(
-    (max, item) => Math.max(max, (item.y_mm ?? 18) + (item.height_mm ?? 12)),
-    18,
-  );
-  return {
-    x_mm: 20,
-    y_mm: Math.min(270, maxBottom + 5),
-    width_mm,
-    height_mm,
-  };
+function findPrintItem(layout: CardPrintLayout, itemId: string | null) {
+  if (!itemId) return null;
+  const item = layout.items.find((candidate) => candidate.id === itemId);
+  if (item) return item;
+  const overlay = layout.overlays?.find((candidate) => candidate.id === itemId);
+  return overlay ? overlayToPrintItem(overlay) : null;
 }
 
-function createLayoutItemId(prefix: string, items: CardPrintLayoutItem[]) {
-  const usedIds = new Set(items.map((item) => item.id));
-  let index = items.length + 1;
-  let candidate = `${prefix}-${index}`;
-  while (usedIds.has(candidate)) {
-    index += 1;
-    candidate = `${prefix}-${index}`;
-  }
-  return candidate;
-}
-
-function fieldRectInsideBlock(
-  blockRect: NonNullable<Parameters<typeof createBlockItem>[3]>,
-  field: FormFieldRead,
-  index: number,
-) {
-  const row = printFieldLayoutRow(field, index + 1);
-  const column = printFieldLayoutColumn(field, 1);
-  const columnSpan = Math.min(printFieldColumnSpan(field), blockFieldGridColumns - column + 1);
-  const contentWidth = Math.max(20, blockRect.width_mm - blockFieldPaddingMm * 2);
-  const columnWidth =
-    (contentWidth - blockFieldGapMm * (blockFieldGridColumns - 1)) / blockFieldGridColumns;
-  return {
-    x_mm: blockRect.x_mm + blockFieldPaddingMm + (column - 1) * (columnWidth + blockFieldGapMm),
-    y_mm:
-      blockRect.y_mm +
-      blockFieldPaddingMm +
-      blockFieldHeaderMm +
-      (row - 1) * (blockFieldHeightMm + blockFieldGapMm),
-    width_mm: columnWidth * columnSpan + blockFieldGapMm * Math.max(0, columnSpan - 1),
-    height_mm: blockFieldHeightMm,
-  };
-}
-
-function compareFieldsByVisualPlacement(left: FormFieldRead, right: FormFieldRead) {
-  return (
-    printFieldLayoutRow(left, left.position + 1) - printFieldLayoutRow(right, right.position + 1) ||
-    printFieldLayoutColumn(left, 1) - printFieldLayoutColumn(right, 1) ||
-    left.position - right.position ||
-    left.label.localeCompare(right.label)
-  );
-}
-
-function printFieldColumnSpan(field: FormFieldRead) {
-  return Math.min(
-    blockFieldGridColumns,
-    Math.max(1, printDisplayConfigNumber(field, "column_span", 1)),
-  );
-}
-
-function printFieldLayoutRow(field: FormFieldRead, fallback: number) {
-  return Math.max(1, printDisplayConfigNumber(field, "layout_row", fallback));
-}
-
-function printFieldLayoutColumn(field: FormFieldRead, fallback: number) {
-  return Math.min(
-    blockFieldGridColumns,
-    Math.max(1, printDisplayConfigNumber(field, "layout_column", fallback)),
-  );
-}
-
-function printDisplayConfigNumber(field: FormFieldRead, key: string, fallback: number) {
-  const value = field.display_config_json?.[key];
-  return typeof value === "number" ? value : fallback;
-}
-
-function cardTemplateFields(
-  template: CardTemplateRead,
-  fields: FormFieldRead[],
-  blocks: FormBlockRead[],
-  extraAllowedIds = new Set<string>(),
-) {
-  const fieldIds = templateFieldIds(template);
-  const allowedIds =
-    fieldIds.length > 0
-      ? new Set([...fieldIds, ...extraAllowedIds])
-      : new Set(fields.map((field) => field.id));
-  const blockOrder = new Map(blocks.map((block, index) => [block.id, index]));
-  return fields
-    .filter((field) => allowedIds.has(field.id) && field.field_type !== "static_text")
-    .sort((left, right) => {
-      const blockDiff =
-        (blockOrder.get(left.block_id) ?? 0) - (blockOrder.get(right.block_id) ?? 0);
-      return blockDiff || left.position - right.position || left.label.localeCompare(right.label);
-    });
-}
-
-function templateFieldIds(template: CardTemplateRead) {
-  const fieldIds = template.field_schema_json?.field_ids;
-  return Array.isArray(fieldIds)
-    ? fieldIds.filter((fieldId): fieldId is string => typeof fieldId === "string")
-    : [];
-}
-
-function usesReferenceList(fieldType: string) {
-  return fieldType === "select" || fieldType === "multi_select";
-}
-
-function requiredModeLabel(requiredMode: string) {
-  return requiredMode === "required" ? "Обязательное" : "Не обязательное";
-}
-
-function printRepeatModeForBlock(block: FormBlockRead): BlockDialogState["repeatMode"] {
-  const rawMode = block.display_config_json?.print_repeat_mode;
-  if (
-    rawMode === "first_instance_only" ||
-    rawMode === "repeat_section" ||
-    rawMode === "table_rows"
-  ) {
-    return rawMode;
-  }
-  return block.is_repeatable ? "repeat_section" : "first_instance_only";
-}
-
-function saveStatusText(
-  status: "saving" | "idle",
-  successMessage: string | null,
-  errorCount: number,
-) {
-  if (status === "saving") {
-    return "Сохранение...";
-  }
-  if (errorCount > 0) {
-    return "Есть ошибки";
-  }
-  return successMessage ? "Сохранено" : "Черновик";
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

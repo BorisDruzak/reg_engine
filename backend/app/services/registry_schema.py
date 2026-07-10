@@ -27,6 +27,14 @@ BLOCK_TITLE_POSITIONS = {"top", "bottom", "left", "right"}
 BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
 
 
+def merge_card_template_field_ids(
+    current_schema: dict[str, Any] | None,
+    field_ids: list[str],
+) -> dict[str, Any]:
+    """Refresh template membership without discarding persisted layout metadata."""
+    return {**(current_schema or {}), "field_ids": field_ids}
+
+
 class RegistrySchemaError(ValueError):
     """Raised when registry schema operations reference invalid schema state."""
 
@@ -160,12 +168,15 @@ class RegistrySchemaService:
         actor_user_id: UUID | None = None,
     ) -> CardTemplate:
         registry = self._get_active_registry(registry_id)
-        expected_schema = self._base_card_template_field_schema(registry.id)
         template = self.session.scalar(
             select(CardTemplate).where(
                 CardTemplate.registry_id == registry.id,
                 CardTemplate.code == BASE_CARD_TEMPLATE_CODE,
             )
+        )
+        expected_schema = self._base_card_template_field_schema(
+            registry.id,
+            current_schema=template.field_schema_json if template is not None else None,
         )
         if template is None:
             template = CardTemplate(
@@ -903,16 +914,25 @@ class RegistrySchemaService:
         }
 
         if field_schema_json is not None or default_values_json is not None:
+            schema_payload = field_schema_json
+            if template.code == BASE_CARD_TEMPLATE_CODE:
+                schema_payload = self._base_card_template_field_schema(
+                    template.registry_id,
+                    current_schema=template.field_schema_json,
+                )
+            elif (
+                field_schema_json is not None
+                and set(field_schema_json) == {"field_ids"}
+                and isinstance(field_schema_json["field_ids"], list)
+            ):
+                schema_payload = merge_card_template_field_ids(
+                    template.field_schema_json,
+                    [str(field_id) for field_id in field_schema_json["field_ids"]],
+                )
             normalized_schema, normalized_defaults = self._normalize_card_template_payload(
                 registry_id=template.registry_id,
                 field_schema_json=(
-                    self._base_card_template_field_schema(template.registry_id)
-                    if template.code == BASE_CARD_TEMPLATE_CODE
-                    else (
-                        field_schema_json
-                        if field_schema_json is not None
-                        else template.field_schema_json
-                    )
+                    schema_payload if schema_payload is not None else template.field_schema_json
                 ),
                 default_values_json=(
                     default_values_json
@@ -931,7 +951,10 @@ class RegistrySchemaService:
         if is_active is not None:
             template.is_active = is_active
         if template.code == BASE_CARD_TEMPLATE_CODE:
-            template.field_schema_json = self._base_card_template_field_schema(template.registry_id)
+            template.field_schema_json = self._base_card_template_field_schema(
+                template.registry_id,
+                current_schema=template.field_schema_json,
+            )
             template.is_active = True
             template.archived_at = None
             template.archived_by = None
@@ -1113,7 +1136,12 @@ class RegistrySchemaService:
             ).all()
         )
 
-    def _base_card_template_field_schema(self, registry_id: UUID) -> dict[str, list[str]]:
+    def _base_card_template_field_schema(
+        self,
+        registry_id: UUID,
+        *,
+        current_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         field_ids = [
             str(field_id)
             for field_id in self.session.scalars(
@@ -1129,7 +1157,7 @@ class RegistrySchemaService:
                 .order_by(FormBlock.position, FormField.position, FormField.label, FormField.id)
             ).all()
         ]
-        return {"field_ids": field_ids}
+        return merge_card_template_field_ids(current_schema, field_ids)
 
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:

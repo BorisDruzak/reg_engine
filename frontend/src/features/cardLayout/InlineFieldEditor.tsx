@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import type { FormFieldRead } from "@/api/types";
+import type { FormFieldRead, ReferenceListRead } from "@/api/types";
 import { FIELD_TYPE_OPTIONS } from "@/app/uiText";
 
 export type InlineFieldEditorProps = {
   field: FormFieldRead;
+  referenceLists?: ReferenceListRead[];
   onCommit: (field: FormFieldRead) => void;
   onCancel: () => void;
 };
 
-export function InlineFieldEditor({ field, onCommit, onCancel }: InlineFieldEditorProps) {
+export function InlineFieldEditor({
+  field,
+  referenceLists = [],
+  onCommit,
+  onCancel,
+}: InlineFieldEditorProps) {
   const rootRef = useRef<HTMLFormElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
@@ -152,15 +158,25 @@ export function InlineFieldEditor({ field, onCommit, onCancel }: InlineFieldEdit
       </label>
       {usesReferenceList ? (
         <label>
-          <span>Источник вариантов</span>
+          <span>Справочник</span>
           <select
-            value={draft.options_source_type ?? ""}
+            value={draft.options_source_id ?? ""}
             onChange={(event) =>
-              setDraft({ ...draft, options_source_type: event.currentTarget.value || null })
+              setDraft({
+                ...draft,
+                options_source_type: event.currentTarget.value ? "reference_list" : null,
+                options_source_id: event.currentTarget.value || null,
+              })
             }
           >
             <option value="">Не выбран</option>
-            <option value="reference_list">Справочник</option>
+            {referenceLists
+              .filter((referenceList) => referenceList.is_active)
+              .map((referenceList) => (
+                <option key={referenceList.id} value={referenceList.id}>
+                  {referenceList.name}
+                </option>
+              ))}
           </select>
         </label>
       ) : null}

@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
-import type { CardTemplateLayoutRead, FormBlockRead, FormFieldRead } from "@/api/types";
+import type {
+  CardTemplateLayoutRead,
+  FormBlockRead,
+  FormFieldRead,
+  ReferenceListRead,
+} from "@/api/types";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
 import type { FieldEditorOption, FieldEditorState } from "@/features/cards/fieldEditorUtils";
 
@@ -31,6 +36,7 @@ export type CardWebLayoutCanvasProps = {
   fieldValues?: Readonly<Record<string, unknown>>;
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
+  referenceLists?: ReferenceListRead[];
   showGeometryDiagnostics?: boolean;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
@@ -59,6 +65,7 @@ function CardWebLayoutCanvasSession({
   fieldValues,
   fieldOptions,
   fileRefOptions,
+  referenceLists,
   showGeometryDiagnostics = false,
   renderFieldValue,
   onSelectionChange,
@@ -144,6 +151,7 @@ function CardWebLayoutCanvasSession({
             fieldValues={fieldValues}
             fieldOptions={fieldOptions}
             fileRefOptions={fileRefOptions}
+            referenceLists={referenceLists}
             showGeometryDiagnostics={showGeometryDiagnostics}
             renderFieldValue={renderFieldValue}
             onSelect={select}

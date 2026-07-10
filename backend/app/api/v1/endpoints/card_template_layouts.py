@@ -14,6 +14,7 @@ from app.schemas.card_template_layouts import (
     CardTemplatePrintViewRead,
     CardTemplatePrintViewUpdate,
 )
+from app.schemas.documents import DocumentTemplateVersionRead
 from app.services.card_template_layout import (
     CardTemplateLayoutConflictError,
     CardTemplateLayoutError,
@@ -131,6 +132,44 @@ def sync_card_template_print_view(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise_service_http_error(exc)
+
+
+@router.post(
+    "/card-templates/{template_id}/layout/print-views/{print_view_id}/convert-linked-card",
+    response_model=DocumentTemplateVersionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def convert_card_template_print_view_to_linked_card(
+    template_id: UUID,
+    print_view_id: str,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> DocumentTemplateVersionRead:
+    try:
+        layout = _layout_service(session).read_layout_for_actor(
+            actor_user_id=actor_user_id,
+            card_template_id=template_id,
+        )
+        print_view = next(
+            (candidate for candidate in layout.print_views if candidate.id == print_view_id),
+            None,
+        )
+        if print_view is None or print_view.document_template_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Сначала сохраните печатное представление.",
+            )
+        version = _document_service(session).convert_print_view_to_linked_card_for_actor(
+            actor_user_id=actor_user_id,
+            template_id=print_view.document_template_id,
+        )
+    except HTTPException:
+        raise
+    except DocumentServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return DocumentTemplateVersionRead.model_validate(version)
 
 
 @router.post(

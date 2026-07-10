@@ -922,6 +922,45 @@ describe("CardWebLayoutCanvas", () => {
     );
   });
 
+  test("keeps reference-list selection real for select and multi-select field types", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          onCommitField,
+          referenceLists: [
+            {
+              id: "reference-statuses",
+              registry_id: "registry-1",
+              owner_organization_id: null,
+              code: "statuses",
+              name: "Статусы",
+              description: null,
+              inherit_to_descendants: false,
+              locked_for_descendants: false,
+              managed_by_system_only: false,
+              is_active: true,
+            },
+          ],
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить поле Имя" }));
+    await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
+    await user.selectOptions(screen.getByLabelText("Справочник"), "reference-statuses");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onCommitField).toHaveBeenCalledWith(
+      expect.objectContaining({
+        field_type: "select",
+        options_source_type: "reference_list",
+        options_source_id: "reference-statuses",
+      }),
+    );
+  });
+
   test("commits a valid field on click-away and keeps invalid fields focused", async () => {
     const user = userEvent.setup();
     const onCommitField = vi.fn();

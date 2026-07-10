@@ -1,6 +1,11 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
-import type { CardTemplateFormLayoutSectionRead, FormBlockRead, FormFieldRead } from "@/api/types";
+import type {
+  CardTemplateFormLayoutSectionRead,
+  FormBlockRead,
+  FormFieldRead,
+  ReferenceListRead,
+} from "@/api/types";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
 import type { FieldEditorOption, FieldEditorState } from "@/features/cards/fieldEditorUtils";
 
@@ -21,6 +26,7 @@ export type CardBlockLayoutNodeProps = {
   fieldValues?: Readonly<Record<string, unknown>>;
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
+  referenceLists?: ReferenceListRead[];
   showGeometryDiagnostics?: boolean;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelect: (selection: CardLayoutSelection) => void;
@@ -43,6 +49,7 @@ export function CardBlockLayoutNode({
   fieldValues,
   fieldOptions,
   fileRefOptions,
+  referenceLists,
   showGeometryDiagnostics = false,
   renderFieldValue,
   onSelect,
@@ -155,6 +162,7 @@ export function CardBlockLayoutNode({
                   value={fieldValues?.[valueKey]}
                   options={fieldOptions?.[valueKey]}
                   fileRefOptions={fileRefOptions?.[valueKey]}
+                  referenceLists={referenceLists}
                   showGeometryDiagnostics={showGeometryDiagnostics}
                   renderFieldValue={renderFieldValue}
                   onSelect={onSelect}

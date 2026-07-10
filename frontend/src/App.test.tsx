@@ -1580,6 +1580,82 @@ beforeEach(() => {
         }
         return jsonResponse({ items: cardTemplateItems });
       }
+      const cardTemplateLayoutMatch = pathname.match(
+        /^\/api\/v1\/card-templates\/([^/]+)\/layout$/,
+      );
+      if (cardTemplateLayoutMatch && init?.method === "GET") {
+        const template = cardTemplateItems.find(
+          (item) => item.id === cardTemplateLayoutMatch[1],
+        );
+        if (!template) {
+          return jsonResponse({ detail: "Not Found" }, { status: 404 });
+        }
+        const fieldIds = new Set(template.field_schema_json?.field_ids ?? []);
+        const templateFields = schemaFieldItems.filter((field) => fieldIds.has(field.id));
+        const blockIds = new Set(templateFields.map((field) => field.block_id));
+        const templateBlocks = schemaBlockItems.filter((block) => blockIds.has(block.id));
+        const printLayout = {
+          version: "card_print_layout_v1",
+          page: {
+            format: "A4",
+            width_mm: 210,
+            height_mm: 297,
+            margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+          },
+          grid: { columns: 12, row_height_mm: 8, snap_mm: 2 },
+          sections: [],
+          overlays: [],
+          items: [],
+        };
+        const formSections = templateBlocks.map((block, blockIndex) => ({
+          id: `block-${block.id}`,
+          block_id: block.id,
+          row: blockIndex * 2 + 1,
+          column: 1,
+          row_span: 2,
+          column_span: 12,
+          items: templateFields
+            .filter((field) => field.block_id === block.id)
+            .map((field, fieldIndex) => ({
+              id: `field-${field.id}`,
+              kind: "field",
+              field_id: field.id,
+              row: fieldIndex + 1,
+              column: 1,
+              row_span: 1,
+              column_span: 12,
+              text: null,
+            })),
+        }));
+        return jsonResponse({
+          version: "card_template_layout_v1",
+          revision: "app-test-revision-1",
+          card_template_id: template.id,
+          registry_id: template.registry_id,
+          structure: { blocks: templateBlocks, fields: templateFields },
+          form_layout: { columns: 12, sections: formSections },
+          print_views: [
+            {
+              id: "default-a4",
+              name: "Основная A4",
+              is_default: true,
+              document_template_id: null,
+              current_version_id: null,
+              source: "form_layout",
+              page: printLayout.page,
+              items: [],
+              layout_json: printLayout,
+              output_filename_template: "{{ card.display_name }}.docx",
+            },
+          ],
+          export_settings: {
+            default_print_view_id: "default-a4",
+            output_filename_template: "{{ card.display_name }}.docx",
+            formats: ["docx", "pdf"],
+          },
+          sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+        });
+      }
       if (url.includes("/api/v1/card-templates/")) {
         const templateId = url.split("/api/v1/card-templates/")[1];
         const current = cardTemplateItems.find((item) => item.id === templateId);

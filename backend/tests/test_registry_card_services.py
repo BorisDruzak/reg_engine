@@ -788,6 +788,69 @@ def test_card_creation_without_explicit_template_uses_base_template(
     }
 
 
+def test_base_template_field_refresh_preserves_form_layout(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="layout-preservation",
+        title="Layout preservation",
+    )
+    first_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="layout_first",
+        label="Layout first",
+        field_type="text",
+    )
+    template = schema_service.ensure_base_card_template_for_registry(
+        registry_id=context["registry"].id,
+        actor_user_id=context["registry_admin"].id,
+    )
+    form_layout = {
+        "columns": 12,
+        "sections": [
+            {
+                "id": "section-main",
+                "block_id": str(block.id),
+                "row": 1,
+                "column": 1,
+                "column_span": 12,
+                "items": [
+                    {
+                        "id": "field-first",
+                        "kind": "field",
+                        "field_id": str(first_field.id),
+                        "row": 1,
+                        "column": 1,
+                        "column_span": 12,
+                    }
+                ],
+            }
+        ],
+    }
+    template.field_schema_json = {
+        **template.field_schema_json,
+        "form_layout": form_layout,
+    }
+    db_session.flush()
+
+    second_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="layout_second",
+        label="Layout second",
+        field_type="bool",
+    )
+
+    assert template.field_schema_json["form_layout"] == form_layout
+    assert set(template.field_schema_json["field_ids"]) == {
+        str(first_field.id),
+        str(second_field.id),
+    }
+
+
 def test_base_card_template_cannot_be_archived(db_session: Session) -> None:
     context = _phase_1d_context(db_session)
     card = CardService(db_session).create_card_for_actor(

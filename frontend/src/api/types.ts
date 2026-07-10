@@ -792,7 +792,16 @@ export type CardPrintSection = {
 
 export type CardPrintOverlayItem = {
   id: string;
-  kind: "line" | "divider" | "rectangle" | "panel" | "container" | "image" | "qr_code";
+  kind:
+    | "line"
+    | "divider"
+    | "rectangle"
+    | "panel"
+    | "container"
+    | "image"
+    | "qr_code"
+    | "static_text"
+    | "heading";
   page: number;
   x_mm: number;
   y_mm: number;

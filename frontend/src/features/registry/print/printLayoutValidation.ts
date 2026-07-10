@@ -28,6 +28,7 @@ const SUPPORTED_KINDS = new Set<CardPrintLayoutItem["kind"]>([
   "print_date",
   "qr_code",
   "image",
+  "card_layout",
 ]);
 
 const DECORATIVE_OVERLAP_KINDS = new Set<CardPrintLayoutItem["kind"]>([

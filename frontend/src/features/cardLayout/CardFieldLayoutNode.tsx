@@ -1,6 +1,6 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
-import type { CardTemplateFormLayoutItemRead, FormFieldRead } from "@/api/types";
+import type { CardTemplateFormLayoutItemRead, FormFieldRead, ReferenceListRead } from "@/api/types";
 import { fieldTypeLabel } from "@/app/uiText";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
@@ -30,6 +30,7 @@ export type CardFieldLayoutNodeProps = {
   value?: unknown;
   options?: FieldEditorOption[];
   fileRefOptions?: FieldEditorFileRefOption[];
+  referenceLists?: ReferenceListRead[];
   showGeometryDiagnostics?: boolean;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelect: (selection: CardLayoutSelection) => void;
@@ -49,6 +50,7 @@ export function CardFieldLayoutNode({
   value,
   options = [],
   fileRefOptions = [],
+  referenceLists = [],
   showGeometryDiagnostics = false,
   renderFieldValue,
   onSelect,
@@ -119,6 +121,7 @@ export function CardFieldLayoutNode({
       {schemaEditing && onCommitField ? (
         <InlineFieldEditor
           field={field}
+          referenceLists={referenceLists}
           onCommit={(draft) => {
             onCommitField(draft);
             onSelect(null);
