@@ -15,6 +15,22 @@ def _alembic_config(stdout: StringIO) -> Config:
     return config
 
 
+def _render_upgrade_sql(revision: str) -> str:
+    stdout = StringIO()
+    command.upgrade(_alembic_config(stdout), revision, sql=True)
+    return stdout.getvalue()
+
+
+def _render_downgrade_sql(start_revision: str, end_revision: str) -> str:
+    stdout = StringIO()
+    command.downgrade(
+        _alembic_config(stdout),
+        f"{start_revision}:{end_revision}",
+        sql=True,
+    )
+    return stdout.getvalue()
+
+
 EXPECTED_TABLES = {
     "access_grants",
     "audit_events",
@@ -119,3 +135,47 @@ def test_alembic_revision_ids_fit_version_table_limit() -> None:
         revision = namespace["revision"]
         assert isinstance(revision, str)
         assert len(revision) <= 32
+
+
+def test_public_link_review_migration_adds_lifecycle_columns() -> None:
+    sql = _render_upgrade_sql("0023_public_link_review")
+
+    assert "0023_public_link_review" in sql
+    assert "submitted_at TIMESTAMP WITH TIME ZONE" in sql
+    assert "reviewed_at TIMESTAMP WITH TIME ZONE" in sql
+    assert "reviewed_by UUID" in sql
+    assert "review_comment TEXT" in sql
+    assert "baseline_snapshot_json JSONB" in sql
+    assert "submission_summary_json JSONB" in sql
+    assert "review_enabled BOOLEAN DEFAULT false NOT NULL" in sql
+    assert "fk_card_public_links_reviewed_by_users" in sql
+    assert "ck_card_public_links_status" in sql
+    assert "'submitted'" in sql
+    assert "'changes_requested'" in sql
+    assert "'approved'" in sql
+    assert "ix_card_public_links_card_status_submitted" in sql
+
+
+def test_public_link_review_migration_downgrade_maps_new_statuses_before_constraint() -> None:
+    sql = _render_downgrade_sql(
+        "0023_public_link_review",
+        "0022_card_print_layout_templates",
+    )
+
+    status_mapping_position = sql.index("UPDATE public.card_public_links")
+    old_constraint_position = sql.index("CHECK (status in ('active', 'disabled', 'expired'))")
+
+    assert status_mapping_position < old_constraint_position
+    assert "status IN ('submitted', 'changes_requested', 'approved')" in sql
+    assert "DROP INDEX public.ix_card_public_links_card_status_submitted" in sql
+    assert "DROP CONSTRAINT fk_card_public_links_reviewed_by_users" in sql
+    for column_name in {
+        "submitted_at",
+        "reviewed_at",
+        "reviewed_by",
+        "review_comment",
+        "baseline_snapshot_json",
+        "submission_summary_json",
+        "review_enabled",
+    }:
+        assert f"DROP COLUMN {column_name}" in sql

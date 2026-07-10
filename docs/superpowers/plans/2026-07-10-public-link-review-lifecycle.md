@@ -58,7 +58,7 @@
 
 ```python
 def test_public_link_review_migration_adds_lifecycle_columns() -> None:
-    sql = render_upgrade_sql("0023_public_link_review_lifecycle")
+    sql = render_upgrade_sql("0023_public_link_review")
     assert "submitted_at" in sql
     assert "reviewed_at" in sql
     assert "reviewed_by" in sql
@@ -79,7 +79,7 @@ Expected: FAIL because revision `0023` and model columns do not exist.
 - [ ] **Step 3: Implement the migration**
 
 ```python
-revision = "0023_public_link_review_lifecycle"
+revision = "0023_public_link_review"
 down_revision = "0022_card_print_layout_templates"
 
 
@@ -613,7 +613,7 @@ Push-Location backend
 Pop-Location
 ```
 
-Expected: migration reaches `0023_public_link_review_lifecycle`; database smoke
+Expected: migration reaches `0023_public_link_review`; database smoke
 and lifecycle tests pass. Never point `TEST_DATABASE_URL` at production.
 
 - [ ] **Step 3: Update docs and project maps**
@@ -653,7 +653,7 @@ status values exist. Stop if any precondition fails.
 - [ ] **Step 7: Apply the planned production migration and verify schema**
 
 Run the configured remote Alembic upgrade against production `reg_engine`, not
-`TEST_DATABASE_URL`. Then verify revision `0023_public_link_review_lifecycle`,
+`TEST_DATABASE_URL`. Then verify revision `0023_public_link_review`,
 new columns, status constraint, index, API health, and service status. Record
 commands and results in `PLANS.md`.
 

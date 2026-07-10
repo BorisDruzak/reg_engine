@@ -19,7 +19,14 @@ FIELD_TYPES = (
     "static_text",
 )
 REQUIRED_MODES = ("not_required", "required", "required_on_publish")
-PUBLIC_LINK_STATUSES = ("active", "disabled", "expired")
+PUBLIC_LINK_STATUSES = (
+    "active",
+    "submitted",
+    "changes_requested",
+    "approved",
+    "disabled",
+    "expired",
+)
 CARD_RELATION_TYPES = ("related_to", "transferred_to", "duplicates")
 AUDIT_ACTOR_TYPES = ("user", "public_link", "system")
 AUDIT_SOURCES = ("api", "public_link", "system", "mcp")

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -38,6 +39,12 @@ class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         Index("ix_card_public_links_card_id", "card_id"),
         Index("ix_card_public_links_token_hash", "token_hash"),
         Index("ix_card_public_links_expires_at", "expires_at"),
+        Index(
+            "ix_card_public_links_card_status_submitted",
+            "card_id",
+            "status",
+            "submitted_at",
+        ),
     )
 
     card_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cards.id"))
@@ -58,3 +65,21 @@ class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     allowed_fields_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    baseline_snapshot_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    submission_summary_json: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    review_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )

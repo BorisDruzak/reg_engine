@@ -1,6 +1,7 @@
-from sqlalchemy import CheckConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Text
+from sqlalchemy.dialects.postgresql import JSONB
 
-from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS, FIELD_TYPES
+from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS, FIELD_TYPES, PUBLIC_LINK_STATUSES
 from app.models import Base
 
 EXPECTED_TABLES = {
@@ -307,6 +308,65 @@ def test_public_link_attachment_limit_columns_are_explicit() -> None:
         "attachment_upload_count",
     }:
         assert column_name in card_public_links.c
+
+
+def test_public_link_review_lifecycle_metadata_is_registered() -> None:
+    card_public_links = Base.metadata.tables["card_public_links"]
+
+    assert PUBLIC_LINK_STATUSES == (
+        "active",
+        "submitted",
+        "changes_requested",
+        "approved",
+        "disabled",
+        "expired",
+    )
+    for column_name in {
+        "submitted_at",
+        "reviewed_at",
+        "reviewed_by",
+        "review_comment",
+        "baseline_snapshot_json",
+        "submission_summary_json",
+        "review_enabled",
+    }:
+        assert column_name in card_public_links.c
+
+    for column_name in {"submitted_at", "reviewed_at"}:
+        column = card_public_links.c[column_name]
+        assert isinstance(column.type, DateTime)
+        assert column.type.timezone is True
+        assert column.nullable is True
+
+    assert isinstance(card_public_links.c.review_comment.type, Text)
+    assert isinstance(card_public_links.c.baseline_snapshot_json.type, JSONB)
+    assert isinstance(card_public_links.c.submission_summary_json.type, JSONB)
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in card_public_links.c.reviewed_by.foreign_keys
+    } == {("users", "id")}
+
+    review_enabled = card_public_links.c.review_enabled
+    assert isinstance(review_enabled.type, Boolean)
+    assert review_enabled.nullable is False
+    assert review_enabled.server_default is not None
+    assert str(review_enabled.server_default.arg) == "false"
+
+    status_checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in card_public_links.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    for status in PUBLIC_LINK_STATUSES:
+        assert status in status_checks["ck_card_public_links_status"]
+
+    assert {
+        index.name: [column.name for column in index.columns] for index in card_public_links.indexes
+    }["ix_card_public_links_card_status_submitted"] == [
+        "card_id",
+        "status",
+        "submitted_at",
+    ]
 
 
 def test_registry_default_owner_metadata_is_registered() -> None:
