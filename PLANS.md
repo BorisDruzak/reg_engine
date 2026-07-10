@@ -4395,7 +4395,7 @@ Live Browser proof:
 
 #### Window-owned field pointer follow-up
 
-Status: implemented and locally verified; production release pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 - Native pointer capture was not a sufficient ownership boundary for direct
   field dragging. When the pointer crossed a neighbouring field or a
@@ -4421,3 +4421,28 @@ Status: implemented and locally verified; production release pending.
   Vite main-chunk advisories remain unchanged. The verified local bundle is
   `index-CXChXVIt.js` (`563.91 kB`, `160.88 kB` gzip) with
   `index-Cl9DldkN.css`.
+
+Production release evidence:
+
+- The implementation was committed and synchronized across local `main`,
+  `origin/main`, and the server checkout at `4cbaa5a3` (`Fix field drag pointer
+  ownership`). No schema or production-data change was required.
+- `scripts/deploy.ps1` passed server checkout, service, PostgreSQL, and
+  attachment-storage checks. `scripts/deploy-frontend.ps1` deployed
+  `/assets/index-CXChXVIt.js` and `/assets/index-Cl9DldkN.css`, restarted the
+  API service, and passed health and same-origin frontend smoke checks.
+
+Live Browser proof:
+
+- The deployed editor loaded `/assets/index-CXChXVIt.js` with `Положение` in
+  the reported arrangement: `tst`, `312`, and the rightmost `Новое поле` in
+  row 1, followed by the full-width `КТо вы из последовательности цифр` in
+  row 2.
+- A real pointer drag moved only the rightmost `Новое поле` from row 1/columns
+  10-12 through the fully occupied row 2 into row 3/columns 10-12. `312`
+  remained in row 1/columns 7-9, the block expanded from two to three rendered
+  rows, release cleared the geometry session and target, and undo became
+  available.
+- Undo restored the original two-row layout. Final state had zero geometry
+  sessions, targets, and editing fields, an empty browser text selection, and
+  zero browser log entries.
