@@ -586,6 +586,54 @@ describe("CardWebLayoutCanvas", () => {
     }
   });
 
+  test("supports direct field interaction without edit or move buttons", async () => {
+    const user = userEvent.setup();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Переместить поле Имя" })).not.toBeInTheDocument();
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    await user.click(fieldNode);
+
+    expect(within(fieldNode).getByLabelText("Название поля")).toBeInTheDocument();
+  });
+
+  test("starts a field surface drag only after the six pixel threshold", () => {
+    const onGeometryCommit = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!);
+    const capture = installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 121, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 121, clientX: 5, clientY: 0 });
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 121, clientX: 6, clientY: 0 });
+    expect(document.querySelector(".card-layout-geometry-session")).toBeInTheDocument();
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 121, clientX: 306, clientY: 0 });
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 121, clientX: 306, clientY: 0 });
+
+    expect(capture.setPointerCapture).toHaveBeenCalledWith(121);
+    expect(capture.releasePointerCapture).toHaveBeenCalledWith(121);
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
+      after: { row: 1, column: 4, rowSpan: 1, columnSpan: 9 },
+    });
+  });
+
+  test("exposes all field resize zones without a field move button", () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    expect(screen.queryByRole("button", { name: "Переместить поле Имя" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
+  });
+
   test("resizes a field from a corner on both axes and allows edge touching", () => {
     const onGeometryCommit = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
@@ -595,12 +643,6 @@ describe("CardWebLayoutCanvas", () => {
       .closest<HTMLElement>("[data-layout-grid='fields']");
     expect(fieldGrid).not.toBeNull();
     mockGridRect(fieldGrid!);
-    const moveHandle = screen.getByRole("button", { name: "Переместить поле Имя" });
-    const moveCapture = installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 21, clientX: 0, clientY: 0 });
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 21, clientX: 0, clientY: 0 });
-
-    expect(moveCapture.releasePointerCapture).toHaveBeenCalledWith(21);
     expect(onGeometryCommit).not.toHaveBeenCalled();
     expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
     const resizeHandle = screen.getByRole("button", {
@@ -628,6 +670,7 @@ describe("CardWebLayoutCanvas", () => {
       before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
       after: { row: 1, column: 4, rowSpan: 2, columnSpan: 6 },
     });
+    expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
   });
 
   test("releases pointer capture and restores geometry on pointer cancel", () => {
@@ -831,8 +874,8 @@ describe("CardWebLayoutCanvas", () => {
 
     onGeometryCommit.mockClear();
     rerender(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-    const fieldMoveHandle = screen.getByRole("button", { name: "Переместить поле Имя" });
-    fieldMoveHandle.focus();
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    fieldNode.focus();
     await user.keyboard("{Shift>}{ArrowLeft}{/Shift}");
     expect(onGeometryCommit).not.toHaveBeenCalled();
     expect(screen.getByTestId("layout-field-field-name")).toHaveStyle({
@@ -847,18 +890,18 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
-  test("discloses eight accessible resize handles only for the active geometry target", () => {
+  test("keeps eight field resize zones available until another geometry target is active", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 
     expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
 
     const canvas = screen.getByTestId("card-layout-canvas");
     const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
     mockGridRect(canvas);
     installPointerCapture(moveHandle);
     dispatchPointer(moveHandle, "pointerdown", { pointerId: 45, clientX: 0, clientY: 0 });
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 45, clientX: 0, clientY: 0 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 45, clientX: 100, clientY: 0 });
 
     expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(8);
     expect(
@@ -913,7 +956,7 @@ describe("CardWebLayoutCanvas", () => {
     ).not.toBeInTheDocument();
   });
 
-  test("does not create an undo command for a pointer session without a geometry change", () => {
+  test("clears a pointer session without a geometry change or undo command", () => {
     const onGeometryCommit = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
 
@@ -927,8 +970,10 @@ describe("CardWebLayoutCanvas", () => {
 
     expect(capture.releasePointerCapture).toHaveBeenCalledWith(47);
     expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByRole("region", { name: "Предпросмотр веб-карточки" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(8);
+    expect(
+      screen.queryByRole("region", { name: "Предпросмотр веб-карточки" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
   });
 
   test("keeps the idle canvas contextual and exposes creation actions locally", () => {
@@ -1026,8 +1071,9 @@ describe("CardWebLayoutCanvas", () => {
     const user = userEvent.setup();
     render(<CardWebLayoutCanvas {...canvasProps()} />);
 
-    await user.click(screen.getByRole("button", { name: "Изменить поле Имя" }));
     const fieldNode = screen.getByTestId("layout-field-field-name");
+    fieldNode.focus();
+    await user.keyboard("{Enter}");
     expect(within(fieldNode).getByLabelText("Название поля")).toHaveValue("Имя");
     const typeSelect = within(fieldNode).getByLabelText("Тип поля");
     const options = within(typeSelect).getAllByRole("option");
@@ -1063,7 +1109,7 @@ describe("CardWebLayoutCanvas", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Изменить поле Имя" }));
+    await user.click(screen.getByTestId("layout-field-field-name"));
     await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
     await user.selectOptions(screen.getByLabelText("Справочник"), "reference-statuses");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -1082,7 +1128,7 @@ describe("CardWebLayoutCanvas", () => {
     const onCommitField = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onCommitField })} />);
 
-    await user.click(screen.getByRole("button", { name: "Изменить поле Имя" }));
+    await user.click(screen.getByTestId("layout-field-field-name"));
     const labelInput = screen.getByLabelText("Название поля");
     await user.clear(labelInput);
     await user.click(screen.getByTestId("card-layout-canvas"));
@@ -1102,7 +1148,7 @@ describe("CardWebLayoutCanvas", () => {
     const onCancelField = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onCancelField })} />);
 
-    await user.click(screen.getByRole("button", { name: "Изменить поле Имя" }));
+    await user.click(screen.getByTestId("layout-field-field-name"));
     await user.keyboard("{Escape}");
 
     expect(onCancelField).toHaveBeenCalledWith(fields[0].id);

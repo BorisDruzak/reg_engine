@@ -249,11 +249,12 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
       releasePointer();
       const current = sessionRef.current;
       if (current && rectEquals(current.original, current.preview)) {
+        clear();
         return;
       }
       commit();
     },
-    [commit, releasePointer],
+    [clear, commit, releasePointer],
   );
 
   const pointerCancel = useCallback(

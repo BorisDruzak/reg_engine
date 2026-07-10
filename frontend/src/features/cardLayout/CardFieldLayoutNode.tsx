@@ -1,5 +1,10 @@
-import { useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { useRef, useState } from "react";
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from "react";
 
 import type { CardTemplateFormLayoutItemRead, FormFieldRead, ReferenceListRead } from "@/api/types";
 import { fieldTypeLabel } from "@/app/uiText";
@@ -13,6 +18,14 @@ import { InlineFieldEditor } from "./InlineFieldEditor";
 import { snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect, ResizeHandle } from "./layoutGeometry";
 import type { LayoutGeometryControls, LayoutGeometryTarget } from "./useLayoutGeometrySession";
+
+const DIRECT_MOVE_THRESHOLD_PX = 6;
+
+type PendingMove = {
+  pointerId: number;
+  x: number;
+  y: number;
+};
 
 export type CardLayoutFieldRenderContext = {
   field: FormFieldRead;
@@ -63,6 +76,8 @@ export function CardFieldLayoutNode({
   geometry,
 }: CardFieldLayoutNodeProps) {
   const [retryDraft, setRetryDraft] = useState<FormFieldRead | null>(null);
+  const pendingMoveRef = useRef<PendingMove | null>(null);
+  const suppressClickRef = useRef(false);
   const nodeId = field?.id ?? item.id;
   const designMode = mode === "design";
   const geometryActive = Boolean(geometry?.session);
@@ -85,6 +100,92 @@ export function CardFieldLayoutNode({
     targetKind: "field",
     original: toLayoutRect(item),
   };
+
+  function openFieldEditor() {
+    if (!field || !designMode || geometryActive || !onCommitField) {
+      return;
+    }
+    setRetryDraft(null);
+    onSelect({ kind: "field", id: field.id });
+  }
+
+  function fieldGrid(element: HTMLElement) {
+    return element.closest<HTMLElement>("[data-layout-grid='fields']");
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (!geometry || geometryActive || schemaEditing || isInteractiveTarget(event.target)) {
+      return;
+    }
+    pendingMoveRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    suppressClickRef.current = false;
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
+    if (geometryTarget) {
+      geometry?.pointerMove(event);
+      return;
+    }
+    const pending = pendingMoveRef.current;
+    if (!pending || pending.pointerId !== event.pointerId || !geometry) {
+      return;
+    }
+    if (
+      Math.hypot(event.clientX - pending.x, event.clientY - pending.y) < DIRECT_MOVE_THRESHOLD_PX
+    ) {
+      return;
+    }
+    const grid = fieldGrid(event.currentTarget);
+    if (!grid) {
+      pendingMoveRef.current = null;
+      return;
+    }
+    pendingMoveRef.current = null;
+    suppressClickRef.current = true;
+    geometry.beginMove(event, geometryTargetDescriptor, grid);
+  }
+
+  function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
+    if (geometryTarget) {
+      geometry?.pointerUp(event);
+      return;
+    }
+    if (pendingMoveRef.current?.pointerId === event.pointerId) {
+      pendingMoveRef.current = null;
+    }
+  }
+
+  function handlePointerCancel(event: ReactPointerEvent<HTMLElement>) {
+    pendingMoveRef.current = null;
+    suppressClickRef.current = false;
+    if (geometryTarget) {
+      geometry?.pointerCancel(event);
+    }
+  }
+
+  function handleLostPointerCapture(event: ReactPointerEvent<HTMLElement>) {
+    pendingMoveRef.current = null;
+    if (geometryTarget) {
+      geometry?.lostPointerCapture(event);
+    }
+  }
+
+  function handleFieldKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget || !designMode || schemaEditing) {
+      return;
+    }
+    if ((event.key === "Enter" || event.key === " ") && !geometryActive && onCommitField) {
+      event.preventDefault();
+      event.stopPropagation();
+      openFieldEditor();
+      return;
+    }
+    geometry?.keyboard(event, geometryTargetDescriptor);
+  }
 
   if (!field) {
     return (
@@ -117,10 +218,32 @@ export function CardFieldLayoutNode({
 
   return (
     <article
-      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}`}
+      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${designMode && onCommitField ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}`}
       data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
-      onClick={(event) => event.stopPropagation()}
+      tabIndex={designMode && onCommitField ? 0 : undefined}
+      aria-label={
+        designMode && onCommitField
+          ? `Поле ${field.label}. Нажмите, чтобы изменить; удерживайте и перетащите, чтобы переместить.`
+          : undefined
+      }
+      onClick={(event) => {
+        event.stopPropagation();
+        if (isInteractiveTarget(event.target)) {
+          return;
+        }
+        if (suppressClickRef.current) {
+          suppressClickRef.current = false;
+          return;
+        }
+        openFieldEditor();
+      }}
+      onKeyDown={handleFieldKeyDown}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handleLostPointerCapture}
     >
       {schemaEditing && onCommitField ? (
         <InlineFieldEditor
@@ -152,19 +275,6 @@ export function CardFieldLayoutNode({
               <strong>{field.label}</strong>
               <small>{fieldTypeLabel(field.field_type)}</small>
             </div>
-            {designMode && !geometryActive && onCommitField ? (
-              <button
-                type="button"
-                className="ghost-button"
-                aria-label={`Изменить поле ${field.label}`}
-                onClick={() => {
-                  setRetryDraft(null);
-                  onSelect({ kind: "field", id: field.id });
-                }}
-              >
-                Изменить
-              </button>
-            ) : null}
           </header>
           {!designMode ? (
             <div className="card-layout-field-value">
@@ -257,36 +367,16 @@ function FieldGeometryAffordances({
   function gridFor(event: ReactPointerEvent<HTMLElement>) {
     return event.currentTarget.closest<HTMLElement>("[data-layout-grid='fields']");
   }
-  const resizeHandles: ResizeHandle[] = geometry.session
-    ? (Object.keys(RESIZE_HANDLE_LABELS) as ResizeHandle[])
-    : ["bottom-right"];
+  const resizeHandles = Object.keys(RESIZE_HANDLE_LABELS) as ResizeHandle[];
 
   return (
     <span className="card-layout-geometry-affordances">
-      <button
-        type="button"
-        className="card-layout-move-handle"
-        aria-label={`Переместить поле ${objectLabel}`}
-        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-        title="Стрелки — перемещение; Shift + стрелки — изменение размера"
-        style={{ position: "absolute", right: 6, top: 6, zIndex: 3, cursor: "move" }}
-        onKeyDown={(event) => geometry.keyboard(event, target)}
-        onPointerDown={(event) => {
-          const grid = gridFor(event);
-          if (grid) geometry.beginMove(event, target, grid);
-        }}
-        onPointerMove={geometry.pointerMove}
-        onPointerUp={geometry.pointerUp}
-        onPointerCancel={geometry.pointerCancel}
-        onLostPointerCapture={geometry.lostPointerCapture}
-      >
-        ⠿
-      </button>
       {resizeHandles.map((handle) => (
         <button
           key={handle}
           type="button"
           className={`card-layout-resize-handle is-${handle}`}
+          data-layout-resize-handle
           aria-label={`Изменить размер поля ${objectLabel}: ${RESIZE_HANDLE_LABELS[handle]}`}
           title={`Изменить размер: ${RESIZE_HANDLE_LABELS[handle]}`}
           style={{
@@ -308,6 +398,17 @@ function FieldGeometryAffordances({
         />
       ))}
     </span>
+  );
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        "button, input, select, textarea, a, [contenteditable='true'], [data-layout-resize-handle]",
+      ),
+    )
   );
 }
 
