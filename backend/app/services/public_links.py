@@ -17,6 +17,7 @@ from app.models import (
     CardAttachment,
     CardBlockInstance,
     CardPublicLink,
+    CardTemplate,
     FieldValue,
     FieldValueItem,
     FormBlock,
@@ -164,6 +165,8 @@ class PublicLinkService:
         expires_in_days: int = DEFAULT_PUBLIC_LINK_TTL_DAYS,
         max_attachment_uploads: int | None = None,
         review_enabled: bool = False,
+        allowed_block_ids: list[UUID] | None = None,
+        allowed_field_ids: list[UUID] | None = None,
     ) -> PublicLinkToken:
         if expires_in_days < 1 or expires_in_days > 30:
             raise PublicLinkError("Public link expiration must be between 1 and 30 days.")
@@ -171,6 +174,11 @@ class PublicLinkService:
             raise PublicLinkError("Public attachment upload limit must not be negative.")
         card = self._get_active_card(card_id)
         self._require_card_permission(actor_user_id, card)
+        allowed_blocks_json, allowed_fields_json = self._validated_public_schema_allowlists(
+            card=card,
+            allowed_block_ids=allowed_block_ids,
+            allowed_field_ids=allowed_field_ids,
+        )
 
         raw_token = secrets.token_urlsafe(32)
         public_link = CardPublicLink(
@@ -178,6 +186,8 @@ class PublicLinkService:
             token_hash=hash_public_token(raw_token),
             expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
             max_attachment_uploads=max_attachment_uploads,
+            allowed_blocks_json=allowed_blocks_json,
+            allowed_fields_json=allowed_fields_json,
             review_enabled=review_enabled,
             created_by=actor_user_id,
         )
@@ -195,6 +205,8 @@ class PublicLinkService:
                 "expires_at": public_link.expires_at.isoformat(),
                 "max_attachment_uploads": max_attachment_uploads,
                 "review_enabled": review_enabled,
+                "allowed_block_count": len(allowed_block_ids or []),
+                "allowed_field_count": len(allowed_field_ids or []),
             },
         )
         return PublicLinkToken(raw_token=raw_token, public_link=public_link)
@@ -905,6 +917,83 @@ class PublicLinkService:
             raise PublicLinkReviewPermissionDeniedError(
                 "Actor cannot review public links for this card."
             )
+
+    def _validated_public_schema_allowlists(
+        self,
+        *,
+        card: Card,
+        allowed_block_ids: list[UUID] | None,
+        allowed_field_ids: list[UUID] | None,
+    ) -> tuple[dict[str, list[str]] | None, dict[str, list[str]] | None]:
+        block_ids = (
+            list(dict.fromkeys(allowed_block_ids)) if allowed_block_ids is not None else None
+        )
+        field_ids = (
+            list(dict.fromkeys(allowed_field_ids)) if allowed_field_ids is not None else None
+        )
+        blocks_by_id: dict[UUID, FormBlock] = {}
+        if block_ids:
+            blocks_by_id = {
+                block.id: block
+                for block in self.session.scalars(
+                    select(FormBlock).where(FormBlock.id.in_(block_ids))
+                ).all()
+            }
+        if block_ids is not None and any(
+            (block := blocks_by_id.get(block_id)) is None
+            or block.registry_id != card.registry_id
+            or block.archived_at is not None
+            or not block.is_active
+            or not block.public_visible
+            or not block.public_editable
+            for block_id in block_ids
+        ):
+            raise PublicLinkError("Public link block allowlist is invalid.")
+
+        if field_ids:
+            field_rows = {
+                field_model.id: (field_model, block)
+                for field_model, block in self.session.execute(
+                    select(FormField, FormBlock)
+                    .join(FormBlock, FormBlock.id == FormField.block_id)
+                    .where(FormField.id.in_(field_ids))
+                )
+            }
+            template = self.session.get(CardTemplate, card.card_template_id)
+            raw_template_field_ids = (
+                template.field_schema_json.get("field_ids") if template is not None else None
+            )
+            template_field_ids = (
+                {str(field_id) for field_id in raw_template_field_ids}
+                if isinstance(raw_template_field_ids, list)
+                else set()
+            )
+        else:
+            field_rows = {}
+            template_field_ids = set()
+        selected_block_ids = set(block_ids) if block_ids is not None else None
+        if field_ids is not None and any(
+            (row := field_rows.get(field_id)) is None
+            or row[1].registry_id != card.registry_id
+            or row[1].archived_at is not None
+            or not row[1].is_active
+            or not row[1].public_visible
+            or not row[1].public_editable
+            or row[0].archived_at is not None
+            or not row[0].is_active
+            or not row[0].public_visible
+            or not row[0].public_editable
+            or row[0].field_type in {"file_ref", "static_text"}
+            or str(field_id) not in template_field_ids
+            or (selected_block_ids is not None and row[0].block_id not in selected_block_ids)
+            for field_id in field_ids
+        ):
+            raise PublicLinkError("Public link field allowlist is invalid.")
+
+        return (
+            {"ids": [str(block_id) for block_id in block_ids]} if block_ids is not None else None,
+            {"ids": [str(field_id) for field_id in field_ids]} if field_ids is not None else None,
+        )
 
     def _get_active_public_field(self, field_id: UUID) -> FormField:
         field = self.session.get(FormField, field_id)

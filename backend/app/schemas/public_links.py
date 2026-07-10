@@ -9,6 +9,8 @@ class PublicLinkCreate(BaseModel):
     expires_in_days: int = Field(default=7, ge=1, le=30)
     max_attachment_uploads: int | None = Field(default=None, ge=0)
     review_enabled: bool = True
+    allowed_block_ids: list[UUID] | None = None
+    allowed_field_ids: list[UUID] | None = None
 
 
 class PublicLinkTokenRead(BaseModel):

@@ -971,7 +971,12 @@ class ReviewApiFixture:
     admin_id: UUID
     outsider_id: UUID
     card_id: UUID
+    block_id: UUID
     field_id: UUID
+    other_field_id: UUID
+    non_editable_field_id: UUID
+    foreign_block_id: UUID
+    foreign_field_id: UUID
 
 
 @pytest.fixture()
@@ -1020,6 +1025,46 @@ def review_api_fixture(
             public_visible=True,
             public_editable=True,
         )
+        other_field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=block.id,
+            code="api-review-other-value",
+            label="Другое значение API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=True,
+        )
+        non_editable_field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=block.id,
+            code="api-review-private-value",
+            label="Непубличное значение API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=False,
+        )
+        foreign_registry = schema_service.create_registry_for_actor(
+            actor_user_id=admin.id,
+            code=f"api-review-foreign-registry-{suffix}",
+            name="Другой реестр API проверки",
+        )
+        foreign_block = schema_service.create_block_for_actor(
+            actor_user_id=admin.id,
+            registry_id=foreign_registry.id,
+            code="api-review-foreign-block",
+            title="Другой блок API проверки",
+            public_visible=True,
+            public_editable=True,
+        )
+        foreign_field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=foreign_block.id,
+            code="api-review-foreign-value",
+            label="Другое поле API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=True,
+        )
         card = CardService(session).create_card_for_actor(
             actor_user_id=admin.id,
             registry_id=registry.id,
@@ -1031,7 +1076,12 @@ def review_api_fixture(
             admin_id=admin.id,
             outsider_id=outsider.id,
             card_id=card.id,
+            block_id=block.id,
             field_id=field.id,
+            other_field_id=other_field.id,
+            non_editable_field_id=non_editable_field.id,
+            foreign_block_id=foreign_block.id,
+            foreign_field_id=foreign_field.id,
         )
         session.commit()
     return fixture
@@ -1060,6 +1110,66 @@ def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
         "PublicLinkReviewRead",
         "PublicLinkRequestChanges",
     } <= schemas
+
+
+def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    admin_headers = _actor_headers(review_api_fixture.admin_id)
+    created_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={
+            "allowed_block_ids": [str(review_api_fixture.block_id)],
+            "allowed_field_ids": [str(review_api_fixture.field_id)],
+        },
+        headers=admin_headers,
+    )
+    assert created_response.status_code == 201, created_response.text
+    created = created_response.json()
+
+    with Session(migrated_test_engine) as verify_session:
+        public_link = verify_session.get(CardPublicLink, UUID(created["id"]))
+        assert public_link is not None
+        assert public_link.allowed_blocks_json == {"ids": [str(review_api_fixture.block_id)]}
+        assert public_link.allowed_fields_json == {"ids": [str(review_api_fixture.field_id)]}
+
+    preview_response = transactional_api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": created["raw_token"]},
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert [block["block_id"] for block in preview["blocks"]] == [str(review_api_fixture.block_id)]
+    assert [
+        field["field_id"]
+        for block in preview["blocks"]
+        for instance in block["instances"]
+        for field in instance["fields"]
+    ] == [str(review_api_fixture.field_id)]
+    assert str(review_api_fixture.other_field_id) not in preview_response.text
+
+    rejected_payloads = [
+        {
+            "allowed_block_ids": [str(review_api_fixture.block_id)],
+            "allowed_field_ids": [str(review_api_fixture.non_editable_field_id)],
+        },
+        {
+            "allowed_block_ids": [str(review_api_fixture.foreign_block_id)],
+            "allowed_field_ids": [str(review_api_fixture.foreign_field_id)],
+        },
+    ]
+    for payload in rejected_payloads:
+        rejected_response = transactional_api_client.post(
+            f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+            json=payload,
+            headers=admin_headers,
+        )
+        assert rejected_response.status_code == 400, rejected_response.text
+        assert rejected_response.json()["detail"] == ("Операция с публичной ссылкой недоступна.")
+        rejected_ids = payload["allowed_block_ids"] + payload["allowed_field_ids"]
+        assert all(object_id not in rejected_response.text for object_id in rejected_ids)
 
 
 def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
@@ -1152,8 +1262,11 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
     assert review_response.status_code == 200, review_response.text
     review = review_response.json()
     assert review["changed_field_count"] == 1
-    assert review["fields"][0]["before"] is None
-    assert review["fields"][0]["after"] == "Первое значение API"
+    reviewed_field = next(
+        field for field in review["fields"] if field["field_id"] == str(review_api_fixture.field_id)
+    )
+    assert reviewed_field["before"] is None
+    assert reviewed_field["after"] == "Первое значение API"
     serialized_review = json.dumps(review, ensure_ascii=False)
     for forbidden_key in {
         "raw_token",

@@ -66,6 +66,8 @@ def create_public_link(
             expires_in_days=payload.expires_in_days,
             max_attachment_uploads=payload.max_attachment_uploads,
             review_enabled=payload.review_enabled,
+            allowed_block_ids=payload.allowed_block_ids,
+            allowed_field_ids=payload.allowed_field_ids,
         )
     except Exception as exc:
         raise_service_http_error(exc)

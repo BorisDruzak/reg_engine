@@ -493,6 +493,8 @@ export type PublicLinkCreatePayload = {
   expires_in_days?: number;
   max_attachment_uploads?: number | null;
   review_enabled?: boolean;
+  allowed_block_ids?: string[] | null;
+  allowed_field_ids?: string[] | null;
 };
 
 export type PublicLinkReviewStatus =

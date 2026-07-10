@@ -8,12 +8,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
-  archivePublicLink,
   archiveCard,
   archiveCardBlockInstance,
   createOrganizationCard,
   createCardBlockInstance,
-  createPublicLink,
   downloadGeneratedDocumentContent,
   generateCardTemplateLayoutDocx,
   generateCardTemplateLayoutPdf,
@@ -35,9 +33,7 @@ import type {
   FormBlockRead,
   FormFieldRead,
   OrganizationRead,
-  PublicLinkCreatePayload,
   PublicLinkRead,
-  PublicLinkTokenRead,
   RegistrySchemaRead,
   AttachmentRead,
 } from "@/api/types";
@@ -56,7 +52,7 @@ import {
   MutationFeedback,
 } from "@/components/common/AdminMutation";
 import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
-import { errorText, formatDate, shortId } from "@/components/common/dataUtils";
+import { errorText, shortId } from "@/components/common/dataUtils";
 import { A4TemplateRenderer } from "@/features/registry/print/A4TemplateRenderer";
 
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
@@ -64,6 +60,7 @@ import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
+import { PublicLinkReviewPanel } from "./PublicLinkReviewPanel";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -133,6 +130,7 @@ export function CardsWorkspace({
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | null>(null);
   const [activeTab, setActiveTab] = useState<CardWorkspaceTab>("fields");
+  const [publicLinkCreateOpen, setPublicLinkCreateOpen] = useState(false);
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
@@ -457,6 +455,7 @@ export function CardsWorkspace({
     setActiveShellTab("list");
     activeCardIdRef.current = null;
     setActiveTab("fields");
+    setPublicLinkCreateOpen(false);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -485,6 +484,7 @@ export function CardsWorkspace({
     setActiveShellTab(`card:${cardId}`);
     activeCardIdRef.current = cardId;
     setActiveTab("fields");
+    setPublicLinkCreateOpen(false);
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -498,6 +498,7 @@ export function CardsWorkspace({
     setActiveShellTab(tabId);
     activeCardIdRef.current = cardId;
     setActiveTab("fields");
+    setPublicLinkCreateOpen(false);
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -621,6 +622,10 @@ export function CardsWorkspace({
               onActivate={() => activateCardMutation.mutate()}
               onDownloadPrintDocx={() => downloadCardPrintDocxMutation.mutate()}
               onDownloadPrintPdf={() => downloadCardPrintPdfMutation.mutate()}
+              onSendForFilling={() => {
+                setActiveTab("links");
+                setPublicLinkCreateOpen(true);
+              }}
               onArchive={() => {
                 setArchiveTarget(selectedCard);
                 setCardFormMode(null);
@@ -752,7 +757,15 @@ export function CardsWorkspace({
             />
           )}
           {card?.can_manage && activeTab === "links" && (
-            <PublicLinksPanel cardId={card.id} token={token} />
+            <PublicLinkReviewPanel
+              key={card.id}
+              blocks={presentationBlocks}
+              cardId={card.id}
+              createFormOpen={publicLinkCreateOpen}
+              fields={presentationFields}
+              onCreateFormOpenChange={setPublicLinkCreateOpen}
+              token={token}
+            />
           )}
           {card && activeTab === "history" && (
             <Panel title={uiText.cardHistory}>
@@ -850,6 +863,7 @@ function CardActionPanel({
   onActivate,
   onDownloadPrintDocx,
   onDownloadPrintPdf,
+  onSendForFilling,
   onArchive,
 }: {
   card: CardRead;
@@ -866,6 +880,7 @@ function CardActionPanel({
   onActivate: () => void;
   onDownloadPrintDocx: () => void;
   onDownloadPrintPdf: () => void;
+  onSendForFilling: () => void;
   onArchive: () => void;
 }) {
   return (
@@ -892,6 +907,9 @@ function CardActionPanel({
         )}
         {canManage ? (
           <>
+            <button type="button" className="primary-button" onClick={onSendForFilling}>
+              Отправить на заполнение
+            </button>
             <button
               type="button"
               className="ghost-button"
@@ -1065,233 +1083,6 @@ function CardMutationForm({
   );
 }
 
-type PublicLinkFormState = {
-  expiresInDays: string;
-  maxAttachmentUploads: string;
-};
-
-function PublicLinksPanel({ cardId, token }: { cardId: string; token: string }) {
-  const queryClient = useQueryClient();
-  const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm] = useState<PublicLinkFormState>(() => initialPublicLinkForm());
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [createdToken, setCreatedToken] = useState<PublicLinkTokenRead | null>(null);
-  const [disableTarget, setDisableTarget] = useState<PublicLinkRead | null>(null);
-
-  const publicLinksQuery = useQuery({
-    queryKey: ["public-links", token, cardId],
-    queryFn: () => listPublicLinks(token, cardId),
-    enabled: Boolean(token && cardId),
-  });
-  const createMutation = useMutation({
-    mutationFn: (payload: PublicLinkCreatePayload) => createPublicLink(token, cardId, payload),
-    onSuccess: async (created) => {
-      setCreatedToken(created);
-      setSuccessMessage(uiText.publicLinkCreated);
-      setIsCreating(false);
-      setForm(initialPublicLinkForm());
-      await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
-      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
-    },
-  });
-  const disableMutation = useMutation({
-    mutationFn: (target: PublicLinkRead) => archivePublicLink(token, target.id),
-    onSuccess: async () => {
-      setDisableTarget(null);
-      setSuccessMessage(uiText.publicLinkDisabled);
-      await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
-      await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
-    },
-  });
-
-  function openCreateForm() {
-    setIsCreating(true);
-    setLocalError(null);
-    setSuccessMessage(null);
-    setCreatedToken(null);
-  }
-
-  function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLocalError(null);
-    setSuccessMessage(null);
-    setCreatedToken(null);
-    const payload = buildPublicLinkPayload(form);
-    if (typeof payload === "string") {
-      setLocalError(payload);
-      return;
-    }
-    createMutation.mutate(payload);
-  }
-
-  const items = publicLinksQuery.data?.items ?? [];
-
-  return (
-    <Panel title={uiText.publicLinks}>
-      <div className="panel-toolbar">
-        <button type="button" className="primary-button" onClick={openCreateForm}>
-          {uiText.createPublicLink}
-        </button>
-      </div>
-      {isCreating && (
-        <div className="panel-form">
-          <AdminMutationForm
-            title={uiText.createPublicLink}
-            submitLabel={uiText.create}
-            isSubmitting={createMutation.isPending}
-            error={localError ? new Error(localError) : createMutation.error}
-            onCancel={() => setIsCreating(false)}
-            onSubmit={handleCreateSubmit}
-          >
-            <label>
-              <span>{uiText.publicLinkExpiresInDays}</span>
-              <input
-                min={1}
-                max={30}
-                step={1}
-                type="number"
-                value={form.expiresInDays}
-                onChange={(event) => {
-                  const expiresInDays = event.currentTarget.value;
-                  setForm((current) => ({
-                    ...current,
-                    expiresInDays,
-                  }));
-                }}
-              />
-            </label>
-            <label>
-              <span>{uiText.publicLinkAttachmentUploadLimit}</span>
-              <input
-                min={0}
-                step={1}
-                type="number"
-                placeholder={uiText.publicLinkUnlimitedUploads}
-                value={form.maxAttachmentUploads}
-                onChange={(event) => {
-                  const maxAttachmentUploads = event.currentTarget.value;
-                  setForm((current) => ({
-                    ...current,
-                    maxAttachmentUploads,
-                  }));
-                }}
-              />
-            </label>
-          </AdminMutationForm>
-        </div>
-      )}
-      <MutationFeedback
-        error={publicLinksQuery.error ?? disableMutation.error}
-        successMessage={successMessage}
-      />
-      {createdToken && (
-        <div className="public-link-token" aria-label={uiText.publicLinkToken}>
-          <span>{uiText.publicLinkToken}</span>
-          <code>{createdToken.raw_token}</code>
-          <label className="public-link-url-control">
-            <span>{uiText.publicLinkUrl}</span>
-            <input
-              aria-label={uiText.publicLinkUrl}
-              readOnly
-              value={publicLinkEditUrl(createdToken.raw_token)}
-            />
-          </label>
-        </div>
-      )}
-      {items.length > 0 ? (
-        <ul className="public-link-list">
-          {items.map((publicLink) => (
-            <PublicLinkListItem
-              key={publicLink.id}
-              publicLink={publicLink}
-              isDisabling={disableMutation.isPending}
-              onDisable={() => {
-                setDisableTarget(publicLink);
-                setSuccessMessage(null);
-                setLocalError(null);
-              }}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className="data-empty">
-          {publicLinksQuery.isLoading ? uiText.loadingCard : uiText.noData}
-        </p>
-      )}
-      {disableTarget && (
-        <AdminMutationDialog title={uiText.disablePublicLink}>
-          <div className="archive-confirmation">
-            <p>
-              {uiText.publicLink}: {shortId(disableTarget.id)}
-            </p>
-            <p>{uiText.publicLinkDisableConfirmation}</p>
-            <div className="admin-mutation-actions">
-              <button type="button" className="ghost-button" onClick={() => setDisableTarget(null)}>
-                {uiText.cancel}
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={disableMutation.isPending}
-                onClick={() => disableMutation.mutate(disableTarget)}
-              >
-                {disableMutation.isPending ? uiText.saving : uiText.disable}
-              </button>
-            </div>
-          </div>
-        </AdminMutationDialog>
-      )}
-    </Panel>
-  );
-}
-
-function PublicLinkListItem({
-  publicLink,
-  isDisabling,
-  onDisable,
-}: {
-  publicLink: PublicLinkRead;
-  isDisabling: boolean;
-  onDisable: () => void;
-}) {
-  const statusLabel = publicLinkStatusLabel(publicLink);
-  const uploadLimitExhausted =
-    publicLink.max_attachment_uploads !== null &&
-    publicLink.attachment_upload_count >= publicLink.max_attachment_uploads;
-  const canDisable = publicLink.status === "active" && !publicLink.disabled_at;
-
-  return (
-    <li>
-      <div>
-        <strong>{`${uiText.publicLink} ${shortId(publicLink.id)}`}</strong>
-        <span>
-          {uiText.publicLinkStatus}: {statusLabel}
-        </span>
-        <span>
-          {uiText.expires}: {formatDate(publicLink.expires_at)}
-        </span>
-        <span>{publicLinkFieldEditUsageLabel(publicLink)}</span>
-        <span>{publicLinkAttachmentUsageLabel(publicLink)}</span>
-        {uploadLimitExhausted && <span>{uiText.publicLinkUploadLimitExhausted}</span>}
-      </div>
-      <div className="row-actions">
-        {canDisable && (
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.disablePublicLink} ${shortId(publicLink.id)}`}
-            disabled={isDisabling}
-            onClick={onDisable}
-          >
-            {uiText.disablePublicLink}
-          </button>
-        )}
-      </div>
-    </li>
-  );
-}
-
 function RepeatableBlockControls({
   blocks,
   card,
@@ -1394,51 +1185,6 @@ function saveCardTabs(state: { activeTab: CardShellTab; openCardIds: string[] })
   localStorage.setItem(cardTabsStorageKey, JSON.stringify(state));
 }
 
-function initialPublicLinkForm(): PublicLinkFormState {
-  return {
-    expiresInDays: "7",
-    maxAttachmentUploads: "",
-  };
-}
-
-function buildPublicLinkPayload(form: PublicLinkFormState): PublicLinkCreatePayload | string {
-  const expiresInDays = Number(form.expiresInDays);
-  if (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 30) {
-    return uiText.publicLinkExpiresInvalid;
-  }
-
-  const maxAttachmentUploadsText = form.maxAttachmentUploads.trim();
-  if (!maxAttachmentUploadsText) {
-    return {
-      expires_in_days: expiresInDays,
-      max_attachment_uploads: null,
-    };
-  }
-
-  const maxAttachmentUploads = Number(maxAttachmentUploadsText);
-  if (!Number.isInteger(maxAttachmentUploads) || maxAttachmentUploads < 0) {
-    return uiText.publicLinkUploadLimitInvalid;
-  }
-
-  return {
-    expires_in_days: expiresInDays,
-    max_attachment_uploads: maxAttachmentUploads,
-  };
-}
-
-function publicLinkStatusLabel(publicLink: PublicLinkRead) {
-  if (publicLink.disabled_at || publicLink.status === "disabled") {
-    return "Отключена";
-  }
-  if (publicLink.status === "expired" || new Date(publicLink.expires_at) <= new Date()) {
-    return "Истекла";
-  }
-  if (publicLink.status === "active") {
-    return "Активна";
-  }
-  return publicLink.status;
-}
-
 function cardCompletionLabel(fields: EditableCardField[]) {
   const requiredFields = fields.filter(
     (field) =>
@@ -1468,31 +1214,6 @@ function cardPublicLinksLabel(items: PublicLinkRead[] | undefined, error: Error 
   ).length;
   if (activeCount === 1) return "Публичные ссылки: 1 активна";
   return `Публичные ссылки: ${activeCount} активны`;
-}
-
-function publicLinkEditUrl(rawToken: string) {
-  const origin =
-    typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
-  return `${origin}/public/edit/${rawToken}`;
-}
-
-function publicLinkFieldEditUsageLabel(publicLink: PublicLinkRead) {
-  return usageLabel(uiText.publicLinkFieldEditUsage, publicLink.used_count, publicLink.max_uses);
-}
-
-function publicLinkAttachmentUsageLabel(publicLink: PublicLinkRead) {
-  return usageLabel(
-    uiText.publicLinkAttachmentUploadUsage,
-    publicLink.attachment_upload_count,
-    publicLink.max_attachment_uploads,
-  );
-}
-
-function usageLabel(label: string, used: number, max: number | null) {
-  if (max === null) {
-    return `${label}: ${used} / ${uiText.publicLinkUnlimitedUploads}`;
-  }
-  return `${label}: ${used} из ${max}`;
 }
 
 async function invalidateCardQueries(

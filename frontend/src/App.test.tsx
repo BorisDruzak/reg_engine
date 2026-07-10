@@ -5536,32 +5536,34 @@ test("allows the first organization to be created as the main root", async () =>
 
 test("manages public links from authenticated card workspace", async () => {
   const user = userEvent.setup();
+  schemaBlockItems = schemaBlockItems.map((block) => ({ ...block, public_editable: true }));
+  schemaFieldItems = schemaFieldItems.map((field) =>
+    field.field_type === "file_ref" ? field : { ...field, public_editable: true },
+  );
   render(<App />);
 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await openExistingCardEditor(user);
-  await user.click(await screen.findByRole("tab", { name: "Публичные ссылки" }));
+  await user.click(await screen.findByRole("button", { name: "Отправить на заполнение" }));
 
   expect(await screen.findByRole("heading", { name: "Публичные ссылки" })).toBeInTheDocument();
-  expect(screen.getAllByText("Статус ссылки: Активна").length).toBeGreaterThan(0);
-  expect(screen.getByText("Статус ссылки: Отключена")).toBeInTheDocument();
-  expect(screen.getByText("Статус ссылки: Истекла")).toBeInTheDocument();
+  expect(screen.getAllByText("Ожидает заполнения").length).toBeGreaterThan(0);
+  expect(screen.getByText("Статус: Отключена")).toBeInTheDocument();
+  expect(screen.getByText("Срок истёк")).toBeInTheDocument();
   expect(screen.getByText("Редактирование полей: 1 из 5")).toBeInTheDocument();
   expect(screen.getByText("Загрузки вложений: 1 из 3")).toBeInTheDocument();
   expect(screen.getByText("Загрузки вложений: 2 из 2")).toBeInTheDocument();
   expect(screen.getByText("Лимит загрузок исчерпан")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Создать публичную ссылку" }));
   const expiresInput = await screen.findByLabelText("Срок действия ссылки, дней");
   await user.clear(expiresInput);
   await user.type(expiresInput, "5");
   await user.type(screen.getByLabelText("Лимит загрузок вложений"), "2");
-  await user.click(screen.getByRole("button", { name: "Создать" }));
+  await user.click(screen.getByRole("button", { name: "Создать ссылку" }));
 
   expect(await screen.findByText("Публичная ссылка создана")).toBeInTheDocument();
-  expect(screen.getByText("created-public-token")).toBeInTheDocument();
   expect(screen.getByDisplayValue(/\/public\/edit\/created-public-token$/)).toBeInTheDocument();
   expect(screen.getAllByText("Загрузки вложений: 0 из 2").length).toBeGreaterThan(0);
 
@@ -5589,6 +5591,12 @@ test("manages public links from authenticated card workspace", async () => {
     expect(createBody).toEqual({
       expires_in_days: 5,
       max_attachment_uploads: 2,
+      review_enabled: true,
+      allowed_block_ids: ["88888888-8888-4888-8888-888888888888"],
+      allowed_field_ids: [
+        "99999999-9999-4999-8999-999999999999",
+        "99999999-9999-4999-8999-999999999998",
+      ],
     });
     expect(createBody).not.toHaveProperty("max_uses");
     expect(createBody).not.toHaveProperty("used_count");
