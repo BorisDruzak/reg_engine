@@ -4147,7 +4147,8 @@ Live Browser proof:
 
 ### Phase 8M follow-up: collision-safe adaptive field dragging
 
-Status: complete, pushed, deployed, server-checked, and live-verified.
+Status: latest browser follow-up implemented and locally verified; production
+synchronization and renewed live Browser proof are pending.
 
 Implementation checkpoint:
 
@@ -4165,21 +4166,30 @@ Implementation checkpoint:
   valid position, the geometry session reports
   `В выбранной строке нет свободного места для поля такого размера.`, and no
   geometry command is committed.
+- Boundary errors now run through the same collision resolver before rendering.
+  A coordinate clamped back inside the 12 x 4 grid can no longer be previewed
+  on top of an occupied field merely because the pointer itself is outside the
+  grid.
+- A fully occupied intermediate row blocks that row, not the whole direction.
+  Moving an upper field down searches subsequent rows and places it in the
+  first row with a horizontal interval wide enough; if no later row fits, the
+  last valid position and no-space feedback are preserved.
 - Resize behavior and block-level collision validation remain unchanged. No
   database migration is required.
 
 Local verification checkpoint:
 
-- The focused renderer suite passes all 53 cases, including first-motion block
-  growth, nearest-free-interval placement, and rejection of a fully occupied
-  row. The lower-level geometry suite passes all 20 cases.
+- The focused renderer suite passes all 55 cases, including first-motion block
+  growth, nearest-free-interval placement, collision-safe boundary clamping,
+  traversal past a fully occupied intermediate row, and rejection when no later
+  row fits. The lower-level geometry suite passes all 20 cases.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed: backend `228 passed / 195 skipped`, frontend
-  `237 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  `239 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
   TypeScript, production build, and project-map checks are green.
 - The existing Starlette/httpx deprecation warning and Vite main-chunk advisory
-  remain unchanged. The verified local bundle is `index-DEMuVROu.js`
-  (`560.94 kB`, `159.92 kB` gzip) with the unchanged
+  remain unchanged. The verified local bundle is `index-DzvkhYMN.js`
+  (`561.14 kB`, `160.00 kB` gzip) with the unchanged
   `index-Cl9DldkN.css`.
 
 Production release evidence:

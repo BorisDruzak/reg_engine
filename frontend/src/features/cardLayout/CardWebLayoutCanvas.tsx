@@ -324,23 +324,47 @@ function resolveFieldMove(
   if (!obstacles.some((obstacle) => rectsOverlap(session.preview, obstacle))) {
     return { session };
   }
-  const availableColumn = nearestAvailableColumn(session.preview, obstacles);
-  if (availableColumn !== null) {
-    return {
-      session: {
-        ...session,
-        preview: { ...session.preview, column: availableColumn },
-      },
-    };
-  }
-  const lastValidPreview =
+  const lastPreview =
     previous?.targetId === session.targetId && previous.targetKind === session.targetKind
       ? previous.preview
       : session.original;
+  const availablePlacement = nearestAvailablePlacement(session.preview, lastPreview, obstacles);
+  if (availablePlacement) {
+    return {
+      session: {
+        ...session,
+        preview: availablePlacement,
+      },
+    };
+  }
   return {
-    session: { ...session, preview: lastValidPreview },
+    session: { ...session, preview: lastPreview },
     invalidReason: NO_FIELD_SPACE_MESSAGE,
   };
+}
+
+function nearestAvailablePlacement(
+  preview: LayoutRect,
+  previous: LayoutRect,
+  obstacles: LayoutRect[],
+): LayoutRect | null {
+  const sameRowColumn = nearestAvailableColumn(preview, obstacles);
+  if (sameRowColumn !== null) {
+    return { ...preview, column: sameRowColumn };
+  }
+  const direction = Math.sign(preview.row - previous.row);
+  if (direction === 0) {
+    return null;
+  }
+  const maximumRow = 4 - preview.rowSpan + 1;
+  for (let row = preview.row + direction; row >= 1 && row <= maximumRow; row += direction) {
+    const candidate = { ...preview, row };
+    const column = nearestAvailableColumn(candidate, obstacles);
+    if (column !== null) {
+      return { ...candidate, column };
+    }
+  }
+  return null;
 }
 
 function nearestAvailableColumn(preview: LayoutRect, obstacles: LayoutRect[]) {

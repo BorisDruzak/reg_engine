@@ -787,10 +787,21 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
-  test("keeps a moved field out of a row without enough free width", () => {
+  test("moves an upper field below a fully occupied intermediate row", () => {
     const onGeometryCommit = vi.fn();
-    const fullyOccupiedLayout: CardTemplateLayoutRead = {
+    const fullRowField: FormFieldRead = {
+      ...fields[0],
+      id: "field-full-row",
+      code: "full_row",
+      label: "Полная строка",
+      position: 2,
+    };
+    const layoutWithFullIntermediateRow: CardTemplateLayoutRead = {
       ...layout,
+      structure: {
+        ...layout.structure,
+        fields: [...fields, fullRowField],
+      },
       form_layout: {
         ...layout.form_layout,
         sections: [
@@ -807,7 +818,82 @@ describe("CardWebLayoutCanvas", () => {
               },
               {
                 ...layout.form_layout.sections[0].items[1],
+                row: 1,
+                column: 7,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                id: fullRowField.id,
+                kind: "field",
+                field_id: fullRowField.id,
                 row: 2,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: layoutWithFullIntermediateRow,
+          fields: [...fields, fullRowField],
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 126, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 126, clientX: 0, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "3 / span 1",
+    });
+    expect(fieldGrid!.dataset.layoutGridRows).toBe("3");
+    expect(fieldGrid!.style.minHeight).toBe("9rem");
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 126, clientX: 0, clientY: 100 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 3, column: 1, rowSpan: 1, columnSpan: 6 },
+    });
+  });
+
+  test("keeps a moved field out of a row without enough free width", () => {
+    const onGeometryCommit = vi.fn();
+    const fullyOccupiedLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 3,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 4,
                 column: 1,
                 row_span: 1,
                 column_span: 12,
@@ -824,7 +910,7 @@ describe("CardWebLayoutCanvas", () => {
     const fieldNode = screen.getByTestId("layout-field-field-name");
     const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
     expect(fieldGrid).not.toBeNull();
-    mockGridRect(fieldGrid!, 1200, 200);
+    mockGridRect(fieldGrid!, 1200, 400);
     installPointerCapture(fieldNode);
 
     dispatchPointer(fieldNode, "pointerdown", { pointerId: 124, clientX: 0, clientY: 0 });
@@ -832,7 +918,7 @@ describe("CardWebLayoutCanvas", () => {
 
     expect(fieldNode).toHaveStyle({
       gridColumn: "1 / span 6",
-      gridRow: "1 / span 1",
+      gridRow: "3 / span 1",
     });
     expect(screen.getByRole("status")).toHaveTextContent(
       "В выбранной строке нет свободного места для поля такого размера",
@@ -890,9 +976,7 @@ describe("CardWebLayoutCanvas", () => {
       gridColumn: "1 / span 12",
       gridRow: "2 / span 1",
     });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Объект выходит за границы сетки 12 × 4",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Объект выходит за границы сетки 12 × 4");
 
     dispatchPointer(fieldNode, "pointerup", { pointerId: 125, clientX: 0, clientY: -100 });
 
