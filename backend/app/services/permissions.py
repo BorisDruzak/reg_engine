@@ -16,6 +16,14 @@ class PersistStatePermissionDeniedError(PermissionDeniedError):
     """Raised after a deliberate state transition that must survive the denied request."""
 
 
+class PublicLinkSubmittedReadOnlyError(PermissionDeniedError):
+    """Raised when a submitted public link attempts another public mutation."""
+
+
+class PublicLinkReviewPermissionDeniedError(PermissionDeniedError):
+    """Raised when an actor cannot use administrator public-link review actions."""
+
+
 class PermissionService:
     def __init__(self, session: Session) -> None:
         self.session = session

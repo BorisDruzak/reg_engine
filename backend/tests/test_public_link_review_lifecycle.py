@@ -25,7 +25,11 @@ from app.models import AuditEvent, Card, CardPublicLink, FieldValue, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
-from app.services.permissions import PermissionDeniedError, PersistStatePermissionDeniedError
+from app.services.permissions import (
+    PermissionDeniedError,
+    PersistStatePermissionDeniedError,
+    PublicLinkSubmittedReadOnlyError,
+)
 from app.services.public_links import (
     PublicLinkError,
     PublicLinkService,
@@ -446,7 +450,7 @@ def test_invalid_transitions_expiry_precedence_and_forbidden_reviewer(
             public_link_id=token.public_link.id,
         )
     service.submit_for_review(raw_token=token.raw_token)
-    with pytest.raises(PublicLinkTransitionError):
+    with pytest.raises(PublicLinkSubmittedReadOnlyError):
         service.submit_for_review(raw_token=token.raw_token)
     with pytest.raises(PermissionDeniedError):
         service.review_diff_for_actor(
@@ -808,6 +812,7 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
         403,
     ]
     assert ordinary_response.status_code == 403
+    assert ordinary_response.json()["detail"] == "Недостаточно прав для выполнения операции."
     with Session(migrated_test_engine) as verify_session:
         for link_id in link_ids:
             public_link = verify_session.get(CardPublicLink, link_id)
@@ -1014,16 +1019,51 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
         "/api/v1/public-links/submit",
         json={"raw_token": raw_token},
     )
-    assert duplicate_submit.status_code == 409, duplicate_submit.text
-    assert any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in duplicate_submit.text)
+    submitted_readonly_detail = (
+        "Карточка уже отправлена на проверку. Редактирование временно недоступно."
+    )
+    assert duplicate_submit.status_code == 403, duplicate_submit.text
+    assert duplicate_submit.json()["detail"] == submitted_readonly_detail
     assert raw_token not in duplicate_submit.text
 
-    forbidden_review = transactional_api_client.get(
-        f"/api/v1/public-links/{public_link_id}/review",
-        headers=_actor_headers(review_api_fixture.outsider_id),
+    submitted_edit = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Не должно сохраниться",
+        },
     )
-    assert forbidden_review.status_code == 403, forbidden_review.text
-    assert raw_token not in forbidden_review.text
+    submitted_attachments = transactional_api_client.post(
+        "/api/v1/public-links/attachments",
+        json={"raw_token": raw_token},
+    )
+    for response in [submitted_edit, submitted_attachments]:
+        assert response.status_code == 403, response.text
+        assert response.json()["detail"] == submitted_readonly_detail
+        assert raw_token not in response.text
+
+    review_forbidden_detail = "Недостаточно прав для проверки этой публичной ссылки."
+    forbidden_cases = [
+        ("GET", f"/api/v1/public-links/{public_link_id}/review", None),
+        (
+            "POST",
+            f"/api/v1/public-links/{public_link_id}/request-changes",
+            {"comment": "Недоступное замечание"},
+        ),
+        ("POST", f"/api/v1/public-links/{public_link_id}/approve", None),
+        ("POST", f"/api/v1/public-links/{public_link_id}/start-review-cycle", None),
+    ]
+    for method, path, payload in forbidden_cases:
+        forbidden_response = transactional_api_client.request(
+            method,
+            path,
+            headers=_actor_headers(review_api_fixture.outsider_id),
+            json=payload,
+        )
+        assert forbidden_response.status_code == 403, forbidden_response.text
+        assert forbidden_response.json()["detail"] == review_forbidden_detail
+        assert raw_token not in forbidden_response.text
     review_response = transactional_api_client.get(
         f"/api/v1/public-links/{public_link_id}/review",
         headers=admin_headers,

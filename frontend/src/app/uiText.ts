@@ -702,11 +702,11 @@ export function apiErrorMessageLabel(message: string) {
     "Invalid email or password.": uiText.invalidEmailOrPassword,
     "Not Found": uiText.notFound,
     "Organization code already exists.": uiText.organizationCodeAlreadyExists,
-    "Actor cannot manage public links for this card.": uiText.publicLinkReviewForbidden,
+    "Карточка уже отправлена на проверку. Редактирование временно недоступно.":
+      uiText.publicLinkSubmittedReadOnly,
     "Недопустимый переход состояния публичной ссылки.": uiText.publicLinkInvalidTransition,
+    "Недостаточно прав для проверки этой публичной ссылки.": uiText.publicLinkReviewForbidden,
     "Недостаточно прав для выполнения операции.": uiText.actionDenied,
-    "Public link has expired.": uiText.publicLinkExpired,
-    "Public link is not editable.": uiText.publicLinkSubmittedReadOnly,
     "Registry code already exists.": uiText.registryCodeAlreadyExists,
     "Срок действия публичной ссылки истёк.": uiText.publicLinkExpired,
     "Temporary dev actor header is disabled. Use production auth when available.":
@@ -714,9 +714,6 @@ export function apiErrorMessageLabel(message: string) {
   };
   if (message.startsWith("Unsupported field type:")) {
     return "Неподдерживаемый тип поля.";
-  }
-  if (message.startsWith("Public link cannot transition from ")) {
-    return uiText.publicLinkInvalidTransition;
   }
   if (
     /^(select|card_ref|user_ref|organization_ref|org_unit_ref|registry_ref|file_ref) fields require a UUID string\.$/.test(

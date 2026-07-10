@@ -29,6 +29,8 @@ from app.services.permissions import (
     PermissionDeniedError,
     PermissionService,
     PersistStatePermissionDeniedError,
+    PublicLinkReviewPermissionDeniedError,
+    PublicLinkSubmittedReadOnlyError,
 )
 from app.services.references import ReferenceListError, ReferenceListService
 
@@ -245,7 +247,7 @@ class PublicLinkService:
     ) -> CardPublicLink:
         public_link = self._locked_public_link(public_link_id)
         card = self._get_active_card(public_link.card_id)
-        self._require_card_permission(actor_user_id, card)
+        self._require_review_permission(actor_user_id, card)
         self._require_not_expired(public_link)
         if public_link.status != "active" or public_link.review_enabled:
             raise PublicLinkTransitionError("Review baseline cannot be captured in this state.")
@@ -264,6 +266,8 @@ class PublicLinkService:
     def submit_for_review(self, *, raw_token: str) -> CardPublicLink:
         public_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_not_expired(public_link)
+        if public_link.status == "submitted":
+            raise PublicLinkSubmittedReadOnlyError("Public link was already submitted.")
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
             raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
         self._require_transition(public_link, "submitted")
@@ -304,7 +308,7 @@ class PublicLinkService:
 
         public_link = self._locked_public_link(public_link_id)
         card = self._get_active_card(public_link.card_id)
-        self._require_card_permission(actor_user_id, card)
+        self._require_review_permission(actor_user_id, card)
         self._require_not_expired(public_link)
         self._require_transition(public_link, "changes_requested")
 
@@ -338,7 +342,7 @@ class PublicLinkService:
     ) -> CardPublicLink:
         public_link = self._locked_public_link(public_link_id)
         card = self._get_active_card(public_link.card_id)
-        self._require_card_permission(actor_user_id, card)
+        self._require_review_permission(actor_user_id, card)
         self._require_not_expired(public_link)
         self._require_transition(public_link, "approved")
 
@@ -405,7 +409,7 @@ class PublicLinkService:
     ) -> PublicLinkReviewDiff:
         public_link = self._locked_public_link(public_link_id)
         card = self._get_active_card(public_link.card_id)
-        self._require_card_permission(actor_user_id, card)
+        self._require_review_permission(actor_user_id, card)
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
             raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
 
@@ -624,6 +628,8 @@ class PublicLinkService:
             lock_for_update=lock_for_update,
         )
         self._require_not_expired(public_link)
+        if public_link.status == "submitted":
+            raise PublicLinkSubmittedReadOnlyError("Public link was already submitted.")
         if public_link.status not in EDITABLE_PUBLIC_LINK_STATUSES:
             raise PermissionDeniedError("Public link is not editable.")
         if not public_link.can_edit:
@@ -890,6 +896,17 @@ class PublicLinkService:
             registry_id=card.registry_id,
         ):
             raise PermissionDeniedError("Actor cannot manage public links for this card.")
+
+    def _require_review_permission(self, actor_user_id: UUID, card: Card) -> None:
+        if not PermissionService(self.session).has_permission(
+            actor_user_id,
+            "cards.manage",
+            organization_id=card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PublicLinkReviewPermissionDeniedError(
+                "Actor cannot review public links for this card."
+            )
 
     def _get_active_public_field(self, field_id: UUID) -> FormField:
         field = self.session.get(FormField, field_id)

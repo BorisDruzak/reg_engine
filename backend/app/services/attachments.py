@@ -16,6 +16,7 @@ from app.services.permissions import (
     PermissionDeniedError,
     PermissionService,
     PersistStatePermissionDeniedError,
+    PublicLinkSubmittedReadOnlyError,
 )
 
 
@@ -542,6 +543,8 @@ class AttachmentService:
 
         now = datetime.now(UTC)
         editable_statuses = {"active", "changes_requested"}
+        if public_link.status == "submitted":
+            raise PublicLinkSubmittedReadOnlyError("Public link was already submitted.")
         if public_link.status not in editable_statuses or public_link.expires_at <= now:
             if public_link.expires_at <= now and public_link.status in editable_statuses:
                 old_status = public_link.status

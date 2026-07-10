@@ -1839,6 +1839,7 @@ beforeEach(() => {
               status: created.status,
               can_edit: created.can_edit,
               expires_at: created.expires_at,
+              review_enabled: created.review_enabled,
             },
             { status: 201 },
           );

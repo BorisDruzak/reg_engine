@@ -38,11 +38,15 @@ describe("uiText", () => {
     expect(apiErrorMessageLabel("Недопустимый переход состояния публичной ссылки.")).toBe(
       uiText.publicLinkInvalidTransition,
     );
-    expect(apiErrorMessageLabel("Public link has expired.")).toBe(uiText.publicLinkExpired);
-    expect(apiErrorMessageLabel("Public link is not editable.")).toBe(
-      uiText.publicLinkSubmittedReadOnly,
+    expect(apiErrorMessageLabel("Срок действия публичной ссылки истёк.")).toBe(
+      uiText.publicLinkExpired,
     );
-    expect(apiErrorMessageLabel("Actor cannot manage public links for this card.")).toBe(
+    expect(
+      apiErrorMessageLabel(
+        "Карточка уже отправлена на проверку. Редактирование временно недоступно.",
+      ),
+    ).toBe(uiText.publicLinkSubmittedReadOnly);
+    expect(apiErrorMessageLabel("Недостаточно прав для проверки этой публичной ссылки.")).toBe(
       uiText.publicLinkReviewForbidden,
     );
     expect(apiErrorMessageLabel("Недостаточно прав для выполнения операции.")).toBe(

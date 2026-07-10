@@ -20,6 +20,8 @@ from app.services.organizations import OrganizationNotFoundError, OrganizationTo
 from app.services.permissions import (
     PermissionDeniedError,
     PersistStatePermissionDeniedError,
+    PublicLinkReviewPermissionDeniedError,
+    PublicLinkSubmittedReadOnlyError,
 )
 from app.services.public_links import PublicLinkError, PublicLinkTransitionError
 from app.services.references import ReferenceListError
@@ -140,6 +142,16 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(
             status_code=409,
             detail="Недопустимый переход состояния публичной ссылки.",
+        ) from exc
+    if isinstance(exc, PublicLinkSubmittedReadOnlyError):
+        raise HTTPException(
+            status_code=403,
+            detail=("Карточка уже отправлена на проверку. Редактирование временно недоступно."),
+        ) from exc
+    if isinstance(exc, PublicLinkReviewPermissionDeniedError):
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для проверки этой публичной ссылки.",
         ) from exc
     if isinstance(exc, PermissionDeniedError):
         raise HTTPException(
