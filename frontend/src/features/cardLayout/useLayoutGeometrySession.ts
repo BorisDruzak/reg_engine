@@ -260,7 +260,12 @@ export function useLayoutGeometrySession({
         };
         publish(
           nextSession,
-          isMoveOutOfGrid(pointer.base, requestedColumn, requestedRow) ? OUT_OF_GRID_MESSAGE : null,
+          pointerMoveBoundaryReason(
+            current.targetKind,
+            pointer.base,
+            requestedColumn,
+            requestedRow,
+          ),
           Math.sign(requestedRow - pointer.base.row),
           Math.sign(requestedColumn - pointer.base.column),
         );
@@ -482,6 +487,20 @@ function isMoveOutOfGrid(rect: LayoutRect, column: number, row: number) {
     column + rect.columnSpan > GRID_COLUMNS + 1 ||
     row + rect.rowSpan > GRID_ROWS + 1
   );
+}
+
+function pointerMoveBoundaryReason(
+  targetKind: LayoutGeometryTargetKind,
+  rect: LayoutRect,
+  column: number,
+  row: number,
+) {
+  if (!isMoveOutOfGrid(rect, column, row)) {
+    return null;
+  }
+  const staysInsideColumns = column >= 1 && column + rect.columnSpan <= GRID_COLUMNS + 1;
+  const movesBelowCompactFieldGrid = targetKind === "field" && row > GRID_ROWS - rect.rowSpan + 1;
+  return staysInsideColumns && movesBelowCompactFieldGrid ? null : OUT_OF_GRID_MESSAGE;
 }
 
 function requestedResize(

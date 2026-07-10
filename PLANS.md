@@ -4340,3 +4340,28 @@ Live Browser proof:
   geometry targets, and zero active sessions without saving.
 - Final browser logs contained zero warnings/errors. The current saved layout
   remained unchanged after the live checks.
+
+#### Compact-grid downward drag follow-up
+
+Status: implemented and locally verified; production deployment and live
+browser proof are pending.
+
+- A compact web block renders only occupied rows, so a field in its last
+  visible row has no empty drop surface below it. Pointer movement below that
+  rendered edge could calculate a logical row after row 4 and was rejected,
+  even though `moveRect` had already clamped its preview to the valid last row.
+- Downward pointer movement of a field now accepts that existing clamped
+  preview when the horizontal coordinate remains inside the grid. The block
+  expands through the existing rendered-row projection and the field can be
+  dropped on row 4.
+- Strict boundary behavior remains unchanged for horizontal overflow, upward
+  overflow, block movement, resize operations, and keyboard movement.
+- The focused renderer/geometry suites pass all 82 cases, including the new
+  regression from a one-row compact field grid to logical row 4.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `228 passed / 195 skipped`, frontend
+  `246 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  TypeScript, production build, and project-map checks are green. The existing
+  Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
+  The verified local bundle is `index-Cj0A4D57.js` (`562.70 kB`, `160.60 kB`
+  gzip) with `index-Cl9DldkN.css`.

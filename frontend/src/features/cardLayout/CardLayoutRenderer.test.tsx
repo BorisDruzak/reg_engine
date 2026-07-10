@@ -799,6 +799,65 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
+  test("clamps a downward drag past a compact field grid to its last logical row", () => {
+    const onGeometryCommit = vi.fn();
+    const singleFieldLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: singleFieldLayout,
+          fields: [fields[0]],
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    expect(fieldGrid!.dataset.layoutGridRows).toBe("1");
+    mockGridRect(fieldGrid!, 1200, 100);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 132, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 132, clientX: 0, clientY: 400 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "4 / span 1",
+    });
+    expect(fieldGrid!.dataset.layoutGridRows).toBe("4");
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 132, clientX: 0, clientY: 400 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 4, column: 1, rowSpan: 1, columnSpan: 6 },
+    });
+  });
+
   test("places a moved field in the nearest free part of a partially occupied row", () => {
     const onGeometryCommit = vi.fn();
     const partiallyOccupiedLayout: CardTemplateLayoutRead = {

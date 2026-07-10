@@ -73,8 +73,10 @@ Target system:
   edge/corner zones; no separate field edit or move buttons are rendered. A
   moved field uses the nearest free interval, shrinks only itself when that
   interval is narrower, and can pass a fully occupied row to the first free row
-  above or below. Arrow keys move the active item and `Shift + стрелки` resizes
-  it. `Готово` commits one geometry command,
+  above or below. A downward pointer drag beyond the rendered bottom of a
+  compact field grid clamps to its last logical row instead of being rejected
+  as outside the 12 x 4 grid. Arrow keys move the active item and
+  `Shift + стрелки` resizes it. `Готово` commits one geometry command,
   while `Escape` or `Отмена` restores the starting rectangle. Undo and redo
   operate on the same revision-safe save path.
 - Block and field creation, insertion, and editing are disclosed in context
