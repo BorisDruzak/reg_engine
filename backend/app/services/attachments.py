@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from app.models import Card, CardAttachment, CardPublicLink, StoredFile
 from app.services.audit import AuditService
-from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.permissions import (
+    PermissionDeniedError,
+    PermissionService,
+    PersistStatePermissionDeniedError,
+)
 
 
 class AttachmentServiceError(ValueError):
@@ -540,10 +544,18 @@ class AttachmentService:
         editable_statuses = {"active", "changes_requested"}
         if public_link.status not in editable_statuses or public_link.expires_at <= now:
             if public_link.expires_at <= now and public_link.status in editable_statuses:
+                old_status = public_link.status
                 public_link.status = "expired"
                 public_link.can_view = False
                 public_link.can_edit = False
-                self.session.flush()
+                AuditService(self.session).record_system_event(
+                    action="public_link.expire",
+                    object_type="card_public_link",
+                    object_id=public_link.id,
+                    old_data_json={"status": old_status},
+                    new_data_json={"status": "expired"},
+                )
+                raise PersistStatePermissionDeniedError("Public link has expired.")
             raise PermissionDeniedError("Public link is not active.")
         if not public_link.can_edit:
             raise PermissionDeniedError("Public editing is disabled for this card.")

@@ -1,24 +1,30 @@
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from typing import Annotated
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import Depends
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.models import AuditEvent, Card, FieldValue, User
+import app.api.dependencies as api_dependencies
+from app.api.dependencies import get_db_session, raise_service_http_error
+from app.main import create_app
+from app.models import AuditEvent, Card, CardPublicLink, FieldValue, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
-from app.services.permissions import PermissionDeniedError
+from app.services.permissions import PermissionDeniedError, PersistStatePermissionDeniedError
 from app.services.public_links import (
     PublicLinkError,
     PublicLinkService,
@@ -591,3 +597,285 @@ def test_review_diff_matches_synthetic_non_repeatable_instance_to_first_saved_in
     assert target_fields[0].before is None
     assert target_fields[0].after == "Первое заполнение"
     assert target_fields[0].block_instance_id is not None
+
+
+def test_safe_status_requires_effectively_editable_card(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    service = PublicLinkService(db_session)
+    token = service.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        review_enabled=True,
+    )
+    card = db_session.get(Card, review_fixture.card_id)
+    assert card is not None
+
+    card.public_edit_enabled = False
+    db_session.flush()
+    assert service.safe_status(raw_token=token.raw_token).can_edit is False
+
+    card.public_edit_enabled = True
+    card.archived_at = datetime.now(UTC)
+    db_session.flush()
+    assert service.safe_status(raw_token=token.raw_token).can_edit is False
+
+    card.archived_at = None
+    card.lifecycle_status = "superseded"
+    db_session.flush()
+    assert service.safe_status(raw_token=token.raw_token).can_edit is False
+
+
+def test_review_attachment_diffs_have_stable_change_and_uuid_order(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    second_baseline = review_fixture.attachment_service.create_attachment_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        original_filename="second-baseline.txt",
+        content_type="text/plain",
+        content=b"second baseline",
+    )
+    service = PublicLinkService(db_session)
+    token = service.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        review_enabled=True,
+    )
+    added_attachments = [
+        review_fixture.attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=token.public_link.id,
+            card_id=review_fixture.card_id,
+            original_filename=f"added-{index}.txt",
+            content_type="text/plain",
+            content=f"added-{index}".encode(),
+        )
+        for index in range(2)
+    ]
+    for attachment_id in [review_fixture.initial_attachment_id, second_baseline.id]:
+        review_fixture.attachment_service.archive_attachment_for_actor(
+            actor_user_id=review_fixture.admin_id,
+            attachment_id=attachment_id,
+        )
+
+    review = service.review_diff_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        public_link_id=token.public_link.id,
+    )
+    actual_order = [(item.change, str(item.attachment_id)) for item in review.attachments]
+
+    assert {item.attachment_id for item in review.attachments} == {
+        review_fixture.initial_attachment_id,
+        second_baseline.id,
+        *(attachment.id for attachment in added_attachments),
+    }
+    assert actual_order == sorted(actual_order)
+
+
+@pytest.fixture()
+def transactional_api_client(
+    migrated_test_engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[TestClient]:
+    def test_sessions() -> Generator[Session, None, None]:
+        with Session(migrated_test_engine, expire_on_commit=False) as session:
+            yield session
+
+    monkeypatch.setattr(api_dependencies, "get_session", test_sessions)
+    app = create_app()
+
+    @app.post("/_test/public-links/submit")
+    def submit_for_review(
+        payload: dict[str, str],
+        session: Annotated[Session, Depends(get_db_session)],
+    ) -> None:
+        try:
+            PublicLinkService(session).submit_for_review(raw_token=payload["raw_token"])
+        except Exception as exc:
+            raise_service_http_error(exc)
+
+    @app.post("/_test/ordinary-denied")
+    def ordinary_denied(
+        session: Annotated[Session, Depends(get_db_session)],
+    ) -> None:
+        session.add(
+            User(
+                email="must-rollback@example.test",
+                display_name="Must rollback",
+            )
+        )
+        session.flush()
+        raise_service_http_error(PermissionDeniedError("Ordinary denied operation."))
+
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        with migrated_test_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "TRUNCATE TABLE users, roles, permissions, organizations, "
+                    "registries, stored_files RESTART IDENTITY CASCADE"
+                )
+            )
+
+
+def test_expiry_denials_commit_only_expiry_state_and_one_audit(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+) -> None:
+    suffix = uuid4().hex[:8]
+    with Session(migrated_test_engine, expire_on_commit=False) as setup_session:
+        admin = User(
+            email=f"expiry-admin-{suffix}@example.test",
+            display_name="Expiry admin",
+            is_superuser=True,
+        )
+        setup_session.add(admin)
+        setup_session.flush()
+        organization = OrganizationService(setup_session).create_root_for_actor(
+            actor_user_id=admin.id,
+            code=f"expiry-root-{suffix}",
+            name="Expiry root",
+        )
+        schema_service = RegistrySchemaService(setup_session)
+        registry = schema_service.create_registry_for_actor(
+            actor_user_id=admin.id,
+            code=f"expiry-registry-{suffix}",
+            name="Expiry registry",
+        )
+        block = schema_service.create_block_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            code="expiry-public",
+            title="Expiry public",
+            public_editable=True,
+        )
+        field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=block.id,
+            code="expiry-value",
+            label="Expiry value",
+            field_type="text",
+            public_editable=True,
+        )
+        card = CardService(setup_session).create_card_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            organization_id=organization.id,
+            display_name="Expiry card",
+            public_edit_enabled=True,
+        )
+        tokens = [
+            PublicLinkService(setup_session).create_public_link_for_actor(
+                actor_user_id=admin.id,
+                card_id=card.id,
+                review_enabled=True,
+            )
+            for _ in range(3)
+        ]
+        for token in tokens:
+            token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        link_ids = [token.public_link.id for token in tokens]
+        raw_tokens = [token.raw_token for token in tokens]
+        field_id = field.id
+        card_id = card.id
+        setup_session.commit()
+
+    edit_response = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={"raw_token": raw_tokens[0], "field_id": str(field_id), "value": "blocked"},
+    )
+    submit_response = transactional_api_client.post(
+        "/_test/public-links/submit",
+        json={"raw_token": raw_tokens[1]},
+    )
+    attachment_response = transactional_api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": raw_tokens[2]},
+        files={"file": ("blocked.txt", b"blocked", "text/plain")},
+    )
+    ordinary_response = transactional_api_client.post("/_test/ordinary-denied")
+
+    assert [
+        edit_response.status_code,
+        submit_response.status_code,
+        attachment_response.status_code,
+    ] == [
+        403,
+        403,
+        403,
+    ]
+    assert ordinary_response.status_code == 403
+    with Session(migrated_test_engine) as verify_session:
+        for link_id in link_ids:
+            public_link = verify_session.get(CardPublicLink, link_id)
+            assert public_link is not None
+            assert public_link.status == "expired"
+            assert public_link.can_view is False
+            assert public_link.can_edit is False
+            expiry_events = list(
+                verify_session.scalars(
+                    select(AuditEvent).where(
+                        AuditEvent.object_type == "card_public_link",
+                        AuditEvent.object_id == link_id,
+                        AuditEvent.action == "public_link.expire",
+                    )
+                )
+            )
+            assert len(expiry_events) == 1
+            assert expiry_events[0].actor_type == "system"
+            assert expiry_events[0].source == "system"
+        assert (
+            verify_session.scalar(select(User).where(User.email == "must-rollback@example.test"))
+            is None
+        )
+        assert (
+            verify_session.scalar(
+                select(FieldValue).where(
+                    FieldValue.card_id == card_id,
+                    FieldValue.field_id == field_id,
+                )
+            )
+            is None
+        )
+
+
+def test_direct_attachment_expiry_uses_persist_marker_and_one_system_audit(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    token = PublicLinkService(db_session).create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        review_enabled=True,
+    )
+    token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.flush()
+
+    with pytest.raises(PersistStatePermissionDeniedError):
+        review_fixture.attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=token.public_link.id,
+            card_id=review_fixture.card_id,
+            original_filename="expired-direct.txt",
+            content_type="text/plain",
+            content=b"must not persist",
+        )
+
+    assert token.public_link.status == "expired"
+    assert token.public_link.can_view is False
+    assert token.public_link.can_edit is False
+    expiry_events = list(
+        db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.object_type == "card_public_link",
+                AuditEvent.object_id == token.public_link.id,
+                AuditEvent.action == "public_link.expire",
+            )
+        )
+    )
+    assert len(expiry_events) == 1
+    assert expiry_events[0].actor_type == "system"
+    assert expiry_events[0].source == "system"

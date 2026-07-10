@@ -25,7 +25,11 @@ from app.models import (
 )
 from app.services.audit import AuditService
 from app.services.cards import CardService, CardServiceError
-from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.permissions import (
+    PermissionDeniedError,
+    PermissionService,
+    PersistStatePermissionDeniedError,
+)
 from app.services.references import ReferenceListError, ReferenceListService
 
 DEFAULT_PUBLIC_LINK_TTL_DAYS = 7
@@ -368,9 +372,14 @@ class PublicLinkService:
 
         expose_review_details = public_link.status in {"submitted", "changes_requested"}
         summary = public_link.submission_summary_json or {}
+        card_allows_public_edit = self._card_allows_public_edit(public_link.card_id)
         return PublicLinkSafeStatus(
             status=public_link.status,
-            can_edit=(public_link.status in EDITABLE_PUBLIC_LINK_STATUSES and public_link.can_edit),
+            can_edit=(
+                public_link.status in EDITABLE_PUBLIC_LINK_STATUSES
+                and public_link.can_edit
+                and card_allows_public_edit
+            ),
             submitted_at=public_link.submitted_at,
             reviewed_at=public_link.reviewed_at,
             review_comment=(
@@ -457,6 +466,7 @@ class PublicLinkService:
             attachment_diffs.append(
                 self._attachment_diff(current_attachments[attachment_id], change="added")
             )
+        attachment_diffs.sort(key=lambda item: (item.change, str(item.attachment_id)))
 
         return PublicLinkReviewDiff(
             public_link=public_link,
@@ -633,7 +643,7 @@ class PublicLinkService:
 
     def _require_not_expired(self, public_link: CardPublicLink) -> None:
         if self._expire_if_needed(public_link):
-            raise PermissionDeniedError("Public link has expired.")
+            raise PersistStatePermissionDeniedError("Public link has expired.")
 
     def _expire_if_needed(self, public_link: CardPublicLink) -> bool:
         if (
@@ -852,6 +862,15 @@ class PublicLinkService:
     def _require_field_edit_usage_available(self, public_link: CardPublicLink) -> None:
         if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
             raise PermissionDeniedError("Public link usage limit is exhausted.")
+
+    def _card_allows_public_edit(self, card_id: UUID) -> bool:
+        card = self.session.get(Card, card_id)
+        return bool(
+            card is not None
+            and card.archived_at is None
+            and card.lifecycle_status not in {"archived", "superseded"}
+            and card.public_edit_enabled
+        )
 
     def _get_active_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)

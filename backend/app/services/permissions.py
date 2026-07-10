@@ -12,6 +12,10 @@ class PermissionDeniedError(PermissionError):
     """Raised when an actor does not have the required organization-scoped access."""
 
 
+class PersistStatePermissionDeniedError(PermissionDeniedError):
+    """Raised after a deliberate state transition that must survive the denied request."""
+
+
 class PermissionService:
     def __init__(self, session: Session) -> None:
         self.session = session

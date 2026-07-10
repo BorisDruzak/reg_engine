@@ -17,7 +17,10 @@ from app.services.cards import CardServiceError, InvalidFieldValueError
 from app.services.documents import DocumentServiceError
 from app.services.import_export import ImportExportServiceError
 from app.services.organizations import OrganizationNotFoundError, OrganizationTopologyError
-from app.services.permissions import PermissionDeniedError
+from app.services.permissions import (
+    PermissionDeniedError,
+    PersistStatePermissionDeniedError,
+)
 from app.services.public_links import PublicLinkError
 from app.services.references import ReferenceListError
 from app.services.registry_schema import RegistrySchemaError
@@ -35,6 +38,10 @@ class RequestMetadata:
     user_agent: str | None
     request_id: str | None
     source: str
+
+
+class PersistStateHTTPException(HTTPException):
+    """HTTP denial whose deliberate service state transition must be committed."""
 
 
 def get_request_metadata(request: Request) -> RequestMetadata:
@@ -58,6 +65,9 @@ def get_db_session(
         try:
             yield session
             session.commit()
+        except PersistStateHTTPException:
+            session.commit()
+            raise
         except IntegrityError as exc:
             session.rollback()
             _raise_integrity_http_error(exc)
@@ -121,6 +131,8 @@ def _bearer_token_from_authorization(authorization: str) -> str:
 def raise_service_http_error(exc: Exception) -> NoReturn:
     if isinstance(exc, IntegrityError):
         _raise_integrity_http_error(exc)
+    if isinstance(exc, PersistStatePermissionDeniedError):
+        raise PersistStateHTTPException(status_code=403, detail=str(exc)) from exc
     if isinstance(exc, PermissionDeniedError):
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if isinstance(exc, OrganizationNotFoundError):
