@@ -118,7 +118,7 @@ export function PublicLinkReviewPanel({
     },
     enabled: Boolean(selectedReviewId && selectedReviewLink?.status === "submitted"),
   });
-  const reviewReady = reviewQuery.isSuccess && Boolean(reviewQuery.data);
+  const reviewReady = reviewQuery.isSuccess && Boolean(reviewQuery.data) && Boolean(layout);
 
   const invalidateLinkQueries = async () => {
     await Promise.all([

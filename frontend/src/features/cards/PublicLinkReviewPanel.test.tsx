@@ -227,6 +227,21 @@ describe("PublicLinkReviewPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("keeps review lifecycle actions unavailable when review succeeds without a layout", async () => {
+    const user = userEvent.setup();
+    links = [
+      publicLink("submitted", { status: "submitted", submitted_at: "2026-07-10T10:00:00Z" }),
+    ];
+    renderPanel({ panelLayout: null });
+
+    await user.click(await screen.findByRole("button", { name: "Открыть проверку" }));
+    expect(await screen.findByText("Макет карточки недоступен")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Вернуть на доработку" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Подтвердить и закрыть доступ" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("renders review differences at configured form layout geometry", async () => {
     const user = userEvent.setup();
     links = [
@@ -302,19 +317,34 @@ describe("PublicLinkReviewPanel", () => {
   });
 });
 
-function renderPanel({ openCreateRequest = 0 }: { openCreateRequest?: number } = {}) {
+function renderPanel({
+  openCreateRequest = 0,
+  panelLayout = layout,
+}: {
+  openCreateRequest?: number;
+  panelLayout?: CardTemplateLayoutRead | null;
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <PublicLinkReviewPanelHarness initiallyOpen={openCreateRequest > 0} />
+      <PublicLinkReviewPanelHarness
+        initiallyOpen={openCreateRequest > 0}
+        panelLayout={panelLayout}
+      />
     </QueryClientProvider>,
   );
   return queryClient;
 }
 
-function PublicLinkReviewPanelHarness({ initiallyOpen }: { initiallyOpen: boolean }) {
+function PublicLinkReviewPanelHarness({
+  initiallyOpen,
+  panelLayout,
+}: {
+  initiallyOpen: boolean;
+  panelLayout: CardTemplateLayoutRead | null;
+}) {
   const [createFormOpen, setCreateFormOpen] = useState(initiallyOpen);
   return (
     <PublicLinkReviewPanel
@@ -322,7 +352,7 @@ function PublicLinkReviewPanelHarness({ initiallyOpen }: { initiallyOpen: boolea
       cardId={cardId}
       createFormOpen={createFormOpen}
       fields={fields}
-      layout={layout}
+      layout={panelLayout}
       onCreateFormOpenChange={setCreateFormOpen}
       token={token}
     />
