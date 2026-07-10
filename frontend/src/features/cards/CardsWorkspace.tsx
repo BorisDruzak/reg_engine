@@ -19,7 +19,6 @@ import {
   listAttachments,
   listPublicLinks,
   readCardPresentation,
-  updateCard,
   updateCardFieldValue,
   updateCardFieldValues,
 } from "@/api/client";
@@ -322,22 +321,6 @@ export function CardsWorkspace({
       await invalidateCardQueries(queryClient, token, created.registry_id, created.id);
     },
   });
-  const activateCardMutation = useMutation({
-    mutationFn: () => {
-      if (!card) {
-        throw new Error(uiText.notFound);
-      }
-      return updateCard(token, card.id, {
-        lifecycle_status: "active",
-      });
-    },
-    onSuccess: async (updated) => {
-      await invalidateCardQueries(queryClient, token, updated.registry_id, updated.id);
-      if (activeCardIdRef.current === updated.id) {
-        setSuccessMessage(uiText.cardActivated);
-      }
-    },
-  });
   const archiveCardMutation = useMutation({
     mutationFn: (target: CardSummaryRead) => archiveCard(token, target.id),
     onSuccess: async (archived) => {
@@ -431,7 +414,6 @@ export function CardsWorkspace({
   });
 
   function resetSelectedCardMutationState() {
-    activateCardMutation.reset();
     archiveCardMutation.reset();
     createBlockInstanceMutation.reset();
     archiveBlockInstanceMutation.reset();
@@ -607,19 +589,16 @@ export function CardsWorkspace({
               canManage={card.can_manage}
               completionLabel={completionLabel}
               publicLinksLabel={publicLinksLabel}
-              isActivating={activateCardMutation.isPending}
               canDownloadPrint={Boolean(selectedCardPrintView)}
               isDownloadingPrint={
                 downloadCardPrintDocxMutation.isPending || downloadCardPrintPdfMutation.isPending
               }
               actionError={
-                activateCardMutation.error ??
                 archiveCardMutation.error ??
                 downloadCardPrintDocxMutation.error ??
                 downloadCardPrintPdfMutation.error
               }
               successMessage={successMessage}
-              onActivate={() => activateCardMutation.mutate()}
               onDownloadPrintDocx={() => downloadCardPrintDocxMutation.mutate()}
               onDownloadPrintPdf={() => downloadCardPrintPdfMutation.mutate()}
               onSendForFilling={() => {
@@ -856,12 +835,10 @@ function CardActionPanel({
   canManage,
   completionLabel,
   publicLinksLabel,
-  isActivating,
   canDownloadPrint,
   isDownloadingPrint,
   actionError,
   successMessage,
-  onActivate,
   onDownloadPrintDocx,
   onDownloadPrintPdf,
   onSendForFilling,
@@ -873,12 +850,10 @@ function CardActionPanel({
   canManage: boolean;
   completionLabel: string;
   publicLinksLabel: string | null;
-  isActivating: boolean;
   canDownloadPrint: boolean;
   isDownloadingPrint: boolean;
   actionError?: unknown;
   successMessage?: string | null;
-  onActivate: () => void;
   onDownloadPrintDocx: () => void;
   onDownloadPrintPdf: () => void;
   onSendForFilling: () => void;
@@ -895,17 +870,6 @@ function CardActionPanel({
         <MutationFeedback error={actionError} successMessage={successMessage} />
       </div>
       <div className="row-actions card-action-buttons">
-        {canManage && selectedCard.lifecycle_status === "draft" && (
-          <button
-            type="button"
-            className="primary-button"
-            aria-label={`${uiText.activateCard} ${card.display_name}`}
-            disabled={isActivating}
-            onClick={onActivate}
-          >
-            {uiText.activateCard}
-          </button>
-        )}
         {canManage ? (
           <>
             <button type="button" className="primary-button" onClick={onSendForFilling}>

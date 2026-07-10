@@ -3484,8 +3484,11 @@ test("shows card editor actions in the sticky card panel", async () => {
   expect(within(actionPanel).getByText("Обязательные поля: 0 из 0 заполнено")).toBeInTheDocument();
   expect(within(actionPanel).getByText("Публичные ссылки: 2 активны")).toBeInTheDocument();
   expect(
-    within(actionPanel).getByRole("button", { name: "Активировать карточку Карточка актива" }),
-  ).toBeInTheDocument();
+    within(actionPanel).queryByRole("button", { name: "Активировать карточку Карточка актива" }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(actionPanel).getByRole("button", { name: "Отправить на заполнение" }),
+  ).toBeEnabled();
   expect(
     within(actionPanel).getByRole("button", { name: "Архивировать карточку Карточка актива" }),
   ).toBeInTheDocument();
@@ -3496,6 +3499,26 @@ test("shows card editor actions in the sticky card panel", async () => {
     await screen.findByRole("button", { name: "Изменить блок Основной блок" }),
   ).toBeInTheDocument();
   expect(screen.queryByRole("form", { name: "Массовое сохранение полей" })).not.toBeInTheDocument();
+});
+
+test("keeps send for filling available for an active card", async () => {
+  cardItems = cardItems.map((item) =>
+    item.display_name === "Карточка актива" ? { ...item, lifecycle_status: "active" } : item,
+  );
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.dblClick(await screen.findByRole("button", { name: /Карточка актива/ }));
+
+  const actionPanel = await screen.findByRole("group", { name: "Панель действий карточки" });
+  expect(within(actionPanel).getByText("Активно")).toBeInTheDocument();
+  expect(
+    within(actionPanel).getByRole("button", { name: "Отправить на заполнение" }),
+  ).toBeEnabled();
 });
 
 test("shows required field errors before saving an inline block", async () => {
