@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
@@ -9,11 +9,13 @@ import type {
   CardBlockInstanceRead,
   CardTemplateLayoutRead,
   FieldValueRead,
+  FieldValuesBulkUpdatePayload,
   FormBlockRead,
   FormFieldRead,
 } from "@/api/types";
 
 import { FilledCardLayout, type FilledCardLayoutProps } from "./FilledCardLayout";
+import { useBlockEditor } from "./useBlockEditor";
 
 const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
@@ -395,6 +397,367 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
   });
 
+  test("edits ordinary fields in place and saves changed values atomically", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    const activeBlock = screen.getByTestId("filled-block-fio");
+    const firstName = within(activeBlock).getByLabelText("Имя");
+    expect(firstName).toHaveValue("Иван");
+    expect(
+      within(activeBlock).getByRole("button", { name: "Сохранить блок ФИО" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Массовое сохранение полей")).not.toBeInTheDocument();
+
+    await user.clear(firstName);
+    await user.type(firstName, "Пётр");
+    const lastName = within(activeBlock).getByLabelText("Фамилия");
+    await user.clear(lastName);
+    await user.type(lastName, "Петров");
+    await user.click(within(activeBlock).getByRole("button", { name: "Сохранить блок ФИО" }));
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [
+          { field_id: "first-name", value: "Пётр", block_instance_id: null },
+          { field_id: "last-name", value: "Петров", block_instance_id: null },
+        ],
+      }),
+    );
+    expect(saveValues).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+  });
+
+  test("cancels an in-block draft and restores the opening snapshot", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.clear(screen.getByLabelText("Имя"));
+    await user.type(screen.getByLabelText("Имя"), "Пётр");
+    await user.click(screen.getByRole("button", { name: "Отмена блока ФИО" }));
+
+    expect(saveValues).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+    expect(screen.getByTestId("filled-field-first-name")).toHaveTextContent("Иван");
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    expect(screen.getByLabelText("Имя")).toHaveValue("Иван");
+  });
+
+  test("keeps permission-readonly, static text, and file references out of block bulk save", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const { unmount } = render(<EditableFilledCard saveValues={saveValues} />);
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    expect(screen.queryByLabelText("Статус")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Документ")).not.toBeInTheDocument();
+    expect(screen.getByTestId("filled-field-status")).toHaveTextContent("Согласовано");
+    expect(screen.getByTestId("filled-field-attachment")).toHaveTextContent(
+      "Заявление (request.pdf)",
+    );
+    expect(screen.getByTestId("filled-field-attachment")).toHaveTextContent(
+      "Файл изменяется в разделе «Вложения»",
+    );
+    await user.click(screen.getByRole("button", { name: "Отмена блока ФИО" }));
+    unmount();
+
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ editableFieldIds: new Set(["metadata", "hint"]) }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Изменить блок Служебные сведения" }));
+    expect(screen.queryByLabelText("Подсказка")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Проверьте сведения перед подтверждением")).not.toHaveLength(0);
+  });
+
+  test("keeps file references in the attachment-aware single-field control", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const openFileRef = vi.fn();
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{
+          editableFieldIds: new Set(["first-name", "attachment"]),
+          renderFileRefControl: ({ field, blockInstanceId }) => (
+            <button type="button" onClick={() => openFileRef(field.id, blockInstanceId)}>
+              Выбрать вложение для поля «{field.label}»
+            </button>
+          ),
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    const activeBlock = screen.getByTestId("filled-block-fio");
+    await user.click(
+      within(activeBlock).getByRole("button", {
+        name: "Выбрать вложение для поля «Документ»",
+      }),
+    );
+    expect(openFileRef).toHaveBeenCalledWith("attachment", null);
+
+    await user.clear(within(activeBlock).getByLabelText("Имя"));
+    await user.type(within(activeBlock).getByLabelText("Имя"), "Пётр");
+    await user.click(within(activeBlock).getByRole("button", { name: "Сохранить блок ФИО" }));
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
+      }),
+    );
+  });
+
+  test("does not expose the file reference control without field edit permission", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{
+          renderFileRefControl: () => <button type="button">Выбрать вложение</button>,
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+
+    expect(screen.queryByRole("button", { name: "Выбрать вложение" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("filled-field-attachment")).toHaveTextContent(
+      "Заявление (request.pdf)",
+    );
+  });
+
+  test("does not offer block editing when the only permitted field is static text", () => {
+    const staticOnlyLayout: CardTemplateLayoutRead = {
+      ...layout,
+      structure: {
+        blocks: [restrictedBlock],
+        fields: [fields.find((item) => item.id === "hint")!],
+      },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            id: restrictedBlock.id,
+            block_id: restrictedBlock.id,
+            row: 1,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
+            items: [layoutField("hint", 1, 1, 1, 12)],
+          },
+        ],
+      },
+    };
+    render(
+      <FilledCardLayout
+        {...props({
+          layout: staticOnlyLayout,
+          blocks: [restrictedBlock],
+          fields: staticOnlyLayout.structure.fields,
+          editableFieldIds: new Set(["hint"]),
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Изменить блок Служебные сведения" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("keeps invalid drafts open and shows field validation in Russian", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ editableFieldIds: new Set(["metadata"]) }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок Служебные сведения" }));
+    const metadataField = screen.getByTestId("filled-field-metadata");
+    const editor = within(metadataField).getByLabelText("Метаданные");
+    await user.clear(editor);
+    await user.type(editor, "invalid");
+    await user.click(screen.getByRole("button", { name: "Сохранить блок Служебные сведения" }));
+
+    expect(saveValues).not.toHaveBeenCalled();
+    expect(within(metadataField).getByRole("alert")).toHaveTextContent(
+      "JSON-поле должно содержать объект.",
+    );
+    expect(editor).toHaveValue("invalid");
+  });
+
+  test("keeps a rejected save draft and maps service errors to Russian", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockRejectedValue(new Error("Forbidden"));
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.clear(screen.getByLabelText("Имя"));
+    await user.type(screen.getByLabelText("Имя"), "Пётр");
+    await user.click(screen.getByRole("button", { name: "Сохранить блок ФИО" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Действие недоступно.");
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
+  });
+
+  test("protects dirty click-away with all three decisions", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.clear(screen.getByLabelText("Имя"));
+    await user.type(screen.getByLabelText("Имя"), "Пётр");
+    await user.click(screen.getByTestId("card-layout-canvas"));
+
+    const decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    expect(within(decision).getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+    expect(within(decision).getByRole("button", { name: "Не сохранять" })).toBeInTheDocument();
+    await user.click(within(decision).getByRole("button", { name: "Продолжить редактирование" }));
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
+
+    await user.click(screen.getByTestId("card-layout-canvas"));
+    await user.click(screen.getByRole("button", { name: "Не сохранять" }));
+    expect(saveValues).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+    expect(screen.getByTestId("filled-field-first-name")).toHaveTextContent("Иван");
+  });
+
+  test("keeps the dirty-close decision open with a Russian error when save fails", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockRejectedValue(new Error("Forbidden"));
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.clear(screen.getByLabelText("Имя"));
+    await user.type(screen.getByLabelText("Имя"), "Пётр");
+    await user.click(screen.getByTestId("card-layout-canvas"));
+    const decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    await user.click(within(decision).getByRole("button", { name: "Сохранить" }));
+
+    expect(await within(decision).findByRole("alert")).toHaveTextContent("Действие недоступно.");
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
+  });
+
+  test("shows client-side field validation inside the dirty-close decision", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ editableFieldIds: new Set(["metadata"]) }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок Служебные сведения" }));
+    await user.clear(screen.getByLabelText("Метаданные"));
+    await user.type(screen.getByLabelText("Метаданные"), "invalid");
+    await user.click(screen.getByTestId("card-layout-canvas"));
+    const decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    await user.click(within(decision).getByRole("button", { name: "Сохранить" }));
+
+    expect(await within(decision).findByRole("alert")).toHaveTextContent(
+      "JSON-поле должно содержать объект.",
+    );
+  });
+
+  test("saves only the selected repeatable block instance", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const repeatableFixture = repeatableProps();
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ ...repeatableFixture, editableFieldIds: new Set(["contact-value"]) }}
+      />,
+    );
+
+    let secondInstance = screen.getByTestId(
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2",
+    );
+    await user.click(
+      within(secondInstance).getByRole("button", { name: "Изменить блок Контакты" }),
+    );
+    secondInstance = screen.getByTestId(
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2",
+    );
+    const contact = within(secondInstance).getByLabelText("Контакт");
+    expect(contact).toHaveValue("Второй контакт");
+    await user.clear(contact);
+    await user.type(contact, "Обновлённый контакт");
+    await user.click(
+      within(secondInstance).getByRole("button", { name: "Сохранить блок Контакты" }),
+    );
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [
+          {
+            field_id: "contact-value",
+            value: "Обновлённый контакт",
+            block_instance_id: "contact-instance-2",
+          },
+        ],
+      }),
+    );
+    expect(
+      screen.getByTestId("filled-instance-contact-instance-1-field-contact-value"),
+    ).toHaveTextContent("Первый контакт");
+  });
+
+  test("exposes deterministic dirty state from the block editor hook", () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() =>
+      useBlockEditor({ fields, editableFieldIds: new Set(["first-name"]), saveValues }),
+    );
+
+    act(() => result.current.open(block.id, null, { "first-name": "Иван" }));
+    expect(result.current.key).toBe("fio:primary");
+    expect(result.current.dirty).toBe(false);
+
+    act(() => result.current.update("first-name", "Пётр"));
+    expect(result.current.dirty).toBe(true);
+    let closeResult: ReturnType<typeof result.current.requestClose> = "closed";
+    act(() => {
+      closeResult = result.current.requestClose();
+    });
+    expect(closeResult).toBe("confirm-discard");
+  });
+
   test("marks the read surface for row-major mobile reflow without horizontal scrolling", () => {
     render(<FilledCardLayout {...props()} />);
 
@@ -483,5 +846,54 @@ function repeatableInstance(
         value: fieldValue,
       },
     },
+  };
+}
+
+function EditableFilledCard({
+  saveValues,
+  overrides = {},
+}: {
+  saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
+  overrides?: Partial<FilledCardLayoutProps>;
+}) {
+  const componentProps = props(overrides);
+  const blockEditor = useBlockEditor({
+    fields: componentProps.fields,
+    editableFieldIds: componentProps.editableFieldIds,
+    saveValues,
+  });
+  return <FilledCardLayout {...componentProps} blockEditor={blockEditor} />;
+}
+
+function repeatableProps(): Partial<FilledCardLayoutProps> {
+  return {
+    layout: {
+      ...layout,
+      structure: {
+        blocks: [...layout.structure.blocks, repeatableBlock],
+        fields,
+      },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          ...layout.form_layout.sections,
+          {
+            id: repeatableBlock.id,
+            block_id: repeatableBlock.id,
+            row: 4,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
+            items: [layoutField("contact-value", 1, 1, 1, 12)],
+          },
+        ],
+      },
+    },
+    blocks: [block, restrictedBlock, repeatableBlock],
+    blockInstances: [
+      ...blockInstances,
+      repeatableInstance("contact-instance-1", 0, "Первый контакт"),
+      repeatableInstance("contact-instance-2", 1, "Второй контакт"),
+    ],
   };
 }
