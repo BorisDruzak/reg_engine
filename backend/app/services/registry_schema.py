@@ -171,12 +171,15 @@ class RegistrySchemaService:
         registry_id: UUID,
         actor_user_id: UUID | None = None,
     ) -> CardTemplate:
-        registry = self._get_active_registry(registry_id)
+        registry = self._get_active_registry(registry_id, lock_for_update=True)
         template = self.session.scalar(
-            select(CardTemplate).where(
+            select(CardTemplate)
+            .where(
                 CardTemplate.registry_id == registry.id,
                 CardTemplate.code == BASE_CARD_TEMPLATE_CODE,
             )
+            .execution_options(populate_existing=True)
+            .with_for_update()
         )
         expected_schema = self._base_card_template_field_schema(
             registry.id,
@@ -1158,11 +1161,34 @@ class RegistrySchemaService:
 
         raise PermissionDeniedError("Actor cannot read registry.")
 
-    def _get_active_registry(self, registry_id: UUID) -> Registry:
-        return self._get_registry(registry_id, include_archive=False)
+    def _get_active_registry(
+        self,
+        registry_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> Registry:
+        return self._get_registry(
+            registry_id,
+            include_archive=False,
+            lock_for_update=lock_for_update,
+        )
 
-    def _get_registry(self, registry_id: UUID, *, include_archive: bool) -> Registry:
-        registry = self.session.get(Registry, registry_id)
+    def _get_registry(
+        self,
+        registry_id: UUID,
+        *,
+        include_archive: bool,
+        lock_for_update: bool = False,
+    ) -> Registry:
+        if lock_for_update:
+            registry = self.session.scalars(
+                select(Registry)
+                .where(Registry.id == registry_id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            ).one_or_none()
+        else:
+            registry = self.session.get(Registry, registry_id)
         if registry is None or (
             not include_archive
             and (registry.archived_at is not None or registry.lifecycle_status == "archived")

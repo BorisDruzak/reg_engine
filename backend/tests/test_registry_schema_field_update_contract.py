@@ -2,10 +2,11 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import registries as registry_endpoints
-from app.models import CardTemplate, FormBlock, FormField, ReferenceList
+from app.models import CardTemplate, FormBlock, FormField, ReferenceList, Registry
 from app.schemas.registries import FormBlockUpdate, FormFieldUpdate
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
@@ -646,6 +647,158 @@ def test_locked_card_template_load_uses_populate_existing_and_for_update() -> No
     assert loaded is template
     assert statement.get_execution_options()["populate_existing"] is True
     assert statement._for_update_arg is not None
+
+
+def test_archive_field_refresh_locks_and_reloads_base_template_before_schema_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry = Registry(id=uuid4(), code="archive-refresh", name="Архивное обновление")
+    block = FormBlock(
+        id=uuid4(),
+        registry_id=registry.id,
+        code="main",
+        title="Основной блок",
+    )
+    field = _field(block_id=block.id)
+    stale_layout = {"columns": 12, "sections": [{"id": "stale-layout"}]}
+    fresh_layout = {"columns": 12, "sections": [{"id": "fresh-layout"}]}
+    template = CardTemplate(
+        id=uuid4(),
+        registry_id=registry.id,
+        code="base_template",
+        name="Базовый шаблон",
+        field_schema_json={
+            "field_ids": [str(field.id)],
+            "form_layout": stale_layout,
+        },
+        default_values_json=[],
+        is_active=True,
+    )
+    statements: list[object] = []
+
+    class RecordingSession:
+        def scalar(self, statement: object) -> CardTemplate:
+            statements.append(statement)
+            if (
+                statement.get_execution_options().get("populate_existing") is True  # type: ignore[attr-defined]
+                and statement._for_update_arg is not None  # type: ignore[attr-defined]
+            ):
+                template.field_schema_json = {
+                    "field_ids": [str(field.id)],
+                    "form_layout": fresh_layout,
+                }
+            return template
+
+        def flush(self) -> None:
+            pass
+
+    service = RegistrySchemaService(RecordingSession())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "_get_active_field", lambda _field_id: field)
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_ensure_mutable_field", lambda _field: None)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        service,
+        "_get_active_registry",
+        lambda _registry_id, **_kwargs: registry,
+    )
+    monkeypatch.setattr(
+        service,
+        "_base_card_template_field_schema",
+        lambda _registry_id, *, current_schema=None: {
+            **(current_schema or {}),
+            "field_ids": [],
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **_payload: None,
+    )
+
+    service.archive_field_for_actor(
+        actor_user_id=actor_user_id,
+        field_id=field.id,
+    )
+
+    assert len(statements) == 1
+    statement = statements[0]
+    compiled = str(statement.compile(dialect=postgresql.dialect()))  # type: ignore[attr-defined]
+    assert "FOR UPDATE" in compiled
+    assert statement.get_execution_options()["populate_existing"] is True  # type: ignore[attr-defined]
+    assert template.field_schema_json == {
+        "field_ids": [],
+        "form_layout": fresh_layout,
+    }
+
+
+def test_absent_base_template_creation_locks_registry_and_keeps_unique_creation_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = Registry(id=uuid4(), code="base-create", name="Создание шаблона")
+    field_id = uuid4()
+    statements: list[object] = []
+    added: list[object] = []
+
+    class ScalarResult:
+        def __init__(self, value: object | None) -> None:
+            self.value = value
+
+        def one_or_none(self) -> object | None:
+            return self.value
+
+    class RecordingSession:
+        def get(self, _model: object, _object_id: object) -> Registry:
+            return registry
+
+        def scalar(self, statement: object) -> None:
+            statements.append(statement)
+            return None
+
+        def scalars(self, statement: object) -> ScalarResult:
+            statements.append(statement)
+            return ScalarResult(registry)
+
+        def add(self, value: object) -> None:
+            added.append(value)
+
+        def flush(self) -> None:
+            pass
+
+    service = RegistrySchemaService(RecordingSession())  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        service,
+        "_base_card_template_field_schema",
+        lambda _registry_id, *, current_schema=None: {
+            **(current_schema or {}),
+            "field_ids": [str(field_id)],
+        },
+    )
+
+    template = service.ensure_base_card_template_for_registry(registry_id=registry.id)
+
+    assert added == [template]
+    assert template.registry_id == registry.id
+    assert template.code == "base_template"
+    assert template.field_schema_json == {"field_ids": [str(field_id)]}
+    assert len(statements) == 2
+    for statement in statements:
+        compiled = str(statement.compile(dialect=postgresql.dialect()))  # type: ignore[attr-defined]
+        assert "FOR UPDATE" in compiled
+        assert statement.get_execution_options()["populate_existing"] is True  # type: ignore[attr-defined]
+
+
+def test_read_only_active_registry_lookup_does_not_request_row_lock() -> None:
+    registry = Registry(id=uuid4(), code="read-only", name="Чтение")
+    session = Mock(spec=Session)
+    session.get.return_value = registry
+    service = RegistrySchemaService(session)
+
+    loaded = service._get_active_registry(registry.id)  # noqa: SLF001
+
+    assert loaded is registry
+    session.get.assert_called_once_with(Registry, registry.id)
+    session.scalars.assert_not_called()
 
 
 def test_field_update_preserves_type_config_when_type_is_unchanged(
