@@ -114,6 +114,7 @@ class CardRead(BaseModel):
     card_template_name: str | None = None
     organization_id: UUID
     display_name: str
+    can_manage: bool
     blocks: dict[str, CardBlockRead]
     fields: dict[str, CardFieldRead]
 

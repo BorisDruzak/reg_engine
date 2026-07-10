@@ -455,6 +455,7 @@ export type CardRead = {
   card_template_name?: string | null;
   organization_id: string;
   display_name: string;
+  can_manage: boolean;
   blocks: Record<string, CardBlockRead>;
   fields: Record<string, CardFieldRead>;
 };

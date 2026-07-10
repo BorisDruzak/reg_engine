@@ -155,8 +155,11 @@ export function CardsWorkspace({
   );
   const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
   const editableFieldIds = useMemo(
-    () => new Set(fieldRows.map((field) => field.field.field_id)),
-    [fieldRows],
+    () =>
+      card?.can_manage
+        ? new Set(fieldRows.map((field) => field.field.field_id))
+        : new Set<string>(),
+    [card?.can_manage, fieldRows],
   );
   const saveBlockValues = useCallback(
     async (payload: FieldValuesBulkUpdatePayload) => {
@@ -632,23 +635,27 @@ export function CardsWorkspace({
                   blockEditor={blockEditor}
                   referenceOptions={referenceOptions}
                   onEditBlock={() => setSuccessMessage(null)}
-                  renderFileRefControl={({ field, blockInstanceId, readValue }) => {
-                    const fileRefField = fileRefFieldRows.find(
-                      (item) =>
-                        item.field.field_id === field.id &&
-                        item.blockInstanceId === blockInstanceId,
-                    );
-                    return fileRefField ? (
-                      <CardFieldEditor
-                        key={fileRefField.key}
-                        cardId={card.id}
-                        field={fileRefField}
-                        token={token}
-                      />
-                    ) : (
-                      readValue
-                    );
-                  }}
+                  renderFileRefControl={
+                    card.can_manage
+                      ? ({ field, blockInstanceId, readValue }) => {
+                          const fileRefField = fileRefFieldRows.find(
+                            (item) =>
+                              item.field.field_id === field.id &&
+                              item.blockInstanceId === blockInstanceId,
+                          );
+                          return fileRefField ? (
+                            <CardFieldEditor
+                              key={fileRefField.key}
+                              cardId={card.id}
+                              field={fileRefField}
+                              token={token}
+                            />
+                          ) : (
+                            readValue
+                          );
+                        }
+                      : undefined
+                  }
                 />
               ) : null}
               {!cardTemplateLayoutQuery.isLoading &&

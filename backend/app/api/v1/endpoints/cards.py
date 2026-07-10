@@ -409,6 +409,7 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
         card_template_name=card_read.card_template_name,
         organization_id=card_read.organization_id,
         display_name=card_read.display_name,
+        can_manage=card_read.can_manage,
         blocks={
             block_code: CardBlockRead(
                 block_id=block.block_id,

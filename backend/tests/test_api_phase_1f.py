@@ -21,6 +21,7 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.schemas.cards import CardRead as CardReadSchema
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
@@ -217,6 +218,10 @@ def test_phase_1f_api_routes_are_registered_without_database() -> None:
     assert "/api/v1/public-links/preview" in paths
     assert "/api/v1/public-links/edit" in paths
     assert "/api/v1/audit-events" in paths
+
+
+def test_card_read_contract_exposes_backend_manage_capability() -> None:
+    assert CardReadSchema.model_fields["can_manage"].annotation is bool
 
 
 def test_api_lists_registries_visible_to_actor(
@@ -455,8 +460,10 @@ def test_api_card_visibility_uses_organization_scope(
         is_superuser=True,
     )
     org_admin = _create_user(db_session, "api-org-admin@example.test")
+    read_only_user = _create_user(db_session, "api-read-only@example.test")
     outsider = _create_user(db_session, "api-outsider@example.test")
     card_role = _create_role_with_permissions(db_session, "api_card_admin", ["cards.manage"])
+    read_only_role = _create_role_with_permissions(db_session, "api_card_reader", [])
 
     organization_service = OrganizationService(db_session)
     root = organization_service.create_root_for_actor(
@@ -518,9 +525,35 @@ def test_api_card_visibility_uses_organization_scope(
         include_descendants=True,
         created_by=system_admin.id,
     )
+    _grant_access(
+        db_session,
+        user_id=read_only_user.id,
+        role_id=read_only_role.id,
+        organization_id=child.id,
+        registry_id=registry.id,
+        include_descendants=False,
+        created_by=system_admin.id,
+    )
 
+    system_read = api_client.get(
+        f"/api/v1/cards/{card.id}", headers=_actor_headers(system_admin.id)
+    )
     allowed_read = api_client.get(f"/api/v1/cards/{card.id}", headers=_actor_headers(org_admin.id))
+    read_only_read = api_client.get(
+        f"/api/v1/cards/{card.id}", headers=_actor_headers(read_only_user.id)
+    )
     assert allowed_read.status_code == 200, allowed_read.text
+    assert system_read.status_code == 200, system_read.text
+    assert read_only_read.status_code == 200, read_only_read.text
+    assert system_read.json()["can_manage"] is True
+    assert allowed_read.json()["can_manage"] is True
+    assert read_only_read.json()["can_manage"] is False
+    read_only_write = api_client.patch(
+        f"/api/v1/cards/{card.id}/fields/{field.id}",
+        json={"value": "blocked"},
+        headers=_actor_headers(read_only_user.id),
+    )
+    assert read_only_write.status_code == 403, read_only_write.text
     denied_read = api_client.get(f"/api/v1/cards/{card.id}", headers=_actor_headers(outsider.id))
     assert denied_read.status_code == 403, denied_read.text
     denied_write = api_client.patch(

@@ -91,6 +91,7 @@ class CardRead:
     display_name: str
     card_template_id: UUID
     card_template_name: str | None = None
+    can_manage: bool = False
     blocks: dict[str, CardBlockRead] = field(default_factory=dict)
     fields: dict[str, CardFieldRead] = field(default_factory=dict)
 
@@ -802,7 +803,8 @@ class CardService:
         include_archive: bool = False,
     ) -> CardRead:
         card = self._get_readable_card(card_id, include_archive=include_archive)
-        if not PermissionService(self.session).can_see_organization(
+        permissions = PermissionService(self.session)
+        if not permissions.can_see_organization(
             actor_user_id,
             card.organization_id,
             registry_id=card.registry_id,
@@ -886,6 +888,12 @@ class CardService:
             card_template_name=self._card_template_name(card),
             organization_id=card.organization_id,
             display_name=card.display_name,
+            can_manage=permissions.has_permission(
+                actor_user_id,
+                "cards.manage",
+                organization_id=card.organization_id,
+                registry_id=card.registry_id,
+            ),
             blocks=read_blocks,
             fields=read_fields,
         )

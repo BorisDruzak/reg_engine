@@ -571,6 +571,7 @@ let documentTemplateItems: DocumentTemplateRead[];
 let generatedDocumentItems: typeof apiPayloads.generatedDocuments.items;
 let reportTemplateItems: ReportTemplateRead[];
 let reportRunItems: ReportRunRead[];
+let cardCanManage: boolean;
 
 beforeEach(() => {
   localStorage.clear();
@@ -615,6 +616,7 @@ beforeEach(() => {
   generatedDocumentItems = [];
   reportTemplateItems = [...apiPayloads.reportTemplates.items];
   reportRunItems = [];
+  cardCanManage = true;
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   vi.stubGlobal(
     "fetch",
@@ -1654,6 +1656,65 @@ beforeEach(() => {
           sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
         });
       }
+      const cardTemplateLayoutGenerateMatch = pathname.match(
+        /^\/api\/v1\/cards\/([^/]+)\/card-template-layout\/([^/]+)\/generate-(docx|pdf)$/,
+      );
+      if (cardTemplateLayoutGenerateMatch && init?.method === "POST") {
+        const format = cardTemplateLayoutGenerateMatch[3];
+        const documentId =
+          format === "docx"
+            ? "abab1212-1212-4212-8212-121212121212"
+            : "cdcd5656-5656-4656-8656-565656565656";
+        return jsonResponse({
+          document: {
+            id: documentId,
+            card_id: cardTemplateLayoutGenerateMatch[1],
+            template_id: cardTemplateLayoutGenerateMatch[2],
+            stored_file_id: "34343434-3434-4343-8434-343434343434",
+            title: format === "docx" ? "Основная A4" : "Основная A4 PDF",
+            output_filename: format === "docx" ? "card.docx" : "card.pdf",
+            content_type:
+              format === "docx"
+                ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                : "application/pdf",
+            render_status: "generated",
+            created_at: "2026-06-28T12:03:00Z",
+            archived_at: null,
+          },
+          print_view: {
+            id: "default-a4",
+            name: "Основная A4",
+            is_default: true,
+            document_template_id: null,
+            current_version_id: null,
+            source: "form_layout",
+            page: {
+              format: "A4",
+              width_mm: 210,
+              height_mm: 297,
+              margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+            },
+            items: [],
+            layout_json: null,
+            output_filename_template: "{{ card.display_name }}.docx",
+          },
+        });
+      }
+      if (
+        url.endsWith("/api/v1/generated-documents/abab1212-1212-4212-8212-121212121212/content") ||
+        url.endsWith("/api/v1/generated-documents/cdcd5656-5656-4656-8656-565656565656/content")
+      ) {
+        const isDocx = url.includes("abab1212");
+        return new Response(isDocx ? "docx-bytes" : "pdf-bytes", {
+          status: 200,
+          headers: {
+            "Content-Type": isDocx
+              ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              : "application/pdf",
+            "X-Document-Filename": isDocx ? "card.docx" : "card.pdf",
+          },
+        });
+      }
       if (url.includes("/api/v1/card-templates/")) {
         const templateId = url.split("/api/v1/card-templates/")[1];
         const current = cardTemplateItems.find((item) => item.id === templateId);
@@ -2289,6 +2350,7 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
 
   return {
     ...apiPayloads.cardRead,
+    can_manage: cardCanManage,
     id: cardSummary.id,
     registry_id: cardSummary.registry_id,
     organization_id: cardSummary.organization_id,
@@ -2754,6 +2816,52 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   const actionPanel = screen.getByRole("group", { name: "Панель действий карточки" });
   expect(within(actionPanel).getByText("Обязательные поля: 1 из 1 заполнено")).toBeInTheDocument();
   expect(within(actionPanel).getByText("Публичные ссылки: 2 активны")).toBeInTheDocument();
+  const docxButton = within(actionPanel).getByRole("button", { name: "Скачать DOCX" });
+  const pdfButton = within(actionPanel).getByRole("button", { name: "Скачать PDF" });
+  expect(docxButton).toBeEnabled();
+  expect(pdfButton).toBeEnabled();
+  await user.click(docxButton);
+  expect(await screen.findByText("DOCX печатной формы скачан")).toBeInTheDocument();
+  await user.click(pdfButton);
+  expect(await screen.findByText("PDF печатной формы скачан")).toBeInTheDocument();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/card-template-layout/71717171-7171-4171-8171-717171717171/generate-docx",
+          ) && init?.method === "POST",
+      ),
+  ).toBe(true);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith(
+            "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/card-template-layout/71717171-7171-4171-8171-717171717171/generate-pdf",
+          ) && init?.method === "POST",
+      ),
+  ).toBe(true);
+  expect(
+    vi.mocked(fetch).mock.calls.some(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith("/api/v1/generated-documents/abab1212-1212-4212-8212-121212121212/content") &&
+        init?.method === "GET"
+      );
+    }),
+  ).toBe(true);
+  expect(
+    vi.mocked(fetch).mock.calls.some(([input, init]) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return (
+        url.endsWith("/api/v1/generated-documents/cdcd5656-5656-4656-8656-565656565656/content") &&
+        init?.method === "GET"
+      );
+    }),
+  ).toBe(true);
   let mainBlock = await screen.findByTestId(
     "filled-block-block-88888888-8888-4888-8888-888888888888",
   );
@@ -2778,6 +2886,34 @@ test("renders refactored card workspace with focused tabs and simple metadata", 
   await user.click(screen.getByRole("button", { name: "Создать карточку" }));
   expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
   expect(screen.queryByText("Данные карточки")).not.toBeInTheDocument();
+});
+
+test("renders card values without mutation controls for a read-only actor", async () => {
+  enableFileRefSchema();
+  cardCanManage = false;
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "reader@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await openExistingCardEditor(user);
+
+  expect((await screen.findAllByText("drafted")).length).toBeGreaterThan(0);
+  expect(
+    screen.queryByRole("button", { name: "Изменить блок Основной блок" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Сохранить Файл карточки" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Очистить файл" })).not.toBeInTheDocument();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(
+        ([input, init]) =>
+          String(input).includes("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") &&
+          init?.method === "PATCH",
+      ),
+  ).toBe(false);
 });
 
 test("renders static text schema fields without sending them in block saves", async () => {
