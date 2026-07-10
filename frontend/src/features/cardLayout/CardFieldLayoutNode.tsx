@@ -163,6 +163,9 @@ export function CardFieldLayoutNode({
   function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
       directMovePointerRef.current = null;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
       geometry?.pointerUp(event);
       return;
     }

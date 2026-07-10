@@ -731,6 +731,25 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
+  test("does not swallow a later click when the drag produces no click event", async () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 131, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 131, clientX: 306, clientY: 0 });
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 131, clientX: 306, clientY: 0 });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    fireEvent.click(fieldNode);
+
+    expect(within(fieldNode).getByLabelText("Название поля")).toBeInTheDocument();
+  });
+
   test("grows a compact block on the first vertical field drag event", () => {
     const onGeometryCommit = vi.fn();
     const singleFieldLayout: CardTemplateLayoutRead = {

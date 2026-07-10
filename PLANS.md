@@ -4297,17 +4297,21 @@ browser proof are pending.
   crossing through release/cancel. A fast native pointer stream can no longer
   lose movement or release events while React is still rerendering the newly
   opened geometry session.
+- Drag click suppression expires after the release event cycle. Browsers that
+  omit the synthetic click after a drag can no longer leave a stale flag that
+  swallows the user's next ordinary click on that or another field.
 - Out-of-grid movement keeps the last valid preview and boundary error; a
   clamped coordinate cannot trigger an adaptive placement or overlap.
-- The focused renderer/geometry suites pass all 80 cases. The regressions
+- The focused renderer/geometry suites pass all 81 cases. The regressions
   cover text-selection suppression, adaptive shrink without changing the
   obstacle, preference for the narrow interval under the pointer, stable
   repeated movement, an unbatched native pointer stream, full-row traversal in
-  both directions, and rejected boundary/collision drops.
+  both directions, release of stale click suppression, and rejected
+  boundary/collision drops.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed: backend `228 passed / 195 skipped`, frontend
-  `244 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  `245 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
   TypeScript, production build, and project-map checks are green. The existing
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
-  The verified local bundle is `index-CoQERnHQ.js` (`562.52 kB`, `160.51 kB`
+  The verified local bundle is `index-BJCSk3ri.js` (`562.56 kB`, `160.53 kB`
   gzip) with `index-Cl9DldkN.css`.
