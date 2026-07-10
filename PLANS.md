@@ -3667,6 +3667,34 @@ Task 7 local verification:
   the final project-tree check passed. Remote GitHub/server checks were skipped
   intentionally by `-SkipRemote`.
 
+Task 7 live follow-up defect and repair:
+
+- Live validation of deployed checkpoint `839c8be3` found that converting the
+  production legacy print view whose identifier starts with `3b2e` returned
+  HTTP `422` with the existing safe Russian linked-layout detail. Its legacy
+  `items[]` contained one heading, two fields, and one static-text item.
+- Root cause: conversion correctly removed the legacy field items but retained
+  heading/static text beside the full-page linked `card_layout`; validation
+  then rejected both print-only flow items because they overlapped the linked
+  rectangle.
+- The focused service regression now uses that production-shaped composition,
+  executes the real layout validator, verifies one new audited version with
+  exactly one `card_layout`, preserves heading/static text plus image/QR content
+  as overlays, keeps the previous version readable, and checks generated DOCX
+  `PK` and PDF `%PDF` signatures plus supported overlay text.
+- The repair is limited to conversion composition: linked conversion writes only
+  the protected rectangle to `items[]` and promotes all remaining non-field,
+  non-block, non-card-layout flow items to explicit overlays. The shared splitter
+  and generation behavior for already normalized linked layouts are unchanged.
+- Focused verification passed with the repository virtual environment:
+  `python -m pytest tests/test_document_generation_services.py
+  tests/test_card_print_layout_services.py
+  tests/test_card_template_layout_services.py -q -ra`; the ten disposable
+  PostgreSQL cases remained skipped because `TEST_DATABASE_URL` was not set, and
+  the existing Starlette/httpx warning remained. The repaired conversion still
+  requires deployment and a repeat of the production live conversion before
+  this follow-up can be marked live-verified.
+
 Known warnings and limitations:
 
 - PostgreSQL-backed regressions require a disposable `TEST_DATABASE_URL` whose

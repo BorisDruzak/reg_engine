@@ -641,59 +641,124 @@ def test_linked_generation_uses_current_form_layout_without_persisting_expansion
     assert "QR-CARD-42" in pdf_text
 
 
-def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_previous(
+def test_convert_production_legacy_print_view_promotes_print_only_items_to_overlays(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     actor_user_id = uuid4()
     registry_id = uuid4()
     card_template_id = uuid4()
     document_template_id = uuid4()
-    previous_layout = _card_print_layout(uuid4())
-    previous_layout["items"] = [
-        {
-            "id": "footer-heading",
-            "kind": "heading",
-            "page": 1,
-            "x_mm": 15.0,
-            "y_mm": 286.0,
-            "width_mm": 180.0,
-            "height_mm": 8.0,
-            "text": "Служебный заголовок",
-        }
-    ]
-    previous_layout["overlays"] = [
-        {
-            "id": "brand-image",
-            "kind": "image",
-            "page": 1,
-            "x_mm": 20.0,
-            "y_mm": 20.0,
-            "width_mm": 30.0,
-            "height_mm": 20.0,
-            "alt": "Эмблема",
+    first_field_id = uuid4()
+    second_field_id = uuid4()
+    previous_layout: dict[str, Any] = {
+        "version": "card_print_layout_v1",
+        "page": {
+            "format": "A4",
+            "width_mm": 210,
+            "height_mm": 297,
+            "margin_mm": {"top": 12, "right": 12, "bottom": 12, "left": 12},
         },
-        {
-            "id": "card-qr",
-            "kind": "qr_code",
-            "page": 1,
-            "x_mm": 160.0,
-            "y_mm": 220.0,
-            "width_mm": 24.0,
-            "height_mm": 24.0,
-            "text": "QR-CARD-42",
-        },
-        {
-            "id": "static-note",
-            "kind": "static_text",
-            "page": 1,
-            "x_mm": 20.0,
-            "y_mm": 250.0,
-            "width_mm": 80.0,
-            "height_mm": 10.0,
-            "text": "Служебная пометка",
-        },
-    ]
+        "grid": {"columns": 12, "row_height_mm": 8},
+        "items": [
+            {
+                "id": "legacy-heading",
+                "kind": "heading",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 12.0,
+                "width_mm": 186.0,
+                "height_mm": 8.0,
+                "text": "Печатная форма карточки",
+            },
+            {
+                "id": "legacy-first-field",
+                "kind": "field",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 24.0,
+                "width_mm": 90.0,
+                "height_mm": 16.0,
+                "field_id": str(first_field_id),
+                "label": "Первое поле",
+            },
+            {
+                "id": "legacy-second-field",
+                "kind": "field",
+                "page": 1,
+                "x_mm": 108.0,
+                "y_mm": 24.0,
+                "width_mm": 90.0,
+                "height_mm": 16.0,
+                "field_id": str(second_field_id),
+                "label": "Второе поле",
+            },
+            {
+                "id": "legacy-static-note",
+                "kind": "static_text",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 44.0,
+                "width_mm": 186.0,
+                "height_mm": 10.0,
+                "text": "Служебная пометка",
+            },
+        ],
+        "overlays": [
+            {
+                "id": "brand-image",
+                "kind": "image",
+                "page": 1,
+                "x_mm": 20.0,
+                "y_mm": 20.0,
+                "width_mm": 30.0,
+                "height_mm": 20.0,
+                "alt": "Эмблема карточки",
+            },
+            {
+                "id": "card-qr",
+                "kind": "qr_code",
+                "page": 1,
+                "x_mm": 160.0,
+                "y_mm": 220.0,
+                "width_mm": 24.0,
+                "height_mm": 24.0,
+                "text": "QR-CARD-42",
+            },
+        ],
+    }
     previous_snapshot = deepcopy(previous_layout)
+    card = replace(_card_read_for_print_layout(first_field_id), card_template_id=card_template_id)
+    card_template = SimpleNamespace(
+        id=card_template_id,
+        registry_id=card.registry_id,
+        archived_at=None,
+        is_active=True,
+        field_schema_json={
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "section-main",
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 4,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "field-current",
+                                "kind": "field",
+                                "field_id": str(first_field_id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 6,
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    )
     template = SimpleNamespace(
         id=document_template_id,
         registry_id=registry_id,
@@ -717,6 +782,13 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
         def flush(self) -> None:
             return None
 
+        def get(self, model: type[object], object_id: UUID) -> object | None:
+            if model is CardTemplate and object_id == card_template_id:
+                return card_template
+            if model is FormField and object_id == first_field_id:
+                return SimpleNamespace(label="Текущее поле")
+            return None
+
     service = DocumentService(FakeSession(), storage=SimpleNamespace())  # type: ignore[arg-type]
     audit_events: list[dict[str, object]] = []
 
@@ -726,9 +798,10 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
     monkeypatch.setattr(service, "_next_template_version_number", lambda _template_id: 2)
     monkeypatch.setattr(
         service,
-        "_validate_card_print_layout_for_template",
-        lambda **payload: payload["layout_json"],
+        "_card_print_allowed_field_ids",
+        lambda **_payload: {first_field_id, second_field_id},
     )
+    monkeypatch.setattr(service, "_card_print_allowed_block_ids", lambda **_payload: set())
     monkeypatch.setattr(
         service,
         "_create_card_print_template_version",
@@ -756,15 +829,35 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
     assert previous_version.layout_json == previous_snapshot
     converted_layout = result.layout_json
     assert converted_layout["composition_mode"] == "linked_card"
-    linked_items = [item for item in converted_layout["items"] if item["kind"] == "card_layout"]
-    assert linked_items[0]["card_template_id"] == str(card_template_id)
-    assert any(item["id"] == "footer-heading" for item in converted_layout["items"])
+    assert len(converted_layout["items"]) == 1
+    assert converted_layout["items"][0]["kind"] == "card_layout"
+    assert converted_layout["items"][0]["card_template_id"] == str(card_template_id)
     assert [overlay["id"] for overlay in converted_layout["overlays"]] == [
         "brand-image",
         "card-qr",
-        "static-note",
+        "legacy-heading",
+        "legacy-static-note",
     ]
     assert validate_card_print_layout(converted_layout).errors == []
+    assert validate_card_print_layout(previous_version.layout_json).errors == []
+
+    render_context = _RenderContext(card=card)
+    docx_content = service._build_docx_from_card_print_layout(converted_layout, render_context)
+    assert docx_content.startswith(b"PK")
+    with ZipFile(BytesIO(docx_content)) as docx:
+        rendered_xml = docx.read("word/document.xml").decode("utf-8")
+    assert "Печатная форма карточки" in rendered_xml
+    assert "Служебная пометка" in rendered_xml
+    assert "Эмблема карточки" in rendered_xml
+    assert "QR-CARD-42" in rendered_xml
+
+    pdf_content = service._build_pdf_from_card_print_layout(converted_layout, render_context)
+    assert pdf_content.startswith(b"%PDF")
+    pdf_text = "".join(_extract_pdf_text(pdf_content).split())
+    assert "Печатнаяформакарточки" in pdf_text
+    assert "Служебнаяпометка" in pdf_text
+    assert "Эмблемакарточки" in pdf_text
+    assert "QR-CARD-42" in pdf_text
     assert audit_events == [
         {
             "actor_user_id": actor_user_id,

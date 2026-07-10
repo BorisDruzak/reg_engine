@@ -1354,11 +1354,8 @@ class DocumentService:
         converted["composition_mode"] = CARD_PRINT_LINKED_COMPOSITION_MODE
         converted["page"] = page
         flow_items, overlay_items = self._split_print_only_card_layout_items(layout_json)
-        converted["items"] = [
-            linked_item,
-            *flow_items,
-        ]
-        converted["overlays"] = overlay_items
+        converted["items"] = [linked_item]
+        converted["overlays"] = [*overlay_items, *flow_items]
         return converted
 
     def _expand_linked_card_layouts_for_generation(
