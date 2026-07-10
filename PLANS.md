@@ -231,10 +231,11 @@ not a hardcoded employee registry.
   `Макет карточки` workspace where the same selected block/field exposes web
   placement, A4 placement, appearance, access, and technical settings in one
   properties panel. No database migration was required.
-- Phase 8J contextual card-layout studio implementation is complete locally
-  through code checkpoint `383469b2`; Task 7 project-map verification and the
-  cumulative local gate pass. Push, deployment, and live Browser proof have not
-  yet been performed for Phase 8J.
+- Phase 8J contextual card-layout studio is complete on `main` through deployed
+  checkpoint `46c4f0e8`. The cumulative local gate, GitHub/server
+  synchronization, frontend deployment, desktop/mobile Browser proof,
+  conversion follow-up, and live DOCX/PDF signature checks pass. No database
+  migration was required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3593,9 +3594,8 @@ Acceptance criteria:
 
 ## Phase 8J: Contextual Card Layout Studio
 
-Status: implementation, Task 7 documentation, and the cumulative local gate are
-complete; ready for push, deployment, and live Browser proof. Phase 8J is not
-deployed or live-verified yet. No database migration is required.
+Status: complete on `main`, pushed, deployed, and live Browser-verified through
+checkpoint `46c4f0e8`. No database migration was required.
 
 Goal:
 
@@ -3758,8 +3758,33 @@ Task 7 final conversion safety follow-up:
   `scripts/check.ps1 -SkipRemote` gate passed: backend 219 passed / 175 skipped,
   frontend Vitest 161 passed / 25 skipped, the production frontend build
   completed with the existing chunk-size advisory, and the project-map check
-  passed. This final safety follow-up remains local-only; no push or deployment
-  was performed.
+  passed.
+
+Task 7 deployment and live Browser proof:
+
+- `main` was pushed and the configured server checkout synchronized to
+  `46c4f0e8`. The frontend artifact was deployed through the project script,
+  the API service was restarted, and same-origin frontend/API smoke checks
+  passed.
+- Live conversion of the production-shaped legacy print view succeeded after
+  the focused conversion repairs. The prior version remains readable and the
+  new version contains one protected linked-card rectangle plus supported
+  print-only overlays; unsupported explicit structural overlays remain
+  rejected before version creation or audit.
+- The three studio stages, contextual inline block editor, eight resize
+  handles, mouse/keyboard geometry session, cancel/restore behavior, Russian
+  boundary feedback, linked A4 sizing, and read-only dual preview were exercised
+  in the live Browser surface.
+- Desktop width `1440` and mobile width `420` were verified. At `420` the page,
+  canvas, and card blocks have no horizontal overflow, every block collapses to
+  one full-width column, and source order remains the reading order. Evidence
+  screenshots `phase8j-desktop-1440.png` and `phase8j-mobile-420.png` are stored
+  outside the repository with the local run artifacts.
+- The post-login Browser run reported zero console errors. All captured auth,
+  organization, registry, card, schema, reference-list, and template-layout
+  requests returned HTTP `200`.
+- Live blank-document downloads were checked by content signature: DOCX
+  returned `PK\\x03\\x04` and PDF returned `%PDF`.
 
 Known warnings and limitations:
 
@@ -3770,10 +3795,6 @@ Known warnings and limitations:
 - The production frontend build retains the existing Vite main-chunk size
   advisory (`526.02 kB`, `149.03 kB` gzip); Phase 8J adds no dependency and
   bundle splitting is deferred.
-- Push, server synchronization, frontend deployment, DOCX/PDF live signatures,
-  desktop/mobile rendering, and browser-console proof remain Task 7 deployment
-  handoff work. Do not mark Phase 8J deployed or live-verified until those
-  checks are recorded.
 
 ## Phase 8K: Filled Card Workspace
 
