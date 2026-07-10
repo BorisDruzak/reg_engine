@@ -755,6 +755,7 @@ def test_convert_print_view_to_linked_card_creates_new_version_and_preserves_pre
     assert result.version_number == 2
     assert previous_version.layout_json == previous_snapshot
     converted_layout = result.layout_json
+    assert converted_layout["composition_mode"] == "linked_card"
     linked_items = [item for item in converted_layout["items"] if item["kind"] == "card_layout"]
     assert linked_items[0]["card_template_id"] == str(card_template_id)
     assert any(item["id"] == "footer-heading" for item in converted_layout["items"])

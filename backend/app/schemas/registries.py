@@ -120,12 +120,17 @@ class FormFieldRead(BaseModel):
 class FormFieldUpdate(BaseModel):
     label: str | None = None
     description: str | None = None
+    field_type: str | None = None
     position: int | None = None
     required_mode: str | None = None
+    options_source_type: str | None = None
+    options_source_id: UUID | None = None
     options_config_json: dict[str, Any] | None = None
     display_config_json: dict[str, Any] | None = None
     is_active: bool | None = None
     is_list_display: bool | None = None
+    public_visible: bool | None = None
+    public_editable: bool | None = None
 
 
 class CardTemplateCreate(BaseModel):

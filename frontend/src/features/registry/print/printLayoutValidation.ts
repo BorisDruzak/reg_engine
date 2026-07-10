@@ -66,6 +66,17 @@ export function validatePrintLayout(
     });
   }
 
+  const linkedItemCount = normalized.items.filter((item) => item.kind === "card_layout").length;
+  if (
+    (normalized.composition_mode === "linked_card" || linkedItemCount > 0) &&
+    linkedItemCount !== 1
+  ) {
+    issues.push({
+      level: "error",
+      message: "Связанный макет должен содержать ровно одну карточку.",
+    });
+  }
+
   const blockingItems = normalized.items.filter((item) => !DECORATIVE_OVERLAP_KINDS.has(item.kind));
   for (const item of normalized.items) {
     const rect = itemRectFromMm(item);

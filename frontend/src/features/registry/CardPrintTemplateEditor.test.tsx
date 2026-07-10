@@ -160,9 +160,9 @@ test("saves geometry through the shared pointer session and preview uses the lat
   expect(screen.queryByRole("button", { name: /Переместить блок/ })).not.toBeInTheDocument();
 });
 
-test("retains an optimistic draft on 409 and exposes reload cancel and explicit retry", async () => {
+test("keeps a conflicting local draft visible and accepts the reviewed server version without PATCH", async () => {
   const user = userEvent.setup();
-  const api = createEditorFetchMock({ conflictOnFirstFormSave: true });
+  const api = createEditorFetchMock({ conflictOnFirstFormSave: true, conflictServerColumn: 5 });
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
@@ -179,17 +179,105 @@ test("retains an optimistic draft on 409 and exposes reload cancel and explicit 
   expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
-  expect(screen.getByRole("button", { name: "Обновить данные" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Отменить локальные изменения" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Повторить сохранение" }));
+  expect(screen.queryByRole("button", { name: /Повторить/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
+
+  const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
+  expect(within(comparison).getByTestId("conflict-local-layout")).toHaveTextContent("колонка 2");
+  expect(within(comparison).getByTestId("conflict-server-layout")).toHaveTextContent("колонка 5");
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  await user.click(within(comparison).getByRole("button", { name: "Принять версию сервера" }));
+
+  expect(api.formSavePayloads).toHaveLength(1);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "5 / span 6",
+  });
+});
+
+test("uses a conflicting local draft only after the explicit reviewed overwrite decision", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ conflictOnFirstFormSave: true, conflictServerColumn: 5 });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  expect(await screen.findByText(STALE_LAYOUT_MESSAGE)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
+  const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  await user.click(within(comparison).getByRole("button", { name: "Сохранить локальную версию" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads[1]).toEqual(
+    expect.objectContaining({
+      expected_revision: "revision-2",
+      form_layout: expect.objectContaining({
+        sections: expect.arrayContaining([expect.objectContaining({ column: 2 })]),
+      }),
+    }),
+  );
+});
+
+test("serializes rapid form saves and carries the returned revision into the newest draft", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredFirstFormSave: "success" });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  await moveMainBlockRight(user);
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  api.resolveFirstFormSave();
 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
   expect(api.formSavePayloads.map((payload) => payload.expected_revision)).toEqual([
     "revision-1",
     "revision-2",
   ]);
-  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
-  expect((await screen.findAllByText("Макет карточки сохранён")).length).toBeGreaterThan(0);
+  expect(api.formSavePayloads.map((payload) => payload.form_layout.sections[0].column)).toEqual([
+    2, 3,
+  ]);
+  await waitFor(() =>
+    expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+      gridColumn: "3 / span 6",
+    }),
+  );
+});
+
+test("a queued 409 preserves the newest local draft and waits for an explicit overwrite", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({
+    deferredFirstFormSave: "conflict",
+    conflictServerColumn: 5,
+  });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  await moveMainBlockRight(user);
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  api.resolveFirstFormSave();
+
+  expect(await screen.findByText(STALE_LAYOUT_MESSAGE)).toBeInTheDocument();
+  expect(api.formSavePayloads).toHaveLength(1);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "3 / span 6",
+  });
+  await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
+  const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  await user.click(within(comparison).getByRole("button", { name: "Сохранить локальную версию" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads[1].expected_revision).toBe("revision-2");
+  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(3);
 });
 
 test("A4 stage contains one linked card rectangle, routes internal editing back, and keeps overlays", async () => {
@@ -205,8 +293,17 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
 
   await user.click(screen.getByRole("button", { name: "Добавить заголовок" }));
   expect(screen.getAllByText("Заголовок").length).toBeGreaterThan(0);
+  await user.click(screen.getByTestId("a4-linked-card-item"));
+  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
+  canvas.focus();
+  await user.keyboard("{Delete}");
+  await user.keyboard("{Control>}d{/Control}");
+  await user.keyboard("{Control>}c{/Control}{Control>}v{/Control}");
+  expect(screen.getAllByTestId("a4-linked-card-item")).toHaveLength(1);
+  expect(screen.getAllByText("Заголовок").length).toBeGreaterThan(0);
   await user.click(screen.getByRole("button", { name: "Сохранить печатную форму" }));
   await waitFor(() => expect(api.printSavePayloads).toHaveLength(1));
+  expect(api.printSavePayloads[0].layout_json.composition_mode).toBe("linked_card");
   const savedItems = [
     ...api.printSavePayloads[0].layout_json.items,
     ...(api.printSavePayloads[0].layout_json.overlays ?? []),
@@ -223,6 +320,56 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
   );
 });
 
+test("existing field edits send type reference visibility list and static-text controls", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.clear(screen.getByLabelText("Название поля"));
+  await user.type(screen.getByLabelText("Название поля"), "Статус заявки");
+  await user.type(screen.getByLabelText("Описание поля"), "Выберите статус");
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
+  await user.selectOptions(screen.getByLabelText("Справочник"), "reference-statuses");
+  await user.selectOptions(screen.getByLabelText("Обязательность"), "required");
+  await user.click(screen.getByLabelText("Видно в публичной ссылке"));
+  await user.click(screen.getByLabelText("Доступно для публичного редактирования"));
+  await user.click(screen.getByText("Ещё"));
+  await user.click(screen.getByLabelText("Показывать в списке карточек"));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
+  expect(api.updatedFieldPayloads[0]).toEqual(
+    expect.objectContaining({
+      label: "Статус заявки",
+      description: "Выберите статус",
+      field_type: "select",
+      required_mode: "required",
+      options_source_type: "reference_list",
+      options_source_id: "reference-statuses",
+      public_visible: false,
+      public_editable: true,
+      is_list_display: true,
+    }),
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус заявки" }));
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "static_text");
+  await user.type(screen.getByLabelText("Текст"), "Только для чтения");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(2));
+  expect(api.updatedFieldPayloads[1]).toEqual(
+    expect.objectContaining({
+      field_type: "static_text",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: { static_text: "Только для чтения" },
+    }),
+  );
+});
+
 test("preserves blank DOCX and PDF actions with the linked A4 draft", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
@@ -235,6 +382,7 @@ test("preserves blank DOCX and PDF actions with the linked A4 draft", async () =
 
   await waitFor(() => expect(api.blankDownloadPayloads).toHaveLength(2));
   for (const payload of api.blankDownloadPayloads) {
+    expect(payload.layout_json.composition_mode).toBe("linked_card");
     expect(payload.layout_json.items.filter((item) => item.kind === "card_layout")).toHaveLength(1);
   }
 });
@@ -283,6 +431,8 @@ type PrintSavePayload = {
 function createEditorFetchMock(
   options: {
     conflictOnFirstFormSave?: boolean;
+    conflictServerColumn?: number;
+    deferredFirstFormSave?: "success" | "conflict";
     legacyPrintView?: boolean;
   } = {},
 ) {
@@ -294,9 +444,11 @@ function createEditorFetchMock(
   const printSavePayloads: PrintSavePayload[] = [];
   const createdBlockPayloads: Record<string, unknown>[] = [];
   const createdFieldPayloads: Record<string, unknown>[] = [];
+  const updatedFieldPayloads: Record<string, unknown>[] = [];
   const templateUpdatePayloads: Record<string, unknown>[] = [];
   const blankDownloadPayloads: Array<{ layout_json: CardPrintLayout }> = [];
   let conversionCalls = 0;
+  let resolveDeferredFirst: (() => void) | null = null;
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -311,8 +463,27 @@ function createEditorFetchMock(
       const payload = body as FormSavePayload;
       formSavePayloads.push(payload);
       formSaveAttempts += 1;
+      if (options.deferredFirstFormSave && formSaveAttempts === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveDeferredFirst = () => {
+            if (options.deferredFirstFormSave === "conflict") {
+              layout = layoutWithBlockColumn(
+                { ...layout, revision: "revision-2" },
+                options.conflictServerColumn ?? 5,
+              );
+              resolve(jsonResponse({ detail: "Card layout changed. Reload before saving." }, 409));
+              return;
+            }
+            layout = { ...layout, revision: "revision-2", form_layout: payload.form_layout };
+            resolve(jsonResponse(layout));
+          };
+        });
+      }
       if (options.conflictOnFirstFormSave && formSaveAttempts === 1) {
-        layout = { ...layout, revision: "revision-2" };
+        layout = layoutWithBlockColumn(
+          { ...layout, revision: "revision-2" },
+          options.conflictServerColumn ?? 5,
+        );
         return jsonResponse({ detail: "Card layout changed. Reload before saving." }, 409);
       }
       layout = {
@@ -344,6 +515,21 @@ function createEditorFetchMock(
         structure: { ...layout.structure, fields: [...layout.structure.fields, created] },
       };
       return jsonResponse(created, 201);
+    }
+    if (url.endsWith("/api/v1/fields/field-1") && init?.method === "PATCH") {
+      updatedFieldPayloads.push(body);
+      const current = layout.structure.fields.find((field) => field.id === "field-1");
+      const updated = { ...current, ...body } as FormFieldRead;
+      layout = {
+        ...layout,
+        structure: {
+          ...layout.structure,
+          fields: layout.structure.fields.map((field) =>
+            field.id === updated.id ? updated : field,
+          ),
+        },
+      };
+      return jsonResponse(updated);
     }
     if (url.endsWith("/api/v1/card-templates/template-1") && init?.method === "PATCH") {
       templateUpdatePayloads.push(body);
@@ -385,7 +571,7 @@ function createEditorFetchMock(
       });
     }
     if (url.endsWith("/api/v1/registries/registry-1/reference-lists")) {
-      return jsonResponse({ items: [] });
+      return jsonResponse({ items: [referenceListFixture()] });
     }
     if (
       url.endsWith("/api/v1/registries/registry-1/card-print-templates/blank-docx") ||
@@ -407,11 +593,55 @@ function createEditorFetchMock(
     printSavePayloads,
     createdBlockPayloads,
     createdFieldPayloads,
+    updatedFieldPayloads,
     templateUpdatePayloads,
     blankDownloadPayloads,
     get conversionCalls() {
       return conversionCalls;
     },
+    resolveFirstFormSave() {
+      if (!resolveDeferredFirst) throw new Error("The first form save is not pending.");
+      resolveDeferredFirst();
+      resolveDeferredFirst = null;
+    },
+  };
+}
+
+const STALE_LAYOUT_MESSAGE =
+  "Макет изменён другим пользователем. Обновите данные перед сохранением.";
+
+async function moveMainBlockRight(user: ReturnType<typeof userEvent.setup>) {
+  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  move.focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(screen.getByRole("button", { name: "Готово" }));
+}
+
+function layoutWithBlockColumn(layout: CardTemplateLayoutRead, column: number) {
+  return {
+    ...layout,
+    form_layout: {
+      ...layout.form_layout,
+      sections: layout.form_layout.sections.map((section, index) =>
+        index === 0 ? { ...section, column } : section,
+      ),
+    },
+  };
+}
+
+function referenceListFixture() {
+  return {
+    id: "reference-statuses",
+    registry_id: "registry-1",
+    owner_organization_id: null,
+    code: "statuses",
+    name: "Статусы",
+    description: null,
+    scope_mode: "global",
+    inherit_to_descendants: false,
+    locked_for_descendants: false,
+    managed_by_system_only: false,
+    is_active: true,
   };
 }
 

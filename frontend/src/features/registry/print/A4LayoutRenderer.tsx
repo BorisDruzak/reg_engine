@@ -183,6 +183,7 @@ export function A4LayoutRenderer({
     }
     if (event.key === "Delete") {
       event.preventDefault();
+      if (selectedItem.kind === "card_layout") return;
       onChangeLayout({
         ...normalizedLayout,
         items: normalizedLayout.items.filter((item) => item.id !== selectedItem.id),
@@ -192,10 +193,12 @@ export function A4LayoutRenderer({
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
       event.preventDefault();
+      if (selectedItem.kind === "card_layout") return;
       setCopiedItem(selectedItem);
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v" && copiedItem) {
       event.preventDefault();
+      if (copiedItem.kind === "card_layout") return;
       const pasted = moveItemByMm(
         { ...copiedItem, id: nextDuplicateId(copiedItem.id, normalizedLayout.items) },
         normalizedLayout,
@@ -207,6 +210,7 @@ export function A4LayoutRenderer({
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
       event.preventDefault();
+      if (selectedItem.kind === "card_layout") return;
       const duplicate = moveItemByMm(
         { ...selectedItem, id: nextDuplicateId(selectedItem.id, normalizedLayout.items) },
         normalizedLayout,

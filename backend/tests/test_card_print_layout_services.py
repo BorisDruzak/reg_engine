@@ -114,6 +114,7 @@ def _linked_layout(
 ) -> dict[str, object]:
     return {
         "version": "card_print_layout_v1",
+        "composition_mode": "linked_card",
         "page": {
             "format": "A4",
             "width_mm": 210,
@@ -270,6 +271,38 @@ def test_card_print_layout_validation_normalizes_linked_card_item() -> None:
         "width_mm": 186.0,
         "height_mm": 273.0,
     }
+
+
+def test_linked_card_composition_requires_exactly_one_linked_item() -> None:
+    layout = _linked_layout(str(uuid4()))
+    items = layout["items"]
+    assert isinstance(items, list)
+    items.clear()
+
+    missing = validate_card_print_layout(layout)
+
+    assert any("exactly one" in error for error in missing.errors)
+
+    first = _linked_layout(str(uuid4()))
+    first_items = first["items"]
+    assert isinstance(first_items, list)
+    duplicate = dict(first_items[0])
+    duplicate["id"] = "linked-card-copy"
+    first_items.append(duplicate)
+
+    multiple = validate_card_print_layout(first)
+
+    assert any("exactly one" in error for error in multiple.errors)
+
+
+def test_legacy_composition_without_linked_item_remains_valid() -> None:
+    field_id = uuid4()
+    layout = _valid_layout(str(field_id))
+
+    result = validate_card_print_layout(layout, allowed_field_ids={field_id})
+
+    assert result.errors == []
+    assert "composition_mode" not in result.normalized_layout
 
 
 def test_card_print_layout_validation_rejects_linked_card_overflow() -> None:

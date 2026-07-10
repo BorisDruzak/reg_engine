@@ -40,6 +40,7 @@ import type { PrintOnlyItemKind } from "@/features/cardLayout/A4LinkedCardCanvas
 import {
   createLinkedCardPrintItem,
   isLinkedCardPrintLayout,
+  markLinkedCardPrintLayout,
 } from "@/features/cardLayout/a4LinkedCardLayout";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import type { CardLayoutSelection } from "@/features/cardLayout/CardLayoutRenderer";
@@ -77,11 +78,6 @@ const stages: Array<{ id: StudioStage; label: string }> = [
   { id: "a4", label: "Печатная форма A4" },
   { id: "preview", label: "Предпросмотр" },
 ];
-
-type FormSaveRequest = {
-  formLayout: CardTemplateFormLayoutRead;
-  expectedRevision: string;
-};
 
 type InsertBlockDialogState = {
   position: CardLayoutCreatePosition;
@@ -130,10 +126,13 @@ function CardLayoutStudioSession({
   );
   const [stage, setStage] = useState<StudioStage>("layout");
   const [draftLayout, setDraftLayout] = useState(initialDraft);
-  const [baselineLayout, setBaselineLayout] = useState(initialDraft);
-  const [expectedRevision, setExpectedRevision] = useState(initialDraft.revision);
   const [selection, setSelection] = useState<CardLayoutSelection>(null);
   const [failedFormLayout, setFailedFormLayout] = useState<CardTemplateFormLayoutRead | null>(null);
+  const [conflictServerLayout, setConflictServerLayout] = useState<CardTemplateLayoutRead | null>(
+    null,
+  );
+  const [hasFormConflict, setHasFormConflict] = useState(false);
+  const [conflictReviewPending, setConflictReviewPending] = useState(false);
   const [formSavePending, setFormSavePending] = useState(false);
   const [schemaPending, setSchemaPending] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
@@ -159,6 +158,14 @@ function CardLayoutStudioSession({
   const temporaryFieldIds = useRef(new Set<string>());
   const temporaryCounter = useRef(0);
   const localStructure = useRef(initialDraft.structure);
+  const latestDraftFormLayout = useRef(initialDraft.form_layout);
+  const currentRevision = useRef(initialDraft.revision);
+  const formSaveRunning = useRef(false);
+  const conflictActive = useRef(false);
+  const queuedFormSave = useRef<{
+    formLayout: CardTemplateFormLayoutRead;
+    completed: Array<() => void>;
+  } | null>(null);
   const templateFieldIds = useRef(
     new Set(
       Array.isArray(cardTemplate.field_schema_json?.field_ids)
@@ -195,88 +202,123 @@ function CardLayoutStudioSession({
     hasLegacyCardComposition(printLayout);
   const selectedPrintItem = findPrintItem(printLayout, selectedPrintItemId);
 
-  async function persistFormLayout(request: FormSaveRequest) {
+  async function drainFormSaveQueue() {
+    if (formSaveRunning.current || conflictActive.current) return;
+    formSaveRunning.current = true;
     setFormSavePending(true);
     setLocalError(null);
     setLocalMessage(null);
     try {
-      const saved = await updateCardTemplateFormLayout(token, cardTemplate.id, {
-        expected_revision: request.expectedRevision,
-        form_layout: request.formLayout,
-      });
-      const merged = {
-        ...saved,
-        structure: mergeStructure(saved.structure, localStructure.current),
-        form_layout: request.formLayout,
-      };
-      localStructure.current = merged.structure;
-      setDraftLayout(merged);
-      setBaselineLayout(merged);
-      setExpectedRevision(saved.revision);
-      setFailedFormLayout(null);
-      setLocalMessage("Макет карточки сохранён");
-      queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], saved);
-    } catch (error) {
-      setFailedFormLayout(request.formLayout);
-      setLocalError(
-        error instanceof ApiError && error.status === 409
-          ? STALE_LAYOUT_MESSAGE
-          : `Не сохранено. ${errorMessage(error)}`,
-      );
+      while (queuedFormSave.current && !conflictActive.current) {
+        const request = queuedFormSave.current;
+        queuedFormSave.current = null;
+        try {
+          const saved = await updateCardTemplateFormLayout(token, cardTemplate.id, {
+            expected_revision: currentRevision.current,
+            form_layout: request.formLayout,
+          });
+          const savedBaseline = {
+            ...saved,
+            structure: mergeStructure(saved.structure, localStructure.current),
+            form_layout: request.formLayout,
+          };
+          currentRevision.current = saved.revision;
+          localStructure.current = savedBaseline.structure;
+          setDraftLayout((current) => ({
+            ...savedBaseline,
+            structure: mergeStructure(savedBaseline.structure, current.structure),
+            form_layout: latestDraftFormLayout.current,
+          }));
+          setFailedFormLayout(null);
+          setHasFormConflict(false);
+          setLocalMessage("Макет карточки сохранён");
+          queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], saved);
+          request.completed.forEach((complete) => complete());
+        } catch (error) {
+          const queuedAfterFailure = queuedFormSave.current as {
+            formLayout: CardTemplateFormLayoutRead;
+            completed: Array<() => void>;
+          } | null;
+          const latestLocal = queuedAfterFailure?.formLayout ?? latestDraftFormLayout.current;
+          const completions = [...request.completed, ...(queuedAfterFailure?.completed ?? [])];
+          queuedFormSave.current = null;
+          conflictActive.current = error instanceof ApiError && error.status === 409;
+          setHasFormConflict(conflictActive.current);
+          setFailedFormLayout(latestLocal);
+          setConflictServerLayout(null);
+          setDraftLayout((current) => ({ ...current, form_layout: latestLocal }));
+          setLocalError(
+            conflictActive.current ? STALE_LAYOUT_MESSAGE : `Не сохранено. ${errorMessage(error)}`,
+          );
+          completions.forEach((complete) => complete());
+          break;
+        }
+      }
     } finally {
+      formSaveRunning.current = false;
       setFormSavePending(false);
     }
   }
 
-  function saveNextFormLayout(formLayout: CardTemplateFormLayoutRead) {
+  function saveNextFormLayout(formLayout: CardTemplateFormLayoutRead): Promise<void> {
+    latestDraftFormLayout.current = formLayout;
     setDraftLayout((current) => ({ ...current, form_layout: formLayout }));
-    void persistFormLayout({ formLayout, expectedRevision });
+    setFailedFormLayout((current) => (conflictActive.current ? formLayout : current));
+    if (conflictActive.current) return Promise.resolve();
+    const completion = new Promise<void>((resolve) => {
+      if (queuedFormSave.current) {
+        queuedFormSave.current = {
+          formLayout,
+          completed: [...queuedFormSave.current.completed, resolve],
+        };
+      } else {
+        queuedFormSave.current = { formLayout, completed: [resolve] };
+      }
+    });
+    void drainFormSaveQueue();
+    return completion;
   }
 
-  async function reloadFormLayout() {
-    setFormSavePending(true);
+  async function reviewServerFormLayout() {
+    setConflictReviewPending(true);
     try {
       const latest = await getCardTemplateLayout(token, cardTemplate.id);
       const merged = mergeExternalStructure(latest, blocks, fields);
-      localStructure.current = merged.structure;
-      setDraftLayout(merged);
-      setBaselineLayout(merged);
-      setExpectedRevision(latest.revision);
-      setFailedFormLayout(null);
-      setLocalError(null);
-      setLocalMessage("Данные макета обновлены");
+      setConflictServerLayout(merged);
       queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], latest);
     } catch (error) {
       setLocalError(errorMessage(error));
     } finally {
-      setFormSavePending(false);
+      setConflictReviewPending(false);
     }
   }
 
-  function cancelLocalFormChanges() {
-    localStructure.current = baselineLayout.structure;
-    setDraftLayout(baselineLayout);
-    setExpectedRevision(baselineLayout.revision);
+  function acceptServerFormLayout() {
+    if (!conflictServerLayout) return;
+    localStructure.current = conflictServerLayout.structure;
+    latestDraftFormLayout.current = conflictServerLayout.form_layout;
+    currentRevision.current = conflictServerLayout.revision;
+    conflictActive.current = false;
+    queuedFormSave.current = null;
+    setDraftLayout(conflictServerLayout);
     setFailedFormLayout(null);
+    setHasFormConflict(false);
+    setConflictServerLayout(null);
     setLocalError(null);
-    setLocalMessage("Локальные изменения отменены");
+    setLocalMessage("Принята версия макета с сервера");
     setSelection(null);
   }
 
-  async function retryFormSave() {
-    if (!failedFormLayout) return;
-    setFormSavePending(true);
-    try {
-      const latest = await getCardTemplateLayout(token, cardTemplate.id);
-      setExpectedRevision(latest.revision);
-      await persistFormLayout({
-        formLayout: failedFormLayout,
-        expectedRevision: latest.revision,
-      });
-    } catch (error) {
-      setLocalError(errorMessage(error));
-      setFormSavePending(false);
-    }
+  async function saveReviewedLocalFormLayout() {
+    if (!failedFormLayout || !conflictServerLayout) return;
+    const local = latestDraftFormLayout.current;
+    currentRevision.current = conflictServerLayout.revision;
+    conflictActive.current = false;
+    setConflictServerLayout(null);
+    setFailedFormLayout(null);
+    setHasFormConflict(false);
+    setLocalError(null);
+    await saveNextFormLayout(local);
   }
 
   function handleGeometryCommit(command: LayoutGeometryCommand) {
@@ -348,7 +390,7 @@ function CardLayoutStudioSession({
         temporaryBlockIds.current.delete(block.id);
         localStructure.current = next.structure;
         setDraftLayout(next);
-        await persistFormLayout({ formLayout: next.form_layout, expectedRevision });
+        await saveNextFormLayout(next.form_layout);
         await onSchemaChanged?.();
         return;
       }
@@ -469,19 +511,24 @@ function CardLayoutStudioSession({
         temporaryFieldIds.current.delete(field.id);
         localStructure.current = next.structure;
         setDraftLayout(next);
-        await persistFormLayout({ formLayout: next.form_layout, expectedRevision });
+        await saveNextFormLayout(next.form_layout);
         await onSchemaChanged?.();
         return;
       }
       const updated = await updateFormField(token, field.id, {
         label: field.label,
         description: field.description,
+        field_type: field.field_type,
         position: field.position,
         required_mode: field.required_mode,
+        options_source_type: field.options_source_type,
+        options_source_id: field.options_source_id,
         options_config_json: field.options_config_json,
         display_config_json: field.display_config_json,
         is_active: field.is_active,
         is_list_display: field.is_list_display,
+        public_visible: field.public_visible,
+        public_editable: field.public_editable,
       });
       const nextStructure = {
         ...draftLayout.structure,
@@ -541,7 +588,7 @@ function CardLayoutStudioSession({
         ],
       };
       setInsertDialog(null);
-      saveNextFormLayout(nextFormLayout);
+      await saveNextFormLayout(nextFormLayout);
       await onSchemaChanged?.();
     } catch (error) {
       setLocalError(errorMessage(error));
@@ -729,7 +776,8 @@ function CardLayoutStudioSession({
     return `draft-${kind}-${temporaryCounter.current}`;
   }
 
-  const busy = formSavePending || schemaPending || printPending || conversionPending;
+  const busy =
+    formSavePending || schemaPending || printPending || conversionPending || conflictReviewPending;
 
   return (
     <section
@@ -780,33 +828,57 @@ function CardLayoutStudioSession({
       {localError ? (
         <section className="card-layout-studio-recovery" aria-label="Восстановление макета">
           <p className="data-alert">{localError}</p>
-          {failedFormLayout ? (
-            <div className="row-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => void reloadFormLayout()}
-              >
-                Обновить данные
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busy}
-                onClick={cancelLocalFormChanges}
-              >
-                Отменить локальные изменения
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy}
-                onClick={() => void retryFormSave()}
-              >
-                Повторить сохранение
-              </button>
-            </div>
+          {failedFormLayout && hasFormConflict ? (
+            <>
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={busy}
+                  onClick={() => void reviewServerFormLayout()}
+                >
+                  Сравнить с версией сервера
+                </button>
+              </div>
+              {conflictServerLayout ? (
+                <section
+                  className="card-layout-conflict-comparison"
+                  role="region"
+                  aria-label="Сравнение версий макета"
+                >
+                  <div>
+                    <strong>Локальная версия</strong>
+                    <pre data-testid="conflict-local-layout">
+                      {formatFormLayoutForReview(failedFormLayout)}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Версия на сервере</strong>
+                    <pre data-testid="conflict-server-layout">
+                      {formatFormLayoutForReview(conflictServerLayout.form_layout)}
+                    </pre>
+                  </div>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={busy}
+                      onClick={acceptServerFormLayout}
+                    >
+                      Принять версию сервера
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={busy}
+                      onClick={() => void saveReviewedLocalFormLayout()}
+                    >
+                      Сохранить локальную версию
+                    </button>
+                  </div>
+                </section>
+              ) : null}
+            </>
           ) : null}
         </section>
       ) : null}
@@ -1082,6 +1154,20 @@ function applyGeometryCommand(
   };
 }
 
+function formatFormLayoutForReview(layout: CardTemplateFormLayoutRead) {
+  return layout.sections
+    .flatMap((section, sectionIndex) => [
+      `Блок ${sectionIndex + 1}: строка ${section.row}, колонка ${section.column}, ` +
+        `высота ${section.row_span}, ширина ${section.column_span}`,
+      ...section.items.map(
+        (item, itemIndex) =>
+          `Поле ${itemIndex + 1}: строка ${item.row}, колонка ${item.column}, ` +
+          `высота ${item.row_span}, ширина ${item.column_span}`,
+      ),
+    ])
+    .join("\n");
+}
+
 function replaceBlock(
   layout: CardTemplateLayoutRead,
   temporaryId: string,
@@ -1181,8 +1267,12 @@ function preparePrintLayout(
   cardTemplateId: string,
 ) {
   const layout = normalizeLayoutGeometry(printView?.layout_json ?? createEmptyCardPrintLayout());
-  if (isLinkedCardPrintLayout(layout) || hasLegacyCardComposition(layout)) return layout;
-  return { ...layout, items: [createLinkedCardPrintItem(cardTemplateId), ...layout.items] };
+  if (isLinkedCardPrintLayout(layout)) return markLinkedCardPrintLayout(layout);
+  if (hasLegacyCardComposition(layout)) return layout;
+  return markLinkedCardPrintLayout({
+    ...layout,
+    items: [createLinkedCardPrintItem(cardTemplateId), ...layout.items],
+  });
 }
 
 function hasLegacyCardComposition(layout: CardPrintLayout) {

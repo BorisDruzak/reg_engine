@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import type { FormBlockRead, FormFieldRead } from "@/api/types";
+import type { CardPrintLayout, FormBlockRead, FormFieldRead } from "@/api/types";
 
 import { validatePrintLayout } from "./printLayoutValidation";
 
@@ -12,6 +12,52 @@ const fields = [
 const blocks = [{ id: "block-full-name", name: "ФИО" }] as unknown as FormBlockRead[];
 
 describe("print layout validation", () => {
+  test("requires exactly one linked item only for linked-card compositions", () => {
+    const linkedLayout = linkedCardLayout();
+    const missing = validatePrintLayout(
+      { ...linkedLayout, items: [] },
+      fields,
+      blocks,
+      "Связанный макет",
+      "{{ card.display_name }}.docx",
+    );
+    const multiple = validatePrintLayout(
+      {
+        ...linkedLayout,
+        items: [...linkedLayout.items, { ...linkedLayout.items[0], id: "linked-card-copy" }],
+      },
+      fields,
+      blocks,
+      "Связанный макет",
+      "{{ card.display_name }}.docx",
+    );
+    const legacy = validatePrintLayout(
+      legacyLayoutWithoutLinkedItem(),
+      fields,
+      blocks,
+      "Прежний макет",
+      "{{ card.display_name }}.docx",
+    );
+
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          message: "Связанный макет должен содержать ровно одну карточку.",
+        }),
+      ]),
+    );
+    expect(multiple).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "error",
+          message: "Связанный макет должен содержать ровно одну карточку.",
+        }),
+      ]),
+    );
+    expect(legacy.filter((issue) => issue.level === "error")).toEqual([]);
+  });
+
   test("allows decorative block containers to overlap their field contents", () => {
     const issues = validatePrintLayout(
       {
@@ -122,3 +168,40 @@ describe("print layout validation", () => {
     );
   });
 });
+
+function linkedCardLayout(): CardPrintLayout {
+  return {
+    ...legacyLayoutWithoutLinkedItem(),
+    composition_mode: "linked_card",
+    items: [
+      {
+        id: "linked-card",
+        kind: "card_layout",
+        card_template_id: "template-1",
+        page: 1,
+        x_mm: 12,
+        y_mm: 12,
+        width_mm: 186,
+        height_mm: 273,
+        row: 1,
+        column: 1,
+        row_span: 1,
+        column_span: 12,
+      },
+    ],
+  };
+}
+
+function legacyLayoutWithoutLinkedItem(): CardPrintLayout {
+  return {
+    version: "card_print_layout_v1",
+    page: {
+      format: "A4",
+      width_mm: 210,
+      height_mm: 297,
+      margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+    },
+    grid: { columns: 12, row_height_mm: 8, snap_mm: 2 },
+    items: [],
+  };
+}

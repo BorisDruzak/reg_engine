@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 CARD_PRINT_LAYOUT_VERSION = "card_print_layout_v1"
+CARD_PRINT_LINKED_COMPOSITION_MODE = "linked_card"
 CARD_PRINT_LAYOUT_COLUMNS = 12
 CARD_PRINT_REPEAT_MODES = {"first_instance_only", "repeat_section", "table_rows"}
 CARD_PRINT_PAGE_WIDTH_MM = 210.0
@@ -70,6 +71,9 @@ def validate_card_print_layout(
 
     if normalized_layout.get("version") != CARD_PRINT_LAYOUT_VERSION:
         errors.append("Print layout version must be card_print_layout_v1.")
+    composition_mode = normalized_layout.get("composition_mode")
+    if composition_mode not in (None, CARD_PRINT_LINKED_COMPOSITION_MODE):
+        errors.append("Print layout composition mode is unsupported.")
 
     page = normalized_layout.get("page")
     if not isinstance(page, dict):
@@ -242,6 +246,12 @@ def validate_card_print_layout(
                 )
                 break
         blocking_rects.append(current_rect)
+
+    linked_item_count = sum(item.get("kind") == "card_layout" for item in normalized_items)
+    if composition_mode == CARD_PRINT_LINKED_COMPOSITION_MODE or linked_item_count:
+        normalized_layout["composition_mode"] = CARD_PRINT_LINKED_COMPOSITION_MODE
+        if linked_item_count != 1:
+            errors.append("Linked card composition must contain exactly one card_layout item.")
 
     normalized_layout["items"] = normalized_items
     if has_sections:

@@ -111,7 +111,25 @@ export function InlineFieldEditor({
         <span>Тип поля</span>
         <select
           value={draft.field_type}
-          onChange={(event) => setDraft({ ...draft, field_type: event.currentTarget.value })}
+          onChange={(event) => {
+            const fieldType = event.currentTarget.value;
+            const usesReference = fieldType === "select" || fieldType === "multi_select";
+            const staticTextField = fieldType === "static_text";
+            setDraft({
+              ...draft,
+              field_type: fieldType,
+              required_mode: staticTextField ? "not_required" : draft.required_mode,
+              options_source_type: usesReference ? draft.options_source_type : null,
+              options_source_id: usesReference ? draft.options_source_id : null,
+              options_config_json: staticTextField
+                ? { static_text: "" }
+                : draft.field_type === "static_text"
+                  ? null
+                  : draft.options_config_json,
+              is_list_display: staticTextField ? false : draft.is_list_display,
+              public_editable: staticTextField ? false : draft.public_editable,
+            });
+          }}
         >
           {FIELD_TYPE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

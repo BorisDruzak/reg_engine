@@ -31,7 +31,7 @@ from app.schemas.registries import (
     RegistryUpdate,
 )
 from app.services.references import UNSET_OWNER_ORGANIZATION, ReferenceListService
-from app.services.registry_schema import RegistrySchemaService
+from app.services.registry_schema import UNSET_FIELD_UPDATE, RegistrySchemaService
 
 router = APIRouter(tags=["registries"])
 
@@ -353,13 +353,50 @@ def update_field(
             actor_user_id=actor_user_id,
             field_id=field_id,
             label=payload.label,
-            description=payload.description,
+            description=(
+                payload.description
+                if "description" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
+            field_type=(
+                payload.field_type
+                if "field_type" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
             position=payload.position,
             required_mode=payload.required_mode,
-            options_config_json=payload.options_config_json,
-            display_config_json=payload.display_config_json,
+            options_source_type=(
+                payload.options_source_type
+                if "options_source_type" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
+            options_source_id=(
+                payload.options_source_id
+                if "options_source_id" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
+            options_config_json=(
+                payload.options_config_json
+                if "options_config_json" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
+            display_config_json=(
+                payload.display_config_json
+                if "display_config_json" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
             is_active=payload.is_active,
             is_list_display=payload.is_list_display,
+            public_visible=(
+                payload.public_visible
+                if "public_visible" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
+            public_editable=(
+                payload.public_editable
+                if "public_editable" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
         )
     except Exception as exc:
         raise_service_http_error(exc)

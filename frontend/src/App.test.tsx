@@ -1584,9 +1584,7 @@ beforeEach(() => {
         /^\/api\/v1\/card-templates\/([^/]+)\/layout$/,
       );
       if (cardTemplateLayoutMatch && init?.method === "GET") {
-        const template = cardTemplateItems.find(
-          (item) => item.id === cardTemplateLayoutMatch[1],
-        );
+        const template = cardTemplateItems.find((item) => item.id === cardTemplateLayoutMatch[1]);
         if (!template) {
           return jsonResponse({ detail: "Not Found" }, { status: 404 });
         }

@@ -4,6 +4,10 @@ export function isLinkedCardPrintLayout(layout: CardPrintLayout) {
   return layout.items.some((item) => item.kind === "card_layout");
 }
 
+export function markLinkedCardPrintLayout(layout: CardPrintLayout): CardPrintLayout {
+  return { ...layout, composition_mode: "linked_card" };
+}
+
 export function createLinkedCardPrintItem(cardTemplateId: string): CardPrintLayoutItem {
   return {
     id: "linked-card-layout",

@@ -37,7 +37,11 @@ from app.services.attachments import (
     normalize_attachment_filename,
 )
 from app.services.audit import AuditService
-from app.services.card_print import CARD_PRINT_LAYOUT_VERSION, validate_card_print_layout
+from app.services.card_print import (
+    CARD_PRINT_LAYOUT_VERSION,
+    CARD_PRINT_LINKED_COMPOSITION_MODE,
+    validate_card_print_layout,
+)
 from app.services.card_template_projection import (
     expand_linked_card_layout,
     resolve_card_template_form_layout,
@@ -1347,6 +1351,7 @@ class DocumentService:
             if key not in {"items", "sections", "overlays"}
         }
         converted["version"] = CARD_PRINT_LAYOUT_VERSION
+        converted["composition_mode"] = CARD_PRINT_LINKED_COMPOSITION_MODE
         converted["page"] = page
         flow_items, overlay_items = self._split_print_only_card_layout_items(layout_json)
         converted["items"] = [
@@ -2194,8 +2199,11 @@ class DocumentService:
         errors: list[str],
     ) -> None:
         raw_items = layout_json.get("items")
-        if isinstance(raw_items, list) and any(
-            isinstance(item, dict) and item.get("kind") == "card_layout" for item in raw_items
+        if layout_json.get("composition_mode") == CARD_PRINT_LINKED_COMPOSITION_MODE or (
+            isinstance(raw_items, list)
+            and any(
+                isinstance(item, dict) and item.get("kind") == "card_layout" for item in raw_items
+            )
         ):
             raise DocumentServiceError("Связанный макет карточки содержит недопустимые параметры.")
         raise DocumentServiceError("; ".join(errors))

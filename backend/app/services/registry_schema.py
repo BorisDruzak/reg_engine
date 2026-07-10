@@ -13,6 +13,7 @@ from app.models import (
     FormField,
     Organization,
     OrganizationClosure,
+    ReferenceList,
     Registry,
 )
 from app.models.registry_schema import DEFAULT_CARD_TITLE_LABEL
@@ -25,6 +26,7 @@ FIELD_LABEL_POSITIONS = {"top", "bottom", "left", "right"}
 FIELD_SEPARATOR_STYLES = {"none", "line", "space", "muted"}
 BLOCK_TITLE_POSITIONS = {"top", "bottom", "left", "right"}
 BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
+UNSET_FIELD_UPDATE = object()
 
 
 def merge_card_template_field_ids(
@@ -654,6 +656,12 @@ class RegistrySchemaService:
             options_source_id = None
             is_list_display = False
             public_editable = False
+        options_source_type, options_source_id = self._validate_field_options_source(
+            field_type=field_type,
+            options_source_type=options_source_type,
+            options_source_id=options_source_id,
+            registry_id=block.registry_id,
+        )
 
         field = FormField(
             block_id=block_id,
@@ -708,13 +716,18 @@ class RegistrySchemaService:
         actor_user_id: UUID,
         field_id: UUID,
         label: str | None = None,
-        description: str | None = None,
+        description: str | None | object = UNSET_FIELD_UPDATE,
+        field_type: str | object = UNSET_FIELD_UPDATE,
         position: int | None = None,
         required_mode: str | None = None,
-        options_config_json: dict[str, object] | None = None,
-        display_config_json: dict[str, object] | None = None,
+        options_source_type: str | None | object = UNSET_FIELD_UPDATE,
+        options_source_id: UUID | None | object = UNSET_FIELD_UPDATE,
+        options_config_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
+        display_config_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
         is_active: bool | None = None,
         is_list_display: bool | None = None,
+        public_visible: bool | object = UNSET_FIELD_UPDATE,
+        public_editable: bool | object = UNSET_FIELD_UPDATE,
     ) -> FormField:
         field = self._get_active_field(field_id)
         block = self._get_active_block(field.block_id)
@@ -723,44 +736,116 @@ class RegistrySchemaService:
         old_data = {
             "label": field.label,
             "description": field.description,
+            "field_type": field.field_type,
             "position": field.position,
             "required_mode": field.required_mode,
+            "options_source_type": field.options_source_type,
+            "options_source_id": (
+                str(field.options_source_id) if field.options_source_id is not None else None
+            ),
             "options_config_json": field.options_config_json,
             "display_config_json": field.display_config_json,
             "is_active": field.is_active,
             "is_list_display": field.is_list_display,
+            "public_visible": field.public_visible,
+            "public_editable": field.public_editable,
         }
+        effective_field_type = field.field_type
+        if field_type is not UNSET_FIELD_UPDATE:
+            if not isinstance(field_type, str):
+                raise RegistrySchemaError("Field type must be a string.")
+            self._validate_field_type(field_type)
+            effective_field_type = field_type
         if required_mode is not None:
             self._validate_required_mode(required_mode)
-        if options_config_json is not None:
-            options_config_json = self._normalize_options_config_for_field(
-                field.field_type,
+        effective_options_source_type = (
+            field.options_source_type
+            if options_source_type is UNSET_FIELD_UPDATE
+            else options_source_type
+        )
+        effective_options_source_id = (
+            field.options_source_id
+            if options_source_id is UNSET_FIELD_UPDATE
+            else options_source_id
+        )
+        if not isinstance(effective_options_source_type, (str, type(None))):
+            raise RegistrySchemaError("Field options source type is invalid.")
+        if not isinstance(effective_options_source_id, (UUID, type(None))):
+            raise RegistrySchemaError("Field options source id is invalid.")
+        if (
+            field_type is not UNSET_FIELD_UPDATE
+            or options_source_type is not UNSET_FIELD_UPDATE
+            or options_source_id is not UNSET_FIELD_UPDATE
+        ):
+            effective_options_source_type, effective_options_source_id = (
+                self._validate_field_options_source(
+                    field_type=effective_field_type,
+                    options_source_type=effective_options_source_type,
+                    options_source_id=effective_options_source_id,
+                    registry_id=block.registry_id,
+                )
+            )
+        effective_options_config = field.options_config_json
+        if options_config_json is not UNSET_FIELD_UPDATE or field_type is not UNSET_FIELD_UPDATE:
+            if not isinstance(options_config_json, (dict, type(None))):
+                if options_config_json is UNSET_FIELD_UPDATE:
+                    options_config_json = field.options_config_json
+                else:
+                    raise RegistrySchemaError("Field options config must be an object.")
+            effective_options_config = self._normalize_options_config_for_field(
+                effective_field_type,
                 options_config_json,
             )
-        if display_config_json is not None:
-            display_config_json = self._normalize_field_display_config(display_config_json)
-        if field.field_type == "static_text":
+        effective_display_config = field.display_config_json
+        if display_config_json is not UNSET_FIELD_UPDATE:
+            if not isinstance(display_config_json, (dict, type(None))):
+                raise RegistrySchemaError("Field display config must be an object.")
+            effective_display_config = self._normalize_field_display_config(display_config_json)
+
+        effective_required_mode = required_mode or field.required_mode
+        effective_is_list_display = (
+            field.is_list_display if is_list_display is None else is_list_display
+        )
+        effective_public_visible = field.public_visible
+        if public_visible is not UNSET_FIELD_UPDATE:
+            if not isinstance(public_visible, bool):
+                raise RegistrySchemaError("Field public visibility must be boolean.")
+            effective_public_visible = public_visible
+        effective_public_editable = field.public_editable
+        if public_editable is not UNSET_FIELD_UPDATE:
+            if not isinstance(public_editable, bool):
+                raise RegistrySchemaError("Field public editability must be boolean.")
+            effective_public_editable = public_editable
+        if effective_field_type == "static_text":
             if required_mode not in (None, "not_required"):
                 raise RegistrySchemaError("Static text fields cannot be required.")
             if is_list_display:
                 raise RegistrySchemaError("Static text fields cannot be shown in card lists.")
+            effective_required_mode = "not_required"
+            effective_options_source_type = None
+            effective_options_source_id = None
+            effective_is_list_display = False
+            effective_public_editable = False
 
         if label is not None:
             field.label = label
-        if description is not None:
+        if description is not UNSET_FIELD_UPDATE:
+            if not isinstance(description, (str, type(None))):
+                raise RegistrySchemaError("Field description is invalid.")
             field.description = description
+        field.field_type = effective_field_type
         if position is not None:
             field.position = position
-        if required_mode is not None:
-            field.required_mode = required_mode
-        if options_config_json is not None:
-            field.options_config_json = options_config_json
-        if display_config_json is not None:
-            field.display_config_json = display_config_json
+        field.required_mode = effective_required_mode
+        field.options_source_type = effective_options_source_type
+        field.options_source_id = effective_options_source_id
+        field.options_config_json = effective_options_config
+        field.display_config_json = effective_display_config
         if is_active is not None:
             field.is_active = is_active
-        if is_list_display is not None:
-            field.is_list_display = is_list_display
+        field.is_list_display = effective_is_list_display
+        field.public_visible = effective_public_visible
+        field.public_editable = effective_public_editable
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -771,12 +856,19 @@ class RegistrySchemaService:
             new_data_json={
                 "label": field.label,
                 "description": field.description,
+                "field_type": field.field_type,
                 "position": field.position,
                 "required_mode": field.required_mode,
+                "options_source_type": field.options_source_type,
+                "options_source_id": (
+                    str(field.options_source_id) if field.options_source_id is not None else None
+                ),
                 "options_config_json": field.options_config_json,
                 "display_config_json": field.display_config_json,
                 "is_active": field.is_active,
                 "is_list_display": field.is_list_display,
+                "public_visible": field.public_visible,
+                "public_editable": field.public_editable,
             },
         )
         self.ensure_base_card_template_for_registry(
@@ -1162,6 +1254,32 @@ class RegistrySchemaService:
     def _validate_field_type(self, field_type: str) -> None:
         if field_type not in FIELD_TYPES:
             raise RegistrySchemaError(f"Unsupported field type: {field_type}")
+
+    def _validate_field_options_source(
+        self,
+        *,
+        field_type: str,
+        options_source_type: str | None,
+        options_source_id: UUID | None,
+        registry_id: UUID,
+    ) -> tuple[str | None, UUID | None]:
+        if field_type not in {"select", "multi_select"}:
+            return None, None
+        if options_source_type is None and options_source_id is None:
+            return None, None
+        if options_source_type != "reference_list" or options_source_id is None:
+            raise RegistrySchemaError(
+                "Select fields must use a configured reference list options source."
+            )
+        reference_list = self.session.get(ReferenceList, options_source_id)
+        if (
+            reference_list is None
+            or reference_list.archived_at is not None
+            or not reference_list.is_active
+            or reference_list.registry_id != registry_id
+        ):
+            raise RegistrySchemaError("Field reference list was not found in this registry.")
+        return "reference_list", reference_list.id
 
     def _validate_required_mode(self, required_mode: str) -> None:
         if required_mode not in REQUIRED_MODES:

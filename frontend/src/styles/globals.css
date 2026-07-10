@@ -1686,6 +1686,34 @@ tr:last-child td {
   background: #fff8f8;
 }
 
+.card-layout-conflict-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.card-layout-conflict-comparison > div:not(.row-actions) {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.card-layout-conflict-comparison pre {
+  margin: 0;
+  max-height: 10rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.card-layout-conflict-comparison .row-actions {
+  grid-column: 1 / -1;
+}
+
 .card-layout-renderer,
 .card-layout-a4-workspace,
 .a4-linked-card-stage,
@@ -2525,6 +2553,10 @@ tr:last-child td {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
+  }
+
+  .card-layout-conflict-comparison {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .card-web-layout-canvas {

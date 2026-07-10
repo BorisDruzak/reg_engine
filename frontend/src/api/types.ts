@@ -180,12 +180,17 @@ export type FormFieldCreatePayload = {
 export type FormFieldUpdatePayload = {
   label?: string | null;
   description?: string | null;
+  field_type?: string | null;
   position?: number | null;
   required_mode?: string | null;
+  options_source_type?: string | null;
+  options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
   display_config_json?: Record<string, unknown> | null;
   is_active?: boolean | null;
   is_list_display?: boolean | null;
+  public_visible?: boolean | null;
+  public_editable?: boolean | null;
 };
 
 export type CardTemplateDefaultValue = {
@@ -814,6 +819,7 @@ export type CardPrintOverlayItem = {
 
 export type CardPrintLayout = {
   version: "card_print_layout_v1";
+  composition_mode?: "linked_card";
   page: {
     format: "A4";
     width_mm: number;
