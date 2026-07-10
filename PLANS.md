@@ -4047,8 +4047,7 @@ Known limitations and remaining release gates:
 
 ## Phase 8M: Automatic Card Lifecycle and Layout UX Polish
 
-Status: implementation complete locally; full gate, deployment, and live
-Browser proof are in progress.
+Status: complete, pushed, deployed, production-synchronized, and live-verified.
 
 Goal:
 
@@ -4091,17 +4090,57 @@ Implementation checkpoint:
   status and field-value data, and layout changes are a render/interaction
   projection over existing JSON geometry.
 
-Verification and release evidence will be recorded here after the full local,
-disposable PostgreSQL, server, and Browser gates pass.
-
 Local verification checkpoint:
 
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed: backend `228 passed / 195 skipped`, frontend
-  `233 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, TypeScript,
+  `234 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, TypeScript,
   production build, and project-map checks are green.
 - The existing Starlette/httpx deprecation warning and Vite main-chunk advisory
-  remain. The current production bundle is `index-B7ukh_7h.js` (`559.59 kB`,
-  `159.47 kB` gzip) and `index-Cl9DldkN.css` (`63.71 kB`, `11.40 kB` gzip).
-- PostgreSQL-backed lifecycle/schema tests, remote synchronization, deployment,
-  and live Browser proof remain pending at this checkpoint.
+  remain. The deployed bundle is `index-CBY6JDNj.js` (`559.64 kB`, `159.49 kB`
+  gzip) and `index-Cl9DldkN.css` (`63.71 kB`, `11.40 kB` gzip).
+- Disposable PostgreSQL `reg_engine_phase8m_test` was recreated from empty,
+  upgraded through every migration to `0023_public_link_review (head)`, and 55
+  database smoke/lifecycle/schema tests passed. The database was removed by the
+  cleanup trap and post-check confirmed it no longer exists.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized through
+  `c3577e61` (`Prevent adaptive card block overlap`). `scripts/server-check.ps1`
+  passed after deployment; the API service is active and health returned 200.
+- Existing non-terminal production cards were inspected through the same
+  completeness service before writing: 7 cards checked, 4 stale
+  `draft -> active` transitions required. The service synchronized exactly 4
+  cards with system `lifecycle_sync` audits. Post-check reported zero lifecycle
+  mismatches, four matching system audits, and no temporary test database.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-CBY6JDNj.js` and
+  `/assets/index-Cl9DldkN.css`, restarted the service, and passed same-origin
+  frontend/API smoke checks. Subsequent service logs contained successful 200
+  responses for the live card, schema, reference-list, and template-layout
+  reads with no application error response.
+
+Live Browser proof:
+
+- Card `213` changed from the stale legacy `Черновик` with `0 из 0` mandatory
+  fields to `Активно`; both list and detail agree. `Активировать карточку` is
+  absent. `Отправить на заполнение` is present for the active card, opens the
+  existing link dialog, and cancel leaves the status active. Component tests
+  also cover the same action for a draft without a lifecycle transition.
+- Web field grids projected 1, 2, and 3 occupied rows on the saved card. In the
+  template editor every block has a footer `Создать поле`, field edit/move
+  buttons are absent, every field exposes eight resize zones, and clicking
+  `tst` opened its inline editor successfully.
+- Live resizing of the saved four-row `tst` field to three rows changed its
+  enclosing block grid from four rows/12rem to three rows/9rem while the outer
+  canvas used independent `minmax(0, auto)` tracks. Cancel restored the original
+  four-row geometry without a write. The next `ФИО` and `тест2` blocks remained
+  below the enlarged block with no overlap; this closes the browser-reported
+  equal-row stretching/overlap defect found during final QA.
+- A4 kept four internal rows/12rem for each linked block. The inner-layout
+  overlay is absent; the collapsed `Добавить печатный элемент` list revealed
+  all eight print-only actions and remained separate from saved card geometry.
+- Browser evidence is stored outside Git under
+  `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8m\`:
+  `phase8m-card-active-send.png`, `phase8m-a4-element-list.png`, and
+  `phase8m-layout-no-overlap.png`.
