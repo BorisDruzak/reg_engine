@@ -3882,9 +3882,7 @@ Deployment and live Browser proof:
 
 ## Phase 8L: Public Link Review Lifecycle
 
-Status: implemented and verified locally through the documentation pre-release
-checkpoint. GitHub/server synchronization, production migration `0023`,
-frontend deployment, and live Browser proof remain pending.
+Status: complete, pushed, production-migrated, deployed, and live-verified.
 
 Goal:
 
@@ -3955,12 +3953,77 @@ Local verification checkpoint:
 - The build retains the existing Vite main-chunk size advisory. The existing
   Starlette/httpx deprecation warning also remains; neither warning is new to
   Phase 8L.
-- The only aggregate-check failure was the stale generated
-  `docs/PROJECT_TREE.md`. Task 7 regenerated it with
-  `scripts/project-map.ps1`; the subsequent `-Check` passed.
-- PostgreSQL lifecycle and migration cases remain skipped when
-  `TEST_DATABASE_URL` is absent. Disposable `_test` migration/lifecycle proof
-  is still required before release and must never target production.
+- The first aggregate pass caught a stale generated `docs/PROJECT_TREE.md` and
+  a print-conversion test that still expected an internal permission detail.
+  The map was regenerated, the test was aligned with the existing safe Russian
+  `403` contract, and the final `scripts/check.ps1 -SkipRemote` passed in full.
+- Disposable PostgreSQL `reg_engine_0023_test` was recreated from empty,
+  upgraded through every migration to `0023_public_link_review (head)`, and
+  `tests/test_database_smoke.py tests/test_public_link_review_lifecycle.py -q`
+  passed all 22 database/lifecycle cases. The run also caught and fixed public
+  static-text coercion occurring before authorization; the final endpoint now
+  returns the safe Russian permission denial before value coercion.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized at
+  `781804c7` (`Document public link review lifecycle`). Server checks passed
+  before migration and again after frontend deployment.
+- Production preflight confirmed Alembic
+  `0022_card_print_layout_templates`, zero review-lifecycle columns, and zero
+  unexpected existing public-link statuses. A fresh backup was created outside
+  Git at
+  `/var/backups/reg_engine/reg_engine_before_0023_20260710_153145.dump`;
+  size `299383` bytes, SHA-256
+  `4af303f1ec50851c4a1a5bd2a643fcf07b8bb417de07505170076e256f9979d4`.
+- Production `alembic upgrade head` applied `0023_public_link_review`.
+  Post-check confirmed all seven columns, non-null `review_enabled`, the
+  expanded status constraint, reviewer foreign key path, and
+  `ix_card_public_links_card_status_submitted`. The API service restarted
+  active and `/api/v1/health` returned `200`.
+- `scripts/deploy-frontend.ps1` deployed
+  `/assets/index-CG3uy5Ab.js` and `/assets/index-CxNvpgdd.css`, restarted the
+  API service, and passed same-origin frontend/API smoke checks.
+
+Live production proof:
+
+- The in-app Browser opened the review-enabled link against card
+  `2cca3aa1-4a8a-4a69-96f8-8f9c082a0b9c`. The public page rendered the saved
+  card layout through the shared renderer: block `ФИО` at row 2, column 1,
+  span `1 x 12`; fields `Имя` and `Фамилия` retained their configured item
+  geometry. At 420 px viewport, `innerWidth=420`, document/body scroll width
+  was `405`, and canvas width was `373`, with no horizontal overflow.
+- Editing `Имя` showed `Сохранение...`, disabled submit, then showed
+  `Все изменения сохранены` only after server confirmation. PostgreSQL already
+  contained `Иван LIVE 8L 20260710` before review, and the latest field audit
+  was `public_link.update`, `source=public_link`, with a public-link actor.
+- A bounded `text/plain` attachment (`51` bytes) was uploaded through the
+  public API and appeared in the Browser list with the exhausted one-upload
+  quota. Submit replaced the card/layout/attachment surface with only the safe
+  receipt and completion count `1 из 2`.
+- Administrator review through the deployed backend business service reported
+  one changed text field (`before=None`, `after=Иван LIVE 8L 20260710`) and one
+  added attachment. Request-changes reopened the same token in the Browser with
+  comment `Уточните фамилию и повторно отправьте карточку.`. The recipient
+  saved `Петров LIVE 8L` and resubmitted; the receipt reported `2 из 2`.
+- Final review reported two changed fields and one attachment. Approval set
+  `status=approved`, `can_view=false`, `can_edit=false`, recorded the reviewer,
+  and did not change the field-value `updated_at` timestamp
+  (`value_rewritten=false`). Reopening the old token showed only
+  `Заполнение завершено`; no field, layout, or attachment metadata was present.
+- Lifecycle audit order was `create` (administrator), `public_link.submit`
+  (public-link actor), `public_link.request_changes` (administrator), second
+  `public_link.submit`, and `public_link.approve` (administrator). The temporary
+  schema public-edit flags used by the live test were restored to their prior
+  values after approval.
+- Fresh closed-receipt Browser console errors/warnings: `0`. Captured API
+  response: `POST /api/v1/public-links/status` returned `200`; no response at
+  or above `400` was observed in the fresh closed-link load.
+- Screenshots are stored outside Git under
+  `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8l\`:
+  `phase8l-public-edit-desktop.png`,
+  `phase8l-public-edit-mobile-420.png`, and
+  `phase8l-approved-closed-receipt.png`.
 
 Known limitations and remaining release gates:
 
@@ -3975,8 +4038,9 @@ Known limitations and remaining release gates:
   the link is editable.
 - A status-network failure deliberately leaves the public page closed with a
   Russian-safe error until a fresh authoritative status can be loaded.
-- This checkpoint makes no claim that `main` was pushed, the server checkout or
-  frontend was deployed, migration `0023` was applied to production, or the
-  end-to-end Browser flow was live-verified. Those actions remain the next
-  release steps after disposable PostgreSQL verification and production
-  backup/preflight gates.
+- The deployment restart invalidated the previous interactive administrator
+  browser session. Therefore the public recipient journey and closed-token
+  privacy were proven in the Browser, while administrator review transitions
+  and typed diff were proven live through the deployed backend service and
+  PostgreSQL evidence. The administrator panel itself remains covered by its
+  focused component suite (7/7) and the full frontend regression suite.
