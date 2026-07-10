@@ -12,7 +12,14 @@ CARD_PRINT_LINKED_CARD_HEIGHT_MM = 273.0
 CARD_PRINT_MIN_LINKED_CARD_SCALE = 0.5
 _DECORATIVE_KINDS = {"divider", "line", "block", "container", "panel", "rectangle"}
 _OVERLAY_KINDS = {"divider", "line", "container", "panel", "rectangle", "image", "qr_code"}
-_EXPLICIT_OVERLAY_KINDS = {*_OVERLAY_KINDS, "static_text", "heading"}
+_EXPLICIT_OVERLAY_KINDS = {
+    *_OVERLAY_KINDS,
+    "static_text",
+    "heading",
+    "metadata",
+    "page_number",
+    "print_date",
+}
 _FLOW_KINDS = {"field", "static_text", "heading", "metadata", "page_number", "print_date"}
 _KNOWN_KINDS = {
     "field",

@@ -3695,6 +3695,37 @@ Task 7 live follow-up defect and repair:
   requires deployment and a repeat of the production live conversion before
   this follow-up can be marked live-verified.
 
+Task 7 live follow-up review hardening:
+
+- Review of the conversion repair found one remaining contract mismatch:
+  `DocumentService` already renders positioned `metadata`, `page_number`, and
+  `print_date` print-only content, but explicit overlay validation rejected
+  those three kinds after legacy conversion promoted them into `overlays[]`.
+- Explicit overlays now accept those three dynamic text kinds with the same
+  style and A4-bound validation as the existing heading, static-text,
+  image/QR, and decorative overlay kinds. `field`, `block`, `card_layout`, and
+  unknown kinds remain rejected as overlays.
+- The production-shaped conversion regression now includes heading, static
+  text, metadata, page number, print date, image, and QR legacy content, plus
+  duplicate identifiers across `items[]`, `overlays[]`, and section items. It
+  verifies one linked `card_layout`, exactly one normalized copy of every
+  print-only item, valid converted and previous layouts, the unchanged previous
+  version, the existing version audit event, DOCX/PDF signatures, and exactly
+  one rendered occurrence of every deterministic print-only text value.
+- Strict red/green verification used the repository virtual environment. The
+  focused new-test command first failed only because the validator rejected the
+  three dynamic overlay kinds, then passed all three selected regressions after
+  the allow-list repair. The full print/document/layout suite passed with ten
+  expected disposable PostgreSQL skips; the full backend suite reported 215
+  passed / 175 skipped / one existing Starlette/httpx warning.
+- `ruff check .`, `ruff format --check .` (`138 files already formatted`), and
+  `mypy app` (`79 source files`) passed. The cumulative
+  `scripts/check.ps1 -SkipRemote` gate passed: backend 215 passed / 175 skipped,
+  frontend Vitest 161 passed / 25 skipped, the production frontend build
+  completed with the existing chunk-size advisory, and the project-map check
+  passed. This review follow-up remains local-only; no push or deployment was
+  performed.
+
 Known warnings and limitations:
 
 - PostgreSQL-backed regressions require a disposable `TEST_DATABASE_URL` whose

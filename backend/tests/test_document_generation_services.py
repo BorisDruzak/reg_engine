@@ -2,7 +2,7 @@ import os
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -702,6 +702,57 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
                 "height_mm": 10.0,
                 "text": "Служебная пометка",
             },
+            {
+                "id": "legacy-metadata",
+                "kind": "metadata",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 58.0,
+                "width_mm": 90.0,
+                "height_mm": 8.0,
+                "metadata_key": "card.display_name",
+                "style": {"font_size": 10, "bold": True},
+            },
+            {
+                "id": "legacy-page-number",
+                "kind": "page_number",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 70.0,
+                "width_mm": 40.0,
+                "height_mm": 8.0,
+                "style": {"font_size": 9, "align": "left"},
+            },
+            {
+                "id": "legacy-print-date",
+                "kind": "print_date",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 82.0,
+                "width_mm": 40.0,
+                "height_mm": 8.0,
+                "style": {"font_size": 9, "align": "left"},
+            },
+            {
+                "id": "brand-image",
+                "kind": "image",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 96.0,
+                "width_mm": 30.0,
+                "height_mm": 20.0,
+                "alt": "Эмблема карточки",
+            },
+            {
+                "id": "card-qr",
+                "kind": "qr_code",
+                "page": 1,
+                "x_mm": 160.0,
+                "y_mm": 96.0,
+                "width_mm": 24.0,
+                "height_mm": 24.0,
+                "text": "QR-CARD-42",
+            },
         ],
         "overlays": [
             {
@@ -724,6 +775,38 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
                 "height_mm": 24.0,
                 "text": "QR-CARD-42",
             },
+        ],
+        "sections": [
+            {
+                "id": "legacy-section",
+                "kind": "section",
+                "page": 1,
+                "x_mm": 12.0,
+                "y_mm": 130.0,
+                "width_mm": 186.0,
+                "height_mm": 32.0,
+                "grid_columns": 12,
+                "items": [
+                    {
+                        "id": "legacy-heading",
+                        "kind": "heading",
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 1,
+                        "column_span": 12,
+                        "text": "Печатная форма карточки",
+                    },
+                    {
+                        "id": "legacy-static-note",
+                        "kind": "static_text",
+                        "row": 2,
+                        "column": 1,
+                        "row_span": 1,
+                        "column_span": 12,
+                        "text": "Служебная пометка",
+                    },
+                ],
+            }
         ],
     }
     previous_snapshot = deepcopy(previous_layout)
@@ -832,32 +915,52 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     assert len(converted_layout["items"]) == 1
     assert converted_layout["items"][0]["kind"] == "card_layout"
     assert converted_layout["items"][0]["card_template_id"] == str(card_template_id)
-    assert [overlay["id"] for overlay in converted_layout["overlays"]] == [
+    converted_overlays = converted_layout["overlays"]
+    assert isinstance(converted_overlays, list)
+    overlay_ids = [overlay["id"] for overlay in converted_overlays]
+    assert overlay_ids == [
         "brand-image",
         "card-qr",
         "legacy-heading",
         "legacy-static-note",
+        "legacy-metadata",
+        "legacy-page-number",
+        "legacy-print-date",
     ]
+    assert len(overlay_ids) == len(set(overlay_ids))
+    overlays_by_id = {overlay["id"]: overlay for overlay in converted_overlays}
+    assert overlays_by_id["legacy-heading"]["text"] == "Печатная форма карточки"
+    assert overlays_by_id["legacy-static-note"]["text"] == "Служебная пометка"
+    assert overlays_by_id["legacy-metadata"]["metadata_key"] == "card.display_name"
+    assert overlays_by_id["legacy-page-number"]["kind"] == "page_number"
+    assert overlays_by_id["legacy-print-date"]["kind"] == "print_date"
+    assert overlays_by_id["brand-image"]["alt"] == "Эмблема карточки"
+    assert overlays_by_id["card-qr"]["text"] == "QR-CARD-42"
     assert validate_card_print_layout(converted_layout).errors == []
     assert validate_card_print_layout(previous_version.layout_json).errors == []
 
     render_context = _RenderContext(card=card)
+    expected_rendered_text = [
+        "Печатная форма карточки",
+        "Служебная пометка",
+        card.display_name,
+        "Страница 1",
+        date.today().isoformat(),
+        "Эмблема карточки",
+        "QR-CARD-42",
+    ]
     docx_content = service._build_docx_from_card_print_layout(converted_layout, render_context)
     assert docx_content.startswith(b"PK")
     with ZipFile(BytesIO(docx_content)) as docx:
         rendered_xml = docx.read("word/document.xml").decode("utf-8")
-    assert "Печатная форма карточки" in rendered_xml
-    assert "Служебная пометка" in rendered_xml
-    assert "Эмблема карточки" in rendered_xml
-    assert "QR-CARD-42" in rendered_xml
+    for expected_text in expected_rendered_text:
+        assert rendered_xml.count(expected_text) == 1
 
     pdf_content = service._build_pdf_from_card_print_layout(converted_layout, render_context)
     assert pdf_content.startswith(b"%PDF")
     pdf_text = "".join(_extract_pdf_text(pdf_content).split())
-    assert "Печатнаяформакарточки" in pdf_text
-    assert "Служебнаяпометка" in pdf_text
-    assert "Эмблемакарточки" in pdf_text
-    assert "QR-CARD-42" in pdf_text
+    for expected_text in expected_rendered_text:
+        assert pdf_text.count("".join(expected_text.split())) == 1
     assert audit_events == [
         {
             "actor_user_id": actor_user_id,

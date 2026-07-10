@@ -351,6 +351,72 @@ def test_linked_card_allows_overlapping_image_and_qr_overlays() -> None:
     ]
 
 
+def test_linked_card_accepts_positioned_dynamic_text_overlays() -> None:
+    layout = _linked_layout(str(uuid4()))
+    layout["overlays"] = [
+        {
+            "id": "card-name",
+            "kind": "metadata",
+            "metadata_key": "card.display_name",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 20.0,
+            "width_mm": 80.0,
+            "height_mm": 10.0,
+            "style": {"font_size": 12, "bold": True, "align": "left"},
+        },
+        {
+            "id": "page-number",
+            "kind": "page_number",
+            "page": 1,
+            "x_mm": 160.0,
+            "y_mm": 276.0,
+            "width_mm": 30.0,
+            "height_mm": 8.0,
+            "style": {"font_size": 9, "align": "right"},
+        },
+        {
+            "id": "print-date",
+            "kind": "print_date",
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 276.0,
+            "width_mm": 40.0,
+            "height_mm": 8.0,
+            "style": {"font_size": 9, "align": "left"},
+        },
+    ]
+
+    result = validate_card_print_layout(layout)
+
+    assert result.errors == []
+    assert result.normalized_layout["overlays"] == layout["overlays"]
+
+
+def test_linked_card_rejects_non_print_only_overlay_kinds() -> None:
+    layout = _linked_layout(str(uuid4()))
+    layout["overlays"] = [
+        {
+            "id": f"unsupported-{kind}",
+            "kind": kind,
+            "page": 1,
+            "x_mm": 20.0,
+            "y_mm": 20.0 + (index * 12.0),
+            "width_mm": 40.0,
+            "height_mm": 8.0,
+        }
+        for index, kind in enumerate(("field", "block", "card_layout", "unsupported"))
+    ]
+
+    result = validate_card_print_layout(layout)
+
+    for kind in ("field", "block", "card_layout", "unsupported"):
+        assert any(
+            f"overlay 'unsupported-{kind}' has unsupported kind '{kind}'" in error
+            for error in result.errors
+        )
+
+
 def test_linked_card_still_rejects_overlapping_heading_flow_item() -> None:
     layout = _linked_layout(str(uuid4()))
     items = layout["items"]
