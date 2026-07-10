@@ -3815,18 +3815,37 @@ Design and implementation plan:
 
 Implementation checkpoint:
 
-- Filled cards render and edit through the configured block/field geometry,
-  using each backend `block_instance_id` exactly.
+- The ordinary card opens read-first and renders completed values through the
+  exact saved block/field geometry. The former default mass-edit surface is no
+  longer part of the normal card view.
+- `Изменить блок` opens one editor directly inside that block's existing cells;
+  only that block becomes editable and the surrounding card remains in its
+  filled/read-first state. Existing field types and validation are reused.
+- `file_ref` remains on the attachment-aware single-field workflow and is not
+  folded into the ordinary block bulk payload.
+- Non-repeatable and repeatable blocks resolve and save against the exact
+  backend UUID for that block instance; repeatable instances never fall back to
+  a shared/null primary identifier.
+- Desktop preserves the configured grid geometry. At the mobile breakpoint the
+  web card follows visual row/column order in one readable column; the linked
+  A4 preview keeps its exact print geometry.
 - `GET /api/v1/cards/{card_id}/presentation` exposes only the readable card's
   current template structure/layout after card visibility is enforced; it does
-  not grant registry schema or template-layout permissions.
+  not grant registry-wide schema or template-layout permissions. Manage-only
+  schema queries and selected-card actions are gated by backend `can_manage`.
 - Read-only card actors keep attachment and generated-document list/download
   access, while upload, archive, template management, and document generation
   remain hidden and backend-protected.
-- Local verification passed with 220 backend tests and 195 frontend tests;
-  PostgreSQL permission regressions remain skipped when `TEST_DATABASE_URL` is
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed locally: backend `220 passed / 175 skipped` with the existing single
+  Starlette/httpx deprecation warning; frontend `195 passed / 25 skipped`,
+  ESLint, TypeScript, production build, and project-map checks passed.
+- PostgreSQL permission regressions remain skipped when `TEST_DATABASE_URL` is
   not configured and execute only against a disposable database ending in
-  `_test`.
+  `_test`. Vite retains the existing main-chunk advisory (`540.87 kB`,
+  `153.73 kB` gzip); bundle splitting is outside Phase 8K.
+- This is a local implementation/documentation checkpoint only. No push,
+  deployment, server smoke, or live Browser validation is claimed for Phase 8K.
 
 ## Phase 8L: Public Link Review Lifecycle
 

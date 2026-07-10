@@ -7,8 +7,10 @@ The current implementation includes backend-enforced RBAC, dynamic registry
 schemas and typed card values, organizations, cards, public links, attachments,
 generated documents, import/export, reports, audit, and API-only MCP tools.
 
-Phase 8J adds the locally verified contextual card-layout studio. Deployment
-and live Browser evidence are still pending; Phases 8K and 8L remain planned.
+Phases 8J and 8K are implemented and locally verified. Phase 8K adds the
+read-first filled-card workspace and least-privilege card presentation
+contract. Push, deployment, server smoke, and live Browser evidence are still
+pending; Phase 8L remains planned.
 
 ## Runtime Entrypoints
 
@@ -24,7 +26,8 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
 - `frontend/src/app/router.tsx`: routes `/` to the authenticated workspace and
   `/public/edit/:rawToken` to public card editing.
 - `frontend/src/pages/HomePage.tsx`: owns session-aware Russian admin-shell
-  navigation and section-scoped data loading.
+  navigation and section-scoped data loading; Cards does not load manage-scoped
+  registry schema for a read-only selected card.
 - `frontend/src/pages/PublicLinkEditPage.tsx`: public-link card preview/edit and
   attachment workflow.
 
@@ -36,7 +39,8 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
   actor/session, validate Pydantic payloads, call services, and map safe errors.
 - `backend/app/schemas/*.py`: request/response contracts. In particular,
   `card_template_layouts.py` defines `card_template_layout_v1`, its revisioned
-  form update, print-view, sync, and generated-document payloads.
+  form update, card-scoped presentation, print-view, sync, and
+  generated-document payloads.
 - `backend/app/services/*.py`: backend-enforced permissions, validation,
   transactions, audit, and storage/document workflows. Business logic does not
   belong in endpoint functions.
@@ -48,11 +52,15 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
 ### Contextual card-layout and A4 pipeline
 
 - `backend/app/api/v1/endpoints/card_template_layouts.py`: unified layout read,
-  revisioned form PATCH, print-view create/update/sync, explicit linked-card
-  conversion, and card DOCX/PDF generation endpoints.
+  card-scoped readable presentation, revisioned form PATCH, print-view
+  create/update/sync, explicit linked-card conversion, and card DOCX/PDF
+  generation endpoints.
 - `backend/app/services/card_template_layout.py`: SHA-256 layout revisions,
   strict 12-by-4 geometry/collision validation, row-locked optimistic writes,
-  layout aggregation, print-view persistence/sync, and generation delegation.
+  layout aggregation, card-visibility-first presentation, print-view
+  persistence/sync, and generation delegation. Presentation returns only the
+  selected card's current template structure/layout and does not grant
+  registry-wide schema/layout permission.
 - `backend/app/services/card_template_projection.py`: default form layout,
   web-to-A4 projection, linked-card expansion from the current form layout,
   virtual default print views, and sync mapping without hardcoded fields.
@@ -72,15 +80,18 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
 ### Application and shared contracts
 
 - `frontend/src/api/client.ts`: bearer-authenticated REST client functions,
-  including unified card-template layout and conversion/generation calls.
+  including card-scoped presentation, unified card-template layout, and
+  conversion/generation calls.
 - `frontend/src/api/types.ts`: shared API types, including revisions,
-  `row_span`, linked `card_layout`, print views, and generation results.
+  `row_span`, linked `card_layout`, card presentation, print views, and
+  generation results.
 - `frontend/src/app/uiText.ts`: Russian-first product text plus the canonical
   field-type list used by schema editors.
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`: registry, template,
   schema, reference-list, import/export, report, and studio orchestration.
 - `frontend/src/features/cards/CardsWorkspace.tsx`: organization-scoped card
-  list/detail, schema-driven card work, attachments, and generated documents.
+  list/detail plus read-first exact-geometry values, one in-place block editor,
+  exact block-instance routing, and `can_manage`-gated actions/tabs/queries.
 
 ### Contextual card layout
 
@@ -120,6 +131,28 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
   geometry-state presentation; the web card collapses to one column at the
   mobile breakpoint while linked A4 keeps exact geometry.
 
+### Filled card workspace
+
+- `frontend/src/features/cards/FilledCardLayout.tsx`: renders the saved form
+  layout with current card values, maps every block to its exact backend
+  `block_instance_id`, and keeps non-repeatable/repeatable surfaces distinct.
+- `frontend/src/features/cards/useBlockEditor.ts` and
+  `BlockFieldControl.tsx`: one-block-at-a-time inline draft/save/cancel using
+  existing typed field controls and validation; there is no default global
+  mass-edit surface.
+- `frontend/src/features/cards/CardsWorkspace.tsx`: loads
+  `GET /api/v1/cards/{card_id}/presentation` for selected-card structure, form
+  layout, and A4 preview. `file_ref` stays in the attachment-aware single-field
+  editor rather than the ordinary block payload.
+- `frontend/src/features/cards/CardAttachmentsPanel.tsx`: card-readable
+  list/download surface; upload/archive controls are present only when
+  `can_manage=true`.
+- `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`: card-readable
+  list/download surface; document-template queries, create/generate, and
+  archive controls are disabled for read-only cards.
+- Mobile filled cards use visual row/column order in one column. Desktop keeps
+  configured web geometry and the linked A4 view keeps exact print geometry.
+
 ## Test Ownership
 
 - `backend/tests/test_card_template_layout_services.py`: unified contract,
@@ -132,6 +165,10 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
 - `backend/tests/test_registry_schema_field_update_contract.py`: complete
   block/field mutations, technical-code/type/reference normalization,
   membership locks, and form-layout preservation.
+- `backend/tests/test_api_phase_1f.py`: card capability and least-privilege
+  presentation permissions; read-only presentation succeeds while the original
+  registry schema/layout endpoints stay manage-scoped and outsiders remain
+  forbidden. PostgreSQL cases require disposable `TEST_DATABASE_URL`.
 - `frontend/src/features/cardLayout/layoutGeometry.test.ts`: exact quarter-grid
   move, resize, boundary, collision, and immutability cases.
 - `frontend/src/features/cardLayout/CardLayoutRenderer.test.tsx`: contextual
@@ -140,6 +177,19 @@ and live Browser evidence are still pending; Phases 8K and 8L remain planned.
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`: integrated
   studio stages, save queues/conflicts, schema mutations, linked A4 behavior,
   conversion, undo/redo, and pending-state ownership.
+- `frontend/src/features/cards/FilledCardLayout.test.tsx`: exact geometry/value
+  rendering, inline per-block editing, `file_ref`, and exact UUID routing for
+  non-repeatable and repeatable block instances.
+- `frontend/src/App.test.tsx`: selected-card integration, read-only
+  presentation requests, `can_manage` disclosure, and attachment/document
+  list/download-only regressions.
+
+The final local Phase 8K gate reported backend `220 passed / 175 skipped` with
+one existing Starlette/httpx deprecation warning and frontend
+`195 passed / 25 skipped`; lint, format, typecheck, production build, and
+project-tree checks passed. Vite retains the main-chunk advisory (`540.87 kB`,
+`153.73 kB` gzip). No push, deployment, server smoke, or live Browser evidence
+is claimed by this checkpoint.
 
 ## Operational Scripts
 

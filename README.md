@@ -43,13 +43,17 @@ Target system:
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, card templates, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs with safe upload-limit metadata, authenticated card export API foundation, bounded CSV/XLSX import preview/commit API foundation, authenticated JSON/CSV/XLSX/PDF report template/run API foundation with backend report parameter/schema validation and rollback-safe report output cleanup, read-only MCP-over-API gateway foundation, MCP stdio/config hardening, MCP mutation client foundation for future explicitly approved write tools, MCP registry, schema-builder, card lifecycle, card field-value, card block-instance, card transfer, report-template, report-run, document-template, and generated-document write tools, MCP document metadata read tools, plus MCP report/generated-document content read tools with confirmation, size limits, and normalized errors.
-- Current frontend scope has a bearer-authenticated admin shell with section-scoped data loading, organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive with visual drag/drop field ordering, card-template create/edit/archive for template-driven card creation, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive with unified tag search for free-text, organization, template, archive, and typed schema-field filters, same-organization card org-unit correction, repeatable block-instance add/archive, bulk-primary dynamic value editing with separate `file_ref` editing, authenticated public-link list/create/disable controls with attachment-upload limits and browser-openable public URL display, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV/XLSX card export and CSV/XLSX import preview/commit controls, authenticated report template create/update/archive and JSON/CSV/XLSX/PDF report generate/download/archive controls with template parameter schema/default JSON editing, basic visual run-parameter controls generated from flat schema properties including scalar enum select controls, `oneOf` option titles, date-format string inputs, schema description hints, schema default values, required-parameter validation, scalar `minLength`/`maxLength`/`minimum`/`maximum` validation, `pattern`/`multipleOf` validation, and `exclusiveMinimum`/`exclusiveMaximum` validation, default run-parameter payload fallback when manual JSON is empty, visible run format, filename, parameters, and summary metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download with exhausted-upload state, and full Russian UI browser validation for the core admin setup path.
+- Current frontend scope has a bearer-authenticated admin shell with section-scoped data loading, organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive with visual drag/drop field ordering, card-template create/edit/archive for template-driven card creation, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive with unified tag search for free-text, organization, template, archive, and typed schema-field filters, same-organization card org-unit correction, repeatable block-instance add/archive, read-first exact-geometry card rendering with one inline block editor at a time and attachment-aware separate `file_ref` editing, authenticated public-link list/create/disable controls with attachment-upload limits and browser-openable public URL display, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV/XLSX card export and CSV/XLSX import preview/commit controls, authenticated report template create/update/archive and JSON/CSV/XLSX/PDF report generate/download/archive controls with template parameter schema/default JSON editing, basic visual run-parameter controls generated from flat schema properties including scalar enum select controls, `oneOf` option titles, date-format string inputs, schema description hints, schema default values, required-parameter validation, scalar `minLength`/`maxLength`/`minimum`/`maximum` validation, `pattern`/`multipleOf` validation, and `exclusiveMinimum`/`exclusiveMaximum` validation, default run-parameter payload fallback when manual JSON is empty, visible run format, filename, parameters, and summary metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download with exhausted-upload state, and full Russian UI browser validation for the core admin setup path.
 - Current card-template layout scope uses one Russian-first contextual
   `CardLayoutStudio` with the stages `Макет карточки`, `Печатная форма A4`, and
   `Предпросмотр`. Web/card geometry is stored in the unified
   `card_template_layout_v1` contract, while A4 views remain internal
   `card_print_layout_v1` document-template versions. Ordinary card filling
   remains the primary data-entry workflow.
+- The card-scoped `GET /api/v1/cards/{card_id}/presentation` contract checks
+  card visibility first and returns only that card's current template
+  structure/layout. It does not broaden registry schema or template-layout
+  permissions.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
 - XLSX card import/export is available as a row-oriented technical exchange
   format. XLSX and PDF report outputs are available for existing report types.
@@ -84,6 +88,33 @@ Target system:
   new audited document-template version and leaves the previous version
   unchanged and readable. User-facing labels, validation, recovery choices,
   and accessible controls are Russian-first.
+
+## Filled Card Workspace Contract
+
+- The normal card view is read-first: it renders stored values in the exact
+  saved block/field geometry and does not open a global mass-edit form by
+  default.
+- `Изменить блок` opens one editor in place inside the selected block. The
+  existing field controls and validation are reused, while `file_ref` remains
+  in its attachment-aware single-field editor.
+- Every block read/write resolves the exact backend `block_instance_id` for
+  that block. This applies to both non-repeatable blocks and each repeatable
+  instance; repeatable values are never merged into a shared primary surface.
+- Desktop follows the configured grid. The web card collapses to one readable
+  column at the mobile breakpoint in visual row/column order, while A4 keeps
+  exact print geometry.
+- Backend `can_manage` controls editing, lifecycle, public-link, print-download,
+  repeatable-instance, attachment, and document management actions. A readable
+  card without manage permission uses the card-scoped presentation endpoint;
+  attachments and generated documents remain list/download-only, with no
+  upload, archive, template-management, or generation requests.
+- The local Phase 8K gate passed with backend `220 passed / 175 skipped` and
+  frontend `195 passed / 25 skipped`. The known single Starlette/httpx
+  deprecation warning and Vite main-chunk advisory (`540.87 kB`, `153.73 kB`
+  gzip) remain. PostgreSQL permission tests require a disposable
+  `TEST_DATABASE_URL` ending in `_test` and are skipped when it is absent.
+- Phase 8K is verified locally only. This checkpoint does not claim a push,
+  deployment, server smoke, or live Browser result.
 
 ## Local Setup
 
@@ -1114,9 +1145,10 @@ Phase 5R completes the current user-scenario hardening slice:
 
 - scoped card/org users no longer see unrelated global users/roles/access/audit
   permission errors while working in allowed card workflows;
-- card field editing uses the bulk field-values form as the primary editor for
-  normal schema fields, while `file_ref` remains in the attachment-aware
-  single-field editor;
+- Phase 8K supersedes the earlier default bulk form in the ordinary card view:
+  cards now open read-first in exact geometry and edit one block in place. The
+  atomic bulk values API still backs block saves, while `file_ref` remains in
+  the attachment-aware single-field editor;
 - existing cards may correct `org_unit_id` inside the same organization through
   PATCH `/api/v1/cards/{card_id}` and the Russian card metadata form;
 - the card list UI exposes search, organization filter, archive/superseded
