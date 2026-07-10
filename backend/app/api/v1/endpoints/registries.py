@@ -283,6 +283,9 @@ def update_block(
             title=payload.title,
             description=payload.description,
             position=payload.position,
+            is_repeatable=payload.is_repeatable,
+            public_visible=payload.public_visible,
+            public_editable=payload.public_editable,
             layout_columns=payload.layout_columns,
             display_config_json=payload.display_config_json,
         )
@@ -352,6 +355,7 @@ def update_field(
         field = RegistrySchemaService(session).update_field_for_actor(
             actor_user_id=actor_user_id,
             field_id=field_id,
+            code=(payload.code if "code" in payload.model_fields_set else UNSET_FIELD_UPDATE),
             label=payload.label,
             description=(
                 payload.description

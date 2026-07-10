@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 
 import type { CardTemplateFormLayoutItemRead, FormFieldRead, ReferenceListRead } from "@/api/types";
@@ -34,7 +35,7 @@ export type CardFieldLayoutNodeProps = {
   showGeometryDiagnostics?: boolean;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelect: (selection: CardLayoutSelection) => void;
-  onCommitField?: (field: FormFieldRead) => void;
+  onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
   onCancelField?: (fieldId: string) => void;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
   geometry?: LayoutGeometryControls;
@@ -59,6 +60,7 @@ export function CardFieldLayoutNode({
   onFieldValueChange,
   geometry,
 }: CardFieldLayoutNodeProps) {
+  const [retryDraft, setRetryDraft] = useState<FormFieldRead | null>(null);
   const nodeId = field?.id ?? item.id;
   const designMode = mode === "design";
   const geometryActive = Boolean(geometry?.session);
@@ -120,13 +122,23 @@ export function CardFieldLayoutNode({
     >
       {schemaEditing && onCommitField ? (
         <InlineFieldEditor
-          field={field}
+          field={retryDraft ?? field}
           referenceLists={referenceLists}
           onCommit={(draft) => {
-            onCommitField(draft);
+            setRetryDraft(draft);
             onSelect(null);
+            void Promise.resolve(onCommitField(draft))
+              .then((saved) => {
+                if (saved === false) {
+                  onSelect({ kind: "field", id: field.id });
+                } else {
+                  setRetryDraft(null);
+                }
+              })
+              .catch(() => onSelect({ kind: "field", id: field.id }));
           }}
           onCancel={() => {
+            setRetryDraft(null);
             onCancelField?.(field.id);
             onSelect(null);
           }}
@@ -143,7 +155,10 @@ export function CardFieldLayoutNode({
                 type="button"
                 className="ghost-button"
                 aria-label={`Изменить поле ${field.label}`}
-                onClick={() => onSelect({ kind: "field", id: field.id })}
+                onClick={() => {
+                  setRetryDraft(null);
+                  onSelect({ kind: "field", id: field.id });
+                }}
               >
                 Изменить
               </button>

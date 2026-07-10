@@ -31,9 +31,9 @@ export type CardBlockLayoutNodeProps = {
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelect: (selection: CardLayoutSelection) => void;
   onCreateField?: (blockId: string) => void;
-  onCommitBlock?: (block: FormBlockRead) => void;
+  onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
   onCancelBlock?: (blockId: string) => void;
-  onCommitField?: (field: FormFieldRead) => void;
+  onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
   onCancelField?: (fieldId: string) => void;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
   geometry?: LayoutGeometryControls;
@@ -97,8 +97,12 @@ export function CardBlockLayoutNode({
         <InlineBlockEditor
           block={block}
           onCommit={(draft) => {
-            onCommitBlock(draft);
             onSelect(null);
+            void Promise.resolve(onCommitBlock(draft))
+              .then((saved) => {
+                if (saved === false) onSelect({ kind: "block", id: block.id });
+              })
+              .catch(() => onSelect({ kind: "block", id: block.id }));
           }}
           onCancel={() => {
             onCancelBlock?.(block.id);
@@ -138,7 +142,7 @@ export function CardBlockLayoutNode({
             ) : null}
           </header>
           <div
-            className="card-layout-field-grid"
+            className="card-layout-field-grid card-layout-responsive-field-grid"
             data-layout-grid="fields"
             style={{
               display: "grid",
@@ -147,7 +151,7 @@ export function CardBlockLayoutNode({
               minHeight: "12rem",
             }}
           >
-            {section.items.map((item) => {
+            {rowMajor(section.items).map((item) => {
               const field = item.field_id ? (fieldsById.get(item.field_id) ?? null) : null;
               const valueKey = field?.id ?? item.id;
               return (
@@ -310,4 +314,8 @@ function toLayoutRect(rect: {
     rowSpan: rect.row_span,
     columnSpan: rect.column_span,
   });
+}
+
+function rowMajor<T extends { row: number; column: number }>(items: T[]): T[] {
+  return [...items].sort((left, right) => left.row - right.row || left.column - right.column);
 }

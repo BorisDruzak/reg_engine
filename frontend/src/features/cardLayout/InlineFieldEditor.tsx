@@ -115,6 +115,7 @@ export function InlineFieldEditor({
             const fieldType = event.currentTarget.value;
             const usesReference = fieldType === "select" || fieldType === "multi_select";
             const staticTextField = fieldType === "static_text";
+            const fieldTypeChanged = fieldType !== draft.field_type;
             setDraft({
               ...draft,
               field_type: fieldType,
@@ -123,7 +124,7 @@ export function InlineFieldEditor({
               options_source_id: usesReference ? draft.options_source_id : null,
               options_config_json: staticTextField
                 ? { static_text: "" }
-                : draft.field_type === "static_text"
+                : fieldTypeChanged
                   ? null
                   : draft.options_config_json,
               is_list_display: staticTextField ? false : draft.is_list_display,

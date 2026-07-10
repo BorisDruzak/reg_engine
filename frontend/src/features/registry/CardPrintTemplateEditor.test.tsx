@@ -81,6 +81,35 @@ test("creates a block inside the canvas and saves its placement with the current
   );
 });
 
+test("merges a deferred block create into the newest geometry before the first layout PATCH", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredBlockCreate: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Создать блок в этой области" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(api.createdBlockPayloads).toHaveLength(1));
+
+  await moveMainBlockDown(user);
+  expect(api.formSavePayloads).toHaveLength(0);
+
+  api.resolveBlockCreate();
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0]).toEqual(
+    expect.objectContaining({
+      expected_revision: "revision-1",
+      form_layout: expect.objectContaining({
+        sections: expect.arrayContaining([
+          expect.objectContaining({ block_id: "block-1", row: 2 }),
+          expect.objectContaining({ block_id: "block-created" }),
+        ]),
+      }),
+    }),
+  );
+});
+
 test("creates a field inline with a real canonical type and persists the layout", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
@@ -111,6 +140,40 @@ test("creates a field inline with a real canonical type and persists the layout"
   expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
   expect(api.formSavePayloads[0].form_layout.sections[0].items).toEqual(
     expect.arrayContaining([expect.objectContaining({ field_id: "field-created" })]),
+  );
+});
+
+test("merges a deferred field create into the newest geometry after membership completes", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredFieldCreate: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(
+    await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
+
+  await moveMainBlockRight(user);
+  expect(api.formSavePayloads).toHaveLength(0);
+
+  api.resolveFieldCreate();
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0]).toEqual(
+    expect.objectContaining({
+      expected_revision: "revision-1",
+      form_layout: expect.objectContaining({
+        sections: expect.arrayContaining([
+          expect.objectContaining({
+            block_id: "block-1",
+            column: 2,
+            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-created" })]),
+          }),
+        ]),
+      }),
+    }),
   );
 });
 
@@ -288,6 +351,9 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
 
   await user.click(await screen.findByRole("tab", { name: "Печатная форма A4" }));
   expect(screen.getAllByTestId("a4-linked-card-item")).toHaveLength(1);
+  expect(
+    within(screen.getByTestId("a4-linked-card-item")).getByTestId("card-layout-canvas"),
+  ).not.toHaveClass("card-layout-responsive-grid");
   expect(screen.queryByRole("button", { name: /Переместить поле/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Изменить размер поля/ })).not.toBeInTheDocument();
 
@@ -320,6 +386,57 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
   );
 });
 
+test("preview is readonly for linked and legacy print layouts", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
+  const linked = renderEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Предпросмотр" }));
+  expect(screen.getByTestId("a4-linked-card-item")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Редактировать внутренний макет" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Преобразовать/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("toolbar", { name: "Печатные элементы A4" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Изменить блок/ })).not.toBeInTheDocument();
+
+  linked.unmount();
+  vi.stubGlobal("fetch", createEditorFetchMock({ legacyPrintView: true }).fetchMock);
+  renderEditor();
+  await user.click(await screen.findByRole("tab", { name: "Предпросмотр" }));
+
+  expect(screen.queryByRole("button", { name: /Преобразовать/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Сохранена прежняя поэлементная печатная форма"),
+  ).not.toBeInTheDocument();
+});
+
+test("existing block edits send the complete semantic payload", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Изменить блок Основной блок" }));
+  await user.click(screen.getByLabelText("Повторяемый блок"));
+  await user.click(screen.getByLabelText("Виден в публичной ссылке"));
+  await user.click(screen.getByLabelText("Доступен для публичного редактирования"));
+  await user.click(screen.getByLabelText("Можно свернуть"));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedBlockPayloads).toHaveLength(1));
+  expect(api.updatedBlockPayloads[0]).toEqual({
+    title: "Основной блок",
+    description: null,
+    position: 0,
+    is_repeatable: true,
+    public_visible: false,
+    public_editable: true,
+    layout_columns: 1,
+    display_config_json: { collapsible: true },
+  });
+});
+
 test("existing field edits send type reference visibility list and static-text controls", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
@@ -327,6 +444,8 @@ test("existing field edits send type reference visibility list and static-text c
   renderEditor();
 
   await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.clear(screen.getByLabelText("Технический код"));
+  await user.type(screen.getByLabelText("Технический код"), "status_v2");
   await user.clear(screen.getByLabelText("Название поля"));
   await user.type(screen.getByLabelText("Название поля"), "Статус заявки");
   await user.type(screen.getByLabelText("Описание поля"), "Выберите статус");
@@ -342,6 +461,7 @@ test("existing field edits send type reference visibility list and static-text c
   await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
   expect(api.updatedFieldPayloads[0]).toEqual(
     expect.objectContaining({
+      code: "status_v2",
       label: "Статус заявки",
       description: "Выберите статус",
       field_type: "select",
@@ -366,6 +486,65 @@ test("existing field edits send type reference visibility list and static-text c
       options_source_type: null,
       options_source_id: null,
       options_config_json: { static_text: "Только для чтения" },
+    }),
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус заявки" }));
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "text");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(3));
+  expect(api.updatedFieldPayloads[2]).toEqual(
+    expect.objectContaining({
+      code: "status_v2",
+      field_type: "text",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: null,
+    }),
+  );
+});
+
+test("keeps the field editor open with its technical code when update fails", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ fieldUpdateError: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  const code = screen.getByLabelText("Технический код");
+  await user.clear(code);
+  await user.type(code, "duplicate_code");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(
+    await screen.findByText("Технический код уже используется другим полем этого реестра."),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Технический код")).toHaveValue("duplicate_code");
+});
+
+test("clears select-only source and options when an existing field changes to text", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor({
+    ...fieldFixture("field-1", "block-1", "Статус", "select"),
+    options_source_type: "reference_list",
+    options_source_id: "reference-statuses",
+    options_config_json: { allow_empty: false },
+  });
+
+  await user.click(await screen.findByRole("button", { name: "Изменить поле Статус" }));
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "text");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
+  expect(api.updatedFieldPayloads[0]).toEqual(
+    expect.objectContaining({
+      field_type: "text",
+      options_source_type: null,
+      options_source_id: null,
+      options_config_json: null,
     }),
   );
 });
@@ -433,6 +612,9 @@ function createEditorFetchMock(
     conflictOnFirstFormSave?: boolean;
     conflictServerColumn?: number;
     deferredFirstFormSave?: "success" | "conflict";
+    deferredBlockCreate?: boolean;
+    deferredFieldCreate?: boolean;
+    fieldUpdateError?: boolean;
     legacyPrintView?: boolean;
   } = {},
 ) {
@@ -444,11 +626,14 @@ function createEditorFetchMock(
   const printSavePayloads: PrintSavePayload[] = [];
   const createdBlockPayloads: Record<string, unknown>[] = [];
   const createdFieldPayloads: Record<string, unknown>[] = [];
+  const updatedBlockPayloads: Record<string, unknown>[] = [];
   const updatedFieldPayloads: Record<string, unknown>[] = [];
   const templateUpdatePayloads: Record<string, unknown>[] = [];
   const blankDownloadPayloads: Array<{ layout_json: CardPrintLayout }> = [];
   let conversionCalls = 0;
   let resolveDeferredFirst: (() => void) | null = null;
+  let resolveDeferredBlockCreate: (() => void) | null = null;
+  let resolveDeferredFieldCreate: (() => void) | null = null;
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -496,11 +681,19 @@ function createEditorFetchMock(
     if (url.endsWith("/api/v1/registries/registry-1/blocks")) {
       createdBlockPayloads.push(body);
       const created = blockFixture("block-created", String(body.title ?? "Новый блок"));
-      layout = {
-        ...layout,
-        structure: { ...layout.structure, blocks: [...layout.structure.blocks, created] },
+      const complete = () => {
+        layout = {
+          ...layout,
+          structure: { ...layout.structure, blocks: [...layout.structure.blocks, created] },
+        };
+        return jsonResponse(created, 201);
       };
-      return jsonResponse(created, 201);
+      if (options.deferredBlockCreate) {
+        return new Promise<Response>((resolve) => {
+          resolveDeferredBlockCreate = () => resolve(complete());
+        });
+      }
+      return complete();
     }
     if (url.endsWith("/api/v1/blocks/block-1/fields")) {
       createdFieldPayloads.push(body);
@@ -510,14 +703,40 @@ function createEditorFetchMock(
         String(body.label ?? "Новое поле"),
         String(body.field_type ?? "text"),
       );
+      const complete = () => {
+        layout = {
+          ...layout,
+          structure: { ...layout.structure, fields: [...layout.structure.fields, created] },
+        };
+        return jsonResponse(created, 201);
+      };
+      if (options.deferredFieldCreate) {
+        return new Promise<Response>((resolve) => {
+          resolveDeferredFieldCreate = () => resolve(complete());
+        });
+      }
+      return complete();
+    }
+    if (url.endsWith("/api/v1/blocks/block-1") && init?.method === "PATCH") {
+      updatedBlockPayloads.push(body);
+      const current = layout.structure.blocks.find((block) => block.id === "block-1");
+      const updated = { ...current, ...body } as FormBlockRead;
       layout = {
         ...layout,
-        structure: { ...layout.structure, fields: [...layout.structure.fields, created] },
+        structure: {
+          ...layout.structure,
+          blocks: layout.structure.blocks.map((block) =>
+            block.id === updated.id ? updated : block,
+          ),
+        },
       };
-      return jsonResponse(created, 201);
+      return jsonResponse(updated);
     }
     if (url.endsWith("/api/v1/fields/field-1") && init?.method === "PATCH") {
       updatedFieldPayloads.push(body);
+      if (options.fieldUpdateError) {
+        return jsonResponse({ detail: "Field code already exists in this registry." }, 400);
+      }
       const current = layout.structure.fields.find((field) => field.id === "field-1");
       const updated = { ...current, ...body } as FormFieldRead;
       layout = {
@@ -593,6 +812,7 @@ function createEditorFetchMock(
     printSavePayloads,
     createdBlockPayloads,
     createdFieldPayloads,
+    updatedBlockPayloads,
     updatedFieldPayloads,
     templateUpdatePayloads,
     blankDownloadPayloads,
@@ -604,6 +824,16 @@ function createEditorFetchMock(
       resolveDeferredFirst();
       resolveDeferredFirst = null;
     },
+    resolveBlockCreate() {
+      if (!resolveDeferredBlockCreate) throw new Error("The block create is not pending.");
+      resolveDeferredBlockCreate();
+      resolveDeferredBlockCreate = null;
+    },
+    resolveFieldCreate() {
+      if (!resolveDeferredFieldCreate) throw new Error("The field create is not pending.");
+      resolveDeferredFieldCreate();
+      resolveDeferredFieldCreate = null;
+    },
   };
 }
 
@@ -614,6 +844,13 @@ async function moveMainBlockRight(user: ReturnType<typeof userEvent.setup>) {
   const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
   move.focus();
   await user.keyboard("{ArrowRight}");
+  await user.click(screen.getByRole("button", { name: "Готово" }));
+}
+
+async function moveMainBlockDown(user: ReturnType<typeof userEvent.setup>) {
+  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  move.focus();
+  await user.keyboard("{ArrowDown}");
   await user.click(screen.getByRole("button", { name: "Готово" }));
 }
 
@@ -839,7 +1076,7 @@ function cardTemplateFixture() {
   };
 }
 
-function renderEditor() {
+function renderEditor(initialField = fieldFixture("field-1", "block-1", "Статус", "text")) {
   return render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -852,7 +1089,7 @@ function renderEditor() {
           blockFixture("block-1", "Основной блок"),
           blockFixture("block-2", "Дополнительный блок"),
         ]}
-        fields={[fieldFixture("field-1", "block-1", "Статус", "text")]}
+        fields={[initialField]}
       />
     </QueryClientProvider>,
   );

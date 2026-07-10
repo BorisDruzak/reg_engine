@@ -76,6 +76,9 @@ class FormBlockUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     position: int | None = None
+    is_repeatable: bool | None = None
+    public_visible: bool | None = None
+    public_editable: bool | None = None
     layout_columns: int | None = Field(default=None, ge=1, le=3)
     display_config_json: dict[str, Any] | None = None
 
@@ -118,6 +121,7 @@ class FormFieldRead(BaseModel):
 
 
 class FormFieldUpdate(BaseModel):
+    code: str | None = None
     label: str | None = None
     description: str | None = None
     field_type: str | None = None

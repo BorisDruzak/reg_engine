@@ -37,15 +37,16 @@ export type CardWebLayoutCanvasProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  responsive?: boolean;
   showGeometryDiagnostics?: boolean;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
   onCreateBlock?: (position: CardLayoutCreatePosition) => void;
   onInsertBlock?: (position: CardLayoutCreatePosition) => void;
   onCreateField?: (blockId: string) => void;
-  onCommitBlock?: (block: FormBlockRead) => void;
+  onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
   onCancelBlock?: (blockId: string) => void;
-  onCommitField?: (field: FormFieldRead) => void;
+  onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
   onCancelField?: (fieldId: string) => void;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
   onGeometryCommit?: (command: LayoutGeometryCommand) => void;
@@ -66,6 +67,7 @@ function CardWebLayoutCanvasSession({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  responsive = true,
   showGeometryDiagnostics = false,
   renderFieldValue,
   onSelectionChange,
@@ -116,6 +118,10 @@ function CardWebLayoutCanvasSession({
     () => applyLayoutGeometryPreview(layout, geometry.session),
     [geometry.session, layout],
   );
+  const orderedSections = useMemo(
+    () => rowMajor(displayLayout.form_layout.sections),
+    [displayLayout.form_layout.sections],
+  );
 
   function select(nextSelection: CardLayoutSelection) {
     if (!selectionControlled) {
@@ -134,12 +140,12 @@ function CardWebLayoutCanvasSession({
   return (
     <>
       <div
-        className={`card-web-layout-canvas is-${mode}${geometryActive ? " is-geometry-active" : ""}`}
+        className={`card-web-layout-canvas${responsive ? " card-layout-responsive-grid" : ""} is-${mode}${geometryActive ? " is-geometry-active" : ""}`}
         data-testid="card-layout-canvas"
         data-layout-grid="canvas"
         style={canvasStyle}
       >
-        {displayLayout.form_layout.sections.map((section) => (
+        {orderedSections.map((section) => (
           <CardBlockLayoutNode
             key={section.id}
             section={section}
@@ -293,4 +299,8 @@ function withinGrid(rect: LayoutRect) {
     rect.row + rect.rowSpan <= 5 &&
     rect.column + rect.columnSpan <= 13
   );
+}
+
+function rowMajor<T extends { row: number; column: number }>(items: T[]): T[] {
+  return [...items].sort((left, right) => left.row - right.row || left.column - right.column);
 }

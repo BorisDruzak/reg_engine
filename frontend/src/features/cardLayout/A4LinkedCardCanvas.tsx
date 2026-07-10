@@ -64,7 +64,7 @@ export function A4LinkedCardCanvas({
 }: A4LinkedCardCanvasProps) {
   return (
     <section className="a4-linked-card-stage" aria-label="Печатная форма A4">
-      {legacy ? (
+      {readonly ? null : legacy ? (
         <div className="a4-linked-card-legacy-notice" role="status">
           <div>
             <strong>Сохранена прежняя поэлементная печатная форма</strong>
@@ -82,7 +82,7 @@ export function A4LinkedCardCanvas({
             Преобразовать в связанный макет
           </button>
         </div>
-      ) : readonly ? null : (
+      ) : (
         <div className="a4-linked-card-actions" role="toolbar" aria-label="Печатные элементы A4">
           {printOnlyActions.map((action) => (
             <button
@@ -108,7 +108,7 @@ export function A4LinkedCardCanvas({
         selectedItemId={legacy || readonly ? null : selectedItemId}
         onSelectItem={legacy || readonly ? undefined : onSelectItem}
         onChangeLayout={legacy || readonly ? undefined : onChangeLayout}
-        onEditLinkedCard={onEditCardLayout}
+        onEditLinkedCard={readonly ? undefined : onEditCardLayout}
       />
     </section>
   );

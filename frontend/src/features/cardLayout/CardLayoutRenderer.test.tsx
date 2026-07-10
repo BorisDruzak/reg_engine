@@ -1,5 +1,8 @@
+/// <reference types="node" />
+
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { describe, expect, test, vi } from "vitest";
 
@@ -8,6 +11,8 @@ import { FIELD_TYPES, fieldTypeLabel } from "@/app/uiText";
 
 import { CardLayoutRenderer } from "./CardLayoutRenderer";
 import { CardWebLayoutCanvas, type CardWebLayoutCanvasProps } from "./CardWebLayoutCanvas";
+
+const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
 const block: FormBlockRead = {
   id: "block-fio",
@@ -226,6 +231,67 @@ function blockMoveHandle() {
 }
 
 describe("CardWebLayoutCanvas", () => {
+  test("renders responsive grids in row-major DOM order with a single-column CSS contract", () => {
+    const unsortedLayout: CardTemplateLayoutRead = {
+      ...layout,
+      structure: {
+        blocks: [block, secondaryBlock],
+        fields: [...fields, secondaryField],
+      },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            id: secondaryBlock.id,
+            block_id: secondaryBlock.id,
+            row: 2,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
+            items: [
+              {
+                id: secondaryField.id,
+                kind: "field",
+                field_id: secondaryField.id,
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+            ],
+          },
+          {
+            ...layout.form_layout.sections[0],
+            items: [...layout.form_layout.sections[0].items].reverse(),
+          },
+        ],
+      },
+    };
+
+    render(<CardWebLayoutCanvas layout={unsortedLayout} mode="preview" />);
+
+    expect(screen.getByTestId("card-layout-canvas")).toHaveClass("card-layout-responsive-grid");
+    expect(screen.getAllByTestId(/^layout-block-/).map((node) => node.dataset.testid)).toEqual([
+      "layout-block-block-fio",
+      "layout-block-block-work",
+    ]);
+    expect(
+      within(screen.getByTestId("layout-block-block-fio"))
+        .getAllByTestId(/^layout-field-/)
+        .map((node) => node.dataset.testid),
+    ).toEqual(["layout-field-field-name", "layout-field-field-active"]);
+    expect(globalStyles).toContain(".card-layout-responsive-grid");
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 820px\)[\s\S]*\.card-layout-responsive-grid[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)\s*!important/,
+    );
+    expect(globalStyles).toMatch(
+      /\.card-layout-responsive-grid\s*>\s*\.card-layout-block-node[\s\S]*grid-column:\s*1\s*\/\s*-1\s*!important/,
+    );
+    expect(globalStyles).toMatch(
+      /\.card-layout-responsive-field-grid\s*>\s*\.card-layout-field-node[\s\S]*grid-row:\s*auto\s*!important/,
+    );
+  });
+
   test("treats an explicit null selection as controlled", async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();

@@ -442,7 +442,7 @@ function A4TemplateElement({
         onMouseLeave={() => onHover(false)}
       >
         <div className="a4-linked-card-renderer">
-          <CardLayoutRenderer layout={linkedCardLayout} mode="preview" />
+          <CardLayoutRenderer layout={linkedCardLayout} mode="preview" responsive={false} />
         </div>
         {mode === "design" ? (
           <button

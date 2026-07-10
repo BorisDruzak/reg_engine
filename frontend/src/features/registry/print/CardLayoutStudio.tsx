@@ -125,7 +125,7 @@ function CardLayoutStudioSession({
     [blocks, fields, initialLayout],
   );
   const [stage, setStage] = useState<StudioStage>("layout");
-  const [draftLayout, setDraftLayout] = useState(initialDraft);
+  const [draftLayout, setDraftLayoutState] = useState(initialDraft);
   const [selection, setSelection] = useState<CardLayoutSelection>(null);
   const [failedFormLayout, setFailedFormLayout] = useState<CardTemplateFormLayoutRead | null>(null);
   const [conflictServerLayout, setConflictServerLayout] = useState<CardTemplateLayoutRead | null>(
@@ -158,9 +158,11 @@ function CardLayoutStudioSession({
   const temporaryFieldIds = useRef(new Set<string>());
   const temporaryCounter = useRef(0);
   const localStructure = useRef(initialDraft.structure);
+  const draftLayoutRef = useRef(initialDraft);
   const latestDraftFormLayout = useRef(initialDraft.form_layout);
   const currentRevision = useRef(initialDraft.revision);
   const formSaveRunning = useRef(false);
+  const schemaWritesInFlight = useRef(0);
   const conflictActive = useRef(false);
   const queuedFormSave = useRef<{
     formLayout: CardTemplateFormLayoutRead;
@@ -202,8 +204,28 @@ function CardLayoutStudioSession({
     hasLegacyCardComposition(printLayout);
   const selectedPrintItem = findPrintItem(printLayout, selectedPrintItemId);
 
+  function updateDraftLayout(
+    updater: CardTemplateLayoutRead | ((current: CardTemplateLayoutRead) => CardTemplateLayoutRead),
+  ) {
+    const next = typeof updater === "function" ? updater(draftLayoutRef.current) : updater;
+    draftLayoutRef.current = next;
+    setDraftLayoutState(next);
+    return next;
+  }
+
+  function beginSchemaWrite() {
+    schemaWritesInFlight.current += 1;
+  }
+
+  function endSchemaWrite() {
+    schemaWritesInFlight.current = Math.max(0, schemaWritesInFlight.current - 1);
+    if (schemaWritesInFlight.current === 0) void drainFormSaveQueue();
+  }
+
   async function drainFormSaveQueue() {
-    if (formSaveRunning.current || conflictActive.current) return;
+    if (formSaveRunning.current || conflictActive.current || schemaWritesInFlight.current > 0)
+      return;
+    if (!queuedFormSave.current) return;
     formSaveRunning.current = true;
     setFormSavePending(true);
     setLocalError(null);
@@ -224,7 +246,7 @@ function CardLayoutStudioSession({
           };
           currentRevision.current = saved.revision;
           localStructure.current = savedBaseline.structure;
-          setDraftLayout((current) => ({
+          updateDraftLayout((current) => ({
             ...savedBaseline,
             structure: mergeStructure(savedBaseline.structure, current.structure),
             form_layout: latestDraftFormLayout.current,
@@ -246,7 +268,7 @@ function CardLayoutStudioSession({
           setHasFormConflict(conflictActive.current);
           setFailedFormLayout(latestLocal);
           setConflictServerLayout(null);
-          setDraftLayout((current) => ({ ...current, form_layout: latestLocal }));
+          updateDraftLayout((current) => ({ ...current, form_layout: latestLocal }));
           setLocalError(
             conflictActive.current ? STALE_LAYOUT_MESSAGE : `Не сохранено. ${errorMessage(error)}`,
           );
@@ -262,7 +284,7 @@ function CardLayoutStudioSession({
 
   function saveNextFormLayout(formLayout: CardTemplateFormLayoutRead): Promise<void> {
     latestDraftFormLayout.current = formLayout;
-    setDraftLayout((current) => ({ ...current, form_layout: formLayout }));
+    updateDraftLayout((current) => ({ ...current, form_layout: formLayout }));
     setFailedFormLayout((current) => (conflictActive.current ? formLayout : current));
     if (conflictActive.current) return Promise.resolve();
     const completion = new Promise<void>((resolve) => {
@@ -300,7 +322,7 @@ function CardLayoutStudioSession({
     currentRevision.current = conflictServerLayout.revision;
     conflictActive.current = false;
     queuedFormSave.current = null;
-    setDraftLayout(conflictServerLayout);
+    updateDraftLayout(conflictServerLayout);
     setFailedFormLayout(null);
     setHasFormConflict(false);
     setConflictServerLayout(null);
@@ -322,10 +344,11 @@ function CardLayoutStudioSession({
   }
 
   function handleGeometryCommit(command: LayoutGeometryCommand) {
-    saveNextFormLayout(applyGeometryCommand(draftLayout.form_layout, command));
+    saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
   }
 
   function startCreateBlock(position: CardLayoutCreatePosition) {
+    const currentLayout = draftLayoutRef.current;
     const temporaryId = nextTemporaryId("block");
     const block: FormBlockRead = {
       id: temporaryId,
@@ -346,15 +369,15 @@ function CardLayoutStudioSession({
       display_config_json: null,
     };
     const next = {
-      ...draftLayout,
+      ...currentLayout,
       structure: {
-        ...draftLayout.structure,
-        blocks: [...draftLayout.structure.blocks, block],
+        ...currentLayout.structure,
+        blocks: [...currentLayout.structure.blocks, block],
       },
       form_layout: {
-        ...draftLayout.form_layout,
+        ...currentLayout.form_layout,
         sections: [
-          ...draftLayout.form_layout.sections,
+          ...currentLayout.form_layout.sections,
           {
             id: `layout-${temporaryId}`,
             block_id: temporaryId,
@@ -366,11 +389,18 @@ function CardLayoutStudioSession({
     };
     temporaryBlockIds.current.add(temporaryId);
     localStructure.current = next.structure;
-    setDraftLayout(next);
+    updateDraftLayout(next);
     setSelection({ kind: "block", id: temporaryId });
   }
 
   async function commitBlock(block: FormBlockRead) {
+    beginSchemaWrite();
+    let gateReleased = false;
+    const releaseGate = () => {
+      if (gateReleased) return;
+      gateReleased = true;
+      endSchemaWrite();
+    };
     setSchemaPending(true);
     setLocalError(null);
     try {
@@ -386,47 +416,57 @@ function CardLayoutStudioSession({
           layout_columns: block.layout_columns,
           display_config_json: block.display_config_json,
         });
-        const next = replaceBlock(draftLayout, block.id, created);
+        const next = replaceBlock(draftLayoutRef.current, block.id, created);
         temporaryBlockIds.current.delete(block.id);
         localStructure.current = next.structure;
-        setDraftLayout(next);
-        await saveNextFormLayout(next.form_layout);
+        updateDraftLayout(next);
+        const save = saveNextFormLayout(next.form_layout);
+        releaseGate();
+        await save;
         await onSchemaChanged?.();
-        return;
+        return true;
       }
       const updated = await updateFormBlock(token, block.id, {
         title: block.title,
         description: block.description,
         position: block.position,
+        is_repeatable: block.is_repeatable,
+        public_visible: block.public_visible,
+        public_editable: block.public_editable,
         layout_columns: block.layout_columns,
         display_config_json: block.display_config_json,
       });
-      const nextStructure = {
-        ...draftLayout.structure,
-        blocks: draftLayout.structure.blocks.map((item) =>
-          item.id === updated.id ? updated : item,
-        ),
-      };
-      localStructure.current = nextStructure;
-      setDraftLayout((current) => ({ ...current, structure: nextStructure }));
+      updateDraftLayout((current) => {
+        const structure = {
+          ...current.structure,
+          blocks: current.structure.blocks.map((item) => (item.id === updated.id ? updated : item)),
+        };
+        localStructure.current = structure;
+        return { ...current, structure };
+      });
+      releaseGate();
       setLocalMessage("Блок сохранён");
       await onSchemaChanged?.();
+      return true;
     } catch (error) {
-      setLocalError(errorMessage(error));
+      setLocalError(schemaErrorMessage(error));
+      return false;
     } finally {
+      releaseGate();
       setSchemaPending(false);
     }
   }
 
   function cancelBlock(blockId: string) {
     if (!temporaryBlockIds.current.delete(blockId)) return;
-    const next = removeTemporaryBlock(draftLayout, blockId);
+    const next = removeTemporaryBlock(draftLayoutRef.current, blockId);
     localStructure.current = next.structure;
-    setDraftLayout(next);
+    updateDraftLayout(next);
   }
 
   function startCreateField(blockId: string) {
-    const section = draftLayout.form_layout.sections.find((item) => item.block_id === blockId);
+    const currentLayout = draftLayoutRef.current;
+    const section = currentLayout.form_layout.sections.find((item) => item.block_id === blockId);
     if (!section) return;
     const temporaryId = nextTemporaryId("field");
     const itemId = `layout-${temporaryId}`;
@@ -454,14 +494,14 @@ function CardLayoutStudioSession({
     };
     const position = firstEmptyFieldPosition(section.items);
     const next = {
-      ...draftLayout,
+      ...currentLayout,
       structure: {
-        ...draftLayout.structure,
-        fields: [...draftLayout.structure.fields, field],
+        ...currentLayout.structure,
+        fields: [...currentLayout.structure.fields, field],
       },
       form_layout: {
-        ...draftLayout.form_layout,
-        sections: draftLayout.form_layout.sections.map((item) =>
+        ...currentLayout.form_layout,
+        sections: currentLayout.form_layout.sections.map((item) =>
           item.id === section.id
             ? {
                 ...item,
@@ -482,11 +522,18 @@ function CardLayoutStudioSession({
     };
     temporaryFieldIds.current.add(temporaryId);
     localStructure.current = next.structure;
-    setDraftLayout(next);
+    updateDraftLayout(next);
     setSelection({ kind: "field", id: temporaryId });
   }
 
   async function commitField(field: FormFieldRead) {
+    beginSchemaWrite();
+    let gateReleased = false;
+    const releaseGate = () => {
+      if (gateReleased) return;
+      gateReleased = true;
+      endSchemaWrite();
+    };
     setSchemaPending(true);
     setLocalError(null);
     try {
@@ -507,15 +554,18 @@ function CardLayoutStudioSession({
           public_editable: field.public_editable,
         });
         await appendFieldsToTemplate([created.id]);
-        const next = replaceField(draftLayout, field.id, created);
+        const next = replaceField(draftLayoutRef.current, field.id, created);
         temporaryFieldIds.current.delete(field.id);
         localStructure.current = next.structure;
-        setDraftLayout(next);
-        await saveNextFormLayout(next.form_layout);
+        updateDraftLayout(next);
+        const save = saveNextFormLayout(next.form_layout);
+        releaseGate();
+        await save;
         await onSchemaChanged?.();
-        return;
+        return true;
       }
       const updated = await updateFormField(token, field.id, {
+        code: field.code,
         label: field.label,
         description: field.description,
         field_type: field.field_type,
@@ -530,28 +580,32 @@ function CardLayoutStudioSession({
         public_visible: field.public_visible,
         public_editable: field.public_editable,
       });
-      const nextStructure = {
-        ...draftLayout.structure,
-        fields: draftLayout.structure.fields.map((item) =>
-          item.id === updated.id ? updated : item,
-        ),
-      };
-      localStructure.current = nextStructure;
-      setDraftLayout((current) => ({ ...current, structure: nextStructure }));
+      updateDraftLayout((current) => {
+        const structure = {
+          ...current.structure,
+          fields: current.structure.fields.map((item) => (item.id === updated.id ? updated : item)),
+        };
+        localStructure.current = structure;
+        return { ...current, structure };
+      });
+      releaseGate();
       setLocalMessage("Поле сохранено");
       await onSchemaChanged?.();
+      return true;
     } catch (error) {
-      setLocalError(errorMessage(error));
+      setLocalError(schemaErrorMessage(error));
+      return false;
     } finally {
+      releaseGate();
       setSchemaPending(false);
     }
   }
 
   function cancelField(fieldId: string) {
     if (!temporaryFieldIds.current.delete(fieldId)) return;
-    const next = removeTemporaryField(draftLayout, fieldId);
+    const next = removeTemporaryField(draftLayoutRef.current, fieldId);
     localStructure.current = next.structure;
-    setDraftLayout(next);
+    updateDraftLayout(next);
   }
 
   function openInsertBlock(position: CardLayoutCreatePosition) {
@@ -560,20 +614,29 @@ function CardLayoutStudioSession({
 
   async function insertExistingBlock() {
     if (!insertDialog?.blockId) return;
+    const insertPosition = insertDialog.position;
     const block = allBlocks.find((item) => item.id === insertDialog.blockId);
     if (!block) return;
     const blockFields = allFields.filter((field) => field.block_id === block.id && field.is_active);
+    beginSchemaWrite();
+    let gateReleased = false;
+    const releaseGate = () => {
+      if (gateReleased) return;
+      gateReleased = true;
+      endSchemaWrite();
+    };
     setSchemaPending(true);
     try {
       await appendFieldsToTemplate(blockFields.map((field) => field.id));
+      const currentFormLayout = draftLayoutRef.current.form_layout;
       const nextFormLayout: CardTemplateFormLayoutRead = {
-        ...draftLayout.form_layout,
+        ...currentFormLayout,
         sections: [
-          ...draftLayout.form_layout.sections,
+          ...currentFormLayout.sections,
           {
             id: `block-${block.id}`,
             block_id: block.id,
-            ...insertDialog.position,
+            ...insertPosition,
             items: blockFields.map((field, index) => ({
               id: `field-${field.id}`,
               kind: "field",
@@ -588,11 +651,14 @@ function CardLayoutStudioSession({
         ],
       };
       setInsertDialog(null);
-      await saveNextFormLayout(nextFormLayout);
+      const save = saveNextFormLayout(nextFormLayout);
+      releaseGate();
+      await save;
       await onSchemaChanged?.();
     } catch (error) {
       setLocalError(errorMessage(error));
     } finally {
+      releaseGate();
       setSchemaPending(false);
     }
   }
@@ -917,9 +983,9 @@ function CardLayoutStudioSession({
           onCreateBlock={startCreateBlock}
           onInsertBlock={openInsertBlock}
           onCreateField={startCreateField}
-          onCommitBlock={(block) => void commitBlock(block)}
+          onCommitBlock={commitBlock}
           onCancelBlock={cancelBlock}
-          onCommitField={(field) => void commitField(field)}
+          onCommitField={commitField}
           onCancelField={cancelField}
           onGeometryCommit={handleGeometryCommit}
         />
@@ -1354,6 +1420,17 @@ function findPrintItem(layout: CardPrintLayout, itemId: string | null) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function schemaErrorMessage(error: unknown) {
+  const message = errorMessage(error);
+  if (message.includes("Field code already exists")) {
+    return "Технический код уже используется другим полем этого реестра.";
+  }
+  if (message.includes("Field code format")) {
+    return "Технический код должен начинаться с латинской буквы и содержать только строчные латинские буквы, цифры, дефисы и подчёркивания.";
+  }
+  return message;
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -25,6 +26,7 @@ BASE_CARD_TEMPLATE_CODE = "base_template"
 FIELD_LABEL_POSITIONS = {"top", "bottom", "left", "right"}
 FIELD_SEPARATOR_STYLES = {"none", "line", "space", "muted"}
 BLOCK_TITLE_POSITIONS = {"top", "bottom", "left", "right"}
+FIELD_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 BASE_CARD_TEMPLATE_NAME = "Базовый шаблон"
 UNSET_FIELD_UPDATE = object()
 
@@ -546,6 +548,9 @@ class RegistrySchemaService:
         title: str | None = None,
         description: str | None = None,
         position: int | None = None,
+        is_repeatable: bool | None = None,
+        public_visible: bool | None = None,
+        public_editable: bool | None = None,
         layout_columns: int | None = None,
         display_config_json: dict[str, object] | None = None,
     ) -> FormBlock:
@@ -556,6 +561,9 @@ class RegistrySchemaService:
             "title": block.title,
             "description": block.description,
             "position": block.position,
+            "is_repeatable": block.is_repeatable,
+            "public_visible": block.public_visible,
+            "public_editable": block.public_editable,
             "layout_columns": block.layout_columns,
             "display_config_json": block.display_config_json,
         }
@@ -570,6 +578,12 @@ class RegistrySchemaService:
             block.description = description
         if position is not None:
             block.position = position
+        if is_repeatable is not None:
+            block.is_repeatable = is_repeatable
+        if public_visible is not None:
+            block.public_visible = public_visible
+        if public_editable is not None:
+            block.public_editable = public_editable
         if layout_columns is not None:
             block.layout_columns = layout_columns
         if display_config_json is not None:
@@ -585,6 +599,9 @@ class RegistrySchemaService:
                 "title": block.title,
                 "description": block.description,
                 "position": block.position,
+                "is_repeatable": block.is_repeatable,
+                "public_visible": block.public_visible,
+                "public_editable": block.public_editable,
                 "layout_columns": block.layout_columns,
                 "display_config_json": block.display_config_json,
             },
@@ -715,6 +732,7 @@ class RegistrySchemaService:
         *,
         actor_user_id: UUID,
         field_id: UUID,
+        code: str | object = UNSET_FIELD_UPDATE,
         label: str | None = None,
         description: str | None | object = UNSET_FIELD_UPDATE,
         field_type: str | object = UNSET_FIELD_UPDATE,
@@ -734,6 +752,7 @@ class RegistrySchemaService:
         self._ensure_mutable_field(field)
         self._require_schema_permission(actor_user_id, block.registry_id)
         old_data = {
+            "code": field.code,
             "label": field.label,
             "description": field.description,
             "field_type": field.field_type,
@@ -750,6 +769,17 @@ class RegistrySchemaService:
             "public_visible": field.public_visible,
             "public_editable": field.public_editable,
         }
+        effective_code = field.code
+        if code is not UNSET_FIELD_UPDATE:
+            if not isinstance(code, str):
+                raise RegistrySchemaError("Field code must be a string.")
+            cleaned_code = code.strip()
+            if cleaned_code != field.code:
+                effective_code = self._validate_field_code_update(
+                    code=cleaned_code,
+                    registry_id=block.registry_id,
+                    field_id=field.id,
+                )
         effective_field_type = field.field_type
         if field_type is not UNSET_FIELD_UPDATE:
             if not isinstance(field_type, str):
@@ -785,16 +815,17 @@ class RegistrySchemaService:
                     registry_id=block.registry_id,
                 )
             )
+        field_type_changed = effective_field_type != field.field_type
         effective_options_config = field.options_config_json
-        if options_config_json is not UNSET_FIELD_UPDATE or field_type is not UNSET_FIELD_UPDATE:
-            if not isinstance(options_config_json, (dict, type(None))):
-                if options_config_json is UNSET_FIELD_UPDATE:
-                    options_config_json = field.options_config_json
-                else:
-                    raise RegistrySchemaError("Field options config must be an object.")
+        if options_config_json is not UNSET_FIELD_UPDATE or field_type_changed:
+            candidate_options_config = None if field_type_changed else options_config_json
+            if options_config_json is not UNSET_FIELD_UPDATE:
+                candidate_options_config = options_config_json
+            if not isinstance(candidate_options_config, (dict, type(None))):
+                raise RegistrySchemaError("Field options config must be an object.")
             effective_options_config = self._normalize_options_config_for_field(
                 effective_field_type,
-                options_config_json,
+                candidate_options_config,
             )
         effective_display_config = field.display_config_json
         if display_config_json is not UNSET_FIELD_UPDATE:
@@ -827,6 +858,7 @@ class RegistrySchemaService:
             effective_is_list_display = False
             effective_public_editable = False
 
+        field.code = effective_code
         if label is not None:
             field.label = label
         if description is not UNSET_FIELD_UPDATE:
@@ -854,6 +886,7 @@ class RegistrySchemaService:
             object_id=field.id,
             old_data_json=old_data,
             new_data_json={
+                "code": field.code,
                 "label": field.label,
                 "description": field.description,
                 "field_type": field.field_type,
@@ -1305,7 +1338,40 @@ class RegistrySchemaService:
                 raise RegistrySchemaError("Unsupported block title position.")
             normalized["title_position"] = title_position
 
+        collapsible = display_config_json.get("collapsible")
+        if collapsible is not None:
+            if not isinstance(collapsible, bool):
+                raise RegistrySchemaError("Block collapsible setting must be boolean.")
+            normalized["collapsible"] = collapsible
+
         return normalized or None
+
+    def _validate_field_code_update(
+        self,
+        *,
+        code: str,
+        registry_id: UUID,
+        field_id: UUID,
+    ) -> str:
+        cleaned = code.strip()
+        if not cleaned or FIELD_CODE_PATTERN.fullmatch(cleaned) is None:
+            raise RegistrySchemaError(
+                "Field code format requires a lowercase Latin letter followed by "
+                "lowercase Latin letters, digits, underscores, or hyphens."
+            )
+        duplicate = self.session.scalar(
+            select(FormField.id)
+            .join(FormBlock, FormBlock.id == FormField.block_id)
+            .where(
+                FormBlock.registry_id == registry_id,
+                FormField.code == cleaned,
+                FormField.id != field_id,
+            )
+            .limit(1)
+        )
+        if duplicate is not None:
+            raise RegistrySchemaError("Field code already exists in this registry.")
+        return cleaned
 
     def _normalize_field_display_config(
         self,

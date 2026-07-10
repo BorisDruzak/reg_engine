@@ -138,6 +138,9 @@ export type FormBlockUpdatePayload = {
   title?: string | null;
   description?: string | null;
   position?: number | null;
+  is_repeatable?: boolean | null;
+  public_visible?: boolean | null;
+  public_editable?: boolean | null;
   layout_columns?: number | null;
   display_config_json?: Record<string, unknown> | null;
 };
@@ -178,6 +181,7 @@ export type FormFieldCreatePayload = {
 };
 
 export type FormFieldUpdatePayload = {
+  code?: string | null;
   label?: string | null;
   description?: string | null;
   field_type?: string | null;

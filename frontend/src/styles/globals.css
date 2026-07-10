@@ -2559,8 +2559,33 @@ tr:last-child td {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .card-web-layout-canvas {
-    min-width: 620px;
+  .card-layout-renderer {
+    overflow-x: hidden;
+  }
+
+  .card-layout-responsive-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: none !important;
+    min-width: 0;
+    min-height: 0 !important;
+    overflow-x: hidden;
+  }
+
+  .card-layout-responsive-grid > .card-layout-block-node,
+  .card-layout-responsive-grid > .card-layout-empty-area-actions {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+  }
+
+  .card-layout-responsive-grid .card-layout-responsive-field-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: none !important;
+    min-height: 0 !important;
+  }
+
+  .card-layout-responsive-grid .card-layout-responsive-field-grid > .card-layout-field-node {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
   }
 
   .a4-linked-card-actions {

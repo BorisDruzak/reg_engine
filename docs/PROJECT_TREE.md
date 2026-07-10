@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-10 02:08:22 +05:00
+- Generated: 2026-07-10 07:52:11 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -164,6 +164,7 @@
 - `backend/tests/test_phase_2c_generated_documents_architecture.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
+- `backend/tests/test_registry_schema_field_update_contract.py`
 - `backend/tests/test_required_field_payloads.py`
 - `backend/tests/test_schema_constraints.py`
 - `docs/ADR/0001-project-foundation.md`
@@ -234,6 +235,19 @@
 - `frontend/src/features/audit/AuditTable.tsx`
 - `frontend/src/features/auth/LoginScreen.tsx`
 - `frontend/src/features/auth/session.ts`
+- `frontend/src/features/cardLayout/A4LinkedCardCanvas.tsx`
+- `frontend/src/features/cardLayout/a4LinkedCardLayout.ts`
+- `frontend/src/features/cardLayout/CardBlockLayoutNode.tsx`
+- `frontend/src/features/cardLayout/CardFieldLayoutNode.tsx`
+- `frontend/src/features/cardLayout/CardLayoutRenderer.test.tsx`
+- `frontend/src/features/cardLayout/CardLayoutRenderer.tsx`
+- `frontend/src/features/cardLayout/CardWebLayoutCanvas.tsx`
+- `frontend/src/features/cardLayout/InlineBlockEditor.tsx`
+- `frontend/src/features/cardLayout/InlineFieldEditor.tsx`
+- `frontend/src/features/cardLayout/layoutGeometry.test.ts`
+- `frontend/src/features/cardLayout/layoutGeometry.ts`
+- `frontend/src/features/cardLayout/LayoutLivePreview.tsx`
+- `frontend/src/features/cardLayout/useLayoutGeometrySession.ts`
 - `frontend/src/features/cards/.gitkeep`
 - `frontend/src/features/cards/CardAttachmentsPanel.tsx`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
