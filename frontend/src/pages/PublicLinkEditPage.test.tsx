@@ -20,7 +20,7 @@ let attachments: PublicLinkAttachmentListRead;
 let fetchCalls: { method: string; path: string; body: unknown }[];
 let editResponseMode: "success" | "deferred" | "error";
 let deferredEditResponses: Array<(response: Response) => void>;
-let statusResponseMode: "success" | "deferred";
+let statusResponseMode: "success" | "deferred" | "error";
 let deferredStatusResponses: Array<(response: Response) => void>;
 let lifecycleDenialPath: string | null;
 let uploadResponseMode: "success" | "deferred" | "error";
@@ -306,6 +306,50 @@ describe("PublicLinkEditPage", () => {
     expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
   });
 
+  test("always revalidates a fresh cached active status when the public page is revisited", async () => {
+    status = safeStatus("approved", { reviewed_at: "2026-07-10T11:00:00Z" });
+    renderPage((client) => {
+      client.setQueryDefaults(["public-link-status"], {
+        staleTime: Infinity,
+        refetchOnMount: false,
+      });
+      client.setQueryData(["public-link-status", rawToken], safeStatus("active"));
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Заполнение завершено" }),
+    ).toBeInTheDocument();
+    expect(statusCalls()).toHaveLength(1);
+    expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/preview")).toBe(false);
+    expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/attachments")).toBe(false);
+  });
+
+  test("never trusts cached active data after status revalidation fails", async () => {
+    statusResponseMode = "error";
+    preview = { ...publicPreview(), display_name: "PRIVATE NETWORK PREVIEW" };
+    const queryClient = renderPage((client) => {
+      client.setQueryData(["public-link-status", rawToken], safeStatus("active"));
+      client.setQueryData(["public-link-preview", rawToken], {
+        ...publicPreview(),
+        display_name: "PRIVATE FAILED CACHE",
+      });
+      client.setQueryData(["public-link-attachments", rawToken], {
+        ...attachments,
+        items: [{ ...publicAttachment(), title: "PRIVATE FAILED ATTACHMENT" }],
+      });
+    });
+
+    expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE FAILED CACHE")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE NETWORK PREVIEW")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE FAILED ATTACHMENT")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Публичный статус" })).not.toBeInTheDocument();
+    expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/preview")).toBe(false);
+    expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/attachments")).toBe(false);
+    expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeUndefined();
+    expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
+  });
+
   test.each([
     ["field", "/api/v1/public-links/edit"],
     ["attachment", "/api/v1/public-links/attachments/upload"],
@@ -393,6 +437,9 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (path === "/api/v1/public-links/status") {
     if (statusResponseMode === "deferred") {
       return new Promise<Response>((resolve) => deferredStatusResponses.push(resolve));
+    }
+    if (statusResponseMode === "error") {
+      return jsonResponse({ detail: "Status unavailable" }, 503);
     }
     return jsonResponse(status);
   }

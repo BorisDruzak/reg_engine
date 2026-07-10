@@ -42,9 +42,15 @@ export function PublicLinkEditPage() {
     queryKey: ["public-link-status", rawToken],
     queryFn: () => getPublicLinkStatus(rawToken),
     enabled: Boolean(rawToken),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const statusAuthoritative =
-    statusQuery.isFetchedAfterMount && !statusQuery.isFetching && !lifecycleRefreshing;
+    statusQuery.isSuccess &&
+    statusQuery.error === null &&
+    statusQuery.isFetchedAfterMount &&
+    !statusQuery.isFetching &&
+    !lifecycleRefreshing;
   const editableStatus =
     statusAuthoritative &&
     statusQuery.data?.can_edit === true &&
