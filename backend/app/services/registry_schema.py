@@ -660,6 +660,10 @@ class RegistrySchemaService:
     ) -> FormField:
         block = self._get_active_block(block_id)
         self._require_schema_permission(actor_user_id, block.registry_id)
+        code = self._validate_field_code(
+            code=code,
+            registry_id=block.registry_id,
+        )
         self._validate_field_type(field_type)
         self._validate_required_mode(required_mode)
         options_config_json = self._normalize_options_config_for_field(
@@ -775,7 +779,7 @@ class RegistrySchemaService:
                 raise RegistrySchemaError("Field code must be a string.")
             cleaned_code = code.strip()
             if cleaned_code != field.code:
-                effective_code = self._validate_field_code_update(
+                effective_code = self._validate_field_code(
                     code=cleaned_code,
                     registry_id=block.registry_id,
                     field_id=field.id,
@@ -1025,7 +1029,11 @@ class RegistrySchemaService:
         default_values_json: list[dict[str, Any]] | None = None,
         is_active: bool | None = None,
     ) -> CardTemplate:
-        template = self._get_card_template(template_id, include_archive=False)
+        template = self._get_card_template(
+            template_id,
+            include_archive=False,
+            lock_for_update=field_schema_json is not None,
+        )
         self._require_schema_permission(actor_user_id, template.registry_id)
         if template.code == BASE_CARD_TEMPLATE_CODE and is_active is False:
             raise RegistrySchemaError("Base card template must remain active.")
@@ -1167,8 +1175,17 @@ class RegistrySchemaService:
         template_id: UUID,
         *,
         include_archive: bool,
+        lock_for_update: bool = False,
     ) -> CardTemplate:
-        template = self.session.get(CardTemplate, template_id)
+        if lock_for_update:
+            template = self.session.scalars(
+                select(CardTemplate)
+                .where(CardTemplate.id == template_id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            ).one_or_none()
+        else:
+            template = self.session.get(CardTemplate, template_id)
         if template is None or (
             not include_archive and (template.archived_at is not None or not template.is_active)
         ):
@@ -1346,12 +1363,12 @@ class RegistrySchemaService:
 
         return normalized or None
 
-    def _validate_field_code_update(
+    def _validate_field_code(
         self,
         *,
         code: str,
         registry_id: UUID,
-        field_id: UUID,
+        field_id: UUID | None = None,
     ) -> str:
         cleaned = code.strip()
         if not cleaned or FIELD_CODE_PATTERN.fullmatch(cleaned) is None:
@@ -1359,16 +1376,17 @@ class RegistrySchemaService:
                 "Field code format requires a lowercase Latin letter followed by "
                 "lowercase Latin letters, digits, underscores, or hyphens."
             )
-        duplicate = self.session.scalar(
+        statement = (
             select(FormField.id)
             .join(FormBlock, FormBlock.id == FormField.block_id)
             .where(
                 FormBlock.registry_id == registry_id,
                 FormField.code == cleaned,
-                FormField.id != field_id,
             )
-            .limit(1)
         )
+        if field_id is not None:
+            statement = statement.where(FormField.id != field_id)
+        duplicate = self.session.scalar(statement.limit(1))
         if duplicate is not None:
             raise RegistrySchemaError("Field code already exists in this registry.")
         return cleaned
@@ -1429,8 +1447,29 @@ class RegistrySchemaService:
         field_type: str,
         options_config_json: dict[str, object] | None,
     ) -> dict[str, object] | None:
-        if field_type != "static_text":
-            return options_config_json
+        if field_type not in {"select", "multi_select", "static_text"}:
+            return None
+
+        if field_type in {"select", "multi_select"}:
+            if options_config_json is None:
+                return None
+            normalized: dict[str, object] = {}
+            allow_empty = options_config_json.get("allow_empty")
+            if allow_empty is not None:
+                if not isinstance(allow_empty, bool):
+                    raise RegistrySchemaError("Select allow-empty setting must be boolean.")
+                normalized["allow_empty"] = allow_empty
+            reference_resolution = options_config_json.get("reference_resolution")
+            if reference_resolution is not None:
+                if reference_resolution != "by_card_organization":
+                    raise RegistrySchemaError("Unsupported select reference resolution.")
+                normalized["reference_resolution"] = reference_resolution
+            allow_owner_override = options_config_json.get("allow_owner_override")
+            if allow_owner_override is not None:
+                if not isinstance(allow_owner_override, bool):
+                    raise RegistrySchemaError("Select owner override setting must be boolean.")
+                normalized["allow_owner_override"] = allow_owner_override
+            return normalized or None
 
         static_text = ""
         if options_config_json is not None:

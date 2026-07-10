@@ -179,7 +179,11 @@ export function A4LayoutRenderer({
       const [x, y] = keyMap[event.key];
       const step = event.shiftKey ? 5 : 1;
       event.preventDefault();
-      updateItem(moveItemByMm(selectedItem, normalizedLayout, x * step, y * step));
+      updateItem(
+        event.shiftKey
+          ? resizeItemByMm(selectedItem, normalizedLayout, "bottom-right", x * step, y * step)
+          : moveItemByMm(selectedItem, normalizedLayout, x * step, y * step),
+      );
     }
     if (event.key === "Delete") {
       event.preventDefault();
@@ -319,7 +323,7 @@ export function A4LayoutRenderer({
               showTechnicalData={effectiveShowTechnicalData}
               selected={selectedItemId === item.id}
               hovered={hoveredItemId === item.id}
-              onSelect={() => onSelectItem?.(item.id)}
+              onSelect={interactive && onSelectItem ? () => onSelectItem(item.id) : undefined}
               onHover={(hovered) => setHoveredItemId(hovered ? item.id : null)}
               onDragStart={(event) => {
                 if (!interactive) {
@@ -387,10 +391,10 @@ function A4TemplateElement({
   showTechnicalData: boolean;
   selected: boolean;
   hovered: boolean;
-  onSelect: () => void;
+  onSelect?: () => void;
   onHover: (hovered: boolean) => void;
   onDragStart: (event: React.PointerEvent<HTMLElement>) => void;
-  onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, edge: string) => void;
+  onResizeStart: (event: React.PointerEvent<HTMLElement>, edge: string) => void;
   onEditLinkedCard?: () => void;
 }) {
   const rect = itemRectFromMm(item);
@@ -419,6 +423,7 @@ function A4TemplateElement({
   const showLabel = item.kind === "field" && item.show_label !== false;
   const technicalText = showTechnicalData && field ? field.code : null;
   const readonly = mode !== "design";
+  const interactive = mode === "design" && Boolean(onSelect);
 
   if (item.kind === "card_layout" && linkedCardLayout) {
     return (
@@ -434,12 +439,16 @@ function A4TemplateElement({
           .join(" ")}
         data-testid="a4-linked-card-item"
         style={{ ...itemStyleFromMm(item, scale), ...contentStyle }}
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect();
-        }}
-        onMouseEnter={() => onHover(true)}
-        onMouseLeave={() => onHover(false)}
+        onClick={
+          interactive
+            ? (event) => {
+                event.stopPropagation();
+                onSelect?.();
+              }
+            : undefined
+        }
+        onMouseEnter={interactive ? () => onHover(true) : undefined}
+        onMouseLeave={interactive ? () => onHover(false) : undefined}
       >
         <div className="a4-linked-card-renderer">
           <CardLayoutRenderer layout={linkedCardLayout} mode="preview" responsive={false} />
@@ -471,11 +480,13 @@ function A4TemplateElement({
           </button>
         ) : null}
         {mode === "design" && selected ? (
-          <span className="a4-resize-handles" aria-hidden="true">
+          <span className="a4-resize-handles">
             {RESIZE_HANDLES.map((edge) => (
-              <span
+              <button
                 key={edge}
+                type="button"
                 className={`a4-resize-handle a4-resize-handle--${edge}`}
+                aria-label={`Изменить размер связанного макета карточки: ${resizeHandleLabel(edge)}`}
                 onPointerDown={(event) => onResizeStart(event, edge)}
               />
             ))}
@@ -485,28 +496,17 @@ function A4TemplateElement({
     );
   }
 
-  return (
-    <button
-      type="button"
-      className={[
-        "a4-template-element",
-        `a4-template-element--${item.kind}`,
-        selected ? "is-selected" : "",
-        hovered ? "is-hovered" : "",
-        readonly ? "is-readonly" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      style={{ ...itemStyleFromMm(item, scale), ...contentStyle }}
-      title={technicalText ? `Технический код: ${technicalText}` : undefined}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect();
-      }}
-      onPointerDown={onDragStart}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
-    >
+  const elementClassName = [
+    "a4-template-element",
+    `a4-template-element--${item.kind}`,
+    selected ? "is-selected" : "",
+    hovered ? "is-hovered" : "",
+    readonly ? "is-readonly" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const elementContent = (
+    <>
       {item.kind === "line" || item.kind === "divider" ? (
         <span className="a4-template-line" aria-hidden="true" />
       ) : (
@@ -527,24 +527,81 @@ function A4TemplateElement({
           )}
         </>
       )}
-      {mode === "design" && selected && (
-        <span className="a4-resize-handles" aria-hidden="true">
-          {RESIZE_HANDLES.map((edge) => (
-            <span
-              key={edge}
-              className={`a4-resize-handle a4-resize-handle--${edge}`}
-              onPointerDown={(event) => onResizeStart(event, edge)}
-            />
-          ))}
-        </span>
-      )}
       {showTechnicalData && (
         <small className="a4-template-rect">
           {rect.x_mm} x {rect.y_mm} мм
         </small>
       )}
-    </button>
+    </>
   );
+
+  if (readonly) {
+    return (
+      <div
+        className={elementClassName}
+        style={{ ...itemStyleFromMm(item, scale), ...contentStyle }}
+        title={technicalText ? `Технический код: ${technicalText}` : undefined}
+      >
+        {elementContent}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={elementClassName}
+      style={{ ...itemStyleFromMm(item, scale), ...contentStyle }}
+      title={technicalText ? `Технический код: ${technicalText}` : undefined}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+      onPointerDown={onDragStart}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+    >
+      {elementContent}
+      <button
+        type="button"
+        className="a4-linked-card-move-handle"
+        aria-label={`Переместить элемент ${label}`}
+        onFocus={() => onSelect?.()}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onDragStart(event);
+        }}
+      >
+        ⠿
+      </button>
+      {selected ? (
+        <span className="a4-resize-handles">
+          {RESIZE_HANDLES.map((edge) => (
+            <button
+              key={edge}
+              type="button"
+              className={`a4-resize-handle a4-resize-handle--${edge}`}
+              aria-label={`Изменить размер элемента ${label}: ${resizeHandleLabel(edge)}`}
+              onPointerDown={(event) => onResizeStart(event, edge)}
+            />
+          ))}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function resizeHandleLabel(edge: string) {
+  const labels: Record<string, string> = {
+    "top-left": "верхний левый угол",
+    top: "верхняя сторона",
+    "top-right": "верхний правый угол",
+    right: "правая сторона",
+    "bottom-right": "нижний правый угол",
+    bottom: "нижняя сторона",
+    "bottom-left": "нижний левый угол",
+    left: "левая сторона",
+  };
+  return labels[edge] ?? edge;
 }
 
 function formatRendererValue(value: unknown): string {

@@ -15,13 +15,14 @@ export type A4LinkedCardCanvasProps = {
   showGrid: boolean;
   selectedItemId: string | null;
   readonly?: boolean;
+  disabled?: boolean;
   legacy: boolean;
   converting?: boolean;
-  onSelectItem: (itemId: string | null) => void;
-  onChangeLayout: (layout: CardPrintLayout) => void;
-  onAddPrintItem: (kind: PrintOnlyItemKind) => void;
-  onEditCardLayout: () => void;
-  onConvertLegacy: () => void;
+  onSelectItem?: (itemId: string | null) => void;
+  onChangeLayout?: (layout: CardPrintLayout) => void;
+  onAddPrintItem?: (kind: PrintOnlyItemKind) => void;
+  onEditCardLayout?: () => void;
+  onConvertLegacy?: () => void;
 };
 
 export type PrintOnlyItemKind =
@@ -54,6 +55,7 @@ export function A4LinkedCardCanvas({
   showGrid,
   selectedItemId,
   readonly = false,
+  disabled = false,
   legacy,
   converting = false,
   onSelectItem,
@@ -76,7 +78,7 @@ export function A4LinkedCardCanvas({
           <button
             type="button"
             className="primary-button"
-            disabled={converting}
+            disabled={converting || disabled}
             onClick={onConvertLegacy}
           >
             Преобразовать в связанный макет
@@ -89,7 +91,8 @@ export function A4LinkedCardCanvas({
               key={action.kind}
               type="button"
               className="ghost-button"
-              onClick={() => onAddPrintItem(action.kind)}
+              disabled={disabled}
+              onClick={() => onAddPrintItem?.(action.kind)}
             >
               {action.label}
             </button>
@@ -101,14 +104,14 @@ export function A4LinkedCardCanvas({
         fields={fields}
         blocks={blocks}
         linkedCardLayout={cardLayout}
-        mode={legacy || readonly ? "preview" : "design"}
+        mode={legacy || readonly || disabled ? "preview" : "design"}
         zoom={zoom}
         showGrid={!legacy && !readonly && showGrid}
         showTechnicalData={false}
-        selectedItemId={legacy || readonly ? null : selectedItemId}
-        onSelectItem={legacy || readonly ? undefined : onSelectItem}
-        onChangeLayout={legacy || readonly ? undefined : onChangeLayout}
-        onEditLinkedCard={readonly ? undefined : onEditCardLayout}
+        selectedItemId={legacy || readonly || disabled ? null : selectedItemId}
+        onSelectItem={legacy || readonly || disabled ? undefined : onSelectItem}
+        onChangeLayout={legacy || readonly || disabled ? undefined : onChangeLayout}
+        onEditLinkedCard={readonly || disabled ? undefined : onEditCardLayout}
       />
     </section>
   );

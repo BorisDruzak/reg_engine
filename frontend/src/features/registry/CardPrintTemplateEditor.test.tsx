@@ -177,6 +177,56 @@ test("merges a deferred field create into the newest geometry after membership c
   );
 });
 
+test("waits for an in-flight layout PATCH before a block update and saves geometry queued during it", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({
+    deferredFirstFormSave: "success",
+    deferredBlockUpdate: true,
+  });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  await user.click(screen.getByRole("button", { name: "Изменить блок Основной блок" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(api.updatedBlockPayloads).toHaveLength(0);
+  api.resolveFirstFormSave();
+  await waitFor(() => expect(api.updatedBlockPayloads).toHaveLength(1));
+
+  await moveMainBlockRight(user);
+  expect(api.formSavePayloads).toHaveLength(1);
+  api.resolveBlockUpdate();
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads[1]).toEqual(
+    expect.objectContaining({
+      expected_revision: "revision-2",
+      form_layout: expect.objectContaining({
+        sections: expect.arrayContaining([expect.objectContaining({ column: 3 })]),
+      }),
+    }),
+  );
+});
+
+test("waits for an in-flight layout PATCH before creating a field", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredFirstFormSave: "success" });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  await user.click(screen.getByRole("button", { name: "Создать поле в блоке Основной блок" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(api.createdFieldPayloads).toHaveLength(0);
+  api.resolveFirstFormSave();
+
+  await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
+});
+
 test("inserts an existing block through a contextual chooser and saves once", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
@@ -242,7 +292,7 @@ test("keeps a conflicting local draft visible and accepts the reviewed server ve
   expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
-  expect(screen.queryByRole("button", { name: /Повторить/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Повторить" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
 
   const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
@@ -343,6 +393,73 @@ test("a queued 409 preserves the newest local draft and waits for an explicit ov
   expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(3);
 });
 
+test("retains a transiently failed layout draft and retries it explicitly", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ formSaveErrorOnFirst: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+
+  expect(await screen.findByText(/Не сохранено\./)).toBeInTheDocument();
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+  expect(api.formSavePayloads).toHaveLength(1);
+
+  await user.click(screen.getByRole("button", { name: "Повторить" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads[1].expected_revision).toBe("revision-1");
+  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+});
+
+test("owns geometry undo and redo history without duplicating commands", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredFirstFormSave: "success" });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  const undo = await screen.findByRole("button", { name: "Отменить изменение" });
+  const redo = screen.getByRole("button", { name: "Повторить изменение" });
+  expect(undo).toBeDisabled();
+  expect(redo).toBeDisabled();
+
+  await moveMainBlockRight(user);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  await moveMainBlockRight(user);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "3 / span 6",
+  });
+
+  await user.click(undo);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+  await user.click(undo);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "1 / span 6",
+  });
+  await user.click(redo);
+  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    gridColumn: "2 / span 6",
+  });
+
+  api.resolveFirstFormSave();
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads.map((payload) => payload.expected_revision)).toEqual([
+    "revision-1",
+    "revision-2",
+  ]);
+  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
+
+  await moveMainBlockDown(user);
+  expect(screen.getByRole("button", { name: "Повторить изменение" })).toBeDisabled();
+});
+
 test("A4 stage contains one linked card rectangle, routes internal editing back, and keeps overlays", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
@@ -386,12 +503,41 @@ test("A4 stage contains one linked card rectangle, routes internal editing back,
   );
 });
 
+test("hides the forced-off legacy grid toggle and resizes the linked A4 item from the keyboard", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Печатная форма A4" }));
+  expect(screen.queryByRole("button", { name: /сетку/i })).not.toBeInTheDocument();
+  await user.click(screen.getByTestId("a4-linked-card-item"));
+  expect(
+    screen.getByRole("button", {
+      name: "Изменить размер связанного макета карточки: нижний правый угол",
+    }),
+  ).toBeInTheDocument();
+  const canvas = screen.getByLabelText("A4 канвас печатного шаблона");
+  canvas.focus();
+  await user.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+  await user.click(screen.getByRole("button", { name: "Сохранить печатную форму" }));
+
+  await waitFor(() => expect(api.printSavePayloads).toHaveLength(1));
+  expect(
+    api.printSavePayloads[0].layout_json.items.find((item) => item.kind === "card_layout")
+      ?.width_mm,
+  ).toBeLessThan(186);
+});
+
 test("preview is readonly for linked and legacy print layouts", async () => {
   const user = userEvent.setup();
   vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
   const linked = renderEditor();
 
   await user.click(await screen.findByRole("tab", { name: "Предпросмотр" }));
+  const linkedCanvas = screen.getByLabelText("A4 канвас печатного шаблона");
+  expect(within(linkedCanvas).queryAllByRole("button")).toHaveLength(0);
+  expect(linkedCanvas.querySelectorAll("[tabindex]")).toHaveLength(0);
   expect(screen.getByTestId("a4-linked-card-item")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Редактировать внутренний макет" }),
@@ -404,6 +550,14 @@ test("preview is readonly for linked and legacy print layouts", async () => {
   vi.stubGlobal("fetch", createEditorFetchMock({ legacyPrintView: true }).fetchMock);
   renderEditor();
   await user.click(await screen.findByRole("tab", { name: "Предпросмотр" }));
+  const legacyCanvas = screen.getByLabelText("A4 канвас печатного шаблона");
+  expect(within(legacyCanvas).queryAllByRole("button")).toHaveLength(0);
+  expect(legacyCanvas.querySelectorAll("[tabindex]")).toHaveLength(0);
+  const overlay = within(legacyCanvas)
+    .getByText("Печатная пометка")
+    .closest(".a4-template-element");
+  expect(overlay).not.toHaveAttribute("role");
+  expect(overlay).not.toHaveAttribute("tabindex");
 
   expect(screen.queryByRole("button", { name: /Преобразовать/ })).not.toBeInTheDocument();
   expect(
@@ -566,6 +720,27 @@ test("preserves blank DOCX and PDF actions with the linked A4 draft", async () =
   }
 });
 
+test("keeps generation pending after the print save and prevents duplicate requests", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ deferredGeneration: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor(undefined, "card-1");
+
+  const docx = await screen.findByRole("button", { name: "DOCX" });
+  const pdf = screen.getByRole("button", { name: "PDF" });
+  await user.click(docx);
+  await waitFor(() => expect(api.generationCalls).toBe(1));
+
+  expect(docx).toBeDisabled();
+  expect(pdf).toBeDisabled();
+  await user.click(docx);
+  expect(api.generationCalls).toBe(1);
+
+  api.resolveGeneration();
+  await waitFor(() => expect(docx).toBeEnabled());
+  expect(pdf).toBeEnabled();
+});
+
 test("converts a saved legacy print view through the real API and then shows the linked item", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock({ legacyPrintView: true });
@@ -614,6 +789,9 @@ function createEditorFetchMock(
     deferredFirstFormSave?: "success" | "conflict";
     deferredBlockCreate?: boolean;
     deferredFieldCreate?: boolean;
+    deferredBlockUpdate?: boolean;
+    deferredGeneration?: boolean;
+    formSaveErrorOnFirst?: boolean;
     fieldUpdateError?: boolean;
     legacyPrintView?: boolean;
   } = {},
@@ -631,9 +809,12 @@ function createEditorFetchMock(
   const templateUpdatePayloads: Record<string, unknown>[] = [];
   const blankDownloadPayloads: Array<{ layout_json: CardPrintLayout }> = [];
   let conversionCalls = 0;
+  let generationCalls = 0;
   let resolveDeferredFirst: (() => void) | null = null;
   let resolveDeferredBlockCreate: (() => void) | null = null;
   let resolveDeferredFieldCreate: (() => void) | null = null;
+  let resolveDeferredBlockUpdate: (() => void) | null = null;
+  let resolveDeferredGeneration: (() => void) | null = null;
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -670,6 +851,9 @@ function createEditorFetchMock(
           options.conflictServerColumn ?? 5,
         );
         return jsonResponse({ detail: "Card layout changed. Reload before saving." }, 409);
+      }
+      if (options.formSaveErrorOnFirst && formSaveAttempts === 1) {
+        return jsonResponse({ detail: "Temporary layout failure." }, 503);
       }
       layout = {
         ...layout,
@@ -721,16 +905,24 @@ function createEditorFetchMock(
       updatedBlockPayloads.push(body);
       const current = layout.structure.blocks.find((block) => block.id === "block-1");
       const updated = { ...current, ...body } as FormBlockRead;
-      layout = {
-        ...layout,
-        structure: {
-          ...layout.structure,
-          blocks: layout.structure.blocks.map((block) =>
-            block.id === updated.id ? updated : block,
-          ),
-        },
+      const complete = () => {
+        layout = {
+          ...layout,
+          structure: {
+            ...layout.structure,
+            blocks: layout.structure.blocks.map((block) =>
+              block.id === updated.id ? updated : block,
+            ),
+          },
+        };
+        return jsonResponse(updated);
       };
-      return jsonResponse(updated);
+      if (options.deferredBlockUpdate) {
+        return new Promise<Response>((resolve) => {
+          resolveDeferredBlockUpdate = () => resolve(complete());
+        });
+      }
+      return complete();
     }
     if (url.endsWith("/api/v1/fields/field-1") && init?.method === "PATCH") {
       updatedFieldPayloads.push(body);
@@ -803,6 +995,23 @@ function createEditorFetchMock(
         headers: { "X-Document-Filename": pdf ? "blank.pdf" : "blank.docx" },
       });
     }
+    if (
+      url.endsWith("/api/v1/cards/card-1/card-template-layout/template-1/generate-docx") ||
+      url.endsWith("/api/v1/cards/card-1/card-template-layout/template-1/generate-pdf")
+    ) {
+      generationCalls += 1;
+      const complete = () =>
+        jsonResponse({
+          document: generatedDocumentFixture(),
+          print_view: printViewFixture(linkedPrintLayout(), true),
+        });
+      if (options.deferredGeneration) {
+        return new Promise<Response>((resolve) => {
+          resolveDeferredGeneration = () => resolve(complete());
+        });
+      }
+      return complete();
+    }
     return jsonResponse({ detail: "not found" }, 404);
   });
 
@@ -819,6 +1028,9 @@ function createEditorFetchMock(
     get conversionCalls() {
       return conversionCalls;
     },
+    get generationCalls() {
+      return generationCalls;
+    },
     resolveFirstFormSave() {
       if (!resolveDeferredFirst) throw new Error("The first form save is not pending.");
       resolveDeferredFirst();
@@ -834,6 +1046,32 @@ function createEditorFetchMock(
       resolveDeferredFieldCreate();
       resolveDeferredFieldCreate = null;
     },
+    resolveBlockUpdate() {
+      if (!resolveDeferredBlockUpdate) throw new Error("The block update is not pending.");
+      resolveDeferredBlockUpdate();
+      resolveDeferredBlockUpdate = null;
+    },
+    resolveGeneration() {
+      if (!resolveDeferredGeneration) throw new Error("Document generation is not pending.");
+      resolveDeferredGeneration();
+      resolveDeferredGeneration = null;
+    },
+  };
+}
+
+function generatedDocumentFixture() {
+  return {
+    id: "generated-1",
+    card_id: "card-1",
+    template_id: "print-template-1",
+    template_version_id: "print-version-1",
+    stored_file_id: "stored-1",
+    title: "Основная A4",
+    output_filename: "card.docx",
+    content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    render_status: "ready",
+    created_at: "2026-07-10T00:00:00Z",
+    archived_at: null,
   };
 }
 
@@ -1000,6 +1238,18 @@ function linkedPrintLayout(): CardPrintLayout {
 function legacyPrintLayout(): CardPrintLayout {
   return {
     ...emptyPrintLayout(),
+    overlays: [
+      {
+        id: "legacy-overlay",
+        kind: "static_text",
+        page: 1,
+        x_mm: 12,
+        y_mm: 30,
+        width_mm: 93,
+        height_mm: 12,
+        text: "Печатная пометка",
+      },
+    ],
     items: [
       {
         id: "legacy-field",
@@ -1076,7 +1326,10 @@ function cardTemplateFixture() {
   };
 }
 
-function renderEditor(initialField = fieldFixture("field-1", "block-1", "Статус", "text")) {
+function renderEditor(
+  initialField = fieldFixture("field-1", "block-1", "Статус", "text"),
+  selectedCardId?: string,
+) {
   return render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -1090,6 +1343,7 @@ function renderEditor(initialField = fieldFixture("field-1", "block-1", "Ста�
           blockFixture("block-2", "Дополнительный блок"),
         ]}
         fields={[initialField]}
+        selectedCardId={selectedCardId}
       />
     </QueryClientProvider>,
   );

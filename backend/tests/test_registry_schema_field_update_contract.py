@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import registries as registry_endpoints
-from app.models import FormBlock, FormField, ReferenceList
+from app.models import CardTemplate, FormBlock, FormField, ReferenceList
 from app.schemas.registries import FormBlockUpdate, FormFieldUpdate
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
@@ -471,6 +471,181 @@ def test_field_type_transition_to_text_clears_type_specific_source_and_config(
     assert updated.options_source_type is None
     assert updated.options_source_id is None
     assert updated.options_config_json is None
+
+
+@pytest.mark.parametrize(
+    ("old_type", "old_source_type", "old_source_id", "stale_config"),
+    [
+        ("static_text", None, None, {"static_text": "Устаревший текст"}),
+        ("select", "reference_list", uuid4(), {"allow_empty": False}),
+    ],
+)
+def test_field_type_transition_to_text_discards_explicit_stale_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    old_type: str,
+    old_source_type: str | None,
+    old_source_id: object,
+    stale_config: dict[str, object],
+) -> None:
+    block_id = uuid4()
+    field = _field(block_id=block_id)
+    field.field_type = old_type
+    field.options_source_type = old_source_type
+    field.options_source_id = old_source_id  # type: ignore[assignment]
+    field.options_config_json = stale_config
+    block = FormBlock(id=block_id, registry_id=uuid4(), code="main", title="Основной")
+    service = RegistrySchemaService(Mock(spec=Session))
+
+    monkeypatch.setattr(service, "_get_active_field", lambda _field_id: field)
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_ensure_mutable_field", lambda _field: None)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "ensure_base_card_template_for_registry", lambda **_payload: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **_payload: None,
+    )
+
+    updated = service.update_field_for_actor(
+        actor_user_id=uuid4(),
+        field_id=field.id,
+        field_type="text",
+        options_source_type=old_source_type,
+        options_source_id=old_source_id,
+        options_config_json=stale_config,
+    )
+
+    assert updated.options_source_type is None
+    assert updated.options_source_id is None
+    assert updated.options_config_json is None
+
+
+def test_field_create_rejects_invalid_code_before_insert_or_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    block = FormBlock(id=uuid4(), registry_id=uuid4(), code="main", title="Основной")
+    session = Mock(spec=Session)
+    service = RegistrySchemaService(session)
+    audit_events: list[dict[str, object]] = []
+
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **payload: audit_events.append(payload),
+    )
+
+    with pytest.raises(RegistrySchemaError, match="format"):
+        service.create_field_for_actor(
+            actor_user_id=actor_user_id,
+            block_id=block.id,
+            code="invalid code",
+            label="Поле",
+            field_type="text",
+        )
+
+    session.add.assert_not_called()
+    session.flush.assert_not_called()
+    assert audit_events == []
+
+
+def test_field_create_rejects_registry_wide_duplicate_before_insert_or_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    block = FormBlock(id=uuid4(), registry_id=uuid4(), code="main", title="Основной")
+    duplicate_field_id = uuid4()
+    session = Mock(spec=Session)
+    session.scalar.return_value = duplicate_field_id
+    service = RegistrySchemaService(session)
+    audit_events: list[dict[str, object]] = []
+
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **payload: audit_events.append(payload),
+    )
+
+    with pytest.raises(RegistrySchemaError, match="already exists"):
+        service.create_field_for_actor(
+            actor_user_id=actor_user_id,
+            block_id=block.id,
+            code="duplicate_code",
+            label="Поле",
+            field_type="text",
+        )
+
+    session.add.assert_not_called()
+    session.flush.assert_not_called()
+    assert audit_events == []
+
+
+def test_card_template_membership_update_requests_a_fresh_row_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    template = CardTemplate(
+        id=uuid4(),
+        registry_id=uuid4(),
+        code="custom",
+        name="Шаблон",
+        field_schema_json={"field_ids": []},
+        default_values_json=[],
+        is_active=True,
+    )
+    service = RegistrySchemaService(Mock(spec=Session))
+    load_calls: list[dict[str, object]] = []
+
+    def load_template(_template_id, **kwargs):
+        load_calls.append(kwargs)
+        return template
+
+    monkeypatch.setattr(service, "_get_card_template", load_template)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        service,
+        "_normalize_card_template_payload",
+        lambda **_payload: ({"field_ids": []}, []),
+    )
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **_payload: None,
+    )
+
+    service.update_card_template_for_actor(
+        actor_user_id=actor_user_id,
+        template_id=template.id,
+        field_schema_json={"field_ids": []},
+    )
+
+    assert load_calls == [{"include_archive": False, "lock_for_update": True}]
+
+
+def test_locked_card_template_load_uses_populate_existing_and_for_update() -> None:
+    template = CardTemplate(
+        id=uuid4(),
+        registry_id=uuid4(),
+        code="custom",
+        name="Шаблон",
+        is_active=True,
+        archived_at=None,
+    )
+    session = Mock(spec=Session)
+    session.scalars.return_value.one_or_none.return_value = template
+    service = RegistrySchemaService(session)
+
+    loaded = service._get_card_template(  # noqa: SLF001
+        template.id,
+        include_archive=False,
+        lock_for_update=True,
+    )
+
+    statement = session.scalars.call_args.args[0]
+    assert loaded is template
+    assert statement.get_execution_options()["populate_existing"] is True
+    assert statement._for_update_arg is not None
 
 
 def test_field_update_preserves_type_config_when_type_is_unchanged(

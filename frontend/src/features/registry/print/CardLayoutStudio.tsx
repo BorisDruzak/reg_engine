@@ -84,6 +84,11 @@ type InsertBlockDialogState = {
   blockId: string;
 };
 
+type GeometryHistory = {
+  undo: LayoutGeometryCommand[];
+  redo: LayoutGeometryCommand[];
+};
+
 export function CardLayoutStudio(props: CardLayoutStudioProps) {
   const layoutQuery = useQuery({
     queryKey: ["card-template-layout", props.token, props.cardTemplate.id],
@@ -150,10 +155,14 @@ function CardLayoutStudioSession({
   );
   const [selectedPrintItemId, setSelectedPrintItemId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.75);
-  const [showGrid, setShowGrid] = useState(true);
-  const [printPending, setPrintPending] = useState(false);
+  const [printSavePending, setPrintSavePending] = useState(false);
+  const [generationPending, setGenerationPending] = useState(false);
   const [conversionPending, setConversionPending] = useState(false);
   const [lastGenerated, setLastGenerated] = useState<GeneratedDocumentRead | null>(null);
+  const [geometryHistory, setGeometryHistoryState] = useState<GeometryHistory>({
+    undo: [],
+    redo: [],
+  });
   const temporaryBlockIds = useRef(new Set<string>());
   const temporaryFieldIds = useRef(new Set<string>());
   const temporaryCounter = useRef(0);
@@ -162,7 +171,13 @@ function CardLayoutStudioSession({
   const latestDraftFormLayout = useRef(initialDraft.form_layout);
   const currentRevision = useRef(initialDraft.revision);
   const formSaveRunning = useRef(false);
+  const formSaveFailed = useRef(false);
+  const formSaveIdleWaiters = useRef<Array<() => void>>([]);
   const schemaWritesInFlight = useRef(0);
+  const schemaWriteTail = useRef(Promise.resolve());
+  const printSaveRunning = useRef(false);
+  const generationRunning = useRef(false);
+  const geometryHistoryRef = useRef<GeometryHistory>({ undo: [], redo: [] });
   const conflictActive = useRef(false);
   const queuedFormSave = useRef<{
     formLayout: CardTemplateFormLayoutRead;
@@ -213,17 +228,46 @@ function CardLayoutStudioSession({
     return next;
   }
 
-  function beginSchemaWrite() {
-    schemaWritesInFlight.current += 1;
+  function notifyFormSaveIdle() {
+    if (formSaveRunning.current || queuedFormSave.current) return;
+    const waiters = formSaveIdleWaiters.current.splice(0);
+    waiters.forEach((resolve) => resolve());
   }
 
-  function endSchemaWrite() {
-    schemaWritesInFlight.current = Math.max(0, schemaWritesInFlight.current - 1);
-    if (schemaWritesInFlight.current === 0) void drainFormSaveQueue();
+  function waitForFormSaveIdle() {
+    if (!formSaveRunning.current && !queuedFormSave.current) return Promise.resolve();
+    const idle = new Promise<void>((resolve) => formSaveIdleWaiters.current.push(resolve));
+    void drainFormSaveQueue();
+    return idle;
+  }
+
+  async function beginSchemaWrite() {
+    const previous = schemaWriteTail.current;
+    let releaseSlot: () => void = () => undefined;
+    const slot = new Promise<void>((resolve) => {
+      releaseSlot = resolve;
+    });
+    schemaWriteTail.current = previous.then(() => slot);
+    await previous;
+    await waitForFormSaveIdle();
+    schemaWritesInFlight.current += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      schemaWritesInFlight.current = Math.max(0, schemaWritesInFlight.current - 1);
+      releaseSlot();
+      if (schemaWritesInFlight.current === 0) void drainFormSaveQueue();
+    };
   }
 
   async function drainFormSaveQueue() {
-    if (formSaveRunning.current || conflictActive.current || schemaWritesInFlight.current > 0)
+    if (
+      formSaveRunning.current ||
+      conflictActive.current ||
+      formSaveFailed.current ||
+      schemaWritesInFlight.current > 0
+    )
       return;
     if (!queuedFormSave.current) return;
     formSaveRunning.current = true;
@@ -252,6 +296,7 @@ function CardLayoutStudioSession({
             form_layout: latestDraftFormLayout.current,
           }));
           setFailedFormLayout(null);
+          formSaveFailed.current = false;
           setHasFormConflict(false);
           setLocalMessage("Макет карточки сохранён");
           queryClient.setQueryData(["card-template-layout", token, cardTemplate.id], saved);
@@ -265,6 +310,7 @@ function CardLayoutStudioSession({
           const completions = [...request.completed, ...(queuedAfterFailure?.completed ?? [])];
           queuedFormSave.current = null;
           conflictActive.current = error instanceof ApiError && error.status === 409;
+          formSaveFailed.current = !conflictActive.current;
           setHasFormConflict(conflictActive.current);
           setFailedFormLayout(latestLocal);
           setConflictServerLayout(null);
@@ -279,14 +325,17 @@ function CardLayoutStudioSession({
     } finally {
       formSaveRunning.current = false;
       setFormSavePending(false);
+      notifyFormSaveIdle();
     }
   }
 
   function saveNextFormLayout(formLayout: CardTemplateFormLayoutRead): Promise<void> {
     latestDraftFormLayout.current = formLayout;
     updateDraftLayout((current) => ({ ...current, form_layout: formLayout }));
-    setFailedFormLayout((current) => (conflictActive.current ? formLayout : current));
-    if (conflictActive.current) return Promise.resolve();
+    setFailedFormLayout((current) =>
+      conflictActive.current || formSaveFailed.current ? formLayout : current,
+    );
+    if (conflictActive.current || formSaveFailed.current) return Promise.resolve();
     const completion = new Promise<void>((resolve) => {
       if (queuedFormSave.current) {
         queuedFormSave.current = {
@@ -299,6 +348,13 @@ function CardLayoutStudioSession({
     });
     void drainFormSaveQueue();
     return completion;
+  }
+
+  async function retryFailedFormLayout() {
+    if (!failedFormLayout || hasFormConflict || formSaveRunning.current) return;
+    formSaveFailed.current = false;
+    setLocalError(null);
+    await saveNextFormLayout(latestDraftFormLayout.current);
   }
 
   async function reviewServerFormLayout() {
@@ -321,6 +377,7 @@ function CardLayoutStudioSession({
     latestDraftFormLayout.current = conflictServerLayout.form_layout;
     currentRevision.current = conflictServerLayout.revision;
     conflictActive.current = false;
+    formSaveFailed.current = false;
     queuedFormSave.current = null;
     updateDraftLayout(conflictServerLayout);
     setFailedFormLayout(null);
@@ -329,6 +386,7 @@ function CardLayoutStudioSession({
     setLocalError(null);
     setLocalMessage("Принята версия макета с сервера");
     setSelection(null);
+    updateGeometryHistory({ undo: [], redo: [] });
   }
 
   async function saveReviewedLocalFormLayout() {
@@ -336,6 +394,7 @@ function CardLayoutStudioSession({
     const local = latestDraftFormLayout.current;
     currentRevision.current = conflictServerLayout.revision;
     conflictActive.current = false;
+    formSaveFailed.current = false;
     setConflictServerLayout(null);
     setFailedFormLayout(null);
     setHasFormConflict(false);
@@ -343,8 +402,43 @@ function CardLayoutStudioSession({
     await saveNextFormLayout(local);
   }
 
+  function updateGeometryHistory(next: GeometryHistory) {
+    geometryHistoryRef.current = next;
+    setGeometryHistoryState(next);
+  }
+
   function handleGeometryCommit(command: LayoutGeometryCommand) {
-    saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
+    updateGeometryHistory({
+      undo: [...geometryHistoryRef.current.undo, command],
+      redo: [],
+    });
+    void saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
+  }
+
+  function undoGeometryChange() {
+    const command = geometryHistoryRef.current.undo.at(-1);
+    if (!command || conflictActive.current || schemaWritesInFlight.current > 0) return;
+    updateGeometryHistory({
+      undo: geometryHistoryRef.current.undo.slice(0, -1),
+      redo: [...geometryHistoryRef.current.redo, command],
+    });
+    void saveNextFormLayout(
+      applyGeometryCommand(draftLayoutRef.current.form_layout, {
+        ...command,
+        before: command.after,
+        after: command.before,
+      }),
+    );
+  }
+
+  function redoGeometryChange() {
+    const command = geometryHistoryRef.current.redo.at(-1);
+    if (!command || conflictActive.current || schemaWritesInFlight.current > 0) return;
+    updateGeometryHistory({
+      undo: [...geometryHistoryRef.current.undo, command],
+      redo: geometryHistoryRef.current.redo.slice(0, -1),
+    });
+    void saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
   }
 
   function startCreateBlock(position: CardLayoutCreatePosition) {
@@ -394,16 +488,11 @@ function CardLayoutStudioSession({
   }
 
   async function commitBlock(block: FormBlockRead) {
-    beginSchemaWrite();
-    let gateReleased = false;
-    const releaseGate = () => {
-      if (gateReleased) return;
-      gateReleased = true;
-      endSchemaWrite();
-    };
+    let releaseGate: (() => void) | null = null;
     setSchemaPending(true);
     setLocalError(null);
     try {
+      releaseGate = await beginSchemaWrite();
       if (temporaryBlockIds.current.has(block.id)) {
         const created = await createFormBlock(token, registryId, {
           code: block.code,
@@ -422,6 +511,7 @@ function CardLayoutStudioSession({
         updateDraftLayout(next);
         const save = saveNextFormLayout(next.form_layout);
         releaseGate();
+        releaseGate = null;
         await save;
         await onSchemaChanged?.();
         return true;
@@ -445,6 +535,7 @@ function CardLayoutStudioSession({
         return { ...current, structure };
       });
       releaseGate();
+      releaseGate = null;
       setLocalMessage("Блок сохранён");
       await onSchemaChanged?.();
       return true;
@@ -452,7 +543,7 @@ function CardLayoutStudioSession({
       setLocalError(schemaErrorMessage(error));
       return false;
     } finally {
-      releaseGate();
+      releaseGate?.();
       setSchemaPending(false);
     }
   }
@@ -527,16 +618,11 @@ function CardLayoutStudioSession({
   }
 
   async function commitField(field: FormFieldRead) {
-    beginSchemaWrite();
-    let gateReleased = false;
-    const releaseGate = () => {
-      if (gateReleased) return;
-      gateReleased = true;
-      endSchemaWrite();
-    };
+    let releaseGate: (() => void) | null = null;
     setSchemaPending(true);
     setLocalError(null);
     try {
+      releaseGate = await beginSchemaWrite();
       if (temporaryFieldIds.current.has(field.id)) {
         const created = await createFormField(token, field.block_id, {
           code: field.code,
@@ -560,6 +646,7 @@ function CardLayoutStudioSession({
         updateDraftLayout(next);
         const save = saveNextFormLayout(next.form_layout);
         releaseGate();
+        releaseGate = null;
         await save;
         await onSchemaChanged?.();
         return true;
@@ -589,6 +676,7 @@ function CardLayoutStudioSession({
         return { ...current, structure };
       });
       releaseGate();
+      releaseGate = null;
       setLocalMessage("Поле сохранено");
       await onSchemaChanged?.();
       return true;
@@ -596,7 +684,7 @@ function CardLayoutStudioSession({
       setLocalError(schemaErrorMessage(error));
       return false;
     } finally {
-      releaseGate();
+      releaseGate?.();
       setSchemaPending(false);
     }
   }
@@ -618,15 +706,10 @@ function CardLayoutStudioSession({
     const block = allBlocks.find((item) => item.id === insertDialog.blockId);
     if (!block) return;
     const blockFields = allFields.filter((field) => field.block_id === block.id && field.is_active);
-    beginSchemaWrite();
-    let gateReleased = false;
-    const releaseGate = () => {
-      if (gateReleased) return;
-      gateReleased = true;
-      endSchemaWrite();
-    };
+    let releaseGate: (() => void) | null = null;
     setSchemaPending(true);
     try {
+      releaseGate = await beginSchemaWrite();
       await appendFieldsToTemplate(blockFields.map((field) => field.id));
       const currentFormLayout = draftLayoutRef.current.form_layout;
       const nextFormLayout: CardTemplateFormLayoutRead = {
@@ -653,12 +736,13 @@ function CardLayoutStudioSession({
       setInsertDialog(null);
       const save = saveNextFormLayout(nextFormLayout);
       releaseGate();
+      releaseGate = null;
       await save;
       await onSchemaChanged?.();
     } catch (error) {
       setLocalError(errorMessage(error));
     } finally {
-      releaseGate();
+      releaseGate?.();
       setSchemaPending(false);
     }
   }
@@ -674,7 +758,9 @@ function CardLayoutStudioSession({
   }
 
   async function savePrintDraft() {
-    setPrintPending(true);
+    if (printSaveRunning.current) return null;
+    printSaveRunning.current = true;
+    setPrintSavePending(true);
     setLocalError(null);
     try {
       const normalized = normalizeLayoutGeometry(printLayout);
@@ -704,7 +790,8 @@ function CardLayoutStudioSession({
       setLocalError(errorMessage(error));
       return null;
     } finally {
-      setPrintPending(false);
+      printSaveRunning.current = false;
+      setPrintSavePending(false);
     }
   }
 
@@ -777,7 +864,9 @@ function CardLayoutStudioSession({
   }
 
   async function generate(format: "docx" | "pdf") {
-    setPrintPending(true);
+    if (generationRunning.current) return;
+    generationRunning.current = true;
+    setGenerationPending(true);
     setLocalError(null);
     try {
       if (selectedCardId) {
@@ -812,7 +901,8 @@ function CardLayoutStudioSession({
     } catch (error) {
       setLocalError(errorMessage(error));
     } finally {
-      setPrintPending(false);
+      generationRunning.current = false;
+      setGenerationPending(false);
     }
   }
 
@@ -843,7 +933,12 @@ function CardLayoutStudioSession({
   }
 
   const busy =
-    formSavePending || schemaPending || printPending || conversionPending || conflictReviewPending;
+    formSavePending ||
+    schemaPending ||
+    printSavePending ||
+    generationPending ||
+    conversionPending ||
+    conflictReviewPending;
 
   return (
     <section
@@ -865,6 +960,24 @@ function CardLayoutStudioSession({
           <button
             type="button"
             className="ghost-button"
+            aria-label="Отменить изменение"
+            disabled={geometryHistory.undo.length === 0 || hasFormConflict || schemaPending}
+            onClick={undoGeometryChange}
+          >
+            Отменить
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            aria-label="Повторить изменение"
+            disabled={geometryHistory.redo.length === 0 || hasFormConflict || schemaPending}
+            onClick={redoGeometryChange}
+          >
+            Повторить
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
             disabled={busy}
             onClick={() => void generate("docx")}
           >
@@ -879,12 +992,17 @@ function CardLayoutStudioSession({
             PDF
           </button>
           {lastGenerated ? (
-            <button type="button" className="ghost-button" onClick={() => void downloadLast()}>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={busy}
+              onClick={() => void downloadLast()}
+            >
               Скачать
             </button>
           ) : null}
           {onClose ? (
-            <button type="button" className="ghost-button" onClick={onClose}>
+            <button type="button" className="ghost-button" disabled={busy} onClick={onClose}>
               Закрыть
             </button>
           ) : null}
@@ -894,6 +1012,18 @@ function CardLayoutStudioSession({
       {localError ? (
         <section className="card-layout-studio-recovery" aria-label="Восстановление макета">
           <p className="data-alert">{localError}</p>
+          {failedFormLayout && !hasFormConflict ? (
+            <div className="row-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={formSavePending || schemaPending}
+                onClick={() => void retryFailedFormLayout()}
+              >
+                Повторить
+              </button>
+            </div>
+          ) : null}
           {failedFormLayout && hasFormConflict ? (
             <>
               <div className="row-actions">
@@ -959,6 +1089,7 @@ function CardLayoutStudioSession({
             role="tab"
             data-stage-id={item.id}
             aria-selected={stage === item.id}
+            disabled={busy}
             className={stage === item.id ? "is-active" : ""}
             onClick={() => {
               setStage(item.id);
@@ -998,6 +1129,7 @@ function CardLayoutStudioSession({
               Печатное представление
               <select
                 value={selectedPrintView?.id ?? ""}
+                disabled={busy}
                 onChange={(event) => loadPrintView(event.currentTarget.value)}
               >
                 {printViews.map((item) => (
@@ -1011,24 +1143,22 @@ function CardLayoutStudioSession({
               Название печатной формы
               <input
                 value={printName}
+                disabled={busy}
                 onChange={(event) => setPrintName(event.currentTarget.value)}
               />
             </label>
             <label>
               Масштаб
-              <select value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))}>
+              <select
+                value={zoom}
+                disabled={busy}
+                onChange={(event) => setZoom(Number(event.currentTarget.value))}
+              >
                 <option value={0.5}>50%</option>
                 <option value={0.75}>75%</option>
                 <option value={1}>100%</option>
               </select>
             </label>
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setShowGrid((current) => !current)}
-            >
-              {showGrid ? "Скрыть сетку" : "Показать сетку"}
-            </button>
             <button
               type="button"
               className="primary-button"
@@ -1043,6 +1173,7 @@ function CardLayoutStudioSession({
                 Имя файла
                 <input
                   value={outputFilename}
+                  disabled={busy}
                   onChange={(event) => setOutputFilename(event.currentTarget.value)}
                 />
               </label>
@@ -1054,10 +1185,11 @@ function CardLayoutStudioSession({
             blocks={allBlocks}
             fields={allFields}
             zoom={zoom}
-            showGrid={showGrid}
+            showGrid={false}
             selectedItemId={selectedPrintItemId}
             legacy={legacyPrintView}
             converting={conversionPending}
+            disabled={busy}
             onSelectItem={setSelectedPrintItemId}
             onChangeLayout={setPrintLayout}
             onAddPrintItem={addPrintItem}
@@ -1094,11 +1226,6 @@ function CardLayoutStudioSession({
             selectedItemId={null}
             readonly
             legacy={legacyPrintView}
-            onSelectItem={() => undefined}
-            onChangeLayout={() => undefined}
-            onAddPrintItem={() => undefined}
-            onEditCardLayout={() => setStage("layout")}
-            onConvertLegacy={() => setStage("a4")}
           />
         </div>
       ) : null}
@@ -1135,7 +1262,12 @@ function CardLayoutStudioSession({
               >
                 Вставить
               </button>
-              <button type="button" className="ghost-button" onClick={() => setInsertDialog(null)}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => setInsertDialog(null)}
+              >
                 Отмена
               </button>
             </div>
