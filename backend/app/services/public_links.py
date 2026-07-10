@@ -589,6 +589,10 @@ class PublicLinkService:
             raise PermissionDeniedError("Public links cannot edit static text fields.")
         if not block.public_editable or not field.public_editable:
             raise PermissionDeniedError("Field is not public editable.")
+        if self._public_link_uses_explicit_allowlists(
+            public_link
+        ) and field.id not in self._card_template_field_ids(card):
+            raise PermissionDeniedError("Public link cannot edit fields outside its card template.")
         if not self._public_link_allows(public_link.allowed_blocks_json, block.id):
             raise PermissionDeniedError("Public link cannot edit this block.")
         if not self._public_link_allows(public_link.allowed_fields_json, field.id):
@@ -931,6 +935,17 @@ class PublicLinkService:
         field_ids = (
             list(dict.fromkeys(allowed_field_ids)) if allowed_field_ids is not None else None
         )
+        restrict_to_template = block_ids is not None or field_ids is not None
+        template_field_ids = self._card_template_field_ids(card) if restrict_to_template else set()
+        template_block_ids = (
+            set(
+                self.session.scalars(
+                    select(FormField.block_id).where(FormField.id.in_(template_field_ids))
+                ).all()
+            )
+            if template_field_ids
+            else set()
+        )
         blocks_by_id: dict[UUID, FormBlock] = {}
         if block_ids:
             blocks_by_id = {
@@ -946,6 +961,7 @@ class PublicLinkService:
             or not block.is_active
             or not block.public_visible
             or not block.public_editable
+            or block_id not in template_block_ids
             for block_id in block_ids
         ):
             raise PublicLinkError("Public link block allowlist is invalid.")
@@ -959,18 +975,8 @@ class PublicLinkService:
                     .where(FormField.id.in_(field_ids))
                 )
             }
-            template = self.session.get(CardTemplate, card.card_template_id)
-            raw_template_field_ids = (
-                template.field_schema_json.get("field_ids") if template is not None else None
-            )
-            template_field_ids = (
-                {str(field_id) for field_id in raw_template_field_ids}
-                if isinstance(raw_template_field_ids, list)
-                else set()
-            )
         else:
             field_rows = {}
-            template_field_ids = set()
         selected_block_ids = set(block_ids) if block_ids is not None else None
         if field_ids is not None and any(
             (row := field_rows.get(field_id)) is None
@@ -984,7 +990,7 @@ class PublicLinkService:
             or not row[0].public_visible
             or not row[0].public_editable
             or row[0].field_type in {"file_ref", "static_text"}
-            or str(field_id) not in template_field_ids
+            or field_id not in template_field_ids
             or (selected_block_ids is not None and row[0].block_id not in selected_block_ids)
             for field_id in field_ids
         ):
@@ -994,6 +1000,21 @@ class PublicLinkService:
             {"ids": [str(block_id) for block_id in block_ids]} if block_ids is not None else None,
             {"ids": [str(field_id) for field_id in field_ids]} if field_ids is not None else None,
         )
+
+    def _card_template_field_ids(self, card: Card) -> set[UUID]:
+        template = self.session.get(CardTemplate, card.card_template_id)
+        raw_field_ids = (
+            template.field_schema_json.get("field_ids") if template is not None else None
+        )
+        if not isinstance(raw_field_ids, list):
+            return set()
+        field_ids: set[UUID] = set()
+        for raw_field_id in raw_field_ids:
+            try:
+                field_ids.add(UUID(str(raw_field_id)))
+            except (TypeError, ValueError):
+                continue
+        return field_ids
 
     def _get_active_public_field(self, field_id: UUID) -> FormField:
         field = self.session.get(FormField, field_id)
@@ -1015,6 +1036,12 @@ class PublicLinkService:
             return True
         return str(object_id) in allowed_ids
 
+    def _public_link_uses_explicit_allowlists(self, public_link: CardPublicLink) -> bool:
+        return (
+            public_link.allowed_blocks_json is not None
+            or public_link.allowed_fields_json is not None
+        )
+
     def _public_schema_rows(
         self,
         *,
@@ -1035,11 +1062,17 @@ class PublicLinkService:
             )
             .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
         )
+        template_field_ids = (
+            self._card_template_field_ids(self._get_active_card(public_link.card_id))
+            if self._public_link_uses_explicit_allowlists(public_link)
+            else None
+        )
         return [
             (block, field_model)
             for block, field_model in rows
             if self._public_link_allows(public_link.allowed_blocks_json, block.id)
             and self._public_link_allows(public_link.allowed_fields_json, field_model.id)
+            and (template_field_ids is None or field_model.id in template_field_ids)
             and (
                 (block.public_editable and field_model.public_editable)
                 or field_model.field_type == "static_text"

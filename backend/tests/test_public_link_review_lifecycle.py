@@ -975,6 +975,9 @@ class ReviewApiFixture:
     field_id: UUID
     other_field_id: UUID
     non_editable_field_id: UUID
+    off_template_field_id: UUID
+    off_template_block_id: UUID
+    off_template_block_field_id: UUID
     foreign_block_id: UUID
     foreign_field_id: UUID
 
@@ -1043,6 +1046,19 @@ def review_api_fixture(
             public_visible=True,
             public_editable=False,
         )
+        card_template = schema_service.create_card_template_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            code="api-review-template",
+            name="Шаблон карточки API проверки",
+            field_schema_json={
+                "field_ids": [
+                    str(field.id),
+                    str(other_field.id),
+                    str(non_editable_field.id),
+                ]
+            },
+        )
         foreign_registry = schema_service.create_registry_for_actor(
             actor_user_id=admin.id,
             code=f"api-review-foreign-registry-{suffix}",
@@ -1070,7 +1086,34 @@ def review_api_fixture(
             registry_id=registry.id,
             organization_id=organization.id,
             display_name="Карточка API проверки",
+            card_template_id=card_template.id,
             public_edit_enabled=True,
+        )
+        off_template_field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=block.id,
+            code="api-review-off-template-value",
+            label="Поле вне шаблона API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=True,
+        )
+        off_template_block = schema_service.create_block_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            code="api-review-off-template-block",
+            title="Блок вне шаблона API проверки",
+            public_visible=True,
+            public_editable=True,
+        )
+        off_template_block_field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=off_template_block.id,
+            code="api-review-off-template-block-value",
+            label="Поле блока вне шаблона API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=True,
         )
         fixture = ReviewApiFixture(
             admin_id=admin.id,
@@ -1080,6 +1123,9 @@ def review_api_fixture(
             field_id=field.id,
             other_field_id=other_field.id,
             non_editable_field_id=non_editable_field.id,
+            off_template_field_id=off_template_field.id,
+            off_template_block_id=off_template_block.id,
+            off_template_block_field_id=off_template_block_field.id,
             foreign_block_id=foreign_block.id,
             foreign_field_id=foreign_field.id,
         )
@@ -1159,6 +1205,9 @@ def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
             "allowed_block_ids": [str(review_api_fixture.foreign_block_id)],
             "allowed_field_ids": [str(review_api_fixture.foreign_field_id)],
         },
+        {
+            "allowed_block_ids": [str(review_api_fixture.off_template_block_id)],
+        },
     ]
     for payload in rejected_payloads:
         rejected_response = transactional_api_client.post(
@@ -1168,8 +1217,94 @@ def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
         )
         assert rejected_response.status_code == 400, rejected_response.text
         assert rejected_response.json()["detail"] == ("Операция с публичной ссылкой недоступна.")
-        rejected_ids = payload["allowed_block_ids"] + payload["allowed_field_ids"]
+        rejected_ids = payload.get("allowed_block_ids", []) + payload.get("allowed_field_ids", [])
         assert all(object_id not in rejected_response.text for object_id in rejected_ids)
+
+
+def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_stays_legacy(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    admin_headers = _actor_headers(review_api_fixture.admin_id)
+    legacy_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={},
+        headers=admin_headers,
+    )
+    assert legacy_response.status_code == 201, legacy_response.text
+    legacy = legacy_response.json()
+    legacy_preview_response = transactional_api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": legacy["raw_token"]},
+    )
+    assert legacy_preview_response.status_code == 200, legacy_preview_response.text
+    legacy_field_ids = {
+        field["field_id"]
+        for block in legacy_preview_response.json()["blocks"]
+        for instance in block["instances"]
+        for field in instance["fields"]
+    }
+    assert str(review_api_fixture.off_template_field_id) in legacy_field_ids
+    assert str(review_api_fixture.off_template_block_field_id) in legacy_field_ids
+
+    partial_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={"allowed_block_ids": [str(review_api_fixture.block_id)]},
+        headers=admin_headers,
+    )
+    assert partial_response.status_code == 201, partial_response.text
+    partial = partial_response.json()
+    partial_preview_response = transactional_api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": partial["raw_token"]},
+    )
+    assert partial_preview_response.status_code == 200, partial_preview_response.text
+    partial_field_ids = {
+        field["field_id"]
+        for block in partial_preview_response.json()["blocks"]
+        for instance in block["instances"]
+        for field in instance["fields"]
+    }
+    assert partial_field_ids == {
+        str(review_api_fixture.field_id),
+        str(review_api_fixture.other_field_id),
+    }
+    denied_partial_edit = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": partial["raw_token"],
+            "field_id": str(review_api_fixture.off_template_field_id),
+            "value": "Недопустимое значение вне шаблона",
+        },
+    )
+    assert denied_partial_edit.status_code == 403, denied_partial_edit.text
+    assert denied_partial_edit.json()["detail"] == "Недостаточно прав для выполнения операции."
+    assert partial["raw_token"] not in denied_partial_edit.text
+
+    with Session(migrated_test_engine) as mutate_session:
+        manual_link = mutate_session.get(CardPublicLink, UUID(legacy["id"]))
+        assert manual_link is not None
+        manual_link.allowed_blocks_json = {"ids": [str(review_api_fixture.off_template_block_id)]}
+        mutate_session.commit()
+
+    manual_preview_response = transactional_api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": legacy["raw_token"]},
+    )
+    assert manual_preview_response.status_code == 200, manual_preview_response.text
+    assert manual_preview_response.json()["blocks"] == []
+    denied_manual_edit = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": legacy["raw_token"],
+            "field_id": str(review_api_fixture.off_template_block_field_id),
+            "value": "Недопустимое ручное значение",
+        },
+    )
+    assert denied_manual_edit.status_code == 403, denied_manual_edit.text
+    assert denied_manual_edit.json()["detail"] == "Недостаточно прав для выполнения операции."
+    assert legacy["raw_token"] not in denied_manual_edit.text
 
 
 def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
