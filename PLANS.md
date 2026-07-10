@@ -4228,8 +4228,7 @@ Live Browser proof:
 
 #### Pointer-session release follow-up
 
-Status: implemented and focused-tested locally; full gate, deployment, and
-renewed live Browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 - A rejected pointer drop now releases capture and clears the geometry session
   immediately. The preview returns to the saved layout instead of leaving a
@@ -4250,3 +4249,28 @@ renewed live Browser proof are pending.
   TypeScript, production build, and project-map checks are green. The verified
   local bundle is `index-C2UZ2WDJ.js` (`561.19 kB`, `160.02 kB` gzip) with the
   unchanged `index-Cl9DldkN.css`; the existing warnings remain unchanged.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized at
+  `8318f68f` (`Release rejected layout pointer sessions`). No schema or
+  production-data change was required.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-C2UZ2WDJ.js` and
+  `/assets/index-Cl9DldkN.css`, restarted the API service, and passed health and
+  same-origin frontend smoke checks.
+
+Live Browser proof:
+
+- The reported stuck session was captured before reload: one geometry target
+  remained selected, `Готово` was disabled, only its eight resize handles were
+  shown, and clicking `tst` did not open an editor. The session was canceled to
+  restore the user's active editor before deployment.
+- On the deployed bundle, a real pointer drag moved the `ФИО` `Новое поле`
+  through a valid row and ended over an occupied row. Pointer release restored
+  its saved row 2 rectangle, removed the geometry panel and target class,
+  restored all 83 field resize handles, and did not create an undo command.
+- Clicking `Имя` immediately afterward opened its inline editor. Cancel closed
+  it cleanly; the final page had zero geometry sessions, zero editing fields,
+  zero geometry targets, and zero console warnings/errors.
+- Browser evidence is stored outside Git at
+  `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-11-phase8m-pointer-release\rejected-drop-next-field-editable.png`.
