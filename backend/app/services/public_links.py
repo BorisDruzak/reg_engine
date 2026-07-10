@@ -703,6 +703,7 @@ class PublicLinkService:
                         "block_id": str(block.id),
                         "field_id": str(field_model.id),
                         "block_instance_id": str(instance.id) if instance is not None else None,
+                        "is_repeatable": block.is_repeatable,
                         "label": field_model.label,
                         "field_type": field_model.field_type,
                         "value": self._json_safe_value(
@@ -794,9 +795,14 @@ class PublicLinkService:
         return result
 
     def _field_snapshot_key(self, item: dict[str, Any]) -> tuple[str, str | None, str]:
+        block_instance_id = (
+            str(item["block_instance_id"]) if item.get("block_instance_id") is not None else None
+        )
+        if item.get("is_repeatable") is False:
+            block_instance_id = None
         return (
             str(item.get("block_id")),
-            str(item["block_instance_id"]) if item.get("block_instance_id") is not None else None,
+            block_instance_id,
             str(item.get("field_id")),
         )
 

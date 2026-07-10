@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.models import AuditEvent, FieldValue, User
+from app.models import AuditEvent, Card, FieldValue, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
@@ -536,3 +536,58 @@ def test_review_diff_uses_typed_values_safe_attachment_metadata_and_audit_timest
             "content",
         }
     )
+
+
+def test_review_diff_matches_synthetic_non_repeatable_instance_to_first_saved_instance(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    card = db_session.get(Card, review_fixture.card_id)
+    assert card is not None
+    schema_service = RegistrySchemaService(db_session)
+    empty_block = schema_service.create_block_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        registry_id=card.registry_id,
+        code="empty-non-repeatable",
+        title="Пустой неповторяемый блок",
+        public_visible=True,
+        public_editable=True,
+    )
+    empty_field = schema_service.create_field_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        block_id=empty_block.id,
+        code="first-value",
+        label="Первое значение",
+        field_type="text",
+        public_visible=True,
+        public_editable=True,
+    )
+    service = PublicLinkService(db_session)
+    token = service.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        review_enabled=True,
+    )
+    baseline_fields = token.public_link.baseline_snapshot_json["fields"]
+    baseline_field = next(
+        item for item in baseline_fields if item["field_id"] == str(empty_field.id)
+    )
+    assert baseline_field["block_instance_id"] is None
+
+    service.edit_card_field_with_token(
+        raw_token=token.raw_token,
+        field_id=empty_field.id,
+        value="Первое заполнение",
+        block_instance_id=None,
+    )
+    review = service.review_diff_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        public_link_id=token.public_link.id,
+    )
+    target_fields = [item for item in review.fields if item.field_id == empty_field.id]
+
+    assert review.changed_field_count == 1
+    assert len(target_fields) == 1
+    assert target_fields[0].before is None
+    assert target_fields[0].after == "Первое заполнение"
+    assert target_fields[0].block_instance_id is not None
