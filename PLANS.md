@@ -4147,8 +4147,8 @@ Live Browser proof:
 
 ### Phase 8M follow-up: collision-safe adaptive field dragging
 
-Status: latest browser follow-up implemented and locally verified; production
-synchronization and renewed live Browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live-verified through
+the latest browser follow-up.
 
 Implementation checkpoint:
 
@@ -4195,9 +4195,9 @@ Local verification checkpoint:
 Production release evidence:
 
 - `main`, `origin/main`, and the server checkout were synchronized at
-  `6bc2fa77` (`Harden adaptive field dragging`). No schema or production-data
-  change was required.
-- `scripts/deploy-frontend.ps1` deployed `/assets/index-DEMuVROu.js` and
+  `a1951ce1` (`Allow fields to pass occupied rows`). No schema or
+  production-data change was required.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-DzvkhYMN.js` and
   `/assets/index-Cl9DldkN.css`, restarted the API service, and passed health and
   same-origin frontend smoke checks. The final `scripts/server-check.ps1`
   passed with the service active and the server checkout clean on `main`.
@@ -4216,6 +4216,12 @@ Live Browser proof:
   row kept the field at columns 7-12 on row 1 and displayed the no-space
   message. Both sessions were canceled; the editor finished with zero active
   geometry sessions and the original saved layout unchanged.
+- On the exact reported `Положение` layout, `tst` started at row 1/columns 1-6,
+  `Новое поле` occupied all of row 2, and moving `tst` down placed it at row 3
+  without overlap. The block expanded from two rows/`6rem` to three
+  rows/`9rem`, the session remained valid, and cancel restored the saved row 1
+  position and two-row block without a write.
 - Browser screenshots are stored outside Git under
   `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8m-field-drag\`:
-  `block-grows-on-move.png` and `occupied-row-blocked.png`.
+  `block-grows-on-move.png`, `occupied-row-blocked.png`, and
+  `upper-field-passes-full-row.png`.
