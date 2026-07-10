@@ -258,6 +258,7 @@ function FieldGeometryAffordances({
         onPointerMove={geometry.pointerMove}
         onPointerUp={geometry.pointerUp}
         onPointerCancel={geometry.pointerCancel}
+        onLostPointerCapture={geometry.lostPointerCapture}
       >
         ⠿
       </button>
@@ -283,6 +284,7 @@ function FieldGeometryAffordances({
           onPointerMove={geometry.pointerMove}
           onPointerUp={geometry.pointerUp}
           onPointerCancel={geometry.pointerCancel}
+          onLostPointerCapture={geometry.lostPointerCapture}
         />
       ))}
     </span>

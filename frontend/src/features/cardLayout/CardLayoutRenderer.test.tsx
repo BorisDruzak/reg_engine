@@ -203,7 +203,7 @@ function installPointerCapture(element: HTMLElement) {
 
 function dispatchPointer(
   element: HTMLElement,
-  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel",
+  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "lostpointercapture",
   { pointerId, clientX, clientY }: { pointerId: number; clientX: number; clientY: number },
 ) {
   const event = new Event(type, { bubbles: true, cancelable: true });
@@ -213,6 +213,16 @@ function dispatchPointer(
     pointerId: { value: pointerId },
   });
   fireEvent(element, event);
+}
+
+function blockMoveHandle() {
+  const handle = screen
+    .getByTestId("layout-block-block-fio")
+    .querySelector<HTMLButtonElement>(
+      ":scope > .card-layout-geometry-affordances > .card-layout-move-handle",
+    );
+  expect(handle).not.toBeNull();
+  return handle!;
 }
 
 describe("CardWebLayoutCanvas", () => {
@@ -344,6 +354,120 @@ describe("CardWebLayoutCanvas", () => {
       before: { row: 1, column: 1, rowSpan: 2, columnSpan: 6 },
       after: { row: 2, column: 4, rowSpan: 2, columnSpan: 6 },
     });
+  });
+
+  test("rolls back a failed pointer capture so a later pointer session can start", () => {
+    const onGeometryCommit = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    const capture = installPointerCapture(moveHandle);
+    capture.setPointerCapture.mockImplementationOnce(() => {
+      throw new Error("capture unavailable");
+    });
+
+    expect(() =>
+      dispatchPointer(moveHandle, "pointerdown", { pointerId: 101, clientX: 100, clientY: 50 }),
+    ).not.toThrow();
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 102, clientX: 100, clientY: 50 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 102, clientX: 400, clientY: 150 });
+    dispatchPointer(moveHandle, "pointerup", { pointerId: 102, clientX: 400, clientY: 150 });
+
+    expect(capture.setPointerCapture).toHaveBeenCalledTimes(2);
+    expect(onGeometryCommit).toHaveBeenCalledOnce();
+  });
+
+  test("cancels and restores an active session when pointer capture is lost", () => {
+    const onGeometryCommit = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    const capture = installPointerCapture(moveHandle);
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 103, clientX: 100, clientY: 50 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 103, clientX: 400, clientY: 150 });
+
+    dispatchPointer(moveHandle, "lostpointercapture", {
+      pointerId: 103,
+      clientX: 400,
+      clientY: 150,
+    });
+
+    expect(capture.releasePointerCapture).not.toHaveBeenCalled();
+    expect(onGeometryCommit).not.toHaveBeenCalled();
+    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "1 / span 2",
+    });
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+  });
+
+  test("ignores lost capture emitted by an intentional pointer release", () => {
+    const onGeometryCommit = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    const capture = installPointerCapture(moveHandle);
+    capture.releasePointerCapture.mockImplementation((pointerId: number) => {
+      dispatchPointer(moveHandle, "lostpointercapture", {
+        pointerId,
+        clientX: 400,
+        clientY: 150,
+      });
+    });
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 104, clientX: 100, clientY: 50 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 104, clientX: 400, clientY: 150 });
+
+    dispatchPointer(moveHandle, "pointerup", { pointerId: 104, clientX: 400, clientY: 150 });
+
+    expect(capture.releasePointerCapture).toHaveBeenCalledOnce();
+    expect(onGeometryCommit).toHaveBeenCalledOnce();
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+  });
+
+  test("uses four equal non-auto physical rows in the canvas, fields, and live previews", () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const fieldGrid = screen
+      .getByTestId("layout-field-field-name")
+      .closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(6rem, 1fr))");
+    expect(canvas.style.gridTemplateRows).not.toContain("auto");
+    expect(canvas.style.minHeight).toBe("24rem");
+    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, 1fr))");
+    expect(fieldGrid!.style.gridTemplateRows).not.toContain("auto");
+    expect(fieldGrid!.style.minHeight).toBe("12rem");
+
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    installPointerCapture(moveHandle);
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 105, clientX: 100, clientY: 50 });
+
+    const liveCanvasGrids = document.querySelectorAll<HTMLElement>(".layout-live-preview-grid");
+    const liveFieldGrids = document.querySelectorAll<HTMLElement>(
+      ".layout-live-preview-field-grid",
+    );
+    expect(liveCanvasGrids).toHaveLength(2);
+    expect(liveFieldGrids).toHaveLength(2);
+    for (const grid of liveCanvasGrids) {
+      expect(grid.style.gridTemplateRows).toBe("repeat(4, minmax(6rem, 1fr))");
+      expect(grid.style.gridTemplateRows).not.toContain("auto");
+      expect(grid.style.minHeight).toBe("24rem");
+    }
+    for (const grid of liveFieldGrids) {
+      expect(grid.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, 1fr))");
+      expect(grid.style.gridTemplateRows).not.toContain("auto");
+      expect(grid.style.minHeight).toBe("12rem");
+    }
   });
 
   test("resizes a field from a corner on both axes and allows edge touching", () => {
@@ -494,6 +618,73 @@ describe("CardWebLayoutCanvas", () => {
       clientX: -100,
       clientY: 50,
     });
+    expect(onGeometryCommit).not.toHaveBeenCalled();
+  });
+
+  test("revalidates immediately when a controlled layout removes the active obstacle", () => {
+    const onGeometryCommit = vi.fn();
+    const { rerender } = render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+          layout: twoBlockLayout,
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    installPointerCapture(moveHandle);
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 106, clientX: 100, clientY: 50 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 106, clientX: 700, clientY: 250 });
+    expect(screen.getByRole("status")).toHaveClass("is-invalid");
+
+    rerender(<CardWebLayoutCanvas {...canvasProps({ layout, onGeometryCommit })} />);
+
+    const doneButton = document.querySelector<HTMLButtonElement>(
+      ".card-layout-geometry-session button:not(.ghost-button)",
+    );
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+    expect(doneButton).not.toBeNull();
+    expect(doneButton).toBeEnabled();
+    fireEvent.click(doneButton!);
+    expect(onGeometryCommit).toHaveBeenCalledOnce();
+  });
+
+  test("revalidates immediately when a controlled layout adds an active obstacle", () => {
+    const onGeometryCommit = vi.fn();
+    const { rerender } = render(
+      <CardWebLayoutCanvas {...canvasProps({ layout, onGeometryCommit })} />,
+    );
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const moveHandle = blockMoveHandle();
+    mockGridRect(canvas);
+    installPointerCapture(moveHandle);
+    dispatchPointer(moveHandle, "pointerdown", { pointerId: 107, clientX: 100, clientY: 50 });
+    dispatchPointer(moveHandle, "pointermove", { pointerId: 107, clientX: 700, clientY: 250 });
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    rerender(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+          layout: twoBlockLayout,
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const doneButton = document.querySelector<HTMLButtonElement>(
+      ".card-layout-geometry-session button:not(.ghost-button)",
+    );
+    expect(screen.getByRole("status")).toHaveClass("is-invalid");
+    expect(doneButton).not.toBeNull();
+    expect(doneButton).toBeDisabled();
     expect(onGeometryCommit).not.toHaveBeenCalled();
   });
 

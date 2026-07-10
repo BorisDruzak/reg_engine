@@ -120,7 +120,8 @@ function CardWebLayoutCanvasSession({
   const canvasStyle: CSSProperties = {
     display: "grid",
     gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-    gridTemplateRows: "repeat(4, minmax(6rem, auto))",
+    gridTemplateRows: "repeat(4, minmax(6rem, 1fr))",
+    minHeight: "24rem",
   };
 
   return (

@@ -56,21 +56,20 @@ const INVALID_SIZE_MESSAGE = "Размер объекта должен зани�
 
 export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeometrySessionOptions) {
   const [session, setSession] = useState<LayoutGeometrySession | null>(null);
-  const [invalidReason, setInvalidReason] = useState<string | null>(null);
+  const [boundaryReason, setBoundaryReason] = useState<string | null>(null);
   const sessionActive = session !== null;
   const sessionRef = useRef<LayoutGeometrySession | null>(null);
-  const invalidReasonRef = useRef<string | null>(null);
+  const boundaryReasonRef = useRef<string | null>(null);
   const pointerRef = useRef<PointerCaptureSession | null>(null);
 
   const publish = useCallback(
-    (nextSession: LayoutGeometrySession, boundaryReason: string | null = null) => {
-      const nextReason = boundaryReason ?? validate(nextSession);
+    (nextSession: LayoutGeometrySession, nextBoundaryReason: string | null = null) => {
       sessionRef.current = nextSession;
-      invalidReasonRef.current = nextReason;
+      boundaryReasonRef.current = nextBoundaryReason;
       setSession(nextSession);
-      setInvalidReason(nextReason);
+      setBoundaryReason(nextBoundaryReason);
     },
-    [validate],
+    [],
   );
 
   const releasePointer = useCallback(() => {
@@ -90,9 +89,9 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
 
   const clear = useCallback(() => {
     sessionRef.current = null;
-    invalidReasonRef.current = null;
+    boundaryReasonRef.current = null;
     setSession(null);
-    setInvalidReason(null);
+    setBoundaryReason(null);
   }, []);
 
   const cancel = useCallback(() => {
@@ -105,10 +104,8 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
     if (!current) {
       return false;
     }
-    const reason = invalidReasonRef.current ?? validate(current);
+    const reason = boundaryReasonRef.current ?? validate(current);
     if (reason) {
-      invalidReasonRef.current = reason;
-      setInvalidReason(reason);
       return false;
     }
     releasePointer();
@@ -149,7 +146,7 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
       const pointerId = event.pointerId;
       const captureTarget = event.currentTarget;
       const base = existing?.preview ?? target.original;
-      pointerRef.current = {
+      const nextPointer = {
         pointerId,
         captureTarget,
         base,
@@ -159,8 +156,19 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
         rowHeight: gridRect.height > 0 ? gridRect.height / GRID_ROWS : 1,
       };
       captureTarget.focus();
+      pointerRef.current = nextPointer;
       if (typeof captureTarget.setPointerCapture === "function") {
-        captureTarget.setPointerCapture(pointerId);
+        try {
+          captureTarget.setPointerCapture(pointerId);
+        } catch {
+          if (pointerRef.current === nextPointer) {
+            pointerRef.current = null;
+          }
+          return;
+        }
+      }
+      if (pointerRef.current !== nextPointer) {
+        return;
       }
       publish({
         targetId: existing?.targetId ?? target.targetId,
@@ -261,6 +269,23 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
     [cancel],
   );
 
+  const lostPointerCapture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const pointer = pointerRef.current;
+      if (
+        !pointer ||
+        event.pointerId !== pointer.pointerId ||
+        event.currentTarget !== pointer.captureTarget
+      ) {
+        return;
+      }
+      event.stopPropagation();
+      pointerRef.current = null;
+      clear();
+    },
+    [clear],
+  );
+
   const keyboard = useCallback(
     (event: ReactKeyboardEvent<HTMLElement>, target: LayoutGeometryTarget) => {
       const direction = arrowDirection(event.key);
@@ -338,12 +363,15 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
     return () => window.removeEventListener("keydown", handleEscape);
   }, [cancel, sessionActive]);
 
+  const invalidReason = session ? (boundaryReason ?? validate(session)) : null;
+
   return {
     beginMove,
     beginResize,
     cancel,
     commit,
     keyboard,
+    lostPointerCapture,
     pointerCancel,
     pointerMove,
     pointerUp,

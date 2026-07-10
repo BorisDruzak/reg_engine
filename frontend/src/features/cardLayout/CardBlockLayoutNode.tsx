@@ -136,7 +136,8 @@ export function CardBlockLayoutNode({
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-              gridTemplateRows: "repeat(4, minmax(3rem, auto))",
+              gridTemplateRows: "repeat(4, minmax(3rem, 1fr))",
+              minHeight: "12rem",
             }}
           >
             {section.items.map((item) => {
@@ -256,6 +257,7 @@ function LayoutGeometryAffordances({
         onPointerMove={geometry.pointerMove}
         onPointerUp={geometry.pointerUp}
         onPointerCancel={geometry.pointerCancel}
+        onLostPointerCapture={geometry.lostPointerCapture}
       >
         ⠿
       </button>
@@ -281,6 +283,7 @@ function LayoutGeometryAffordances({
           onPointerMove={geometry.pointerMove}
           onPointerUp={geometry.pointerUp}
           onPointerCancel={geometry.pointerCancel}
+          onLostPointerCapture={geometry.lostPointerCapture}
         />
       ))}
     </span>

@@ -98,7 +98,8 @@ function gridStyle(minimumRowHeight: number): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-    gridTemplateRows: `repeat(4, minmax(${minimumRowHeight}rem, auto))`,
+    gridTemplateRows: `repeat(4, minmax(${minimumRowHeight}rem, 1fr))`,
+    minHeight: `${minimumRowHeight * 4}rem`,
   };
 }
 
