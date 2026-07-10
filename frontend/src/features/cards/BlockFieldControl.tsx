@@ -39,7 +39,11 @@ export function BlockFieldControl({
 
   if (field.field_type === "file_ref") {
     if (fileRefControl) {
-      return <div className="filled-card-file-ref-control">{fileRefControl}</div>;
+      return (
+        <fieldset className="filled-card-file-ref-control" disabled={pending}>
+          {fileRefControl}
+        </fieldset>
+      );
     }
     return (
       <div className="filled-card-file-ref-readonly">
@@ -60,6 +64,7 @@ export function BlockFieldControl({
         label={field.label}
         options={options.map((option) => ({ id: option.id, label: option.label }))}
         value={value}
+        disabled={pending}
         onChange={onChange}
       />
       {error ? (

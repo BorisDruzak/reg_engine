@@ -9,6 +9,7 @@ export function FieldEditorControl({
   options,
   fileRefOptions = [],
   value,
+  disabled = false,
   onChange,
 }: {
   fieldType: string;
@@ -16,6 +17,7 @@ export function FieldEditorControl({
   options: FieldEditorOption[];
   fileRefOptions?: FieldEditorFileRefOption[];
   value: FieldEditorState;
+  disabled?: boolean;
   onChange: (value: FieldEditorState) => void;
 }) {
   if (fieldType === "bool") {
@@ -23,6 +25,7 @@ export function FieldEditorControl({
       <input
         aria-label={label}
         checked={Boolean(value)}
+        disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.checked)}
         type="checkbox"
       />
@@ -33,6 +36,7 @@ export function FieldEditorControl({
     return (
       <textarea
         aria-label={label}
+        disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.value)}
         value={typeof value === "string" ? value : "{}"}
       />
@@ -43,6 +47,7 @@ export function FieldEditorControl({
     return (
       <select
         aria-label={label}
+        disabled={disabled}
         multiple
         onChange={(event) =>
           onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
@@ -62,6 +67,7 @@ export function FieldEditorControl({
     return (
       <select
         aria-label={label}
+        disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.value)}
         value={typeof value === "string" ? value : ""}
       >
@@ -83,6 +89,7 @@ export function FieldEditorControl({
       <div className="file-ref-control">
         <select
           aria-label={label}
+          disabled={disabled}
           onChange={(event) => onChange(event.currentTarget.value)}
           value={selectedValue}
         >
@@ -94,7 +101,12 @@ export function FieldEditorControl({
           ))}
         </select>
         {selectedValue && (
-          <button type="button" className="ghost-button" onClick={() => onChange("")}>
+          <button
+            type="button"
+            className="ghost-button"
+            disabled={disabled}
+            onClick={() => onChange("")}
+          >
             {uiText.clearFile}
           </button>
         )}
@@ -112,6 +124,7 @@ export function FieldEditorControl({
   return (
     <input
       aria-label={label}
+      disabled={disabled}
       onChange={(event) => onChange(event.currentTarget.value)}
       type={inputTypeForField(fieldType)}
       value={typeof value === "string" ? value : ""}

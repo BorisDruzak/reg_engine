@@ -702,6 +702,96 @@ describe("FilledCardLayout", () => {
     expect(within(decision).getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
   });
 
+  test("guards dirty drafts from an outside workspace action without unmounting", async () => {
+    const user = userEvent.setup();
+    const outsideAction = vi.fn();
+    render(
+      <EditableFilledCardWithOutsideAction
+        outsideAction={outsideAction}
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.type(screen.getByLabelText("Имя"), "Черновик");
+    await user.click(screen.getByRole("button", { name: "Внешняя вкладка карточки" }));
+
+    expect(outsideAction).not.toHaveBeenCalled();
+    expect(screen.getByTestId("filled-card-layout")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Несохранённые изменения" })).toBeInTheDocument();
+  });
+
+  test("keeps the dirty decision modal, keyboard-contained, and restores editor focus on Escape", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    const firstName = screen.getByLabelText("Имя");
+    await user.clear(firstName);
+    await user.type(firstName, "Пётр");
+    expect(firstName).toHaveFocus();
+    await user.click(screen.getByTestId("card-layout-canvas"));
+
+    const decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    const save = within(decision).getByRole("button", { name: "Сохранить" });
+    const discard = within(decision).getByRole("button", { name: "Не сохранять" });
+    const continueEditing = within(decision).getByRole("button", {
+      name: "Продолжить редактирование",
+    });
+    await waitFor(() => expect(save).toHaveFocus());
+    expect(screen.getByTestId("filled-card-layout").closest("body > div")).toHaveAttribute("inert");
+
+    await user.tab();
+    expect(discard).toHaveFocus();
+    await user.tab();
+    expect(continueEditing).toHaveFocus();
+    await user.tab();
+    expect(save).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(continueEditing).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("dialog", { name: "Несохранённые изменения" }),
+    ).not.toBeInTheDocument();
+    expect(firstName).toHaveFocus();
+    expect(firstName).toHaveValue("Пётр");
+  });
+
+  test("disables inline field controls while an atomic block save is pending", async () => {
+    const user = userEvent.setup();
+    let resolveSave: (() => void) | undefined;
+    const saveValues = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    render(
+      <EditableFilledCard
+        saveValues={saveValues}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    const firstName = screen.getByLabelText("Имя");
+    await user.clear(firstName);
+    await user.type(firstName, "Пётр");
+    await user.click(screen.getByRole("button", { name: "Сохранить блок ФИО" }));
+
+    await waitFor(() => expect(firstName).toBeDisabled());
+    await user.type(firstName, " не должно попасть");
+    expect(firstName).toHaveValue("Пётр");
+    act(() => resolveSave?.());
+    await waitFor(() => expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument());
+  });
+
   test("keeps the dirty-close decision open with a Russian error when save fails", async () => {
     const user = userEvent.setup();
     const saveValues = vi.fn().mockRejectedValue(new Error("Forbidden"));
@@ -950,6 +1040,29 @@ function EditableFilledCard({
     saveValues,
   });
   return <FilledCardLayout {...componentProps} blockEditor={blockEditor} />;
+}
+
+function EditableFilledCardWithOutsideAction({
+  outsideAction,
+  saveValues,
+}: {
+  outsideAction: () => void;
+  saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
+}) {
+  const componentProps = props();
+  const blockEditor = useBlockEditor({
+    fields: componentProps.fields,
+    editableFieldIds: componentProps.editableFieldIds,
+    saveValues,
+  });
+  return (
+    <div>
+      <button type="button" onClick={outsideAction}>
+        Внешняя вкладка карточки
+      </button>
+      <FilledCardLayout {...componentProps} blockEditor={blockEditor} />
+    </div>
+  );
 }
 
 function repeatableProps(): Partial<FilledCardLayoutProps> {

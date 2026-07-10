@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { expect, test, vi } from "vitest";
 
 import { ApiError } from "@/api/client";
@@ -91,3 +92,55 @@ test("renders mutation feedback only when error or success exists", () => {
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.getByText("Сохранено")).toBeInTheDocument();
 });
+
+test("contains keyboard focus, closes on Escape, and restores the dialog trigger", async () => {
+  const user = userEvent.setup();
+  render(<AccessibleDialogFixture />);
+
+  const trigger = screen.getByRole("button", { name: "Открыть подтверждение" });
+  await user.click(trigger);
+  const dialog = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+  const save = within(dialog).getByRole("button", { name: "Сохранить" });
+  const discard = within(dialog).getByRole("button", { name: "Не сохранять" });
+  const continueEditing = within(dialog).getByRole("button", {
+    name: "Продолжить редактирование",
+  });
+
+  await waitFor(() => expect(save).toHaveFocus());
+  expect(trigger.closest("body > div")).toHaveAttribute("inert");
+  await user.tab();
+  expect(discard).toHaveFocus();
+  await user.tab();
+  expect(continueEditing).toHaveFocus();
+  await user.tab();
+  expect(save).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(continueEditing).toHaveFocus();
+
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "Несохранённые изменения" })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  expect(trigger.closest("body > div")).not.toHaveAttribute("inert");
+});
+
+function AccessibleDialogFixture() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Открыть подтверждение
+      </button>
+      {open ? (
+        <AdminMutationDialog title="Несохранённые изменения" onCancel={() => setOpen(false)}>
+          <div className="admin-mutation-actions">
+            <button type="button">Сохранить</button>
+            <button type="button">Не сохранять</button>
+            <button type="button" onClick={() => setOpen(false)}>
+              Продолжить редактирование
+            </button>
+          </div>
+        </AdminMutationDialog>
+      ) : null}
+    </>
+  );
+}

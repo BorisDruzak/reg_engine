@@ -1,4 +1,4 @@
-import { useMemo, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import type {
   CardBlockInstanceRead,
@@ -9,6 +9,7 @@ import type {
   FormFieldRead,
 } from "@/api/types";
 import { booleanLabel, formatUiDateTime, instanceLabel } from "@/app/uiText";
+import { AdminMutationDialog } from "@/components/common/AdminMutation";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import { BlockFieldControl } from "./BlockFieldControl";
@@ -88,32 +89,48 @@ export function FilledCardLayout({
     [blockInstances, values],
   );
   const closeError = blockEditor ? Object.values(blockEditor.errors)[0] : undefined;
+  const layoutRootRef = useRef<HTMLDivElement>(null);
+  const lastEditorFocusRef = useRef<HTMLElement | null>(null);
 
-  function handleLayoutClickCapture(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!blockEditor?.target || !(event.target instanceof Element)) return;
-    const clickedBlock = event.target.closest<HTMLElement>("[data-layout-block-id]");
-    const clickedSurface = event.target.closest<HTMLElement>("[data-filled-card-instance]");
-    const clickedBlockId = clickedBlock?.dataset.layoutBlockId;
-    const clickedBlockInstanceId = clickedSurface?.dataset.filledCardInstance;
-    if (
-      clickedBlockId === blockEditor.target.blockId &&
-      clickedBlockInstanceId === (blockEditor.target.blockInstanceId ?? "primary")
-    ) {
-      return;
+  useEffect(() => {
+    const editor = blockEditor;
+    if (!editor?.target) return;
+    const editorState: BlockEditorState = editor;
+    const activeTarget = editor.target;
+    function guardEditorClick(event: MouseEvent) {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest(".admin-mutation-dialog")) return;
+      const clickedBlock = event.target.closest<HTMLElement>("[data-layout-block-id]");
+      const clickedSurface = event.target.closest<HTMLElement>("[data-filled-card-instance]");
+      if (
+        clickedBlock?.dataset.layoutBlockId === activeTarget.blockId &&
+        clickedSurface?.dataset.filledCardInstance === (activeTarget.blockInstanceId ?? "primary")
+      ) {
+        return;
+      }
+      const closeResult = editorState.requestClose();
+      const insideLayout = Boolean(layoutRootRef.current?.contains(event.target));
+      const switchingBlock = Boolean(event.target.closest(".filled-card-edit-block"));
+      if (closeResult === "confirm-discard" && (!insideLayout || !switchingBlock)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     }
-    const closeResult = blockEditor.requestClose();
-    if (closeResult === "confirm-discard" && !event.target.closest(".filled-card-edit-block")) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-  }
+    document.addEventListener("click", guardEditorClick, true);
+    return () => document.removeEventListener("click", guardEditorClick, true);
+  }, [blockEditor]);
 
   return (
     <>
       <div
+        ref={layoutRootRef}
         className="filled-card-layout"
         data-testid="filled-card-layout"
-        onClickCapture={handleLayoutClickCapture}
+        onFocusCapture={(event) => {
+          if (blockEditor?.target && event.target instanceof HTMLElement) {
+            lastEditorFocusRef.current = event.target;
+          }
+        }}
       >
         {surfaces.map((surface) => {
           const surfaceValues =
@@ -131,6 +148,10 @@ export function FilledCardLayout({
             blockEditor?.target?.blockInstanceId === surface.blockInstanceId
               ? blockEditor.target
               : null;
+          const firstEditableId =
+            editorTarget && blockEditor
+              ? firstEditableFieldId(surface.layout, blockEditor)
+              : undefined;
           const surfaceActiveBlock = blockEditor
             ? editorTarget
             : activeBlock?.blockInstanceId === surface.blockInstanceId
@@ -204,9 +225,7 @@ export function FilledCardLayout({
                             })
                           : undefined
                       }
-                      autoFocus={
-                        editable && firstEditableFieldId(surface.layout, blockEditor) === field.id
-                      }
+                      autoFocus={editable && firstEditableId === field.id}
                       onChange={(nextValue: FieldEditorState) =>
                         blockEditor.update(field.id, nextValue)
                       }
@@ -281,48 +300,44 @@ export function FilledCardLayout({
         })}
       </div>
       {blockEditor?.confirmClose ? (
-        <div
-          className="admin-mutation-dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Несохранённые изменения"
+        <AdminMutationDialog
+          title="Несохранённые изменения"
+          onCancel={blockEditor.continueEditing}
+          restoreFocusRef={lastEditorFocusRef}
         >
-          <div className="admin-mutation-dialog-surface">
-            <h3>Несохранённые изменения</h3>
-            <p>Сохранить изменения перед закрытием блока?</p>
-            {closeError ? (
-              <p className="inline-alert" role="alert">
-                {closeError}
-              </p>
-            ) : null}
-            <div className="admin-mutation-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={blockEditor.pending}
-                onClick={() => void blockEditor.save()}
-              >
-                Сохранить
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={blockEditor.pending}
-                onClick={blockEditor.discard}
-              >
-                Не сохранять
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={blockEditor.pending}
-                onClick={blockEditor.continueEditing}
-              >
-                Продолжить редактирование
-              </button>
-            </div>
+          <p>Сохранить изменения перед закрытием блока?</p>
+          {closeError ? (
+            <p className="inline-alert" role="alert">
+              {closeError}
+            </p>
+          ) : null}
+          <div className="admin-mutation-actions">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={blockEditor.pending}
+              onClick={() => void blockEditor.save()}
+            >
+              Сохранить
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={blockEditor.pending}
+              onClick={blockEditor.discard}
+            >
+              Не сохранять
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={blockEditor.pending}
+              onClick={blockEditor.continueEditing}
+            >
+              Продолжить редактирование
+            </button>
           </div>
-        </div>
+        </AdminMutationDialog>
       ) : null}
     </>
   );
