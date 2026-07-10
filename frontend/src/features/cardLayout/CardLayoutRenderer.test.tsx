@@ -214,6 +214,16 @@ function dispatchPointer(
   fireEvent(element, pointerEvent(type, { pointerId, clientX, clientY }));
 }
 
+function dispatchPointerOutsideField(
+  target: EventTarget,
+  type: "pointermove" | "pointerup" | "pointercancel",
+  { pointerId, clientX, clientY }: { pointerId: number; clientX: number; clientY: number },
+) {
+  act(() => {
+    target.dispatchEvent(pointerEvent(type, { pointerId, clientX, clientY }));
+  });
+}
+
 function pointerEvent(
   type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "lostpointercapture",
   { pointerId, clientX, clientY }: { pointerId: number; clientX: number; clientY: number },
@@ -746,6 +756,102 @@ describe("CardWebLayoutCanvas", () => {
       target: { id: fields[0].id, kind: "field" },
       before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
       after: { row: 1, column: 4, rowSpan: 1, columnSpan: 9 },
+    });
+  });
+
+  test("keeps the originating field while the pointer crosses a fully occupied row", () => {
+    const onGeometryCommit = vi.fn();
+    const fullRowField: FormFieldRead = {
+      ...fields[0],
+      id: "field-full-row",
+      code: "full_row",
+      label: "Полная строка",
+      position: 2,
+    };
+    const layoutWithPointerLeavingField: CardTemplateLayoutRead = {
+      ...layout,
+      structure: {
+        ...layout.structure,
+        fields: [...fields, fullRowField],
+      },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 1,
+                column: 7,
+                row_span: 1,
+                column_span: 3,
+              },
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 10,
+                row_span: 1,
+                column_span: 3,
+              },
+              {
+                id: fullRowField.id,
+                kind: "field",
+                field_id: fullRowField.id,
+                row: 2,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: layoutWithPointerLeavingField,
+          fields: [...fields, fullRowField],
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const neighbourNode = screen.getByTestId("layout-field-field-active");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 134, clientX: 950, clientY: 50 });
+    dispatchPointerOutsideField(window, "pointermove", {
+      pointerId: 134,
+      clientX: 950,
+      clientY: 150,
+    });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "10 / span 3",
+      gridRow: "3 / span 1",
+    });
+    expect(neighbourNode).toHaveStyle({
+      gridColumn: "7 / span 3",
+      gridRow: "1 / span 1",
+    });
+
+    dispatchPointerOutsideField(window, "pointerup", {
+      pointerId: 134,
+      clientX: 950,
+      clientY: 150,
+    });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 10, rowSpan: 1, columnSpan: 3 },
+      after: { row: 3, column: 10, rowSpan: 1, columnSpan: 3 },
     });
   });
 

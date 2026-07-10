@@ -4392,3 +4392,32 @@ Live Browser proof:
 - A subsequent keyboard move down and back up previewed rows 2 and 1, then
   Escape cleared the session with row 1 restored. Final state had zero active
   geometry sessions/targets and browser logs contained zero warnings/errors.
+
+#### Window-owned field pointer follow-up
+
+Status: implemented and locally verified; production release pending.
+
+- Native pointer capture was not a sufficient ownership boundary for direct
+  field dragging. When the pointer crossed a neighbouring field or a
+  full-width occupied row, some browsers could stop delivering the stream to
+  the originating field. The field under the pointer could then appear to take
+  over the gesture while the original geometry session remained stuck.
+- A direct field press now installs temporary capture-phase window listeners
+  for that pointer id. Movement, release, and cancellation remain routed to the
+  originating field even if native pointer capture is lost or hit-testing
+  moves over another field. The listeners are removed on release, cancel, a
+  click-only press, or component unmount.
+- Native React pointer events and the window fallback now share a small typed
+  geometry event contract. Resize handles keep their existing native capture
+  behavior; the fallback is limited to direct field-surface movement.
+- The new regression begins on the rightmost field beside another occupied
+  field, sends the remaining pointer stream through `window`, crosses a fully
+  occupied intermediate row, and proves that only the originating field moves
+  into the next free row.
+- The focused renderer suite passes all 64 cases. The full local gate passes:
+  backend `228 passed / 195 skipped`, frontend `248 passed / 25 skipped`, Ruff,
+  Ruff format, mypy, ESLint, Prettier, TypeScript, production build, and
+  project-map checks are green. The existing Starlette/httpx deprecation and
+  Vite main-chunk advisories remain unchanged. The verified local bundle is
+  `index-CXChXVIt.js` (`563.91 kB`, `160.88 kB` gzip) with
+  `index-Cl9DldkN.css`.

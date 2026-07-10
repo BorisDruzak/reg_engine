@@ -1,10 +1,5 @@
-import { useRef, useState } from "react";
-import type {
-  CSSProperties,
-  KeyboardEvent as ReactKeyboardEvent,
-  PointerEvent as ReactPointerEvent,
-  ReactNode,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
 import type { CardTemplateFormLayoutItemRead, FormFieldRead, ReferenceListRead } from "@/api/types";
 import { fieldTypeLabel } from "@/app/uiText";
@@ -17,7 +12,11 @@ import type { CardLayoutRendererMode, CardLayoutSelection } from "./CardLayoutRe
 import { InlineFieldEditor } from "./InlineFieldEditor";
 import { snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect, ResizeHandle } from "./layoutGeometry";
-import type { LayoutGeometryControls, LayoutGeometryTarget } from "./useLayoutGeometrySession";
+import type {
+  LayoutGeometryControls,
+  LayoutGeometryTarget,
+  LayoutPointerEvent,
+} from "./useLayoutGeometrySession";
 
 const DIRECT_MOVE_THRESHOLD_PX = 6;
 
@@ -78,6 +77,7 @@ export function CardFieldLayoutNode({
   const [retryDraft, setRetryDraft] = useState<FormFieldRead | null>(null);
   const pendingMoveRef = useRef<PendingMove | null>(null);
   const directMovePointerRef = useRef<number | null>(null);
+  const directPointerCleanupRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
   const nodeId = field?.id ?? item.id;
   const designMode = mode === "design";
@@ -106,6 +106,14 @@ export function CardFieldLayoutNode({
     original: toLayoutRect(item),
   };
 
+  useEffect(
+    () => () => {
+      directPointerCleanupRef.current?.();
+      directPointerCleanupRef.current = null;
+    },
+    [],
+  );
+
   function openFieldEditor() {
     if (!field || !designMode || geometryActive || !onCommitField) {
       return;
@@ -118,7 +126,41 @@ export function CardFieldLayoutNode({
     return element.closest<HTMLElement>("[data-layout-grid='fields']");
   }
 
-  function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
+  function stopDirectPointerTracking() {
+    const cleanup = directPointerCleanupRef.current;
+    directPointerCleanupRef.current = null;
+    cleanup?.();
+  }
+
+  function startDirectPointerTracking(element: HTMLElement, pointerId: number) {
+    stopDirectPointerTracking();
+    const handleWindowPointerMove = (event: PointerEvent) => {
+      if (event.pointerId === pointerId) {
+        handlePointerMove(toLayoutPointerEvent(event, element));
+      }
+    };
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      if (event.pointerId === pointerId) {
+        handlePointerUp(toLayoutPointerEvent(event, element));
+      }
+    };
+    const handleWindowPointerCancel = (event: PointerEvent) => {
+      if (event.pointerId === pointerId) {
+        handlePointerCancel(toLayoutPointerEvent(event, element));
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove, true);
+      window.removeEventListener("pointerup", handleWindowPointerUp, true);
+      window.removeEventListener("pointercancel", handleWindowPointerCancel, true);
+    };
+    directPointerCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", handleWindowPointerMove, true);
+    window.addEventListener("pointerup", handleWindowPointerUp, true);
+    window.addEventListener("pointercancel", handleWindowPointerCancel, true);
+  }
+
+  function handlePointerDown(event: LayoutPointerEvent) {
     if (!geometry || geometryActive || schemaEditing || isInteractiveTarget(event.target)) {
       return;
     }
@@ -129,6 +171,7 @@ export function CardFieldLayoutNode({
     };
     directMovePointerRef.current = null;
     suppressClickRef.current = false;
+    startDirectPointerTracking(event.currentTarget, event.pointerId);
     if (typeof event.currentTarget.setPointerCapture === "function") {
       try {
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -138,7 +181,7 @@ export function CardFieldLayoutNode({
     }
   }
 
-  function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
+  function handlePointerMove(event: LayoutPointerEvent) {
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
       geometry?.pointerMove(event);
       return;
@@ -167,8 +210,9 @@ export function CardFieldLayoutNode({
     geometry.pointerMove(event);
   }
 
-  function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
+  function handlePointerUp(event: LayoutPointerEvent) {
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
+      stopDirectPointerTracking();
       directMovePointerRef.current = null;
       window.setTimeout(() => {
         suppressClickRef.current = false;
@@ -177,6 +221,7 @@ export function CardFieldLayoutNode({
       return;
     }
     if (pendingMoveRef.current?.pointerId === event.pointerId) {
+      stopDirectPointerTracking();
       pendingMoveRef.current = null;
       if (typeof event.currentTarget.releasePointerCapture === "function") {
         try {
@@ -188,8 +233,9 @@ export function CardFieldLayoutNode({
     }
   }
 
-  function handlePointerCancel(event: ReactPointerEvent<HTMLElement>) {
+  function handlePointerCancel(event: LayoutPointerEvent) {
     const pendingPointerId = pendingMoveRef.current?.pointerId;
+    stopDirectPointerTracking();
     pendingMoveRef.current = null;
     suppressClickRef.current = false;
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
@@ -207,7 +253,10 @@ export function CardFieldLayoutNode({
     }
   }
 
-  function handleLostPointerCapture(event: ReactPointerEvent<HTMLElement>) {
+  function handleLostPointerCapture(event: LayoutPointerEvent) {
+    if (directPointerCleanupRef.current) {
+      return;
+    }
     pendingMoveRef.current = null;
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
       directMovePointerRef.current = null;
@@ -405,7 +454,7 @@ function FieldGeometryAffordances({
   target: LayoutGeometryTarget;
   geometry: LayoutGeometryControls;
 }) {
-  function gridFor(event: ReactPointerEvent<HTMLElement>) {
+  function gridFor(event: LayoutPointerEvent) {
     return event.currentTarget.closest<HTMLElement>("[data-layout-grid='fields']");
   }
   const resizeHandles = Object.keys(RESIZE_HANDLE_LABELS) as ResizeHandle[];
@@ -440,6 +489,18 @@ function FieldGeometryAffordances({
       ))}
     </span>
   );
+}
+
+function toLayoutPointerEvent(event: PointerEvent, currentTarget: HTMLElement): LayoutPointerEvent {
+  return {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    target: event.target,
+    currentTarget,
+    preventDefault: () => event.preventDefault(),
+    stopPropagation: () => event.stopPropagation(),
+  };
 }
 
 function isInteractiveTarget(target: EventTarget | null) {

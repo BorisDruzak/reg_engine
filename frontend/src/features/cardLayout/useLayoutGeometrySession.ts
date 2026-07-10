@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { CardTemplateLayoutRead } from "@/api/types";
 
@@ -21,6 +21,16 @@ export type LayoutGeometryTarget = {
   targetId: string;
   targetKind: LayoutGeometryTargetKind;
   original: LayoutRect;
+};
+
+export type LayoutPointerEvent = {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  target: EventTarget | null;
+  currentTarget: HTMLElement;
+  preventDefault: () => void;
+  stopPropagation: () => void;
 };
 
 export type LayoutGeometryCommand = {
@@ -160,7 +170,7 @@ export function useLayoutGeometrySession({
 
   const beginPointer = useCallback(
     (
-      event: ReactPointerEvent<HTMLElement>,
+      event: LayoutPointerEvent,
       target: LayoutGeometryTarget,
       gridElement: HTMLElement,
       operation: "move" | "resize",
@@ -222,7 +232,7 @@ export function useLayoutGeometrySession({
 
   const beginMove = useCallback(
     (
-      event: ReactPointerEvent<HTMLElement>,
+      event: LayoutPointerEvent,
       target: LayoutGeometryTarget,
       gridElement: HTMLElement,
       pointerOrigin?: PointerOrigin,
@@ -232,7 +242,7 @@ export function useLayoutGeometrySession({
 
   const beginResize = useCallback(
     (
-      event: ReactPointerEvent<HTMLElement>,
+      event: LayoutPointerEvent,
       target: LayoutGeometryTarget,
       handle: ResizeHandle,
       gridElement: HTMLElement,
@@ -241,7 +251,7 @@ export function useLayoutGeometrySession({
   );
 
   const pointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+    (event: LayoutPointerEvent) => {
       const pointer = pointerRef.current;
       const current = sessionRef.current;
       if (!pointer || !current || event.pointerId !== pointer.pointerId) {
@@ -285,7 +295,7 @@ export function useLayoutGeometrySession({
   );
 
   const pointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+    (event: LayoutPointerEvent) => {
       const pointer = pointerRef.current;
       if (!pointer || event.pointerId !== pointer.pointerId) {
         return;
@@ -309,7 +319,7 @@ export function useLayoutGeometrySession({
   );
 
   const pointerCancel = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+    (event: LayoutPointerEvent) => {
       const pointer = pointerRef.current;
       if (!pointer || event.pointerId !== pointer.pointerId) {
         return;
@@ -322,7 +332,7 @@ export function useLayoutGeometrySession({
   );
 
   const lostPointerCapture = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+    (event: LayoutPointerEvent) => {
       const pointer = pointerRef.current;
       if (
         !pointer ||
