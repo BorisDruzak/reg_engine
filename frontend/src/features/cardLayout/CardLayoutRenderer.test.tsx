@@ -498,7 +498,58 @@ describe("CardWebLayoutCanvas", () => {
     expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
   });
 
-  test("uses four equal non-auto physical rows in the canvas, fields, and live previews", () => {
+  test("renders a compact block from its occupied field rows", () => {
+    const compactLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            items: [layout.form_layout.sections[0].items[0]],
+          },
+        ],
+      },
+    };
+
+    render(
+      <CardWebLayoutCanvas {...canvasProps({ layout: compactLayout, fields: [fields[0]] })} />,
+    );
+
+    const blockNode = screen.getByTestId("layout-block-block-fio");
+    const fieldGrid = blockNode.querySelector<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(1, minmax(3rem, auto))");
+    expect(fieldGrid!.style.minHeight).toBe("3rem");
+    expect(blockNode.style.alignSelf).toBe("start");
+  });
+
+  test("places field creation footer after the existing field grid", () => {
+    render(<CardWebLayoutCanvas {...canvasProps()} />);
+
+    const blockNode = screen.getByTestId("layout-block-block-fio");
+    const fieldGrid = blockNode.querySelector<HTMLElement>("[data-layout-grid='fields']");
+    const createFieldButton = screen.getByRole("button", {
+      name: "Создать поле в блоке ФИО",
+    });
+    expect(createFieldButton.closest(".card-layout-block-footer")).not.toBeNull();
+    expect(
+      fieldGrid!.compareDocumentPosition(createFieldButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("keeps A4 exact height when compact block projection is disabled", () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ compactBlockHeight: false })} />);
+
+    const blockNode = screen.getByTestId("layout-block-block-fio");
+    const fieldGrid = blockNode.querySelector<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, auto))");
+    expect(fieldGrid!.style.minHeight).toBe("12rem");
+    expect(blockNode.style.alignSelf).toBe("");
+  });
+
+  test("uses four canvas rows while compacting web blocks and keeping live previews exact", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 
     const canvas = screen.getByTestId("card-layout-canvas");
@@ -509,9 +560,8 @@ describe("CardWebLayoutCanvas", () => {
     expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(6rem, 1fr))");
     expect(canvas.style.gridTemplateRows).not.toContain("auto");
     expect(canvas.style.minHeight).toBe("24rem");
-    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, 1fr))");
-    expect(fieldGrid!.style.gridTemplateRows).not.toContain("auto");
-    expect(fieldGrid!.style.minHeight).toBe("12rem");
+    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(3, minmax(3rem, auto))");
+    expect(fieldGrid!.style.minHeight).toBe("9rem");
 
     const moveHandle = blockMoveHandle();
     mockGridRect(canvas);

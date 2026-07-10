@@ -31,6 +31,7 @@ export type CardBlockLayoutNodeProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
@@ -56,6 +57,7 @@ export function CardBlockLayoutNode({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  compactBlockHeight = true,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
   renderFieldValue,
@@ -82,10 +84,16 @@ export function CardBlockLayoutNode({
     selection.id === nodeId;
   const valueEditing =
     mode === "block-edit" && selection?.kind === "block" && selection.id === nodeId;
+  const occupiedRowCount = section.items.reduce(
+    (lastRow, item) => Math.max(lastRow, item.row + item.row_span - 1),
+    1,
+  );
+  const visibleRowCount = compactBlockHeight ? occupiedRowCount : 4;
   const style: CSSProperties = {
     gridColumn: `${section.column} / span ${section.column_span}`,
     gridRow: `${section.row} / span ${section.row_span}`,
     position: "relative",
+    alignSelf: compactBlockHeight ? "start" : undefined,
   };
   const geometryTargetDescriptor: LayoutGeometryTarget = {
     targetId: section.id,
@@ -125,28 +133,16 @@ export function CardBlockLayoutNode({
               <strong>{block?.title ?? "Блок недоступен"}</strong>
               {block?.is_repeatable ? <small>Повторяемый блок</small> : null}
             </div>
-            {block && designMode && !geometryActive && (onCreateField || onCommitBlock) ? (
+            {block && designMode && !geometryActive && onCommitBlock ? (
               <div className="row-actions">
-                {onCreateField ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`Создать поле в блоке ${block.title}`}
-                    onClick={() => onCreateField(block.id)}
-                  >
-                    Создать поле
-                  </button>
-                ) : null}
-                {onCommitBlock ? (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    aria-label={`Изменить блок ${block.title}`}
-                    onClick={() => onSelect({ kind: "block", id: block.id })}
-                  >
-                    Изменить блок
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-label={`Изменить блок ${block.title}`}
+                  onClick={() => onSelect({ kind: "block", id: block.id })}
+                >
+                  Изменить блок
+                </button>
               </div>
             ) : null}
             {block && !designMode ? renderBlockActions?.({ block, section, mode }) : null}
@@ -157,8 +153,8 @@ export function CardBlockLayoutNode({
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-              gridTemplateRows: "repeat(4, minmax(3rem, 1fr))",
-              minHeight: "12rem",
+              gridTemplateRows: `repeat(${visibleRowCount}, minmax(3rem, auto))`,
+              minHeight: `${visibleRowCount * 3}rem`,
             }}
           >
             {rowMajor(section.items).map((item) => {
@@ -189,6 +185,18 @@ export function CardBlockLayoutNode({
               );
             })}
           </div>
+          {block && designMode && !geometryActive && onCreateField ? (
+            <footer className="card-layout-block-footer">
+              <button
+                type="button"
+                className="ghost-button"
+                aria-label={`Создать поле в блоке ${block.title}`}
+                onClick={() => onCreateField(block.id)}
+              >
+                Создать поле
+              </button>
+            </footer>
+          ) : null}
         </>
       )}
       {showGeometryDiagnostics ? (

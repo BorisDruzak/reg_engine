@@ -42,6 +42,7 @@ export type CardWebLayoutCanvasProps = {
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
   responsive?: boolean;
+  compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
@@ -74,6 +75,7 @@ function CardWebLayoutCanvasSession({
   fileRefOptions,
   referenceLists,
   responsive = true,
+  compactBlockHeight = true,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
   renderFieldValue,
@@ -166,6 +168,7 @@ function CardWebLayoutCanvasSession({
             fieldOptions={fieldOptions}
             fileRefOptions={fileRefOptions}
             referenceLists={referenceLists}
+            compactBlockHeight={compactBlockHeight}
             showGeometryDiagnostics={showGeometryDiagnostics}
             testIdPrefix={testIdPrefix}
             renderFieldValue={renderFieldValue}

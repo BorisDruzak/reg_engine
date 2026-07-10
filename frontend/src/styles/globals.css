@@ -1781,6 +1781,12 @@ tr:last-child td {
   margin-top: 8px;
 }
 
+.card-layout-block-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .card-layout-field-node {
   min-width: 0;
   padding: 7px;
