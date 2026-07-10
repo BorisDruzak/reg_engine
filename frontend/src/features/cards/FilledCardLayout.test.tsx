@@ -435,6 +435,32 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
+  test("uses the block editor target as the sole active state when the hook is supplied", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ activeBlock: { blockId: restrictedBlock.id, blockInstanceId: null } }}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("region", { name: "Макет карточки только для чтения" }),
+    ).not.toHaveLength(0);
+    expect(
+      screen.queryByRole("region", { name: "Редактирование блока карточки" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    expect(screen.getByLabelText("Имя")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Отмена блока ФИО" }));
+
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Редактирование блока карточки" }),
+    ).not.toBeInTheDocument();
+  });
+
   test("cancels an in-block draft and restores the opening snapshot", async () => {
     const user = userEvent.setup();
     const saveValues = vi.fn().mockResolvedValue(undefined);
@@ -653,6 +679,29 @@ describe("FilledCardLayout", () => {
     expect(screen.getByTestId("filled-field-first-name")).toHaveTextContent("Иван");
   });
 
+  test("opens dirty-close when clicking another block body or field", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+    await user.clear(screen.getByLabelText("Имя"));
+    await user.type(screen.getByLabelText("Имя"), "Пётр");
+
+    await user.click(screen.getByTestId("filled-block-service"));
+    let decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    await user.click(within(decision).getByRole("button", { name: "Продолжить редактирование" }));
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
+
+    await user.click(screen.getByTestId("filled-field-note"));
+    decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    expect(within(decision).getByRole("button", { name: "Сохранить" })).toBeInTheDocument();
+  });
+
   test("keeps the dirty-close decision open with a Russian error when save fails", async () => {
     const user = userEvent.setup();
     const saveValues = vi.fn().mockRejectedValue(new Error("Forbidden"));
@@ -737,6 +786,44 @@ describe("FilledCardLayout", () => {
     expect(
       screen.getByTestId("filled-instance-contact-instance-1-field-contact-value"),
     ).toHaveTextContent("Первый контакт");
+  });
+
+  test("protects a dirty repeatable instance while switching to another exact instance", async () => {
+    const user = userEvent.setup();
+    const repeatableFixture = repeatableProps();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ ...repeatableFixture, editableFieldIds: new Set(["contact-value"]) }}
+      />,
+    );
+
+    let secondInstance = screen.getByTestId(
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2",
+    );
+    await user.click(
+      within(secondInstance).getByRole("button", { name: "Изменить блок Контакты" }),
+    );
+    secondInstance = screen.getByTestId(
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2",
+    );
+    await user.clear(within(secondInstance).getByLabelText("Контакт"));
+    await user.type(within(secondInstance).getByLabelText("Контакт"), "Черновик второго");
+
+    let firstInstance = screen.getByTestId(
+      "filled-instance-contact-instance-1-block-contacts-contact-instance-1",
+    );
+    await user.click(within(firstInstance).getByRole("button", { name: "Изменить блок Контакты" }));
+    const decision = screen.getByRole("dialog", { name: "Несохранённые изменения" });
+    await user.click(within(decision).getByRole("button", { name: "Не сохранять" }));
+
+    firstInstance = screen.getByTestId(
+      "filled-instance-contact-instance-1-block-contacts-contact-instance-1",
+    );
+    expect(within(firstInstance).getByLabelText("Контакт")).toHaveValue("Первый контакт");
+    expect(
+      screen.getByTestId("filled-instance-contact-instance-2-field-contact-value"),
+    ).toHaveTextContent("Второй контакт");
   });
 
   test("exposes deterministic dirty state from the block editor hook", () => {

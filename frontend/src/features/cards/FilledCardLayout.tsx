@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
 import type {
   CardBlockInstanceRead,
@@ -89,12 +89,31 @@ export function FilledCardLayout({
   );
   const closeError = blockEditor ? Object.values(blockEditor.errors)[0] : undefined;
 
+  function handleLayoutClickCapture(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!blockEditor?.target || !(event.target instanceof Element)) return;
+    const clickedBlock = event.target.closest<HTMLElement>("[data-layout-block-id]");
+    const clickedSurface = event.target.closest<HTMLElement>("[data-filled-card-instance]");
+    const clickedBlockId = clickedBlock?.dataset.layoutBlockId;
+    const clickedBlockInstanceId = clickedSurface?.dataset.filledCardInstance;
+    if (
+      clickedBlockId === blockEditor.target.blockId &&
+      clickedBlockInstanceId === (blockEditor.target.blockInstanceId ?? "primary")
+    ) {
+      return;
+    }
+    const closeResult = blockEditor.requestClose();
+    if (closeResult === "confirm-discard" && !event.target.closest(".filled-card-edit-block")) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
+
   return (
     <>
       <div
         className="filled-card-layout"
         data-testid="filled-card-layout"
-        onClick={() => blockEditor?.requestClose()}
+        onClickCapture={handleLayoutClickCapture}
       >
         {surfaces.map((surface) => {
           const surfaceValues =
@@ -112,9 +131,11 @@ export function FilledCardLayout({
             blockEditor?.target?.blockInstanceId === surface.blockInstanceId
               ? blockEditor.target
               : null;
-          const surfaceActiveBlock =
-            editorTarget ??
-            (activeBlock?.blockInstanceId === surface.blockInstanceId ? activeBlock : null);
+          const surfaceActiveBlock = blockEditor
+            ? editorTarget
+            : activeBlock?.blockInstanceId === surface.blockInstanceId
+              ? activeBlock
+              : null;
 
           return (
             <section
@@ -122,6 +143,7 @@ export function FilledCardLayout({
               className={
                 surface.blockInstanceId ? "filled-card-repeatable-instance" : "filled-card-primary"
               }
+              data-filled-card-instance={surface.blockInstanceId ?? "primary"}
               aria-label={
                 surface.instanceOrdinal === null
                   ? "Основные данные карточки"

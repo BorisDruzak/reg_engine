@@ -96,6 +96,7 @@ export function CardBlockLayoutNode({
   return (
     <section
       className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}`}
+      data-layout-block-id={nodeId}
       data-testid={`${testIdPrefix}-block-${section.id}`}
       style={style}
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
