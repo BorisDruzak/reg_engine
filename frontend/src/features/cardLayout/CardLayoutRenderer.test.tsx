@@ -1,6 +1,6 @@
 /// <reference types="node" />
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
@@ -211,13 +211,20 @@ function dispatchPointer(
   type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "lostpointercapture",
   { pointerId, clientX, clientY }: { pointerId: number; clientX: number; clientY: number },
 ) {
+  fireEvent(element, pointerEvent(type, { pointerId, clientX, clientY }));
+}
+
+function pointerEvent(
+  type: "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "lostpointercapture",
+  { pointerId, clientX, clientY }: { pointerId: number; clientX: number; clientY: number },
+) {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperties(event, {
     clientX: { value: clientX },
     clientY: { value: clientY },
     pointerId: { value: pointerId },
   });
-  fireEvent(element, event);
+  return event;
 }
 
 function blockMoveHandle() {
@@ -684,6 +691,39 @@ describe("CardWebLayoutCanvas", () => {
 
     expect(capture.setPointerCapture).toHaveBeenCalledWith(121);
     expect(capture.releasePointerCapture).toHaveBeenCalledWith(121);
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
+      after: { row: 1, column: 4, rowSpan: 1, columnSpan: 9 },
+    });
+  });
+
+  test("keeps processing a fast pointer stream before React rerenders", () => {
+    const onGeometryCommit = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!);
+    installPointerCapture(fieldNode);
+
+    act(() => {
+      fieldNode.dispatchEvent(
+        pointerEvent("pointerdown", { pointerId: 130, clientX: 0, clientY: 0 }),
+      );
+      fieldNode.dispatchEvent(
+        pointerEvent("pointermove", { pointerId: 130, clientX: 6, clientY: 0 }),
+      );
+      fieldNode.dispatchEvent(
+        pointerEvent("pointermove", { pointerId: 130, clientX: 306, clientY: 0 }),
+      );
+      fieldNode.dispatchEvent(
+        pointerEvent("pointerup", { pointerId: 130, clientX: 306, clientY: 0 }),
+      );
+    });
+
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
     expect(onGeometryCommit).toHaveBeenCalledWith({
       target: { id: fields[0].id, kind: "field" },
       before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },

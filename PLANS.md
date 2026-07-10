@@ -4293,17 +4293,21 @@ browser proof are pending.
 - The resolver carries the actual horizontal and vertical movement direction.
   Repeated pointer events at the same occupied row therefore keep one stable
   preview instead of alternating between rows.
+- Direct field dragging keeps the active pointer id in a ref from threshold
+  crossing through release/cancel. A fast native pointer stream can no longer
+  lose movement or release events while React is still rerendering the newly
+  opened geometry session.
 - Out-of-grid movement keeps the last valid preview and boundary error; a
   clamped coordinate cannot trigger an adaptive placement or overlap.
-- The focused renderer/geometry suites pass all 79 cases. The regressions
+- The focused renderer/geometry suites pass all 80 cases. The regressions
   cover text-selection suppression, adaptive shrink without changing the
   obstacle, preference for the narrow interval under the pointer, stable
-  repeated movement, full-row traversal in both directions, and rejected
-  boundary/collision drops.
+  repeated movement, an unbatched native pointer stream, full-row traversal in
+  both directions, and rejected boundary/collision drops.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed: backend `228 passed / 195 skipped`, frontend
-  `243 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  `244 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
   TypeScript, production build, and project-map checks are green. The existing
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
-  The verified local bundle is `index-Druk2Pxs.js` (`562.28 kB`, `160.54 kB`
+  The verified local bundle is `index-CoQERnHQ.js` (`562.52 kB`, `160.51 kB`
   gzip) with `index-Cl9DldkN.css`.

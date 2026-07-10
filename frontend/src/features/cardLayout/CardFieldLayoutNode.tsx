@@ -77,6 +77,7 @@ export function CardFieldLayoutNode({
 }: CardFieldLayoutNodeProps) {
   const [retryDraft, setRetryDraft] = useState<FormFieldRead | null>(null);
   const pendingMoveRef = useRef<PendingMove | null>(null);
+  const directMovePointerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const nodeId = field?.id ?? item.id;
   const designMode = mode === "design";
@@ -126,11 +127,12 @@ export function CardFieldLayoutNode({
       x: event.clientX,
       y: event.clientY,
     };
+    directMovePointerRef.current = null;
     suppressClickRef.current = false;
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
-    if (geometryTarget) {
+    if (geometryTarget || directMovePointerRef.current === event.pointerId) {
       geometry?.pointerMove(event);
       return;
     }
@@ -149,6 +151,7 @@ export function CardFieldLayoutNode({
       return;
     }
     pendingMoveRef.current = null;
+    directMovePointerRef.current = event.pointerId;
     suppressClickRef.current = true;
     geometry.beginMove(event, geometryTargetDescriptor, grid, {
       clientX: pending.x,
@@ -158,7 +161,8 @@ export function CardFieldLayoutNode({
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
-    if (geometryTarget) {
+    if (geometryTarget || directMovePointerRef.current === event.pointerId) {
+      directMovePointerRef.current = null;
       geometry?.pointerUp(event);
       return;
     }
@@ -170,14 +174,16 @@ export function CardFieldLayoutNode({
   function handlePointerCancel(event: ReactPointerEvent<HTMLElement>) {
     pendingMoveRef.current = null;
     suppressClickRef.current = false;
-    if (geometryTarget) {
+    if (geometryTarget || directMovePointerRef.current === event.pointerId) {
+      directMovePointerRef.current = null;
       geometry?.pointerCancel(event);
     }
   }
 
   function handleLostPointerCapture(event: ReactPointerEvent<HTMLElement>) {
     pendingMoveRef.current = null;
-    if (geometryTarget) {
+    if (geometryTarget || directMovePointerRef.current === event.pointerId) {
+      directMovePointerRef.current = null;
       geometry?.lostPointerCapture(event);
     }
   }
