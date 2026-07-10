@@ -116,6 +116,64 @@ Target system:
 - Phase 8K is verified locally only. This checkpoint does not claim a push,
   deployment, server smoke, or live Browser result.
 
+## Public Link Review Lifecycle Checkpoint
+
+Phase 8L is implemented and verified locally through the documentation
+pre-release checkpoint. It is not yet claimed as pushed, deployed, migrated in
+production, or live Browser-verified.
+
+- Review-enabled public links move through `active`, `submitted`,
+  `changes_requested`, `approved`, `disabled`, and `expired`. Public editing is
+  allowed only in `active` and `changes_requested`; approval records the
+  reviewer and closes public view/edit access.
+- Public saves are direct-to-card. Field values and allowed attachments update
+  the real card before approval. The safe baseline supports administrator diff
+  review, while submit stores only completed/total public-field counts.
+- Six lifecycle routes cover recipient submit/status and administrator review,
+  request-changes, approve, and legacy start-review-cycle. Backend card
+  management permission remains authoritative for administrator actions.
+- The public page renders the exact sanitized card-template layout through the
+  shared renderer. It exposes only allowed template blocks/fields, preserves
+  non-editable static instructions inside explicitly selected blocks, and
+  keeps `file_ref` public editing blocked.
+- Field autosaves are sequential and server-confirmed. Canonical server values
+  replace the visible value only for the latest edit version. Card submission
+  remains blocked while a field or attachment upload is pending or has an
+  unresolved failure.
+- Public status is fetched authoritatively on every page mount. Closed links,
+  status refresh failures, and lifecycle `403/409` responses purge/hide preview
+  and attachment caches. Submitted/approved/disabled/expired screens use only
+  the safe status receipt and never render cached card data.
+- Migration `0023_public_link_review` adds lifecycle timestamps, reviewer,
+  comment, safe baseline/summary JSON, `review_enabled`, the expanded status
+  constraint, reviewer foreign key, and review-list index. Existing links stay
+  compatible with `review_enabled=false` until an administrator explicitly
+  captures a review baseline.
+
+Implemented lifecycle endpoints:
+
+```text
+POST /api/v1/public-links/submit
+POST /api/v1/public-links/status
+GET  /api/v1/public-links/{public_link_id}/review
+POST /api/v1/public-links/{public_link_id}/request-changes
+POST /api/v1/public-links/{public_link_id}/approve
+POST /api/v1/public-links/{public_link_id}/start-review-cycle
+```
+
+The latest full local gate reported backend `226 passed / 191 skipped` and
+frontend `225 passed / 25 skipped`; lint, format, typecheck, and the production
+frontend build passed. The existing Starlette/httpx deprecation and Vite
+main-chunk advisory remain. PostgreSQL cases skipped without
+`TEST_DATABASE_URL`; disposable `_test` migration/lifecycle verification is
+still required before release. Production backup/preflight, migration, push,
+deploy, and live Browser proof remain pending.
+
+Known functional limits: review does not stage or roll back public edits,
+legacy links have no trustworthy historical baseline until opt-in, public
+`file_ref` editing and generated documents remain unavailable, and the product
+does not send links through email or messenger channels.
+
 ## Local Setup
 
 ```powershell

@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-10 15:22:46 +05:00
+- Generated: 2026-07-10 20:26:07 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -130,6 +130,7 @@
 - `backend/migrations/versions/0020_schema_layout_static_text.py`
 - `backend/migrations/versions/0021_block_display_config.py`
 - `backend/migrations/versions/0022_card_print_layout_templates.py`
+- `backend/migrations/versions/0023_public_link_review_lifecycle.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -162,6 +163,7 @@
 - `backend/tests/test_organization_permission_services.py`
 - `backend/tests/test_phase_2a_document_architecture.py`
 - `backend/tests/test_phase_2c_generated_documents_architecture.py`
+- `backend/tests/test_public_link_review_lifecycle.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
 - `backend/tests/test_registry_schema_field_update_contract.py`
@@ -262,6 +264,8 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`
+- `frontend/src/features/cards/PublicLinkReviewPanel.tsx`
 - `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
@@ -297,6 +301,7 @@
 - `frontend/src/features/users/UsersAndRoles.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/pages/HomePage.tsx`
+- `frontend/src/pages/PublicLinkEditPage.test.tsx`
 - `frontend/src/pages/PublicLinkEditPage.tsx`
 - `frontend/src/styles/globals.css`
 - `frontend/src/test/setup.ts`

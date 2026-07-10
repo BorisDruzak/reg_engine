@@ -3882,7 +3882,9 @@ Deployment and live Browser proof:
 
 ## Phase 8L: Public Link Review Lifecycle
 
-Status: planned; visual design and written specification approved on 2026-07-10.
+Status: implemented and verified locally through the documentation pre-release
+checkpoint. GitHub/server synchronization, production migration `0023`,
+frontend deployment, and live Browser proof remain pending.
 
 Goal:
 
@@ -3895,3 +3897,86 @@ Design and implementation plan:
 
 - `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
+
+Implementation checkpoint:
+
+- Review-enabled links use `active`, `submitted`, `changes_requested`,
+  `approved`, `disabled`, and `expired`. Only `active` and
+  `changes_requested` permit public editing. Submit makes the token read-only;
+  request-changes reopens the same token while it remains unexpired; approval
+  records the reviewer and closes both view and edit access.
+- Public field saves and permitted attachment uploads remain direct-to-card.
+  Link creation captures a safe baseline for comparison, submit stores only
+  completed/total public-field counts, and approval does not replay or rewrite
+  card values. Invalid transitions, expiry races, and edits/uploads after
+  submit are rejected under backend row locking.
+- The six review endpoints are implemented:
+  `POST /api/v1/public-links/submit`,
+  `POST /api/v1/public-links/status`,
+  `GET /api/v1/public-links/{public_link_id}/review`,
+  `POST /api/v1/public-links/{public_link_id}/request-changes`,
+  `POST /api/v1/public-links/{public_link_id}/approve`, and
+  `POST /api/v1/public-links/{public_link_id}/start-review-cycle`.
+  Administrator actions remain backend-protected by card management access;
+  public tokens stay in request bodies and hashed at rest.
+- The administrator card surface creates review links with template-scoped
+  block/field allowlists, shows a copyable one-time returned URL, lazily loads
+  submitted diffs, requires a correction comment, confirms approval, and
+  presents lifecycle history without globally loading review data.
+- The public page uses `CardLayoutRenderer` in `public-edit` mode with the exact
+  sanitized card-template geometry. Only allowed template blocks/fields are
+  returned. Public static instructions survive selected block allowlists but
+  stay non-editable; field-only allowlists and unselected blocks do not leak
+  static content. `file_ref` remains unavailable for public editing.
+- Per-field autosave is serialized and server-confirmed. The visible value is
+  synchronized from canonical `FieldValueRead.value` only while that request
+  is still the latest version; newer input is never overwritten. Submit is
+  blocked by pending/failed field saves and pending/unresolved attachment
+  uploads.
+- Public status is revalidated on every page mount. Cached active preview and
+  attachment data are hidden until a fresh successful status response. A
+  failed status refresh or lifecycle `403/409` fails closed, purges private
+  caches, and never renders stale card or attachment data.
+- Submitted, approved, disabled, and expired pages render only the safe status
+  receipt. The safe response contains lifecycle status/timestamps, correction
+  comment when applicable, and approved completion counts; it contains no card
+  values, layout, attachment metadata, raw token, or internal identifiers.
+- Additive migration `0023_public_link_review` expands the status constraint,
+  adds submission/review timestamps, reviewer, comment, safe baseline/summary
+  JSON, `review_enabled`, reviewer foreign key, and the card/status/submitted
+  index. Existing rows remain `review_enabled=false`; an administrator must
+  explicitly start a review cycle to capture a trustworthy legacy baseline.
+
+Local verification checkpoint:
+
+- The full local check reached backend `226 passed / 191 skipped` and frontend
+  `225 passed / 25 skipped`. Ruff, Ruff format, mypy, ESLint, Prettier,
+  TypeScript, and the production frontend build passed.
+- The build retains the existing Vite main-chunk size advisory. The existing
+  Starlette/httpx deprecation warning also remains; neither warning is new to
+  Phase 8L.
+- The only aggregate-check failure was the stale generated
+  `docs/PROJECT_TREE.md`. Task 7 regenerated it with
+  `scripts/project-map.ps1`; the subsequent `-Check` passed.
+- PostgreSQL lifecycle and migration cases remain skipped when
+  `TEST_DATABASE_URL` is absent. Disposable `_test` migration/lifecycle proof
+  is still required before release and must never target production.
+
+Known limitations and remaining release gates:
+
+- Review is intentionally not a staged-copy workflow. A recipient's confirmed
+  saves are already present on the real card before administrator approval;
+  requesting changes does not roll them back.
+- Existing legacy links have no historical baseline until the administrator
+  explicitly starts a review cycle. No historical diff is inferred.
+- Public `file_ref` editing, public generated documents, and built-in email or
+  messenger delivery remain outside the approved scope. Existing bounded
+  public attachment list/upload/download behavior remains available only while
+  the link is editable.
+- A status-network failure deliberately leaves the public page closed with a
+  Russian-safe error until a fresh authoritative status can be loaded.
+- This checkpoint makes no claim that `main` was pushed, the server checkout or
+  frontend was deployed, migration `0023` was applied to production, or the
+  end-to-end Browser flow was live-verified. Those actions remain the next
+  release steps after disposable PostgreSQL verification and production
+  backup/preflight gates.

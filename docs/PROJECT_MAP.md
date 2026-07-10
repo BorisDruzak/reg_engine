@@ -7,10 +7,12 @@ The current implementation includes backend-enforced RBAC, dynamic registry
 schemas and typed card values, organizations, cards, public links, attachments,
 generated documents, import/export, reports, audit, and API-only MCP tools.
 
-Phases 8J and 8K are implemented and locally verified. Phase 8K adds the
-read-first filled-card workspace and least-privilege card presentation
-contract. Push, deployment, server smoke, and live Browser evidence are still
-pending; Phase 8L remains planned.
+Phases 8J and 8K are implemented; the read-first filled-card workspace and
+least-privilege card presentation contract were synchronized and
+live-verified in their recorded checkpoints. Phase 8L public-link review is
+implemented and verified locally through the documentation pre-release
+checkpoint. Phase 8L push, server synchronization, production migration
+`0023`, frontend deployment, and live Browser proof remain pending.
 
 ## Runtime Entrypoints
 
@@ -28,8 +30,10 @@ pending; Phase 8L remains planned.
 - `frontend/src/pages/HomePage.tsx`: owns session-aware Russian admin-shell
   navigation and section-scoped data loading; Cards does not load manage-scoped
   registry schema for a read-only selected card.
-- `frontend/src/pages/PublicLinkEditPage.tsx`: public-link card preview/edit and
-  attachment workflow.
+- `frontend/src/pages/PublicLinkEditPage.tsx`: authoritative-status public card
+  workflow with exact sanitized layout, canonical sequential autosave,
+  attachment-aware submit gating, correction reopening, and safe closed
+  receipts that never render cached card data.
 
 ## Backend Source Roles
 
@@ -75,6 +79,26 @@ pending; Phase 8L remains planned.
   validation, base-template membership refresh, and preservation of
   `field_schema_json.form_layout` under row locks.
 
+### Public-link review lifecycle
+
+- `backend/migrations/versions/0023_public_link_review_lifecycle.py`: additive
+  lifecycle columns, expanded status constraint, reviewer foreign key, and
+  card/status/submitted index. Existing rows keep `review_enabled=false` for
+  legacy compatibility until explicit baseline capture.
+- `backend/app/models/public_link.py` and `backend/app/domain/constants.py`:
+  `active`, `submitted`, `changes_requested`, `approved`, `disabled`, and
+  `expired` plus review timestamps, reviewer/comment, safe baseline/summary,
+  and lifecycle index metadata.
+- `backend/app/services/public_links.py`: direct-to-card public edits, safe
+  baseline and typed diff, row-locked transitions, expiry precedence,
+  same-token correction, approval without value rewrite, template/allowlist
+  sanitization, non-editable static instructions, and closed-token privacy.
+- `backend/app/api/v1/endpoints/public_links.py` and
+  `backend/app/schemas/public_links.py`: six submit/status/review/
+  request-changes/approve/start-review-cycle routes and Russian-safe response
+  mapping. Token status returns no card values, layout, attachment metadata,
+  raw token, or internal identifiers.
+
 ## Frontend Source Roles
 
 ### Application and shared contracts
@@ -92,6 +116,24 @@ pending; Phase 8L remains planned.
 - `frontend/src/features/cards/CardsWorkspace.tsx`: organization-scoped card
   list/detail plus read-first exact-geometry values, one in-place block editor,
   exact block-instance routing, and `can_manage`-gated actions/tabs/queries.
+
+### Public-link review UI
+
+- `frontend/src/features/cards/PublicLinkReviewPanel.tsx`: compact
+  template-scoped link creation, one-time returned URL copy, lifecycle history,
+  lazy administrator diff, required correction comment, approval confirmation,
+  legacy review opt-in, and backend-driven action disclosure.
+- `frontend/src/pages/PublicLinkEditPage.tsx`: status-first fail-closed page.
+  Status uses `staleTime=0` and mount revalidation; preview/attachment queries
+  start only after a fresh successful editable status. Lifecycle denials purge
+  caches and refetch status.
+- The public page reuses `CardLayoutRenderer` in `public-edit` mode. It renders
+  exact sanitized block/field geometry and repeatable instances, keeps
+  `static_text` readable but non-editable, and keeps `file_ref` editing blocked.
+- Field controls use per-field latest-value queues and synchronize from
+  canonical `FieldValueRead.value` only for the latest version. Submit is
+  disabled for pending/failed field saves and pending/unresolved attachment
+  uploads. Closed states render only `PublicLinkSafeStatusRead`.
 
 ### Contextual card layout
 
@@ -169,6 +211,12 @@ pending; Phase 8L remains planned.
   presentation permissions; read-only presentation succeeds while the original
   registry schema/layout endpoints stay manage-scoped and outsiders remain
   forbidden. PostgreSQL cases require disposable `TEST_DATABASE_URL`.
+- `backend/tests/test_public_link_review_lifecycle.py`: migration-aware service
+  and API lifecycle, safe baseline/summary, direct-edit/attachment behavior,
+  invalid transitions and expiry races, typed review diff, reviewer
+  permissions, same-token correction/resubmit, closed privacy, sanitized exact
+  layout, static-text allowlist semantics, and raw-token/internal-file
+  non-leakage.
 - `frontend/src/features/cardLayout/layoutGeometry.test.ts`: exact quarter-grid
   move, resize, boundary, collision, and immutability cases.
 - `frontend/src/features/cardLayout/CardLayoutRenderer.test.tsx`: contextual
@@ -180,16 +228,28 @@ pending; Phase 8L remains planned.
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`: exact geometry/value
   rendering, inline per-block editing, `file_ref`, and exact UUID routing for
   non-repeatable and repeatable block instances.
+- `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`: creation,
+  one-time URL copy, lazy diff, correction, approval/disable gating, legacy
+  opt-in, and completed history/timeline behavior.
+- `frontend/src/pages/PublicLinkEditPage.test.tsx`: exact public geometry and
+  repeatable instances, typed/static controls, canonical sequential autosave,
+  StrictMode recovery, submit/cache purge, correction/resubmit, attachment
+  gating, authoritative status refresh, lifecycle denial recovery, and
+  submitted/approved/disabled/expired privacy.
 - `frontend/src/App.test.tsx`: selected-card integration, read-only
   presentation requests, `can_manage` disclosure, and attachment/document
   list/download-only regressions.
 
-The final local Phase 8K gate reported backend `220 passed / 175 skipped` with
-one existing Starlette/httpx deprecation warning and frontend
-`195 passed / 25 skipped`; lint, format, typecheck, production build, and
-project-tree checks passed. Vite retains the main-chunk advisory (`540.87 kB`,
-`153.73 kB` gzip). No push, deployment, server smoke, or live Browser evidence
-is claimed by this checkpoint.
+The Phase 8L pre-release local gate reported backend `226 passed / 191 skipped`
+and frontend `225 passed / 25 skipped`; Ruff/Ruff format/mypy,
+ESLint/Prettier/TypeScript, and the production frontend build passed. The one
+aggregate-check failure was a stale generated `docs/PROJECT_TREE.md`; Task 7
+regenerated it and the subsequent project-map `-Check` passed. The existing
+Starlette/httpx deprecation and Vite main-chunk advisory remain. PostgreSQL
+cases skipped without `TEST_DATABASE_URL`, so disposable `_test` migration and
+lifecycle proof is still a release gate. No Phase 8L push, deployment,
+production migration, server smoke, or live Browser evidence is claimed by
+this checkpoint.
 
 ## Operational Scripts
 
