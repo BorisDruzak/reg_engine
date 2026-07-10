@@ -12,7 +12,11 @@ import type { FieldEditorOption, FieldEditorState } from "@/features/cards/field
 
 import { CardBlockLayoutNode } from "./CardBlockLayoutNode";
 import type { CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
-import type { CardLayoutRendererMode, CardLayoutSelection } from "./CardLayoutRenderer";
+import type {
+  CardLayoutBlockActionsRenderer,
+  CardLayoutRendererMode,
+  CardLayoutSelection,
+} from "./CardLayoutRenderer";
 import { LayoutLivePreview } from "./LayoutLivePreview";
 import { rectsOverlap, snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect } from "./layoutGeometry";
@@ -39,7 +43,9 @@ export type CardWebLayoutCanvasProps = {
   referenceLists?: ReferenceListRead[];
   responsive?: boolean;
   showGeometryDiagnostics?: boolean;
+  testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
+  renderBlockActions?: CardLayoutBlockActionsRenderer;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
   onCreateBlock?: (position: CardLayoutCreatePosition) => void;
   onInsertBlock?: (position: CardLayoutCreatePosition) => void;
@@ -69,7 +75,9 @@ function CardWebLayoutCanvasSession({
   referenceLists,
   responsive = true,
   showGeometryDiagnostics = false,
+  testIdPrefix = "layout",
   renderFieldValue,
+  renderBlockActions,
   onSelectionChange,
   onCreateBlock,
   onInsertBlock,
@@ -159,7 +167,9 @@ function CardWebLayoutCanvasSession({
             fileRefOptions={fileRefOptions}
             referenceLists={referenceLists}
             showGeometryDiagnostics={showGeometryDiagnostics}
+            testIdPrefix={testIdPrefix}
             renderFieldValue={renderFieldValue}
+            renderBlockActions={renderBlockActions}
             onSelect={select}
             onCreateField={onCreateField}
             onCommitBlock={onCommitBlock}

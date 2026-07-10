@@ -1796,6 +1796,65 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.filled-card-layout {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.filled-card-layout .card-web-layout-canvas {
+  min-width: 0;
+  background: #f8fafc;
+  overflow-x: hidden;
+}
+
+.filled-card-layout .card-layout-block-node {
+  align-content: start;
+}
+
+.filled-card-layout .card-layout-field-node {
+  overflow: hidden;
+}
+
+.filled-card-edit-block {
+  flex: none;
+}
+
+.filled-card-empty-value {
+  color: #8a94a3;
+  font-style: italic;
+}
+
+.filled-card-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filled-card-choice-chip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid #c9d8e8;
+  border-radius: 999px;
+  background: #edf5ff;
+  color: #173f69;
+  overflow-wrap: anywhere;
+}
+
+.filled-card-json-value {
+  max-height: 10rem;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.filled-card-instance-title {
+  margin: 0 0 6px;
+  color: #52677f;
+  font-size: 0.84rem;
+}
+
 .card-layout-empty-area-actions {
   display: grid;
   gap: 6px;
@@ -2587,6 +2646,19 @@ tr:last-child td {
   .card-layout-responsive-grid .card-layout-responsive-field-grid > .card-layout-field-node {
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
+  }
+
+  .filled-card-layout .card-layout-responsive-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100%;
+  }
+
+  .filled-card-layout .card-layout-responsive-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .filled-card-layout .card-layout-responsive-field-grid > .card-layout-field-node {
+    grid-column: auto !important;
   }
 
   .a4-linked-card-actions {

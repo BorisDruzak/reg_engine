@@ -33,6 +33,7 @@ export type CardFieldLayoutNodeProps = {
   fileRefOptions?: FieldEditorFileRefOption[];
   referenceLists?: ReferenceListRead[];
   showGeometryDiagnostics?: boolean;
+  testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   onSelect: (selection: CardLayoutSelection) => void;
   onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
@@ -53,6 +54,7 @@ export function CardFieldLayoutNode({
   fileRefOptions = [],
   referenceLists = [],
   showGeometryDiagnostics = false,
+  testIdPrefix = "layout",
   renderFieldValue,
   onSelect,
   onCommitField,
@@ -88,12 +90,12 @@ export function CardFieldLayoutNode({
     return (
       <article
         className="card-layout-field-node is-static-layout-item"
-        data-testid={`layout-field-${item.id}`}
+        data-testid={`${testIdPrefix}-field-${item.id}`}
         style={style}
       >
         {item.text ?? "Поле недоступно"}
         {showGeometryDiagnostics ? (
-          <small data-testid={`layout-field-${item.id}-geometry`}>
+          <small data-testid={`${testIdPrefix}-field-${item.id}-geometry`}>
             {item.column_span} × {item.row_span}
           </small>
         ) : null}
@@ -116,7 +118,7 @@ export function CardFieldLayoutNode({
   return (
     <article
       className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}`}
-      data-testid={`layout-field-${item.id}`}
+      data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
       onClick={(event) => event.stopPropagation()}
     >
@@ -196,7 +198,7 @@ export function CardFieldLayoutNode({
       {showGeometryDiagnostics ? (
         <small
           className="card-layout-geometry-diagnostic"
-          data-testid={`layout-field-${item.id}-geometry`}
+          data-testid={`${testIdPrefix}-field-${item.id}-geometry`}
           aria-label={`Размер поля: ${item.column_span} из 12 по ширине, ${item.row_span} из 4 по высоте`}
         >
           {item.column_span} × {item.row_span}
@@ -205,7 +207,7 @@ export function CardFieldLayoutNode({
       {geometryTarget ? (
         <small
           className="card-layout-geometry-dimension-badge"
-          data-testid={`layout-field-${item.id}-active-geometry`}
+          data-testid={`${testIdPrefix}-field-${item.id}-active-geometry`}
         >
           Размер: {item.column_span} из 12 × {item.row_span} из 4
         </small>

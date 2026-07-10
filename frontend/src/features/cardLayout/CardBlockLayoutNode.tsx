@@ -10,7 +10,11 @@ import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorContr
 import type { FieldEditorOption, FieldEditorState } from "@/features/cards/fieldEditorUtils";
 
 import { CardFieldLayoutNode, type CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
-import type { CardLayoutRendererMode, CardLayoutSelection } from "./CardLayoutRenderer";
+import type {
+  CardLayoutBlockActionsRenderer,
+  CardLayoutRendererMode,
+  CardLayoutSelection,
+} from "./CardLayoutRenderer";
 import { InlineBlockEditor } from "./InlineBlockEditor";
 import { snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect, ResizeHandle } from "./layoutGeometry";
@@ -28,7 +32,9 @@ export type CardBlockLayoutNodeProps = {
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
   showGeometryDiagnostics?: boolean;
+  testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
+  renderBlockActions?: CardLayoutBlockActionsRenderer;
   onSelect: (selection: CardLayoutSelection) => void;
   onCreateField?: (blockId: string) => void;
   onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
@@ -51,7 +57,9 @@ export function CardBlockLayoutNode({
   fileRefOptions,
   referenceLists,
   showGeometryDiagnostics = false,
+  testIdPrefix = "layout",
   renderFieldValue,
+  renderBlockActions,
   onSelect,
   onCreateField,
   onCommitBlock,
@@ -88,7 +96,7 @@ export function CardBlockLayoutNode({
   return (
     <section
       className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}`}
-      data-testid={`layout-block-${section.id}`}
+      data-testid={`${testIdPrefix}-block-${section.id}`}
       style={style}
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
       onClick={(event) => event.stopPropagation()}
@@ -140,6 +148,7 @@ export function CardBlockLayoutNode({
                 ) : null}
               </div>
             ) : null}
+            {block && !designMode ? renderBlockActions?.({ block, section, mode }) : null}
           </header>
           <div
             className="card-layout-field-grid card-layout-responsive-field-grid"
@@ -168,6 +177,7 @@ export function CardBlockLayoutNode({
                   fileRefOptions={fileRefOptions?.[valueKey]}
                   referenceLists={referenceLists}
                   showGeometryDiagnostics={showGeometryDiagnostics}
+                  testIdPrefix={testIdPrefix}
                   renderFieldValue={renderFieldValue}
                   onSelect={onSelect}
                   onCommitField={onCommitField}
@@ -183,7 +193,7 @@ export function CardBlockLayoutNode({
       {showGeometryDiagnostics ? (
         <small
           className="card-layout-geometry-diagnostic"
-          data-testid={`layout-block-${section.id}-geometry`}
+          data-testid={`${testIdPrefix}-block-${section.id}-geometry`}
           aria-label={`Размер блока: ${section.column_span} из 12 по ширине, ${section.row_span} из 4 по высоте`}
         >
           {section.column_span} × {section.row_span}
@@ -192,7 +202,7 @@ export function CardBlockLayoutNode({
       {geometryTarget ? (
         <small
           className="card-layout-geometry-dimension-badge"
-          data-testid={`layout-block-${section.id}-active-geometry`}
+          data-testid={`${testIdPrefix}-block-${section.id}-active-geometry`}
         >
           Размер: {section.column_span} из 12 × {section.row_span} из 4
         </small>
