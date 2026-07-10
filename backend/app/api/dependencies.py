@@ -21,7 +21,7 @@ from app.services.permissions import (
     PermissionDeniedError,
     PersistStatePermissionDeniedError,
 )
-from app.services.public_links import PublicLinkError
+from app.services.public_links import PublicLinkError, PublicLinkTransitionError
 from app.services.references import ReferenceListError
 from app.services.registry_schema import RegistrySchemaError
 from app.services.reports import ReportServiceError
@@ -132,15 +132,31 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
     if isinstance(exc, IntegrityError):
         _raise_integrity_http_error(exc)
     if isinstance(exc, PersistStatePermissionDeniedError):
-        raise PersistStateHTTPException(status_code=403, detail=str(exc)) from exc
+        raise PersistStateHTTPException(
+            status_code=403,
+            detail="Срок действия публичной ссылки истёк.",
+        ) from exc
+    if isinstance(exc, PublicLinkTransitionError):
+        raise HTTPException(
+            status_code=409,
+            detail="Недопустимый переход состояния публичной ссылки.",
+        ) from exc
     if isinstance(exc, PermissionDeniedError):
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав для выполнения операции.",
+        ) from exc
     if isinstance(exc, OrganizationNotFoundError):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if isinstance(exc, UserAccessNotFoundError):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if isinstance(exc, UserAccessConflictError):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if isinstance(exc, PublicLinkError):
+        raise HTTPException(
+            status_code=400,
+            detail="Операция с публичной ссылкой недоступна.",
+        ) from exc
     if isinstance(
         exc,
         (
@@ -150,7 +166,6 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             InvalidFieldValueError,
             ImportExportServiceError,
             OrganizationTopologyError,
-            PublicLinkError,
             ReferenceListError,
             RegistrySchemaError,
             ReportServiceError,

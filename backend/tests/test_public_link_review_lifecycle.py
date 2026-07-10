@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 import app.api.dependencies as api_dependencies
 from app.api.dependencies import get_db_session, raise_service_http_error
+from app.core.config import get_settings
 from app.main import create_app
 from app.models import AuditEvent, Card, CardPublicLink, FieldValue, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
@@ -684,17 +685,10 @@ def transactional_api_client(
             yield session
 
     monkeypatch.setattr(api_dependencies, "get_session", test_sessions)
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
     app = create_app()
-
-    @app.post("/_test/public-links/submit")
-    def submit_for_review(
-        payload: dict[str, str],
-        session: Annotated[Session, Depends(get_db_session)],
-    ) -> None:
-        try:
-            PublicLinkService(session).submit_for_review(raw_token=payload["raw_token"])
-        except Exception as exc:
-            raise_service_http_error(exc)
 
     @app.post("/_test/ordinary-denied")
     def ordinary_denied(
@@ -713,6 +707,11 @@ def transactional_api_client(
         with TestClient(app) as client:
             yield client
     finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
         with migrated_test_engine.begin() as connection:
             connection.execute(
                 text(
@@ -789,7 +788,7 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
         json={"raw_token": raw_tokens[0], "field_id": str(field_id), "value": "blocked"},
     )
     submit_response = transactional_api_client.post(
-        "/_test/public-links/submit",
+        "/api/v1/public-links/submit",
         json={"raw_token": raw_tokens[1]},
     )
     attachment_response = transactional_api_client.post(
@@ -879,3 +878,263 @@ def test_direct_attachment_expiry_uses_persist_marker_and_one_system_audit(
     assert len(expiry_events) == 1
     assert expiry_events[0].actor_type == "system"
     assert expiry_events[0].source == "system"
+
+
+@dataclass(frozen=True)
+class ReviewApiFixture:
+    admin_id: UUID
+    outsider_id: UUID
+    card_id: UUID
+    field_id: UUID
+
+
+@pytest.fixture()
+def review_api_fixture(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+) -> ReviewApiFixture:
+    suffix = uuid4().hex[:8]
+    with Session(migrated_test_engine, expire_on_commit=False) as session:
+        admin = User(
+            email=f"api-review-admin-{suffix}@example.test",
+            display_name="Администратор API проверки",
+            is_superuser=True,
+        )
+        outsider = User(
+            email=f"api-review-outsider-{suffix}@example.test",
+            display_name="Посторонний API пользователь",
+        )
+        session.add_all([admin, outsider])
+        session.flush()
+        organization = OrganizationService(session).create_root_for_actor(
+            actor_user_id=admin.id,
+            code=f"api-review-root-{suffix}",
+            name="Организация API проверки",
+        )
+        schema_service = RegistrySchemaService(session)
+        registry = schema_service.create_registry_for_actor(
+            actor_user_id=admin.id,
+            code=f"api-review-registry-{suffix}",
+            name="Реестр API проверки",
+        )
+        block = schema_service.create_block_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            code="api-review-public",
+            title="Публичный блок API",
+            public_visible=True,
+            public_editable=True,
+        )
+        field = schema_service.create_field_for_actor(
+            actor_user_id=admin.id,
+            block_id=block.id,
+            code="api-review-value",
+            label="Значение API проверки",
+            field_type="text",
+            public_visible=True,
+            public_editable=True,
+        )
+        card = CardService(session).create_card_for_actor(
+            actor_user_id=admin.id,
+            registry_id=registry.id,
+            organization_id=organization.id,
+            display_name="Карточка API проверки",
+            public_edit_enabled=True,
+        )
+        fixture = ReviewApiFixture(
+            admin_id=admin.id,
+            outsider_id=outsider.id,
+            card_id=card.id,
+            field_id=field.id,
+        )
+        session.commit()
+    return fixture
+
+
+def _actor_headers(actor_id: UUID) -> dict[str, str]:
+    return {"X-Actor-User-Id": str(actor_id)}
+
+
+def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
+    openapi = create_app().openapi()
+    paths = set(openapi["paths"])
+    schemas = set(openapi["components"]["schemas"])
+
+    assert {
+        "/api/v1/public-links/submit",
+        "/api/v1/public-links/status",
+        "/api/v1/public-links/{public_link_id}/review",
+        "/api/v1/public-links/{public_link_id}/request-changes",
+        "/api/v1/public-links/{public_link_id}/approve",
+        "/api/v1/public-links/{public_link_id}/start-review-cycle",
+    } <= paths
+    assert {
+        "PublicLinkSubmitRequest",
+        "PublicLinkSafeStatusRead",
+        "PublicLinkReviewRead",
+        "PublicLinkRequestChanges",
+    } <= schemas
+
+
+def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    admin_headers = _actor_headers(review_api_fixture.admin_id)
+    created_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={},
+        headers=admin_headers,
+    )
+    assert created_response.status_code == 201, created_response.text
+    created = created_response.json()
+    assert created["review_enabled"] is True
+    assert "token_hash" not in created
+    assert "baseline_snapshot_json" not in created
+    raw_token = created["raw_token"]
+    public_link_id = UUID(created["id"])
+
+    edit_response = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Первое значение API",
+        },
+    )
+    assert edit_response.status_code == 200, edit_response.text
+
+    submitted_response = transactional_api_client.post(
+        "/api/v1/public-links/submit",
+        json={"raw_token": raw_token},
+    )
+    assert submitted_response.status_code == 200, submitted_response.text
+    assert submitted_response.json()["status"] == "submitted"
+    duplicate_submit = transactional_api_client.post(
+        "/api/v1/public-links/submit",
+        json={"raw_token": raw_token},
+    )
+    assert duplicate_submit.status_code == 409, duplicate_submit.text
+    assert any("а" <= char.lower() <= "я" or char.lower() == "ё" for char in duplicate_submit.text)
+    assert raw_token not in duplicate_submit.text
+
+    forbidden_review = transactional_api_client.get(
+        f"/api/v1/public-links/{public_link_id}/review",
+        headers=_actor_headers(review_api_fixture.outsider_id),
+    )
+    assert forbidden_review.status_code == 403, forbidden_review.text
+    assert raw_token not in forbidden_review.text
+    review_response = transactional_api_client.get(
+        f"/api/v1/public-links/{public_link_id}/review",
+        headers=admin_headers,
+    )
+    assert review_response.status_code == 200, review_response.text
+    review = review_response.json()
+    assert review["changed_field_count"] == 1
+    assert review["fields"][0]["before"] is None
+    assert review["fields"][0]["after"] == "Первое значение API"
+    serialized_review = json.dumps(review, ensure_ascii=False)
+    for forbidden_key in {
+        "raw_token",
+        "token_hash",
+        "baseline_snapshot_json",
+        "storage_key",
+        "checksum_sha256",
+        "stored_file_id",
+    }:
+        assert forbidden_key not in serialized_review
+
+    changes_response = transactional_api_client.post(
+        f"/api/v1/public-links/{public_link_id}/request-changes",
+        json={"comment": "Уточните значение"},
+        headers=admin_headers,
+    )
+    assert changes_response.status_code == 200, changes_response.text
+    assert changes_response.json()["status"] == "changes_requested"
+    status_after_changes = transactional_api_client.post(
+        "/api/v1/public-links/status",
+        json={"raw_token": raw_token},
+    )
+    assert status_after_changes.status_code == 200, status_after_changes.text
+    assert status_after_changes.json()["review_comment"] == "Уточните значение"
+
+    second_edit = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Исправленное значение API",
+        },
+    )
+    assert second_edit.status_code == 200, second_edit.text
+    assert (
+        transactional_api_client.post(
+            "/api/v1/public-links/submit",
+            json={"raw_token": raw_token},
+        ).status_code
+        == 200
+    )
+
+    approved_response = transactional_api_client.post(
+        f"/api/v1/public-links/{public_link_id}/approve",
+        headers=admin_headers,
+    )
+    assert approved_response.status_code == 200, approved_response.text
+    assert approved_response.json()["status"] == "approved"
+    closed_status_response = transactional_api_client.post(
+        "/api/v1/public-links/status",
+        json={"raw_token": raw_token},
+    )
+    assert closed_status_response.status_code == 200, closed_status_response.text
+    closed_status = closed_status_response.json()
+    assert set(closed_status) == {
+        "status",
+        "can_edit",
+        "submitted_at",
+        "reviewed_at",
+        "review_comment",
+        "completed_public_fields",
+        "total_public_fields",
+    }
+    assert closed_status["status"] == "approved"
+    assert closed_status["can_edit"] is False
+    assert closed_status["review_comment"] is None
+    assert closed_status["completed_public_fields"] is None
+    assert closed_status["total_public_fields"] is None
+    assert raw_token not in closed_status_response.text
+    assert (
+        transactional_api_client.post(
+            "/api/v1/public-links/preview",
+            json={"raw_token": raw_token},
+        ).status_code
+        == 403
+    )
+
+    legacy_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={"review_enabled": False},
+        headers=admin_headers,
+    )
+    assert legacy_response.status_code == 201, legacy_response.text
+    legacy = legacy_response.json()
+    assert legacy["review_enabled"] is False
+    started_response = transactional_api_client.post(
+        f"/api/v1/public-links/{legacy['id']}/start-review-cycle",
+        headers=admin_headers,
+    )
+    assert started_response.status_code == 200, started_response.text
+    assert started_response.json()["review_enabled"] is True
+    started_again = transactional_api_client.post(
+        f"/api/v1/public-links/{legacy['id']}/start-review-cycle",
+        headers=admin_headers,
+    )
+    assert started_again.status_code == 409, started_again.text
+
+    listed_response = transactional_api_client.get(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        headers=admin_headers,
+    )
+    assert listed_response.status_code == 200, listed_response.text
+    listed_payload = json.dumps(listed_response.json(), ensure_ascii=False)
+    assert raw_token not in listed_payload
+    assert "baseline_snapshot_json" not in listed_payload

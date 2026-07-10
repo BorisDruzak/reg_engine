@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
@@ -29,10 +29,21 @@ from app.schemas.public_links import (
     PublicLinkPreviewRead,
     PublicLinkPreviewRequest,
     PublicLinkRead,
+    PublicLinkRequestChanges,
+    PublicLinkReviewAttachmentDiffRead,
+    PublicLinkReviewFieldDiffRead,
+    PublicLinkReviewRead,
+    PublicLinkSafeStatusRead,
+    PublicLinkSubmitRequest,
     PublicLinkTokenRead,
 )
 from app.services.attachments import AttachmentService
-from app.services.public_links import PublicLinkPreview, PublicLinkService
+from app.services.public_links import (
+    PublicLinkPreview,
+    PublicLinkReviewDiff,
+    PublicLinkSafeStatus,
+    PublicLinkService,
+)
 
 router = APIRouter(tags=["public-links"])
 
@@ -54,6 +65,7 @@ def create_public_link(
             card_id=card_id,
             expires_in_days=payload.expires_in_days,
             max_attachment_uploads=payload.max_attachment_uploads,
+            review_enabled=payload.review_enabled,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -64,6 +76,7 @@ def create_public_link(
         status=token.public_link.status,
         can_edit=token.public_link.can_edit,
         expires_at=token.public_link.expires_at,
+        review_enabled=token.public_link.review_enabled,
     )
 
 
@@ -91,6 +104,98 @@ def disable_public_link(
 ) -> PublicLinkRead:
     try:
         public_link = PublicLinkService(session).disable_public_link_for_actor(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_to_read(public_link)
+
+
+@router.post("/public-links/submit", response_model=PublicLinkSafeStatusRead)
+def submit_public_link_for_review(
+    payload: PublicLinkSubmitRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PublicLinkSafeStatusRead:
+    service = PublicLinkService(session)
+    try:
+        service.submit_for_review(raw_token=payload.raw_token)
+        safe_status = service.safe_status(raw_token=payload.raw_token)
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_safe_status_to_read(safe_status)
+
+
+@router.post("/public-links/status", response_model=PublicLinkSafeStatusRead)
+def read_public_link_safe_status(
+    payload: PublicLinkSubmitRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> PublicLinkSafeStatusRead:
+    try:
+        safe_status = PublicLinkService(session).safe_status(raw_token=payload.raw_token)
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_safe_status_to_read(safe_status)
+
+
+@router.get("/public-links/{public_link_id}/review", response_model=PublicLinkReviewRead)
+def read_public_link_review(
+    public_link_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> PublicLinkReviewRead:
+    try:
+        review = PublicLinkService(session).review_diff_for_actor(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_review_to_read(review)
+
+
+@router.post("/public-links/{public_link_id}/request-changes", response_model=PublicLinkRead)
+def request_public_link_changes(
+    public_link_id: UUID,
+    payload: PublicLinkRequestChanges,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> PublicLinkRead:
+    try:
+        public_link = PublicLinkService(session).request_changes_for_actor(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+            comment=payload.comment,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_to_read(public_link)
+
+
+@router.post("/public-links/{public_link_id}/approve", response_model=PublicLinkRead)
+def approve_public_link(
+    public_link_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> PublicLinkRead:
+    try:
+        public_link = PublicLinkService(session).approve_for_actor(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _public_link_to_read(public_link)
+
+
+@router.post("/public-links/{public_link_id}/start-review-cycle", response_model=PublicLinkRead)
+def start_public_link_review_cycle(
+    public_link_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> PublicLinkRead:
+    try:
+        public_link = PublicLinkService(session).capture_review_baseline(
             actor_user_id=actor_user_id,
             public_link_id=public_link_id,
         )
@@ -225,6 +330,7 @@ def read_public_link_attachment_content(
 
 
 def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
+    submission_summary = public_link.submission_summary_json or {}
     return PublicLinkRead(
         id=public_link.id,
         card_id=public_link.card_id,
@@ -237,7 +343,70 @@ def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
         max_attachment_uploads=public_link.max_attachment_uploads,
         attachment_upload_count=public_link.attachment_upload_count,
         disabled_at=public_link.disabled_at,
+        submitted_at=public_link.submitted_at,
+        reviewed_at=public_link.reviewed_at,
+        reviewed_by=public_link.reviewed_by,
+        review_comment=public_link.review_comment,
+        review_enabled=public_link.review_enabled,
+        completed_public_fields=_summary_count(
+            submission_summary,
+            "completed_public_fields",
+        ),
+        total_public_fields=_summary_count(
+            submission_summary,
+            "total_public_fields",
+        ),
     )
+
+
+def _public_link_safe_status_to_read(
+    safe_status: PublicLinkSafeStatus,
+) -> PublicLinkSafeStatusRead:
+    return PublicLinkSafeStatusRead(
+        status=safe_status.status,
+        can_edit=safe_status.can_edit,
+        submitted_at=safe_status.submitted_at,
+        reviewed_at=safe_status.reviewed_at,
+        review_comment=safe_status.review_comment,
+        completed_public_fields=safe_status.completed_public_fields,
+        total_public_fields=safe_status.total_public_fields,
+    )
+
+
+def _public_link_review_to_read(review: PublicLinkReviewDiff) -> PublicLinkReviewRead:
+    return PublicLinkReviewRead(
+        public_link=_public_link_to_read(review.public_link),
+        changed_field_count=review.changed_field_count,
+        changed_attachment_count=review.changed_attachment_count,
+        fields=[
+            PublicLinkReviewFieldDiffRead(
+                block_id=item.block_id,
+                field_id=item.field_id,
+                block_instance_id=item.block_instance_id,
+                label=item.label,
+                field_type=item.field_type,
+                before=item.before,
+                after=item.after,
+                changed_at=item.changed_at,
+            )
+            for item in review.fields
+        ],
+        attachments=[
+            PublicLinkReviewAttachmentDiffRead(
+                attachment_id=item.attachment_id,
+                title=item.title,
+                original_filename=item.original_filename,
+                content_length_bytes=item.content_length_bytes,
+                change=cast(Literal["added", "archived"], item.change),
+            )
+            for item in review.attachments
+        ],
+    )
+
+
+def _summary_count(summary: dict[str, object], key: str) -> int | None:
+    value = summary.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _can_public_link_upload_attachment(public_link: CardPublicLink) -> bool:

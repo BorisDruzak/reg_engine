@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class PublicLinkCreate(BaseModel):
     expires_in_days: int = Field(default=7, ge=1, le=30)
     max_attachment_uploads: int | None = Field(default=None, ge=0)
+    review_enabled: bool = True
 
 
 class PublicLinkTokenRead(BaseModel):
@@ -17,6 +18,7 @@ class PublicLinkTokenRead(BaseModel):
     status: str
     can_edit: bool
     expires_at: datetime
+    review_enabled: bool
 
 
 class PublicLinkRead(BaseModel):
@@ -31,6 +33,13 @@ class PublicLinkRead(BaseModel):
     max_attachment_uploads: int | None
     attachment_upload_count: int
     disabled_at: datetime | None
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    reviewed_by: UUID | None
+    review_comment: str | None
+    review_enabled: bool
+    completed_public_fields: int | None
+    total_public_fields: int | None
 
 
 class PublicLinkListRead(BaseModel):
@@ -112,3 +121,48 @@ class PublicLinkEditRequest(BaseModel):
     field_id: UUID
     value: Any
     block_instance_id: UUID | None = None
+
+
+class PublicLinkSubmitRequest(BaseModel):
+    raw_token: str = Field(min_length=1)
+
+
+class PublicLinkRequestChanges(BaseModel):
+    comment: str = Field(min_length=1, max_length=2000)
+
+
+class PublicLinkSafeStatusRead(BaseModel):
+    status: str
+    can_edit: bool
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    review_comment: str | None
+    completed_public_fields: int | None
+    total_public_fields: int | None
+
+
+class PublicLinkReviewFieldDiffRead(BaseModel):
+    block_id: UUID
+    field_id: UUID
+    block_instance_id: UUID | None
+    label: str
+    field_type: str
+    before: Any
+    after: Any
+    changed_at: datetime | None
+
+
+class PublicLinkReviewAttachmentDiffRead(BaseModel):
+    attachment_id: UUID
+    title: str
+    original_filename: str
+    content_length_bytes: int
+    change: Literal["added", "archived"]
+
+
+class PublicLinkReviewRead(BaseModel):
+    public_link: PublicLinkRead
+    changed_field_count: int
+    changed_attachment_count: int
+    fields: list[PublicLinkReviewFieldDiffRead]
+    attachments: list[PublicLinkReviewAttachmentDiffRead]
