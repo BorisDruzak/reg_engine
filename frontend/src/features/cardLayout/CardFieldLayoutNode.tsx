@@ -146,7 +146,11 @@ export function CardFieldLayoutNode({
     }
     pendingMoveRef.current = null;
     suppressClickRef.current = true;
-    geometry.beginMove(event, geometryTargetDescriptor, grid);
+    geometry.beginMove(event, geometryTargetDescriptor, grid, {
+      clientX: pending.x,
+      clientY: pending.y,
+    });
+    geometry.pointerMove(event);
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {

@@ -150,6 +150,7 @@ export function CardBlockLayoutNode({
           <div
             className="card-layout-field-grid card-layout-responsive-field-grid"
             data-layout-grid="fields"
+            data-layout-grid-rows={visibleRowCount}
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(12, minmax(0, 1fr))",

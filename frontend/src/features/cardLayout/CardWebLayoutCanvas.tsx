@@ -21,7 +21,11 @@ import { LayoutLivePreview } from "./LayoutLivePreview";
 import { rectsOverlap, snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect } from "./layoutGeometry";
 import { applyLayoutGeometryPreview, useLayoutGeometrySession } from "./useLayoutGeometrySession";
-import type { LayoutGeometryCommand, LayoutGeometrySession } from "./useLayoutGeometrySession";
+import type {
+  LayoutGeometryCommand,
+  LayoutGeometryResolution,
+  LayoutGeometrySession,
+} from "./useLayoutGeometrySession";
 
 export type CardLayoutCreatePosition = {
   row: number;
@@ -114,12 +118,18 @@ function CardWebLayoutCanvasSession({
     (session: LayoutGeometrySession) => geometryError(layout, session),
     [layout],
   );
+  const resolveGeometry = useCallback(
+    (session: LayoutGeometrySession, previous: LayoutGeometrySession | null) =>
+      resolveFieldMove(layout, session, previous),
+    [layout],
+  );
   const handleGeometryCommit = useCallback(
     (command: LayoutGeometryCommand) => onGeometryCommit?.(command),
     [onGeometryCommit],
   );
   const geometry = useLayoutGeometrySession({
     onCommit: handleGeometryCommit,
+    resolve: resolveGeometry,
     validate: validateGeometry,
   });
   const geometryActive = Boolean(geometry.session);
@@ -292,6 +302,59 @@ function geometryError(layout: CardTemplateLayoutRead, session: LayoutGeometrySe
     (item) => item.id !== session.targetId && rectsOverlap(session.preview, toLayoutRect(item)),
   );
   return collides ? "Пересечение с другим полем. Выберите свободную область." : null;
+}
+
+const NO_FIELD_SPACE_MESSAGE = "В выбранной строке нет свободного места для поля такого размера.";
+
+function resolveFieldMove(
+  layout: CardTemplateLayoutRead,
+  session: LayoutGeometrySession,
+  previous: LayoutGeometrySession | null,
+): LayoutGeometryResolution {
+  if (session.targetKind !== "field" || session.operation !== "move") {
+    return { session };
+  }
+  const owner = layout.form_layout.sections.find((section) =>
+    section.items.some((item) => item.id === session.targetId),
+  );
+  if (!owner) {
+    return { session };
+  }
+  const obstacles = owner.items.filter((item) => item.id !== session.targetId).map(toLayoutRect);
+  if (!obstacles.some((obstacle) => rectsOverlap(session.preview, obstacle))) {
+    return { session };
+  }
+  const availableColumn = nearestAvailableColumn(session.preview, obstacles);
+  if (availableColumn !== null) {
+    return {
+      session: {
+        ...session,
+        preview: { ...session.preview, column: availableColumn },
+      },
+    };
+  }
+  const lastValidPreview =
+    previous?.targetId === session.targetId && previous.targetKind === session.targetKind
+      ? previous.preview
+      : session.original;
+  return {
+    session: { ...session, preview: lastValidPreview },
+    invalidReason: NO_FIELD_SPACE_MESSAGE,
+  };
+}
+
+function nearestAvailableColumn(preview: LayoutRect, obstacles: LayoutRect[]) {
+  const maximumColumn = 12 - preview.columnSpan + 1;
+  const candidates = Array.from({ length: maximumColumn }, (_, index) => index + 1).sort(
+    (left, right) =>
+      Math.abs(left - preview.column) - Math.abs(right - preview.column) || left - right,
+  );
+  return (
+    candidates.find((column) => {
+      const candidate = { ...preview, column };
+      return obstacles.every((obstacle) => !rectsOverlap(candidate, obstacle));
+    }) ?? null
+  );
 }
 
 function toLayoutRect(rect: {

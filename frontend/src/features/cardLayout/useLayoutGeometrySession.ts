@@ -34,6 +34,11 @@ export type LayoutGeometryValidation = {
   message: string;
 };
 
+export type LayoutGeometryResolution = {
+  session: LayoutGeometrySession;
+  invalidReason?: string | null;
+};
+
 type PointerCaptureSession = {
   pointerId: number;
   captureTarget: HTMLElement;
@@ -44,8 +49,17 @@ type PointerCaptureSession = {
   rowHeight: number;
 };
 
+type PointerOrigin = {
+  clientX: number;
+  clientY: number;
+};
+
 type UseLayoutGeometrySessionOptions = {
   onCommit: (command: LayoutGeometryCommand) => void;
+  resolve?: (
+    session: LayoutGeometrySession,
+    previous: LayoutGeometrySession | null,
+  ) => LayoutGeometryResolution;
   validate: (session: LayoutGeometrySession) => string | null;
 };
 
@@ -54,7 +68,11 @@ const GRID_ROWS = 4;
 const OUT_OF_GRID_MESSAGE = "Объект выходит за границы сетки 12 × 4.";
 const INVALID_SIZE_MESSAGE = "Размер объекта должен занимать хотя бы одну четверть сетки.";
 
-export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeometrySessionOptions) {
+export function useLayoutGeometrySession({
+  onCommit,
+  resolve,
+  validate,
+}: UseLayoutGeometrySessionOptions) {
   const [session, setSession] = useState<LayoutGeometrySession | null>(null);
   const [boundaryReason, setBoundaryReason] = useState<string | null>(null);
   const sessionActive = session !== null;
@@ -64,12 +82,17 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
 
   const publish = useCallback(
     (nextSession: LayoutGeometrySession, nextBoundaryReason: string | null = null) => {
-      sessionRef.current = nextSession;
-      boundaryReasonRef.current = nextBoundaryReason;
-      setSession(nextSession);
-      setBoundaryReason(nextBoundaryReason);
+      const resolution =
+        nextBoundaryReason === null && resolve
+          ? resolve(nextSession, sessionRef.current)
+          : { session: nextSession };
+      const resolvedBoundaryReason = nextBoundaryReason ?? resolution.invalidReason ?? null;
+      sessionRef.current = resolution.session;
+      boundaryReasonRef.current = resolvedBoundaryReason;
+      setSession(resolution.session);
+      setBoundaryReason(resolvedBoundaryReason);
     },
-    [],
+    [resolve],
   );
 
   const releasePointer = useCallback(() => {
@@ -129,6 +152,7 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
       gridElement: HTMLElement,
       operation: "move" | "resize",
       handle?: ResizeHandle,
+      pointerOrigin?: PointerOrigin,
     ) => {
       if (pointerRef.current) {
         return;
@@ -143,6 +167,7 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
       event.preventDefault();
       event.stopPropagation();
       const gridRect = gridElement.getBoundingClientRect();
+      const renderedRowCount = positiveInteger(gridElement.dataset.layoutGridRows) ?? GRID_ROWS;
       const pointerId = event.pointerId;
       const captureTarget = event.currentTarget;
       const base = existing?.preview ?? target.original;
@@ -150,10 +175,10 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
         pointerId,
         captureTarget,
         base,
-        startX: event.clientX,
-        startY: event.clientY,
+        startX: pointerOrigin?.clientX ?? event.clientX,
+        startY: pointerOrigin?.clientY ?? event.clientY,
         columnWidth: gridRect.width > 0 ? gridRect.width / GRID_COLUMNS : 1,
-        rowHeight: gridRect.height > 0 ? gridRect.height / GRID_ROWS : 1,
+        rowHeight: gridRect.height > 0 ? gridRect.height / renderedRowCount : 1,
       };
       captureTarget.focus();
       pointerRef.current = nextPointer;
@@ -187,7 +212,8 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
       event: ReactPointerEvent<HTMLElement>,
       target: LayoutGeometryTarget,
       gridElement: HTMLElement,
-    ) => beginPointer(event, target, gridElement, "move"),
+      pointerOrigin?: PointerOrigin,
+    ) => beginPointer(event, target, gridElement, "move", undefined, pointerOrigin),
     [beginPointer],
   );
 
@@ -386,6 +412,14 @@ export function useLayoutGeometrySession({ onCommit, validate }: UseLayoutGeomet
 }
 
 export type LayoutGeometryControls = ReturnType<typeof useLayoutGeometrySession>;
+
+function positiveInteger(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 export function applyLayoutGeometryPreview(
   layout: CardTemplateLayoutRead,

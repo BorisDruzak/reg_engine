@@ -678,6 +678,171 @@ describe("CardWebLayoutCanvas", () => {
     });
   });
 
+  test("grows a compact block on the first vertical field drag event", () => {
+    const onGeometryCommit = vi.fn();
+    const singleFieldLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [layout.form_layout.sections[0].items[0]],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: singleFieldLayout,
+          fields: [fields[0]],
+          onGeometryCommit,
+        })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    expect(fieldGrid!.dataset.layoutGridRows).toBe("1");
+    mockGridRect(fieldGrid!, 1200, 100);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 122, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 122, clientX: 0, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({ gridRow: "2 / span 1" });
+    expect(fieldGrid!.dataset.layoutGridRows).toBe("2");
+    expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(2, minmax(3rem, auto))");
+    expect(fieldGrid!.style.minHeight).toBe("6rem");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 122, clientX: 0, clientY: 100 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
+      after: { row: 2, column: 1, rowSpan: 1, columnSpan: 9 },
+    });
+  });
+
+  test("places a moved field in the nearest free part of a partially occupied row", () => {
+    const onGeometryCommit = vi.fn();
+    const partiallyOccupiedLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 2,
+                column: 7,
+                row_span: 1,
+                column_span: 6,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({ layout: partiallyOccupiedLayout, onGeometryCommit })}
+      />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 123, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 123, clientX: 600, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "2 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveClass("is-valid");
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 123, clientX: 600, clientY: 100 });
+
+    expect(onGeometryCommit).toHaveBeenCalledWith({
+      target: { id: fields[0].id, kind: "field" },
+      before: { row: 1, column: 1, rowSpan: 1, columnSpan: 6 },
+      after: { row: 2, column: 1, rowSpan: 1, columnSpan: 6 },
+    });
+  });
+
+  test("keeps a moved field out of a row without enough free width", () => {
+    const onGeometryCommit = vi.fn();
+    const fullyOccupiedLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 6,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 2,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas {...canvasProps({ layout: fullyOccupiedLayout, onGeometryCommit })} />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 124, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 124, clientX: 0, clientY: 100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 6",
+      gridRow: "1 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "В выбранной строке нет свободного места для поля такого размера",
+    );
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 124, clientX: 0, clientY: 100 });
+
+    expect(onGeometryCommit).not.toHaveBeenCalled();
+  });
+
   test("exposes all field resize zones without a field move button", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 

@@ -4144,3 +4144,41 @@ Live Browser proof:
   `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8m\`:
   `phase8m-card-active-send.png`, `phase8m-a4-element-list.png`, and
   `phase8m-layout-no-overlap.png`.
+
+### Phase 8M follow-up: collision-safe adaptive field dragging
+
+Status: implemented and locally verified; production synchronization and live
+Browser proof are pending.
+
+Implementation checkpoint:
+
+- A direct field drag now applies the threshold-crossing pointer event instead
+  of discarding its displacement. Moving a field down therefore expands the
+  compact web block in the same interaction frame.
+- Compact field grids expose their rendered row count to pointer geometry.
+  Mouse movement is measured against the rows that are actually visible rather
+  than an always-four-row height, while the saved 12 x 4 geometry contract is
+  unchanged.
+- A moved field can no longer preview on top of another field. When the target
+  row is only partly occupied, the resolver preserves the field size and places
+  it in the nearest horizontal interval wide enough for it.
+- If no interval of the required width exists, the preview remains at the last
+  valid position, the geometry session reports
+  `В выбранной строке нет свободного места для поля такого размера.`, and no
+  geometry command is committed.
+- Resize behavior and block-level collision validation remain unchanged. No
+  database migration is required.
+
+Local verification checkpoint:
+
+- The focused renderer suite passes all 53 cases, including first-motion block
+  growth, nearest-free-interval placement, and rejection of a fully occupied
+  row. The lower-level geometry suite passes all 20 cases.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `228 passed / 195 skipped`, frontend
+  `237 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  TypeScript, production build, and project-map checks are green.
+- The existing Starlette/httpx deprecation warning and Vite main-chunk advisory
+  remain unchanged. The verified local bundle is `index-DEMuVROu.js`
+  (`560.94 kB`, `159.92 kB` gzip) with the unchanged
+  `index-Cl9DldkN.css`.
