@@ -543,22 +543,23 @@ class AttachmentService:
 
         now = datetime.now(UTC)
         editable_statuses = {"active", "changes_requested"}
+        expirable_statuses = {*editable_statuses, "submitted"}
+        if public_link.expires_at <= now and public_link.status in expirable_statuses:
+            old_status = public_link.status
+            public_link.status = "expired"
+            public_link.can_view = False
+            public_link.can_edit = False
+            AuditService(self.session).record_system_event(
+                action="public_link.expire",
+                object_type="card_public_link",
+                object_id=public_link.id,
+                old_data_json={"status": old_status},
+                new_data_json={"status": "expired"},
+            )
+            raise PersistStatePermissionDeniedError("Public link has expired.")
         if public_link.status == "submitted":
             raise PublicLinkSubmittedReadOnlyError("Public link was already submitted.")
-        if public_link.status not in editable_statuses or public_link.expires_at <= now:
-            if public_link.expires_at <= now and public_link.status in editable_statuses:
-                old_status = public_link.status
-                public_link.status = "expired"
-                public_link.can_view = False
-                public_link.can_edit = False
-                AuditService(self.session).record_system_event(
-                    action="public_link.expire",
-                    object_type="card_public_link",
-                    object_id=public_link.id,
-                    old_data_json={"status": old_status},
-                    new_data_json={"status": "expired"},
-                )
-                raise PersistStatePermissionDeniedError("Public link has expired.")
+        if public_link.status not in editable_statuses:
             raise PermissionDeniedError("Public link is not active.")
         if not public_link.can_edit:
             raise PermissionDeniedError("Public editing is disabled for this card.")

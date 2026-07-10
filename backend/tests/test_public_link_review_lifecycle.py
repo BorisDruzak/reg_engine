@@ -450,7 +450,7 @@ def test_invalid_transitions_expiry_precedence_and_forbidden_reviewer(
             public_link_id=token.public_link.id,
         )
     service.submit_for_review(raw_token=token.raw_token)
-    with pytest.raises(PublicLinkSubmittedReadOnlyError):
+    with pytest.raises(PublicLinkTransitionError):
         service.submit_for_review(raw_token=token.raw_token)
     with pytest.raises(PermissionDeniedError):
         service.review_diff_for_actor(
@@ -777,8 +777,11 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
                 card_id=card.id,
                 review_enabled=True,
             )
-            for _ in range(3)
+            for _ in range(5)
         ]
+        public_link_service = PublicLinkService(setup_session)
+        for token in tokens[3:]:
+            public_link_service.submit_for_review(raw_token=token.raw_token)
         for token in tokens:
             token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         link_ids = [token.public_link.id for token in tokens]
@@ -800,17 +803,28 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
         data={"raw_token": raw_tokens[2]},
         files={"file": ("blocked.txt", b"blocked", "text/plain")},
     )
+    submitted_attachment_list_response = transactional_api_client.post(
+        "/api/v1/public-links/attachments",
+        json={"raw_token": raw_tokens[3]},
+    )
+    submitted_attachment_upload_response = transactional_api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": raw_tokens[4]},
+        files={"file": ("submitted-expired.txt", b"blocked", "text/plain")},
+    )
     ordinary_response = transactional_api_client.post("/_test/ordinary-denied")
 
-    assert [
-        edit_response.status_code,
-        submit_response.status_code,
-        attachment_response.status_code,
-    ] == [
-        403,
-        403,
-        403,
+    expired_responses = [
+        edit_response,
+        submit_response,
+        attachment_response,
+        submitted_attachment_list_response,
+        submitted_attachment_upload_response,
     ]
+    assert [response.status_code for response in expired_responses] == [403] * 5
+    assert {response.json()["detail"] for response in expired_responses} == {
+        "Срок действия публичной ссылки истёк."
+    }
     assert ordinary_response.status_code == 403
     assert ordinary_response.json()["detail"] == "Недостаточно прав для выполнения операции."
     with Session(migrated_test_engine) as verify_session:
@@ -883,6 +897,73 @@ def test_direct_attachment_expiry_uses_persist_marker_and_one_system_audit(
     assert len(expiry_events) == 1
     assert expiry_events[0].actor_type == "system"
     assert expiry_events[0].source == "system"
+
+
+def test_direct_submitted_attachment_expiry_precedes_readonly_for_list_and_upload(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    service = PublicLinkService(db_session)
+    tokens = [
+        service.create_public_link_for_actor(
+            actor_user_id=review_fixture.admin_id,
+            card_id=review_fixture.card_id,
+            review_enabled=True,
+        )
+        for _ in range(2)
+    ]
+    for token in tokens:
+        service.submit_for_review(raw_token=token.raw_token)
+    db_session.flush()
+
+    with pytest.raises(PublicLinkSubmittedReadOnlyError):
+        review_fixture.attachment_service.list_attachments_from_public_link(
+            actor_public_link_id=tokens[0].public_link.id,
+            card_id=review_fixture.card_id,
+        )
+    with pytest.raises(PublicLinkSubmittedReadOnlyError):
+        review_fixture.attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=tokens[1].public_link.id,
+            card_id=review_fixture.card_id,
+            original_filename="submitted-direct.txt",
+            content_type="text/plain",
+            content=b"must not persist",
+        )
+
+    for token in tokens:
+        token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.flush()
+
+    with pytest.raises(PersistStatePermissionDeniedError):
+        review_fixture.attachment_service.list_attachments_from_public_link(
+            actor_public_link_id=tokens[0].public_link.id,
+            card_id=review_fixture.card_id,
+        )
+    with pytest.raises(PersistStatePermissionDeniedError):
+        review_fixture.attachment_service.create_attachment_from_public_link(
+            actor_public_link_id=tokens[1].public_link.id,
+            card_id=review_fixture.card_id,
+            original_filename="submitted-expired-direct.txt",
+            content_type="text/plain",
+            content=b"must not persist",
+        )
+
+    for token in tokens:
+        assert token.public_link.status == "expired"
+        assert token.public_link.can_view is False
+        assert token.public_link.can_edit is False
+        expiry_events = list(
+            db_session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.object_type == "card_public_link",
+                    AuditEvent.object_id == token.public_link.id,
+                    AuditEvent.action == "public_link.expire",
+                )
+            )
+        )
+        assert len(expiry_events) == 1
+        assert expiry_events[0].actor_type == "system"
+        assert expiry_events[0].source == "system"
 
 
 @dataclass(frozen=True)
@@ -1019,13 +1100,13 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
         "/api/v1/public-links/submit",
         json={"raw_token": raw_token},
     )
+    assert duplicate_submit.status_code == 409, duplicate_submit.text
+    assert duplicate_submit.json()["detail"] == ("Недопустимый переход состояния публичной ссылки.")
+    assert raw_token not in duplicate_submit.text
+
     submitted_readonly_detail = (
         "Карточка уже отправлена на проверку. Редактирование временно недоступно."
     )
-    assert duplicate_submit.status_code == 403, duplicate_submit.text
-    assert duplicate_submit.json()["detail"] == submitted_readonly_detail
-    assert raw_token not in duplicate_submit.text
-
     submitted_edit = transactional_api_client.post(
         "/api/v1/public-links/edit",
         json={

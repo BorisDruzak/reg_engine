@@ -266,8 +266,6 @@ class PublicLinkService:
     def submit_for_review(self, *, raw_token: str) -> CardPublicLink:
         public_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_not_expired(public_link)
-        if public_link.status == "submitted":
-            raise PublicLinkSubmittedReadOnlyError("Public link was already submitted.")
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
             raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
         self._require_transition(public_link, "submitted")
