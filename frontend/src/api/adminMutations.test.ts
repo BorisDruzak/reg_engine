@@ -15,6 +15,7 @@ import {
   archiveReportRun,
   archiveReportTemplate,
   archiveUser,
+  approvePublicLink,
   createAccessGrant,
   createCard,
   createCardBlockInstance,
@@ -29,6 +30,11 @@ import {
   createReportTemplate,
   createUser,
   generateReportRun,
+  getPublicLinkReview,
+  getPublicLinkStatus,
+  requestPublicLinkChanges,
+  startPublicLinkReviewCycle,
+  submitPublicLink,
   transferCard,
   updateCard,
   updateCardFieldValues,
@@ -42,6 +48,7 @@ import {
   updateReportTemplate,
   updateUser,
 } from "./client";
+import type { PublicLinkRead, PublicLinkReviewRead, PublicLinkSafeStatusRead } from "./types";
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -531,6 +538,135 @@ test("admin mutation API client uses backend routes with bearer auth and JSON bo
       expect((init?.headers as Record<string, string>)["Content-Type"], item.name).toBe(
         "application/json",
       );
+      expect(JSON.parse(String(init?.body)), item.name).toEqual(item.body);
+    } else {
+      expect(init?.body, item.name).toBeUndefined();
+    }
+  }
+});
+
+test("public link review clients keep public tokens in JSON and admin auth in headers", async () => {
+  const rawToken = "raw-public-review-token";
+  const safeStatus = {
+    status: "submitted",
+    can_edit: false,
+    submitted_at: "2026-07-10T10:00:00Z",
+    reviewed_at: null,
+    review_comment: null,
+    completed_public_fields: 2,
+    total_public_fields: 3,
+  } satisfies PublicLinkSafeStatusRead;
+  const publicCases: {
+    name: string;
+    action: () => Promise<PublicLinkSafeStatusRead>;
+    path: string;
+  }[] = [
+    {
+      name: "submit public link",
+      action: () => submitPublicLink(rawToken),
+      path: "/api/v1/public-links/submit",
+    },
+    {
+      name: "read public link status",
+      action: () => getPublicLinkStatus(rawToken),
+      path: "/api/v1/public-links/status",
+    },
+  ];
+
+  for (const item of publicCases) {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(safeStatus));
+    expect(await item.action(), item.name).toEqual(safeStatus);
+    const [input, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(input), item.name).toBe(item.path);
+    expect(String(input), item.name).not.toContain(rawToken);
+    expect(init?.method, item.name).toBe("POST");
+    expect((init?.headers as Record<string, string>).Authorization, item.name).toBeUndefined();
+    expect(JSON.parse(String(init?.body)), item.name).toEqual({ raw_token: rawToken });
+  }
+
+  const review = {
+    public_link: {
+      id: "public-link-id",
+      card_id: "card-id",
+      status: "submitted",
+      can_view: true,
+      can_edit: false,
+      expires_at: "2026-07-17T10:00:00Z",
+      max_uses: null,
+      used_count: 0,
+      max_attachment_uploads: null,
+      attachment_upload_count: 0,
+      disabled_at: null,
+      submitted_at: "2026-07-10T10:00:00Z",
+      reviewed_at: null,
+      reviewed_by: null,
+      review_comment: null,
+      review_enabled: true,
+      completed_public_fields: 2,
+      total_public_fields: 3,
+    },
+    changed_field_count: 1,
+    changed_attachment_count: 0,
+    fields: [
+      {
+        block_id: "block-id",
+        field_id: "field-id",
+        block_instance_id: null,
+        label: "Значение",
+        field_type: "text",
+        before: null,
+        after: "Заполнено",
+        changed_at: "2026-07-10T10:00:00Z",
+      },
+    ],
+    attachments: [],
+  } satisfies PublicLinkReviewRead;
+  vi.mocked(fetch).mockClear();
+  vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(review));
+  expect(await getPublicLinkReview(token, "public-link-id")).toEqual(review);
+  let [input, init] = vi.mocked(fetch).mock.calls[0];
+  expect(String(input)).toBe("/api/v1/public-links/public-link-id/review");
+  expect(init?.method).toBe("GET");
+  expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
+  expect(init?.body).toBeUndefined();
+
+  const publicLink = review.public_link satisfies PublicLinkRead;
+  const adminCases: {
+    name: string;
+    action: () => Promise<PublicLinkRead>;
+    path: string;
+    body?: Record<string, unknown>;
+  }[] = [
+    {
+      name: "request changes",
+      action: () => requestPublicLinkChanges(token, "public-link-id", "Уточните значение"),
+      path: "/api/v1/public-links/public-link-id/request-changes",
+      body: { comment: "Уточните значение" },
+    },
+    {
+      name: "approve public link",
+      action: () => approvePublicLink(token, "public-link-id"),
+      path: "/api/v1/public-links/public-link-id/approve",
+    },
+    {
+      name: "start review cycle",
+      action: () => startPublicLinkReviewCycle(token, "public-link-id"),
+      path: "/api/v1/public-links/public-link-id/start-review-cycle",
+    },
+  ];
+
+  for (const item of adminCases) {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(publicLink));
+    expect(await item.action(), item.name).toEqual(publicLink);
+    [input, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(input), item.name).toBe(item.path);
+    expect(init?.method, item.name).toBe("POST");
+    expect((init?.headers as Record<string, string>).Authorization, item.name).toBe(
+      "Bearer test-token",
+    );
+    if (item.body) {
       expect(JSON.parse(String(init?.body)), item.name).toEqual(item.body);
     } else {
       expect(init?.body, item.name).toBeUndefined();

@@ -492,21 +492,31 @@ export type CardBlockInstanceSummaryRead = {
 export type PublicLinkCreatePayload = {
   expires_in_days?: number;
   max_attachment_uploads?: number | null;
+  review_enabled?: boolean;
 };
+
+export type PublicLinkReviewStatus =
+  | "active"
+  | "submitted"
+  | "changes_requested"
+  | "approved"
+  | "disabled"
+  | "expired";
 
 export type PublicLinkTokenRead = {
   id: string;
   card_id: string;
   raw_token: string;
-  status: string;
+  status: PublicLinkReviewStatus;
   can_edit: boolean;
   expires_at: string;
+  review_enabled: boolean;
 };
 
 export type PublicLinkRead = {
   id: string;
   card_id: string;
-  status: string;
+  status: PublicLinkReviewStatus;
   can_view: boolean;
   can_edit: boolean;
   expires_at: string;
@@ -515,10 +525,54 @@ export type PublicLinkRead = {
   max_attachment_uploads: number | null;
   attachment_upload_count: number;
   disabled_at: string | null;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  review_comment: string | null;
+  review_enabled: boolean;
+  completed_public_fields: number | null;
+  total_public_fields: number | null;
 };
 
 export type PublicLinkListRead = {
   items: PublicLinkRead[];
+};
+
+export type PublicLinkSafeStatusRead = {
+  status: PublicLinkReviewStatus;
+  can_edit: boolean;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  review_comment: string | null;
+  completed_public_fields: number | null;
+  total_public_fields: number | null;
+};
+
+export type PublicLinkReviewFieldDiffRead = {
+  block_id: string;
+  field_id: string;
+  block_instance_id: string | null;
+  label: string;
+  field_type: string;
+  before: unknown;
+  after: unknown;
+  changed_at: string | null;
+};
+
+export type PublicLinkReviewAttachmentDiffRead = {
+  attachment_id: string;
+  title: string;
+  original_filename: string;
+  content_length_bytes: number;
+  change: "added" | "archived";
+};
+
+export type PublicLinkReviewRead = {
+  public_link: PublicLinkRead;
+  changed_field_count: number;
+  changed_attachment_count: number;
+  fields: PublicLinkReviewFieldDiffRead[];
+  attachments: PublicLinkReviewAttachmentDiffRead[];
 };
 
 export type PublicLinkPreviewOptionRead = {

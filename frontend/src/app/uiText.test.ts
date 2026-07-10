@@ -34,6 +34,22 @@ describe("uiText", () => {
     );
   });
 
+  test("maps public link review lifecycle errors to safe Russian messages", () => {
+    expect(apiErrorMessageLabel("Недопустимый переход состояния публичной ссылки.")).toBe(
+      uiText.publicLinkInvalidTransition,
+    );
+    expect(apiErrorMessageLabel("Public link has expired.")).toBe(uiText.publicLinkExpired);
+    expect(apiErrorMessageLabel("Public link is not editable.")).toBe(
+      uiText.publicLinkSubmittedReadOnly,
+    );
+    expect(apiErrorMessageLabel("Actor cannot manage public links for this card.")).toBe(
+      uiText.publicLinkReviewForbidden,
+    );
+    expect(apiErrorMessageLabel("Недостаточно прав для выполнения операции.")).toBe(
+      uiText.actionDenied,
+    );
+  });
+
   test("localizes known built-in user display names", () => {
     expect(userDisplayNameLabel("System Admin")).toBe("Системный администратор");
     expect(userDisplayNameLabel("Пользователь")).toBe("Пользователь");

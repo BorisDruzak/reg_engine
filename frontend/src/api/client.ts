@@ -64,6 +64,8 @@ import type {
   PublicLinkCreatePayload,
   PublicLinkListRead,
   PublicLinkRead,
+  PublicLinkReviewRead,
+  PublicLinkSafeStatusRead,
   PublicLinkTokenRead,
   PublicLinkAttachmentListRead,
   PublicLinkAttachmentRead,
@@ -677,6 +679,20 @@ export async function readPublicLinkPreview(rawToken: string) {
   });
 }
 
+export async function submitPublicLink(rawToken: string) {
+  return apiRequest<PublicLinkSafeStatusRead>("/api/v1/public-links/submit", {
+    method: "POST",
+    body: { raw_token: rawToken },
+  });
+}
+
+export async function getPublicLinkStatus(rawToken: string) {
+  return apiRequest<PublicLinkSafeStatusRead>("/api/v1/public-links/status", {
+    method: "POST",
+    body: { raw_token: rawToken },
+  });
+}
+
 export async function updatePublicLinkFieldValue(
   rawToken: string,
   fieldId: string,
@@ -1281,6 +1297,38 @@ export async function createPublicLink(
 export async function archivePublicLink(token: string, publicLinkId: string) {
   return apiRequest<PublicLinkRead>(`/api/v1/public-links/${publicLinkId}`, {
     method: "DELETE",
+    token,
+  });
+}
+
+export async function getPublicLinkReview(token: string, publicLinkId: string) {
+  return apiRequest<PublicLinkReviewRead>(`/api/v1/public-links/${publicLinkId}/review`, {
+    token,
+  });
+}
+
+export async function requestPublicLinkChanges(
+  token: string,
+  publicLinkId: string,
+  comment: string,
+) {
+  return apiRequest<PublicLinkRead>(`/api/v1/public-links/${publicLinkId}/request-changes`, {
+    method: "POST",
+    token,
+    body: { comment },
+  });
+}
+
+export async function approvePublicLink(token: string, publicLinkId: string) {
+  return apiRequest<PublicLinkRead>(`/api/v1/public-links/${publicLinkId}/approve`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function startPublicLinkReviewCycle(token: string, publicLinkId: string) {
+  return apiRequest<PublicLinkRead>(`/api/v1/public-links/${publicLinkId}/start-review-cycle`, {
+    method: "POST",
     token,
   });
 }

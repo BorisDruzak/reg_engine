@@ -1822,6 +1822,13 @@ beforeEach(() => {
             max_attachment_uploads: payload.max_attachment_uploads ?? null,
             attachment_upload_count: 0,
             disabled_at: null,
+            submitted_at: null,
+            reviewed_at: null,
+            reviewed_by: null,
+            review_comment: null,
+            review_enabled: true,
+            completed_public_fields: null,
+            total_public_fields: null,
           };
           publicLinkItems = [...publicLinkItems, created];
           return jsonResponse(
