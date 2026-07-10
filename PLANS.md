@@ -4147,8 +4147,7 @@ Live Browser proof:
 
 ### Phase 8M follow-up: collision-safe adaptive field dragging
 
-Status: implemented and locally verified; production synchronization and live
-Browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 Implementation checkpoint:
 
@@ -4182,3 +4181,31 @@ Local verification checkpoint:
   remain unchanged. The verified local bundle is `index-DEMuVROu.js`
   (`560.94 kB`, `159.92 kB` gzip) with the unchanged
   `index-Cl9DldkN.css`.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized at
+  `6bc2fa77` (`Harden adaptive field dragging`). No schema or production-data
+  change was required.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-DEMuVROu.js` and
+  `/assets/index-Cl9DldkN.css`, restarted the API service, and passed health and
+  same-origin frontend smoke checks. The final `scripts/server-check.ps1`
+  passed with the service active and the server checkout clean on `main`.
+
+Live Browser proof:
+
+- The deployed administrator editor loaded with Russian page identity, no
+  framework error overlay, and zero console warnings/errors.
+- Moving `Имя` down through the keyboard geometry path changed the field from
+  row 1 to row 2 and expanded `ФИО` from one rendered row/`3rem` to two
+  rows/`6rem` in the same live preview. Cancel restored row 1 and one rendered
+  row without a save.
+- Moving `Фамилия` left toward the occupied half of its row kept it in the
+  nearest free interval at columns 7-12 and left the session valid. Moving
+  `КТо вы из последовательности цифр` down toward the full-width `Новое поле`
+  row kept the field at columns 7-12 on row 1 and displayed the no-space
+  message. Both sessions were canceled; the editor finished with zero active
+  geometry sessions and the original saved layout unchanged.
+- Browser screenshots are stored outside Git under
+  `C:\Users\admin-2\.codex\artifacts\reg_engine\2026-07-10-phase8m-field-drag\`:
+  `block-grows-on-move.png` and `occupied-row-blocked.png`.

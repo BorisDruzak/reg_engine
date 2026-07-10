@@ -82,10 +82,9 @@ export function useLayoutGeometrySession({
 
   const publish = useCallback(
     (nextSession: LayoutGeometrySession, nextBoundaryReason: string | null = null) => {
-      const resolution =
-        nextBoundaryReason === null && resolve
-          ? resolve(nextSession, sessionRef.current)
-          : { session: nextSession };
+      const resolution = resolve
+        ? resolve(nextSession, sessionRef.current)
+        : { session: nextSession };
       const resolvedBoundaryReason = nextBoundaryReason ?? resolution.invalidReason ?? null;
       sessionRef.current = resolution.session;
       boundaryReasonRef.current = resolvedBoundaryReason;

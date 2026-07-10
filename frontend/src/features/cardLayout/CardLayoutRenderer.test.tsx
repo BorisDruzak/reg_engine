@@ -843,6 +843,62 @@ describe("CardWebLayoutCanvas", () => {
     expect(onGeometryCommit).not.toHaveBeenCalled();
   });
 
+  test("keeps an out-of-grid field preview out of an occupied row", () => {
+    const onGeometryCommit = vi.fn();
+    const occupiedTopRowLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            row_span: 1,
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                row: 2,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+              },
+              {
+                ...layout.form_layout.sections[0].items[1],
+                row: 1,
+                column: 7,
+                row_span: 1,
+                column_span: 6,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(
+      <CardWebLayoutCanvas {...canvasProps({ layout: occupiedTopRowLayout, onGeometryCommit })} />,
+    );
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const fieldGrid = fieldNode.closest<HTMLElement>("[data-layout-grid='fields']");
+    expect(fieldGrid).not.toBeNull();
+    mockGridRect(fieldGrid!, 1200, 200);
+    installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 125, clientX: 0, clientY: 100 });
+    dispatchPointer(fieldNode, "pointermove", { pointerId: 125, clientX: 0, clientY: -100 });
+
+    expect(fieldNode).toHaveStyle({
+      gridColumn: "1 / span 12",
+      gridRow: "2 / span 1",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Объект выходит за границы сетки 12 × 4",
+    );
+
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 125, clientX: 0, clientY: -100 });
+
+    expect(onGeometryCommit).not.toHaveBeenCalled();
+  });
+
   test("exposes all field resize zones without a field move button", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 
