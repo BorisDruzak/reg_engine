@@ -226,7 +226,10 @@ def edit_card_field_with_public_link(
 ) -> FieldValueRead:
     service = PublicLinkService(session)
     try:
-        service.validate_public_edit_token(raw_token=payload.raw_token)
+        service.validate_public_field_edit(
+            raw_token=payload.raw_token,
+            field_id=payload.field_id,
+        )
     except Exception as exc:
         raise_service_http_error(exc)
     value = coerce_api_field_value(session, payload.field_id, payload.value)

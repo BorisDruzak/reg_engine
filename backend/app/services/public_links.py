@@ -500,6 +500,11 @@ class PublicLinkService:
         self._require_field_edit_usage_available(public_link)
         return public_link
 
+    def validate_public_field_edit(self, *, raw_token: str, field_id: UUID) -> CardPublicLink:
+        public_link = self.validate_public_edit_token(raw_token=raw_token)
+        self._resolve_public_edit_field(public_link=public_link, field_id=field_id)
+        return public_link
+
     def validate_public_attachment_token(self, *, raw_token: str) -> CardPublicLink:
         return self._editable_public_link(raw_token)
 
@@ -583,6 +588,35 @@ class PublicLinkService:
     ) -> FieldValue:
         public_link = self._editable_public_link(raw_token, lock_for_update=True)
         self._require_field_edit_usage_available(public_link)
+        card, field = self._resolve_public_edit_field(
+            public_link=public_link,
+            field_id=field_id,
+        )
+
+        field_value = CardService(self.session).set_field_value_from_public_link(
+            actor_public_link_id=public_link.id,
+            card_id=card.id,
+            field_id=field.id,
+            value=value,
+            block_instance_id=block_instance_id,
+        )
+        public_link.used_count += 1
+        self.session.flush()
+        AuditService(self.session).record_public_link_event(
+            actor_public_link_id=public_link.id,
+            action="public_link.update",
+            object_type="field_value",
+            object_id=field_value.id,
+            new_data_json={"card_id": str(card.id), "field_id": str(field.id)},
+        )
+        return field_value
+
+    def _resolve_public_edit_field(
+        self,
+        *,
+        public_link: CardPublicLink,
+        field_id: UUID,
+    ) -> tuple[Card, FormField]:
         card = self._get_active_card(public_link.card_id)
         field = self._get_active_public_field(field_id)
         block = self._get_public_block(field.block_id)
@@ -605,24 +639,7 @@ class PublicLinkService:
             raise PermissionDeniedError("Public link cannot edit this block.")
         if not self._public_link_allows(public_link.allowed_fields_json, field.id):
             raise PermissionDeniedError("Public link cannot edit this field.")
-
-        field_value = CardService(self.session).set_field_value_from_public_link(
-            actor_public_link_id=public_link.id,
-            card_id=card.id,
-            field_id=field.id,
-            value=value,
-            block_instance_id=block_instance_id,
-        )
-        public_link.used_count += 1
-        self.session.flush()
-        AuditService(self.session).record_public_link_event(
-            actor_public_link_id=public_link.id,
-            action="public_link.update",
-            object_type="field_value",
-            object_id=field_value.id,
-            new_data_json={"card_id": str(card.id), "field_id": str(field.id)},
-        )
-        return field_value
+        return card, field
 
     def _public_link_for_token(
         self,
