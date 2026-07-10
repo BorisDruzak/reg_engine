@@ -674,7 +674,11 @@ def test_convert_print_view_endpoint_rejects_virtual_or_unknown_views_in_russian
 @pytest.mark.parametrize(
     ("error", "status_code", "detail"),
     [
-        (PermissionDeniedError("Недостаточно прав."), 403, "Недостаточно прав."),
+        (
+            PermissionDeniedError("Недостаточно прав."),
+            403,
+            "Недостаточно прав для выполнения операции.",
+        ),
         (
             DocumentServiceError("Версия печатной формы карточки не найдена."),
             422,
