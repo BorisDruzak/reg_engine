@@ -70,7 +70,9 @@ Target system:
 - Mouse pointer capture supports moving and eight-direction resizing. Fields
   open their inline editor on click or Enter/Space, move after a six-pixel
   hold-and-drag threshold without selecting text, and resize from unobtrusive
-  edge/corner zones; no separate field edit or move buttons are rendered. A
+  edge/corner zones. The field captures the pointer on press so a downward drag
+  can leave the compact rendered row before crossing that threshold; no
+  separate field edit or move buttons are rendered. A
   moved field uses the nearest free interval, shrinks only itself when that
   interval is narrower, and can pass a fully occupied row to the first free row
   above or below. A downward pointer drag beyond the rendered bottom of a

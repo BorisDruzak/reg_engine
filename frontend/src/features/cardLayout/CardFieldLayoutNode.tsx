@@ -129,6 +129,13 @@ export function CardFieldLayoutNode({
     };
     directMovePointerRef.current = null;
     suppressClickRef.current = false;
+    if (typeof event.currentTarget.setPointerCapture === "function") {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // A browser may reject capture for a pointer that has already ended.
+      }
+    }
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
@@ -171,15 +178,32 @@ export function CardFieldLayoutNode({
     }
     if (pendingMoveRef.current?.pointerId === event.pointerId) {
       pendingMoveRef.current = null;
+      if (typeof event.currentTarget.releasePointerCapture === "function") {
+        try {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        } catch {
+          // The browser may already have released a click-only pointer.
+        }
+      }
     }
   }
 
   function handlePointerCancel(event: ReactPointerEvent<HTMLElement>) {
+    const pendingPointerId = pendingMoveRef.current?.pointerId;
     pendingMoveRef.current = null;
     suppressClickRef.current = false;
     if (geometryTarget || directMovePointerRef.current === event.pointerId) {
       directMovePointerRef.current = null;
       geometry?.pointerCancel(event);
+    } else if (
+      pendingPointerId === event.pointerId &&
+      typeof event.currentTarget.releasePointerCapture === "function"
+    ) {
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // Pointer cancellation can release capture before React handles it.
+      }
     }
   }
 

@@ -681,6 +681,7 @@ describe("CardWebLayoutCanvas", () => {
     const capture = installPointerCapture(fieldNode);
 
     dispatchPointer(fieldNode, "pointerdown", { pointerId: 121, clientX: 0, clientY: 0 });
+    expect(capture.setPointerCapture).toHaveBeenCalledWith(121);
     dispatchPointer(fieldNode, "pointermove", { pointerId: 121, clientX: 5, clientY: 0 });
     expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
 
@@ -696,6 +697,23 @@ describe("CardWebLayoutCanvas", () => {
       before: { row: 1, column: 1, rowSpan: 1, columnSpan: 9 },
       after: { row: 1, column: 4, rowSpan: 1, columnSpan: 9 },
     });
+  });
+
+  test("releases pending pointer capture when a field click does not become a drag", () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
+
+    const fieldNode = screen.getByTestId("layout-field-field-name");
+    const capture = installPointerCapture(fieldNode);
+
+    dispatchPointer(fieldNode, "pointerdown", { pointerId: 133, clientX: 0, clientY: 0 });
+    dispatchPointer(fieldNode, "pointerup", { pointerId: 133, clientX: 0, clientY: 0 });
+
+    expect(capture.setPointerCapture).toHaveBeenCalledWith(133);
+    expect(capture.releasePointerCapture).toHaveBeenCalledWith(133);
+    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+
+    fireEvent.click(fieldNode);
+    expect(within(fieldNode).getByLabelText("Название поля")).toBeInTheDocument();
   });
 
   test("keeps processing a fast pointer stream before React rerenders", () => {

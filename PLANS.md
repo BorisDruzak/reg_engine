@@ -4350,18 +4350,24 @@ browser proof are pending.
   visible row has no empty drop surface below it. Pointer movement below that
   rendered edge could calculate a logical row after row 4 and was rejected,
   even though `moveRect` had already clamped its preview to the valid last row.
+- The field now captures its pointer immediately on press while keeping the
+  existing six-pixel movement threshold. A downward pointer can therefore
+  leave the last rendered row without losing the events that start and finish
+  the geometry session. A click that never crosses the threshold releases the
+  pending capture and still opens the inline editor normally.
 - Downward pointer movement of a field now accepts that existing clamped
   preview when the horizontal coordinate remains inside the grid. The block
   expands through the existing rendered-row projection and the field can be
   dropped on row 4.
 - Strict boundary behavior remains unchanged for horizontal overflow, upward
   overflow, block movement, resize operations, and keyboard movement.
-- The focused renderer/geometry suites pass all 82 cases, including the new
-  regression from a one-row compact field grid to logical row 4.
+- The focused renderer/geometry suites pass all 83 cases, including the new
+  regressions for early pending capture, click-only capture release, and a
+  one-row compact field grid moving to logical row 4.
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
   passed: backend `228 passed / 195 skipped`, frontend
-  `246 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
+  `247 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, Prettier,
   TypeScript, production build, and project-map checks are green. The existing
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
-  The verified local bundle is `index-Cj0A4D57.js` (`562.70 kB`, `160.60 kB`
+  The verified local bundle is `index-DY7MbG9Z.js` (`563.12 kB`, `160.66 kB`
   gzip) with `index-Cl9DldkN.css`.
