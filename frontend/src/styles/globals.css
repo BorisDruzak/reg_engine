@@ -4222,6 +4222,34 @@ tr:last-child td {
     justify-content: flex-start;
   }
 
+  .card-action-panel {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .card-action-status,
+  .card-action-buttons {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .card-action-buttons {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+  }
+
+  .card-action-buttons > button {
+    flex: 1 1 160px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .row-actions.card-action-buttons > button {
+    white-space: normal;
+  }
+
   .organization-tree-row {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;

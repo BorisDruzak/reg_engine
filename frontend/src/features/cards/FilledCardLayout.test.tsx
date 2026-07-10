@@ -1061,6 +1061,24 @@ describe("FilledCardLayout", () => {
       /\.card-layout-responsive-grid \.card-layout-responsive-field-grid > \.card-layout-field-node\s*{[^}]*grid-column:\s*1 \/ -1[^}]*grid-row:\s*auto/,
     );
   });
+
+  test("constrains the card action panel and wrapped buttons inside the mobile viewport", () => {
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*\.card-action-panel\s*{[^}]*flex-direction:\s*column[^}]*width:\s*100%[^}]*min-width:\s*0/,
+    );
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*\.card-action-status,\s*\.card-action-buttons\s*{[^}]*width:\s*100%[^}]*min-width:\s*0/,
+    );
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*\.card-action-buttons\s*{[^}]*flex:\s*1 1 auto[^}]*justify-content:\s*flex-start/,
+    );
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*\.card-action-buttons\s*>\s*button\s*{[^}]*flex:\s*1 1 160px[^}]*min-width:\s*0[^}]*max-width:\s*100%/,
+    );
+    expect(globalStyles).toMatch(
+      /@media \(max-width: 620px\)[\s\S]*\.row-actions\.card-action-buttons\s*>\s*button\s*{[^}]*white-space:\s*normal/,
+    );
+  });
 });
 
 function field(overrides: Partial<FormFieldRead> & Pick<FormFieldRead, "id" | "code" | "label">) {
