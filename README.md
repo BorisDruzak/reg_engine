@@ -67,23 +67,32 @@ Target system:
   overlapping blocks or fields. Legacy rows above four remain readable with a
   warning, but must be brought into the current grid before the layout can be
   saved again.
-- Mouse pointer capture supports moving and eight-direction resizing. Arrow
-  keys move the active item and `Shift + стрелки` resizes it. `Готово` commits
-  one geometry command, while `Escape` or `Отмена` restores the starting
-  rectangle. Undo and redo operate on the same revision-safe save path.
+- Mouse pointer capture supports moving and eight-direction resizing. Fields
+  open their inline editor on click or Enter/Space, move after a six-pixel
+  hold-and-drag threshold, and resize from unobtrusive edge/corner zones; no
+  separate field edit or move buttons are rendered. Arrow keys move the active
+  item and `Shift + стрелки` resizes it. `Готово` commits one geometry command,
+  while `Escape` or `Отмена` restores the starting rectangle. Undo and redo
+  operate on the same revision-safe save path.
 - Block and field creation, insertion, and editing are disclosed in context
-  inside the canvas. Inline editors use the real schema APIs and preserve the
-  schema-driven block/field contracts; the preview stage is fully read-only.
+  inside the canvas. `Создать поле` is placed in the block footer below its
+  existing fields. Web blocks project only their occupied internal field rows
+  and align to content without changing saved 12 x 4 geometry; linked A4
+  rendering explicitly keeps all four print rows. Inline editors use the real
+  schema APIs and preserve the schema-driven block/field contracts; the preview
+  stage is fully read-only.
 - Form saves send `expected_revision`. Layout PATCH requests use a latest-value
   queue serialized with schema writes. A `409` keeps the local draft and offers
   `Сравнить с версией сервера`, `Принять версию сервера`, and
   `Сохранить локальную версию`; transient failures offer `Повторить`.
 - A linked A4 composition contains exactly one enclosing `card_layout`
   rectangle plus independently editable print-only overlays. The rectangle is
-  protected from delete/copy/duplicate actions; editing its inner block or
-  field routes back to `Макет карточки`. DOCX/PDF generation expands the
-  linked rectangle from the current form layout without persisting expanded
-  field geometry into the saved A4 JSON.
+  protected from delete/copy/duplicate actions. Stage tabs are the only
+  navigation between A4 and `Макет карточки`; the former
+  `Редактировать внутренний макет` overlay is not rendered. Print-only elements
+  are added through one compact vertical disclosure list. DOCX/PDF generation
+  expands the linked rectangle from the current form layout without persisting
+  expanded field geometry into the saved A4 JSON.
 - Legacy A4 `items[]` payloads remain readable. Explicit conversion creates a
   new audited document-template version and leaves the previous version
   unchanged and readable. User-facing labels, validation, recovery choices,
@@ -91,6 +100,13 @@ Target system:
 
 ## Filled Card Workspace Contract
 
+- A non-terminal card lifecycle is derived automatically from completeness:
+  an empty `required` or `required_on_publish` field makes the card a `draft`,
+  and a card with every mandatory field filled is `active`. A template without
+  mandatory fields creates an active card immediately. Archived and superseded
+  cards remain terminal. Creating or sending a public filling link is
+  lifecycle-neutral and remains available for both draft and active cards; no
+  manual activation button is rendered.
 - The normal card view is read-first: it renders stored values in the exact
   saved block/field geometry and does not open a global mass-edit form by
   default.

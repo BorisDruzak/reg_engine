@@ -4044,3 +4044,62 @@ Known limitations and remaining release gates:
   and typed diff were proven live through the deployed backend service and
   PostgreSQL evidence. The administrator panel itself remains covered by its
   focused component suite (7/7) and the full frontend regression suite.
+
+## Phase 8M: Automatic Card Lifecycle and Layout UX Polish
+
+Status: implementation complete locally; full gate, deployment, and live
+Browser proof are in progress.
+
+Goal:
+
+Remove manual activation and reduce card-layout editor chrome without changing
+the schema-driven data model, saved geometry, revision-safe persistence, or A4
+print output.
+
+Design and implementation plan:
+
+- `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
+- `docs/superpowers/plans/2026-07-10-card-layout-status-ux-polish.md`
+
+Implementation checkpoint:
+
+- `draft` and `active` are now derived by one backend completeness rule for
+  every non-terminal card. Empty `required` or `required_on_publish` fields
+  produce `draft`; complete cards and templates without mandatory fields
+  produce `active`. Archived and superseded cards remain terminal.
+- Lifecycle synchronization runs after card creation/defaults, authenticated
+  and public field writes, bulk writes, repeatable block-instance changes, and
+  schema requiredness/membership changes. Real transitions are audited. A
+  caller cannot force `draft` or `active` against current completeness.
+- `Отправить на заполнение` remains available for both draft and active cards.
+  Link creation/sending does not change lifecycle status. The manual
+  `Активировать карточку` action and its frontend mutation were removed.
+- Web blocks render only the internal rows occupied by fields and align to
+  content, while saved 12 x 4 rectangles remain unchanged. Linked A4 rendering
+  explicitly retains four internal rows. `Создать поле` now follows the field
+  grid in a block footer.
+- A design-mode field opens on click or Enter/Space, starts moving only after a
+  six-pixel hold-and-drag threshold, and exposes eight edge/corner resize zones
+  on hover or focus. The visible `Изменить` and field `⠿` buttons were removed;
+  no-move pointer sessions clear without an undo command.
+- The A4 `Редактировать внутренний макет` overlay and callback chain were
+  removed. Print-only actions now live in one compact vertical disclosure list
+  that closes after selection and preserves busy-state disabling.
+- No database migration is required; lifecycle behavior uses existing card
+  status and field-value data, and layout changes are a render/interaction
+  projection over existing JSON geometry.
+
+Verification and release evidence will be recorded here after the full local,
+disposable PostgreSQL, server, and Browser gates pass.
+
+Local verification checkpoint:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `228 passed / 195 skipped`, frontend
+  `233 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, TypeScript,
+  production build, and project-map checks are green.
+- The existing Starlette/httpx deprecation warning and Vite main-chunk advisory
+  remain. The current production bundle is `index-B7ukh_7h.js` (`559.59 kB`,
+  `159.47 kB` gzip) and `index-Cl9DldkN.css` (`63.71 kB`, `11.40 kB` gzip).
+- PostgreSQL-backed lifecycle/schema tests, remote synchronization, deployment,
+  and live Browser proof remain pending at this checkpoint.
