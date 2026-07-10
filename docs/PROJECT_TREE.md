@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-10 14:53:13 +05:00
+- Generated: 2026-07-10 15:13:14 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -198,6 +198,7 @@
 - `docs/superpowers/plans/2026-06-26-dev-deploy-scripts.md`
 - `docs/superpowers/plans/2026-07-02-card-organization-tag-search.md`
 - `docs/superpowers/plans/2026-07-02-card-unified-tag-search.md`
+- `docs/superpowers/plans/2026-07-10-card-readonly-presentation-repair.md`
 - `docs/superpowers/plans/2026-07-10-card-workspace-quality-repair.md`
 - `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`

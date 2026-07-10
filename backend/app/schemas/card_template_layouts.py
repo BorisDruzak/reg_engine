@@ -108,6 +108,15 @@ class CardTemplateLayoutRead(BaseModel):
     sync_status: CardTemplateLayoutSyncStatusRead
 
 
+class CardPresentationRead(BaseModel):
+    card_id: UUID
+    registry_id: UUID
+    registry_name: str
+    card_template_id: UUID
+    card_template_name: str
+    layout: CardTemplateLayoutRead
+
+
 class CardTemplateLayoutUpdate(BaseModel):
     expected_revision: str
     form_layout: dict[str, Any]

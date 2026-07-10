@@ -21,10 +21,12 @@ export function GeneratedDocumentsPanel({
   cardId,
   registryId,
   token,
+  canManage,
 }: {
   cardId: string;
   registryId: string;
   token: string;
+  canManage: boolean;
 }) {
   const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState("");
@@ -39,7 +41,7 @@ export function GeneratedDocumentsPanel({
   const templatesQuery = useQuery({
     queryKey: ["document-templates", token, registryId],
     queryFn: () => listDocumentTemplates(token, registryId),
-    enabled: Boolean(token && registryId),
+    enabled: Boolean(token && registryId && canManage),
   });
   const documentsQuery = useQuery({
     queryKey: ["generated-documents", token, cardId],
@@ -141,100 +143,105 @@ export function GeneratedDocumentsPanel({
 
   return (
     <Panel title={uiText.documents}>
-      <div className="document-generator">
-        <label className="field-editor-control">
-          <span>{uiText.template}</span>
-          <select
-            value={selectedTemplateId}
-            onChange={(event) => setTemplateId(event.target.value)}
-          >
-            {(templatesQuery.data?.items ?? []).map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!selectedTemplateId || generateMutation.isPending}
-          onClick={() => generateMutation.mutate()}
-        >
-          {uiText.generateDocument}
-        </button>
-        <button
-          type="button"
-          className="ghost-button"
-          disabled={!selectedTemplateId || generatePdfMutation.isPending}
-          onClick={() => generatePdfMutation.mutate()}
-        >
-          {uiText.generatePdfDocument}
-        </button>
-      </div>
-      {templatesQuery.data?.items.length === 0 && (
-        <p className="data-empty">{uiText.noDocumentTemplates}</p>
-      )}
-      <section className="template-manager" aria-labelledby="document-templates-heading">
-        <h3 id="document-templates-heading">{uiText.documentTemplates}</h3>
-        <form
-          className="template-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createTemplateMutation.mutate();
-          }}
-        >
-          <label className="field-editor-control">
-            <span>{uiText.templateName}</span>
-            <input
-              required
-              value={templateName}
-              onChange={(event) => setTemplateName(event.target.value)}
+      {canManage ? (
+        <>
+          <div className="document-generator">
+            <label className="field-editor-control">
+              <span>{uiText.template}</span>
+              <select
+                value={selectedTemplateId}
+                onChange={(event) => setTemplateId(event.target.value)}
+              >
+                {(templatesQuery.data?.items ?? []).map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!selectedTemplateId || generateMutation.isPending}
+              onClick={() => generateMutation.mutate()}
+            >
+              {uiText.generateDocument}
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!selectedTemplateId || generatePdfMutation.isPending}
+              onClick={() => generatePdfMutation.mutate()}
+            >
+              {uiText.generatePdfDocument}
+            </button>
+          </div>
+          {templatesQuery.data?.items.length === 0 && (
+            <p className="data-empty">{uiText.noDocumentTemplates}</p>
+          )}
+          <section className="template-manager" aria-labelledby="document-templates-heading">
+            <h3 id="document-templates-heading">{uiText.documentTemplates}</h3>
+            <form
+              className="template-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                createTemplateMutation.mutate();
+              }}
+            >
+              <label className="field-editor-control">
+                <span>{uiText.templateName}</span>
+                <input
+                  required
+                  value={templateName}
+                  onChange={(event) => setTemplateName(event.target.value)}
+                />
+              </label>
+              <label className="field-editor-control">
+                <span>{uiText.templateDescription}</span>
+                <input
+                  value={templateDescription}
+                  onChange={(event) => setTemplateDescription(event.target.value)}
+                />
+              </label>
+              <label className="field-editor-control">
+                <span>{uiText.outputFilenameTemplate}</span>
+                <input
+                  required
+                  value={outputFilenameTemplate}
+                  onChange={(event) => setOutputFilenameTemplate(event.target.value)}
+                />
+              </label>
+              <label className="field-editor-control template-body-control">
+                <span>{uiText.templateBody}</span>
+                <textarea
+                  required
+                  value={templateBody}
+                  onChange={(event) => setTemplateBody(event.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={!canCreateTemplate || createTemplateMutation.isPending}
+              >
+                {uiText.createTemplate}
+              </button>
+            </form>
+            <DocumentTemplateList
+              items={templatesQuery.data?.items ?? []}
+              archivingId={archiveTemplateMutation.variables ?? null}
+              onArchive={(template) => archiveTemplateMutation.mutate(template.id)}
             />
-          </label>
-          <label className="field-editor-control">
-            <span>{uiText.templateDescription}</span>
-            <input
-              value={templateDescription}
-              onChange={(event) => setTemplateDescription(event.target.value)}
-            />
-          </label>
-          <label className="field-editor-control">
-            <span>{uiText.outputFilenameTemplate}</span>
-            <input
-              required
-              value={outputFilenameTemplate}
-              onChange={(event) => setOutputFilenameTemplate(event.target.value)}
-            />
-          </label>
-          <label className="field-editor-control template-body-control">
-            <span>{uiText.templateBody}</span>
-            <textarea
-              required
-              value={templateBody}
-              onChange={(event) => setTemplateBody(event.target.value)}
-            />
-          </label>
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={!canCreateTemplate || createTemplateMutation.isPending}
-          >
-            {uiText.createTemplate}
-          </button>
-        </form>
-        <DocumentTemplateList
-          items={templatesQuery.data?.items ?? []}
-          archivingId={archiveTemplateMutation.variables ?? null}
-          onArchive={(template) => archiveTemplateMutation.mutate(template.id)}
-        />
-      </section>
+          </section>
+        </>
+      ) : null}
       {message && <p className="inline-success attachment-status">{message}</p>}
       {localError && <p className="inline-alert attachment-status">{localError}</p>}
-      <DataAlert error={templatesQuery.error} />
+      {canManage ? <DataAlert error={templatesQuery.error} /> : null}
       <DataAlert error={documentsQuery.error} />
       <GeneratedDocumentList
         items={documentsQuery.data?.items ?? []}
+        canManage={canManage}
         downloadingId={downloadMutation.variables?.id ?? null}
         archivingId={archiveMutation.variables ?? null}
         onDownload={(document) => downloadMutation.mutate(document)}
@@ -287,12 +294,14 @@ function DocumentTemplateList({
 
 function GeneratedDocumentList({
   items,
+  canManage,
   downloadingId,
   archivingId,
   onDownload,
   onArchive,
 }: {
   items: GeneratedDocumentRead[];
+  canManage: boolean;
   downloadingId: string | null;
   archivingId: string | null;
   onDownload: (document: GeneratedDocumentRead) => void;
@@ -323,15 +332,17 @@ function GeneratedDocumentList({
             >
               {uiText.download}
             </button>
-            <button
-              type="button"
-              className="ghost-button"
-              aria-label={`${uiText.archive} документ ${document.title}`}
-              disabled={archivingId === document.id}
-              onClick={() => onArchive(document)}
-            >
-              {uiText.archive}
-            </button>
+            {canManage ? (
+              <button
+                type="button"
+                className="ghost-button"
+                aria-label={`${uiText.archive} документ ${document.title}`}
+                disabled={archivingId === document.id}
+                onClick={() => onArchive(document)}
+              >
+                {uiText.archive}
+              </button>
+            ) : null}
           </div>
         </li>
       ))}

@@ -214,6 +214,7 @@ def test_phase_1f_api_routes_are_registered_without_database() -> None:
     assert "/api/v1/blocks/{block_id}/fields" in paths
     assert "/api/v1/registries/{registry_id}/cards" in paths
     assert "/api/v1/cards/{card_id}" in paths
+    assert "/api/v1/cards/{card_id}/presentation" in paths
     assert "/api/v1/cards/{card_id}/public-links" in paths
     assert "/api/v1/public-links/preview" in paths
     assert "/api/v1/public-links/edit" in paths
@@ -548,6 +549,29 @@ def test_api_card_visibility_uses_organization_scope(
     assert system_read.json()["can_manage"] is True
     assert allowed_read.json()["can_manage"] is True
     assert read_only_read.json()["can_manage"] is False
+    read_only_schema = api_client.get(
+        f"/api/v1/registries/{registry.id}/schema",
+        headers=_actor_headers(read_only_user.id),
+    )
+    read_only_layout = api_client.get(
+        f"/api/v1/card-templates/{card.card_template_id}/layout",
+        headers=_actor_headers(read_only_user.id),
+    )
+    read_only_presentation = api_client.get(
+        f"/api/v1/cards/{card.id}/presentation",
+        headers=_actor_headers(read_only_user.id),
+    )
+    assert read_only_schema.status_code == 403, read_only_schema.text
+    assert read_only_layout.status_code == 403, read_only_layout.text
+    assert read_only_presentation.status_code == 200, read_only_presentation.text
+    presentation = read_only_presentation.json()
+    assert presentation["card_id"] == str(card.id)
+    assert presentation["registry_id"] == str(registry.id)
+    assert presentation["registry_name"] == registry.name
+    assert presentation["card_template_id"] == str(card.card_template_id)
+    assert presentation["layout"]["card_template_id"] == str(card.card_template_id)
+    assert [item["id"] for item in presentation["layout"]["structure"]["fields"]] == [str(field.id)]
+    assert "templates" not in presentation
     read_only_write = api_client.patch(
         f"/api/v1/cards/{card.id}/fields/{field.id}",
         json={"value": "blocked"},
@@ -556,6 +580,11 @@ def test_api_card_visibility_uses_organization_scope(
     assert read_only_write.status_code == 403, read_only_write.text
     denied_read = api_client.get(f"/api/v1/cards/{card.id}", headers=_actor_headers(outsider.id))
     assert denied_read.status_code == 403, denied_read.text
+    denied_presentation = api_client.get(
+        f"/api/v1/cards/{card.id}/presentation",
+        headers=_actor_headers(outsider.id),
+    )
+    assert denied_presentation.status_code == 403, denied_presentation.text
     denied_write = api_client.patch(
         f"/api/v1/cards/{card.id}/fields/{field.id}",
         json={"value": "blocked"},

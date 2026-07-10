@@ -14,8 +14,10 @@ from app.models import (
     FormBlock,
     FormField,
     GeneratedDocument,
+    Registry,
 )
 from app.schemas.card_template_layouts import (
+    CardPresentationRead,
     CardTemplateExportSettingsRead,
     CardTemplateFormLayoutRead,
     CardTemplateLayoutRead,
@@ -34,6 +36,7 @@ from app.services.card_template_projection import (
     sync_print_view,
     virtual_default_print_view,
 )
+from app.services.cards import CardService
 from app.services.documents import DocumentService, DocumentServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.registry_schema import RegistrySchemaError
@@ -136,6 +139,34 @@ class CardTemplateLayoutService:
     ) -> CardTemplateLayoutRead:
         template = self._get_active_card_template(card_template_id)
         self._require_registry_read_permission(actor_user_id, template.registry_id)
+        return self._layout_read(template)
+
+    def read_card_presentation_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+    ) -> CardPresentationRead:
+        card = CardService(self.session).read_card_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+        )
+        template = self._get_active_card_template(card.card_template_id)
+        if template.registry_id != card.registry_id:
+            raise CardTemplateLayoutError("Card template does not belong to the card registry.")
+        registry = self.session.get(Registry, card.registry_id)
+        if registry is None or registry.archived_at is not None:
+            raise RegistrySchemaError("Registry was not found.")
+        return CardPresentationRead(
+            card_id=card.card_id,
+            registry_id=registry.id,
+            registry_name=registry.name,
+            card_template_id=template.id,
+            card_template_name=template.name,
+            layout=self._layout_read(template),
+        )
+
+    def _layout_read(self, template: CardTemplate) -> CardTemplateLayoutRead:
         blocks, fields = self._template_structure(template)
         form_layout = self._form_layout(template, blocks, fields)
         print_views = self._print_views_for_template(template, form_layout)

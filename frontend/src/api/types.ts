@@ -950,6 +950,15 @@ export type CardTemplateLayoutRead = {
   sync_status: CardTemplateLayoutSyncStatusRead;
 };
 
+export type CardPresentationRead = {
+  card_id: string;
+  registry_id: string;
+  registry_name: string;
+  card_template_id: string;
+  card_template_name: string;
+  layout: CardTemplateLayoutRead;
+};
+
 export type CardTemplateLayoutUpdatePayload = {
   expected_revision: string;
   form_layout: CardTemplateFormLayoutRead;

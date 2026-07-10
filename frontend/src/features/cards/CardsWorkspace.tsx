@@ -17,10 +17,10 @@ import {
   downloadGeneratedDocumentContent,
   generateCardTemplateLayoutDocx,
   generateCardTemplateLayoutPdf,
-  getCardTemplateLayout,
   listCardFieldReferenceItems,
   listAttachments,
   listPublicLinks,
+  readCardPresentation,
   updateCard,
   updateCardFieldValue,
   updateCardFieldValues,
@@ -29,6 +29,7 @@ import type {
   CardFieldFilterPayload,
   CardRead,
   CardSummaryRead,
+  CardTemplateLayoutRead,
   CardTemplateRead,
   FieldValuesBulkUpdatePayload,
   FormBlockRead,
@@ -153,7 +154,37 @@ export function CardsWorkspace({
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
   );
-  const fieldRows = useMemo(() => buildEditableCardFields(card, schema), [card, schema]);
+  const cardPresentationQuery = useQuery({
+    queryKey: ["card-presentation", token, card?.id],
+    queryFn: () => {
+      if (!card) throw new Error(uiText.notFound);
+      return readCardPresentation(token, card.id);
+    },
+    enabled: Boolean(token && card),
+  });
+  const presentationLayout = cardPresentationQuery.data?.layout ?? null;
+  const presentationFields = useMemo(
+    () => presentationLayout?.structure.fields ?? schema?.fields ?? [],
+    [presentationLayout, schema?.fields],
+  );
+  const presentationBlocks = useMemo(
+    () => presentationLayout?.structure.blocks ?? schema?.blocks ?? [],
+    [presentationLayout, schema?.blocks],
+  );
+  const presentationFieldIds = useMemo(
+    () =>
+      presentationLayout
+        ? new Set(presentationLayout.structure.fields.map((field) => field.id))
+        : templateFieldIdSet(
+            schema?.templates.find((template) => template.id === card?.card_template_id),
+          ),
+    [card?.card_template_id, presentationLayout, schema?.templates],
+  );
+  const fieldRows = useMemo(
+    () =>
+      buildEditableCardFields(card, presentationFields, presentationBlocks, presentationFieldIds),
+    [card, presentationBlocks, presentationFieldIds, presentationFields],
+  );
   const editableFieldIds = useMemo(
     () =>
       card?.can_manage
@@ -174,7 +205,7 @@ export function CardsWorkspace({
     [card, queryClient, token],
   );
   const blockEditor = useBlockEditor({
-    fields: schema?.fields ?? [],
+    fields: presentationFields,
     editableFieldIds,
     saveValues: saveBlockValues,
   });
@@ -263,8 +294,8 @@ export function CardsWorkspace({
     [blockEditor.dirty, card?.id, cards, visibleOpenCardIds],
   );
   const repeatableBlocks = useMemo(
-    () => (schema?.blocks ?? []).filter((block) => block.is_active && block.is_repeatable),
-    [schema?.blocks],
+    () => presentationBlocks.filter((block) => block.is_active && block.is_repeatable),
+    [presentationBlocks],
   );
   const activeCardTemplates = useMemo(
     () =>
@@ -352,17 +383,7 @@ export function CardsWorkspace({
       }
     },
   });
-  const cardTemplateLayoutQuery = useQuery({
-    queryKey: ["card-template-layout", token, card?.card_template_id],
-    queryFn: () => {
-      if (!card) {
-        throw new Error(uiText.notFound);
-      }
-      return getCardTemplateLayout(token, card.card_template_id);
-    },
-    enabled: Boolean(token && card?.card_template_id),
-  });
-  const selectedCardPrintView = cardTemplateLayoutQuery.data?.print_views[0] ?? null;
+  const selectedCardPrintView = presentationLayout?.print_views[0] ?? null;
   const downloadCardPrintDocxMutation = useMutation({
     mutationFn: async () => {
       if (!card || !selectedCardPrintView) {
@@ -669,13 +690,13 @@ export function CardsWorkspace({
           </Panel>
           {card && activeTab === "fields" && (
             <Panel title={uiText.cardFields}>
-              {cardTemplateLayoutQuery.isLoading && <p>{uiText.loadingCard}</p>}
-              <DataAlert error={cardTemplateLayoutQuery.error} />
-              {cardTemplateLayoutQuery.data ? (
+              {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
+              <DataAlert error={cardPresentationQuery.error} />
+              {presentationLayout ? (
                 <FilledCardLayout
-                  layout={cardTemplateLayoutQuery.data}
-                  blocks={cardTemplateLayoutQuery.data.structure.blocks}
-                  fields={cardTemplateLayoutQuery.data.structure.fields}
+                  layout={presentationLayout}
+                  blocks={presentationBlocks}
+                  fields={presentationFields}
                   blockInstances={cardBlockInstances}
                   values={[]}
                   editableFieldIds={editableFieldIds}
@@ -705,24 +726,30 @@ export function CardsWorkspace({
                   }
                 />
               ) : null}
-              {!cardTemplateLayoutQuery.isLoading &&
-                !cardTemplateLayoutQuery.error &&
-                !cardTemplateLayoutQuery.data && <p className="data-empty">{uiText.noData}</p>}
+              {!cardPresentationQuery.isLoading &&
+                !cardPresentationQuery.error &&
+                !presentationLayout && <p className="data-empty">{uiText.noData}</p>}
             </Panel>
           )}
           {card && activeTab === "print" && (
             <CardPrintPreviewPanel
               card={card}
-              schema={schema}
-              token={token}
+              layout={presentationLayout}
+              fields={presentationFields}
+              registryName={cardPresentationQuery.data?.registry_name ?? null}
               organizationName={organizationsById.get(card.organization_id)?.name ?? null}
             />
           )}
           {card && activeTab === "attachments" && (
-            <CardAttachmentsPanel cardId={card.id} token={token} />
+            <CardAttachmentsPanel cardId={card.id} token={token} canManage={card.can_manage} />
           )}
           {card && activeTab === "documents" && (
-            <GeneratedDocumentsPanel cardId={card.id} registryId={card.registry_id} token={token} />
+            <GeneratedDocumentsPanel
+              cardId={card.id}
+              registryId={card.registry_id}
+              token={token}
+              canManage={card.can_manage}
+            />
           )}
           {card?.can_manage && activeTab === "links" && (
             <PublicLinksPanel cardId={card.id} token={token} />
@@ -751,21 +778,18 @@ export function CardsWorkspace({
 
 function CardPrintPreviewPanel({
   card,
-  schema,
-  token,
+  layout: cardTemplateLayout,
+  fields,
+  registryName,
   organizationName,
 }: {
   card: CardRead;
-  schema: RegistrySchemaRead | null | undefined;
-  token: string;
+  layout: CardTemplateLayoutRead | null;
+  fields: FormFieldRead[];
+  registryName: string | null;
   organizationName: string | null;
 }) {
-  const cardTemplateLayoutQuery = useQuery({
-    queryKey: ["card-template-layout", token, card.card_template_id],
-    queryFn: () => getCardTemplateLayout(token, card.card_template_id),
-    enabled: Boolean(token && card.card_template_id),
-  });
-  const printView = cardTemplateLayoutQuery.data?.print_views[0] ?? null;
+  const printView = cardTemplateLayout?.print_views[0] ?? null;
   const layout = printView?.layout_json ?? null;
   const fieldValues = useMemo(
     () =>
@@ -778,21 +802,20 @@ function CardPrintPreviewPanel({
     () => ({
       "card.display_name": card.display_name,
       "card.id": card.id,
-      "registry.name": schema?.registry.name ?? "",
+      "registry.name": registryName ?? "",
       "organization.name": organizationName ?? "",
     }),
-    [card.display_name, card.id, organizationName, schema?.registry.name],
+    [card.display_name, card.id, organizationName, registryName],
   );
 
   return (
     <Panel title="Печатная форма">
-      <DataAlert error={cardTemplateLayoutQuery.error} />
       {!layout ? (
         <p className="data-empty">Для шаблона карточки пока нет печатной формы A4</p>
       ) : (
         <A4TemplateRenderer
           layout={layout}
-          fields={schema?.fields ?? []}
+          fields={fields}
           mode="readonly"
           zoom={0.64}
           showGrid={false}
@@ -1624,19 +1647,16 @@ function fileRefLabel(fileRef: ReturnType<typeof fileRefValueFromUnknown>) {
 
 function buildEditableCardFields(
   card: CardRead | null,
-  schema: RegistrySchemaRead | null,
+  fields: FormFieldRead[],
+  blocks: FormBlockRead[],
+  templateFieldIds: ReadonlySet<string> | null,
 ): EditableCardField[] {
   if (!card) {
     return [];
   }
 
-  const fieldsById = new Map((schema?.fields ?? []).map((field) => [field.id, field]));
-  const blocksById = new Map((schema?.blocks ?? []).map((block) => [block.id, block]));
-  const templateFieldIds = card.card_template_id
-    ? templateFieldIdSet(
-        schema?.templates.find((template) => template.id === card.card_template_id),
-      )
-    : null;
+  const fieldsById = new Map(fields.map((field) => [field.id, field]));
+  const blocksById = new Map(blocks.map((block) => [block.id, block]));
 
   return Object.values(card.blocks).flatMap((block) =>
     block.instances.flatMap((instance) =>

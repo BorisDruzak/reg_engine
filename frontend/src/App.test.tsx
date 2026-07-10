@@ -539,6 +539,7 @@ let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
 let denyNextGrantCreate = false;
 let denyAdminReadQueries = false;
+let denyRegistryPresentationApis = false;
 let cardItems: CardSummaryRead[];
 type TestFileRefValue = {
   attachment_id: string;
@@ -597,6 +598,7 @@ beforeEach(() => {
   grantItems = [...apiPayloads.grants.items];
   denyNextGrantCreate = false;
   denyAdminReadQueries = false;
+  denyRegistryPresentationApis = false;
   cardItems = [...apiPayloads.cards.items];
   cardValueStateById = {
     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": {
@@ -1556,6 +1558,9 @@ beforeEach(() => {
         return jsonResponse({ items: registryItems });
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema")) {
+        if (denyRegistryPresentationApis) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         return jsonResponse(currentRegistrySchema());
       }
       if (url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/card-templates")) {
@@ -1590,6 +1595,9 @@ beforeEach(() => {
         /^\/api\/v1\/card-templates\/([^/]+)\/layout$/,
       );
       if (cardTemplateLayoutMatch && init?.method === "GET") {
+        if (denyRegistryPresentationApis) {
+          return jsonResponse({ detail: "Forbidden" }, { status: 403 });
+        }
         const template = cardTemplateItems.find((item) => item.id === cardTemplateLayoutMatch[1]);
         if (!template) {
           return jsonResponse({ detail: "Not Found" }, { status: 404 });
@@ -1659,6 +1667,10 @@ beforeEach(() => {
           },
           sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
         });
+      }
+      const cardPresentationMatch = pathname.match(/^\/api\/v1\/cards\/([^/]+)\/presentation$/);
+      if (cardPresentationMatch && init?.method === "GET") {
+        return jsonResponse(currentCardPresentation(cardPresentationMatch[1]));
       }
       const cardTemplateLayoutGenerateMatch = pathname.match(
         /^\/api\/v1\/cards\/([^/]+)\/card-template-layout\/([^/]+)\/generate-(docx|pdf)$/,
@@ -2654,6 +2666,88 @@ function currentRegistrySchema() {
   };
 }
 
+function currentCardPresentation(cardId: string) {
+  const card = currentCardRead(cardId);
+  const template = cardTemplateItems.find((item) => item.id === card.card_template_id);
+  if (!template) {
+    throw new Error("Card template fixture is missing.");
+  }
+  const fieldIds = new Set(template.field_schema_json?.field_ids ?? []);
+  const fields = schemaFieldItems.filter((field) => fieldIds.has(field.id));
+  const blockIds = new Set(fields.map((field) => field.block_id));
+  const blocks = schemaBlockItems.filter((block) => blockIds.has(block.id));
+  const page = {
+    format: "A4" as const,
+    width_mm: 210,
+    height_mm: 297,
+    margin_mm: { top: 12, right: 12, bottom: 12, left: 12 },
+  };
+  const printLayout = {
+    version: "card_print_layout_v1",
+    page,
+    grid: { columns: 12, row_height_mm: 8, snap_mm: 2 },
+    sections: [],
+    overlays: [],
+    items: [],
+  };
+  const formSections = blocks.map((block, blockIndex) => ({
+    id: `block-${block.id}`,
+    block_id: block.id,
+    row: blockIndex * 2 + 1,
+    column: 1,
+    row_span: 2,
+    column_span: 12,
+    items: fields
+      .filter((field) => field.block_id === block.id)
+      .map((field, fieldIndex) => ({
+        id: `field-${field.id}`,
+        kind: "field",
+        field_id: field.id,
+        row: fieldIndex + 1,
+        column: 1,
+        row_span: 1,
+        column_span: 12,
+        text: null,
+      })),
+  }));
+
+  return {
+    card_id: card.id,
+    registry_id: card.registry_id,
+    registry_name: currentRegistrySchema().registry.name,
+    card_template_id: template.id,
+    card_template_name: template.name,
+    layout: {
+      version: "card_template_layout_v1",
+      revision: "app-test-presentation-revision-1",
+      card_template_id: template.id,
+      registry_id: template.registry_id,
+      structure: { blocks, fields },
+      form_layout: { columns: 12, sections: formSections },
+      print_views: [
+        {
+          id: "default-a4",
+          name: "Основная A4",
+          is_default: true,
+          document_template_id: null,
+          current_version_id: null,
+          source: "form_layout",
+          page,
+          items: [],
+          layout_json: printLayout,
+          output_filename_template: "{{ card.display_name }}.docx",
+        },
+      ],
+      export_settings: {
+        default_print_view_id: "default-a4",
+        output_filename_template: "{{ card.display_name }}.docx",
+        formats: ["docx", "pdf"],
+      },
+      sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+    },
+  };
+}
+
 function currentPublicPreview() {
   return {
     ...apiPayloads.publicPreview,
@@ -2929,6 +3023,38 @@ test("renders card values without mutation controls for a read-only actor", asyn
   enableFileRefSchema();
   enableRepeatableDetailsSchema();
   cardCanManage = false;
+  denyRegistryPresentationApis = true;
+  attachmentItems = [
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      stored_file_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      title: "Акт проверки",
+      description: null,
+      position: 0,
+      original_filename: "akt.txt",
+      content_type: "text/plain",
+      content_length_bytes: 11,
+      checksum_sha256: "a".repeat(64),
+      scanner_status: "deferred",
+      created_at: "2026-06-28T12:01:00Z",
+      archived_at: null,
+    },
+  ];
+  generatedDocumentItems = [
+    {
+      id: "12121212-1212-4212-8212-121212121212",
+      card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      template_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      stored_file_id: "34343434-3434-4343-8434-343434343434",
+      title: "Сводка карточки",
+      output_filename: "card.docx",
+      content_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      render_status: "generated",
+      created_at: "2026-06-28T12:03:00Z",
+      archived_at: null,
+    },
+  ];
   const user = userEvent.setup();
   render(<App />);
 
@@ -2974,6 +3100,67 @@ test("renders card values without mutation controls for a read-only actor", asyn
           String(input).includes("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") &&
           init?.method === "PATCH",
       ),
+  ).toBe(false);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/presentation"),
+      ),
+  ).toBe(true);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([input]) =>
+        String(input).endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/schema"),
+      ),
+  ).toBe(false);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([input]) =>
+        /\/api\/v1\/card-templates\/[^/]+\/layout$/.test(String(input)),
+      ),
+  ).toBe(false);
+
+  await user.click(screen.getByRole("tab", { name: "Вложения" }));
+  expect(await screen.findByText("Акт проверки")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Файл")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Загрузить файл" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Архивировать файл Акт проверки" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать файл Акт проверки" }));
+  expect(await screen.findByText("Файл скачан")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("tab", { name: "Документы" }));
+  expect(await screen.findByText("Сводка карточки")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Сформировать документ" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Сформировать PDF" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Создать шаблон" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Архивировать документ Сводка карточки" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Скачать документ Сводка карточки" }));
+  expect(await screen.findByText("Документ скачан")).toBeInTheDocument();
+
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([input]) =>
+        String(input).endsWith(
+          "/api/v1/registries/77777777-7777-4777-8777-777777777777/document-templates",
+        ),
+      ),
+  ).toBe(false);
+  expect(
+    vi.mocked(fetch).mock.calls.some(([input, init]) => {
+      const url = String(input);
+      return (
+        (url.includes("/attachments") || url.includes("/generated-documents")) &&
+        ["POST", "DELETE"].includes(init?.method ?? "GET")
+      );
+    }),
   ).toBe(false);
 });
 

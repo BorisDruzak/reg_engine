@@ -3798,7 +3798,8 @@ Known warnings and limitations:
 
 ## Phase 8K: Filled Card Workspace
 
-Status: planned; visual design and written specification approved on 2026-07-10.
+Status: implemented and locally verified on 2026-07-10; deployment remains a
+separate checkpoint.
 
 Goal:
 
@@ -3811,6 +3812,21 @@ Design and implementation plan:
 
 - `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
+
+Implementation checkpoint:
+
+- Filled cards render and edit through the configured block/field geometry,
+  using each backend `block_instance_id` exactly.
+- `GET /api/v1/cards/{card_id}/presentation` exposes only the readable card's
+  current template structure/layout after card visibility is enforced; it does
+  not grant registry schema or template-layout permissions.
+- Read-only card actors keep attachment and generated-document list/download
+  access, while upload, archive, template management, and document generation
+  remain hidden and backend-protected.
+- Local verification passed with 220 backend tests and 195 frontend tests;
+  PostgreSQL permission regressions remain skipped when `TEST_DATABASE_URL` is
+  not configured and execute only against a disposable database ending in
+  `_test`.
 
 ## Phase 8L: Public Link Review Lifecycle
 

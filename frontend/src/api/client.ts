@@ -28,6 +28,7 @@ import type {
   CardListRead,
   CardPrintPreviewPayload,
   CardPrintPreviewRead,
+  CardPresentationRead,
   CardRead,
   CardSummaryRead,
   CardTransferPayload,
@@ -431,6 +432,10 @@ export async function createOrganizationCard(
 
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
+}
+
+export async function readCardPresentation(token: string, cardId: string) {
+  return apiRequest<CardPresentationRead>(`/api/v1/cards/${cardId}/presentation`, { token });
 }
 
 export async function updateCard(token: string, cardId: string, payload: CardUpdatePayload) {

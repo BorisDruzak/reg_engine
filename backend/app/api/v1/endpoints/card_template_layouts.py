@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
 from app.api.v1.endpoints.documents import _document_service, _generated_document_to_read
 from app.schemas.card_template_layouts import (
+    CardPresentationRead,
     CardTemplateLayoutGeneratedDocumentRead,
     CardTemplateLayoutGeneratePayload,
     CardTemplateLayoutRead,
@@ -23,6 +24,21 @@ from app.services.card_template_layout import (
 from app.services.documents import DocumentServiceError
 
 router = APIRouter(tags=["card-template-layouts"])
+
+
+@router.get("/cards/{card_id}/presentation", response_model=CardPresentationRead)
+def read_card_presentation(
+    card_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardPresentationRead:
+    try:
+        return _layout_service(session).read_card_presentation_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
 
 
 @router.get("/card-templates/{template_id}/layout", response_model=CardTemplateLayoutRead)

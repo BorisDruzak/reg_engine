@@ -71,7 +71,7 @@ export function HomePage() {
   } = workspaceUiState;
 
   const token = session?.token ?? "";
-  const needsRegistrySchema = activeSection === "registries" || activeSection === "cards";
+  const needsRegistrySchema = activeSection === "registries";
   const needsCards = activeSection === "overview" || activeSection === "cards";
   const needsUsers = activeSection === "users" || activeSection === "access";
   const needsRoles = activeSection === "users" || activeSection === "access";
@@ -135,15 +135,19 @@ export function HomePage() {
     registriesQuery.data?.items.find((registry) => registry.is_default_for_owner_tree)?.id ??
     "";
   const schemaRegistryId = activeSection === "cards" ? cardWorkflowRegistryId : activeRegistryId;
-  const registrySchemaQuery = useQuery({
-    queryKey: ["registry-schema", token, schemaRegistryId],
-    queryFn: () => getRegistrySchema(token, schemaRegistryId),
-    enabled: Boolean(token && schemaRegistryId && needsRegistrySchema),
-  });
   const cardReadQuery = useQuery({
     queryKey: ["card", token, activeCardId],
     queryFn: () => readCard(token, activeCardId),
     enabled: Boolean(token && activeCardId),
+  });
+  const registrySchemaQuery = useQuery({
+    queryKey: ["registry-schema", token, schemaRegistryId],
+    queryFn: () => getRegistrySchema(token, schemaRegistryId),
+    enabled: Boolean(
+      token &&
+      schemaRegistryId &&
+      (needsRegistrySchema || (activeSection === "cards" && cardReadQuery.data?.can_manage)),
+    ),
   });
   const usersQuery = useQuery({
     queryKey: ["users", token],
@@ -382,7 +386,8 @@ export function HomePage() {
             organizationsQuery.error,
             activeSection === "organizations" ? organizationTreeQuery.error : null,
             registriesQuery.error,
-            activeSection === "registries" || activeSection === "cards"
+            activeSection === "registries" ||
+            (activeSection === "cards" && cardReadQuery.data?.can_manage)
               ? registrySchemaQuery.error
               : null,
             activeSection === "cards" ? cardsQuery.error : null,

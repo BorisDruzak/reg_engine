@@ -12,7 +12,15 @@ import { formatUiDateTime, uiText } from "@/app/uiText";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
 
-export function CardAttachmentsPanel({ cardId, token }: { cardId: string; token: string }) {
+export function CardAttachmentsPanel({
+  cardId,
+  token,
+  canManage,
+}: {
+  cardId: string;
+  token: string;
+  canManage: boolean;
+}) {
   const queryClient = useQueryClient();
   const formRef = useRef<HTMLFormElement>(null);
   const [title, setTitle] = useState("");
@@ -70,32 +78,35 @@ export function CardAttachmentsPanel({ cardId, token }: { cardId: string; token:
 
   return (
     <Panel title={uiText.attachments}>
-      <form ref={formRef} className="attachment-form" onSubmit={handleSubmit}>
-        <label className="field-editor-control">
-          <span>{uiText.fileTitle}</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} />
-        </label>
-        <label className="field-editor-control">
-          <span>{uiText.file}</span>
-          <input
-            aria-label={uiText.file}
-            type="file"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={!file || uploadMutation.isPending}
-        >
-          {uiText.uploadFile}
-        </button>
-      </form>
+      {canManage ? (
+        <form ref={formRef} className="attachment-form" onSubmit={handleSubmit}>
+          <label className="field-editor-control">
+            <span>{uiText.fileTitle}</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label className="field-editor-control">
+            <span>{uiText.file}</span>
+            <input
+              aria-label={uiText.file}
+              type="file"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={!file || uploadMutation.isPending}
+          >
+            {uiText.uploadFile}
+          </button>
+        </form>
+      ) : null}
       {message && <p className="inline-success attachment-status">{message}</p>}
       {localError && <p className="inline-alert attachment-status">{localError}</p>}
       <DataAlert error={attachmentsQuery.error} />
       <AttachmentList
         items={attachmentsQuery.data?.items ?? []}
+        canManage={canManage}
         downloadingId={downloadMutation.variables?.id ?? null}
         archivingId={archiveMutation.variables ?? null}
         onDownload={(attachment) => downloadMutation.mutate(attachment)}
@@ -107,12 +118,14 @@ export function CardAttachmentsPanel({ cardId, token }: { cardId: string; token:
 
 function AttachmentList({
   items,
+  canManage,
   downloadingId,
   archivingId,
   onDownload,
   onArchive,
 }: {
   items: AttachmentRead[];
+  canManage: boolean;
   downloadingId: string | null;
   archivingId: string | null;
   onDownload: (attachment: AttachmentRead) => void;
@@ -146,15 +159,17 @@ function AttachmentList({
               >
                 {uiText.download}
               </button>
-              <button
-                type="button"
-                className="ghost-button"
-                aria-label={`${uiText.archive} файл ${title}`}
-                disabled={archivingId === attachment.id}
-                onClick={() => onArchive(attachment)}
-              >
-                {uiText.archive}
-              </button>
+              {canManage ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-label={`${uiText.archive} файл ${title}`}
+                  disabled={archivingId === attachment.id}
+                  onClick={() => onArchive(attachment)}
+                >
+                  {uiText.archive}
+                </button>
+              ) : null}
             </div>
           </li>
         );
