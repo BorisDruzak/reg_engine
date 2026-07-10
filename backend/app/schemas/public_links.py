@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
+
 
 class PublicLinkCreate(BaseModel):
     expires_in_days: int = Field(default=7, ge=1, le=30)
@@ -88,6 +90,7 @@ class PublicLinkPreviewFieldRead(BaseModel):
     code: str
     label: str
     field_type: str
+    required_mode: str
     value: Any
     options_source_type: str | None
     options_source_id: UUID | None
@@ -106,7 +109,9 @@ class PublicLinkPreviewBlockRead(BaseModel):
     block_id: UUID
     code: str
     title: str
+    is_repeatable: bool
     layout_columns: int
+    display_config_json: dict[str, Any] | None
     instances: list[PublicLinkPreviewBlockInstanceRead]
 
 
@@ -115,6 +120,7 @@ class PublicLinkPreviewRead(BaseModel):
     display_name: str
     expires_at: datetime
     can_edit: bool
+    form_layout: CardTemplateFormLayoutRead
     blocks: list[PublicLinkPreviewBlockRead]
 
 

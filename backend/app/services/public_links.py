@@ -25,6 +25,7 @@ from app.models import (
     StoredFile,
 )
 from app.services.audit import AuditService
+from app.services.card_template_projection import resolve_card_template_form_layout
 from app.services.cards import CardService, CardServiceError
 from app.services.permissions import (
     PermissionDeniedError,
@@ -75,6 +76,7 @@ class PublicPreviewField:
     code: str
     label: str
     field_type: str
+    required_mode: str
     value: object | None
     options_source_type: str | None
     options_source_id: UUID | None
@@ -95,7 +97,9 @@ class PublicPreviewBlock:
     block_id: UUID
     code: str
     title: str
+    is_repeatable: bool
     layout_columns: int
+    display_config_json: dict[str, Any] | None
     instances: list[PublicPreviewBlockInstance] = field(default_factory=list)
 
 
@@ -105,6 +109,7 @@ class PublicLinkPreview:
     display_name: str
     expires_at: datetime
     can_edit: bool
+    form_layout: dict[str, Any]
     blocks: list[PublicPreviewBlock] = field(default_factory=list)
 
 
@@ -552,7 +557,9 @@ class PublicLinkService:
                     block_id=block.id,
                     code=block.code,
                     title=block.title,
+                    is_repeatable=block.is_repeatable,
                     layout_columns=block.layout_columns,
+                    display_config_json=block.display_config_json,
                     instances=preview_instances,
                 )
             )
@@ -562,6 +569,7 @@ class PublicLinkService:
             display_name=card.display_name,
             expires_at=public_link.expires_at,
             can_edit=public_link.can_edit and card.public_edit_enabled,
+            form_layout=self._sanitized_public_form_layout(card, schema_rows),
             blocks=blocks,
         )
 
@@ -1016,6 +1024,63 @@ class PublicLinkService:
                 continue
         return field_ids
 
+    def _sanitized_public_form_layout(
+        self,
+        card: Card,
+        schema_rows: list[tuple[FormBlock, FormField]],
+    ) -> dict[str, Any]:
+        template = self.session.get(CardTemplate, card.card_template_id)
+        if template is None:
+            raise PublicLinkError("Card template was not found.")
+        blocks_by_id = {block.id: block for block, _ in schema_rows}
+        fields_by_id = {field_model.id: field_model for _, field_model in schema_rows}
+        form_layout = resolve_card_template_form_layout(
+            template.field_schema_json,
+            blocks=[{"id": str(block.id)} for block in blocks_by_id.values()],
+            fields=[
+                {
+                    "id": str(field_model.id),
+                    "block_id": str(field_model.block_id),
+                }
+                for field_model in fields_by_id.values()
+            ],
+        )
+        allowed_block_ids = {str(block_id) for block_id in blocks_by_id}
+        allowed_field_ids = {str(field_id) for field_id in fields_by_id}
+        sections: list[dict[str, Any]] = []
+        for raw_section in form_layout["sections"]:
+            block_id = raw_section.get("block_id")
+            if block_id is None or str(block_id) not in allowed_block_ids:
+                continue
+            items = [
+                {
+                    "id": str(item["id"]),
+                    "kind": str(item.get("kind") or "field"),
+                    "field_id": str(item["field_id"]),
+                    "row": int(item["row"]),
+                    "column": int(item["column"]),
+                    "row_span": int(item["row_span"]),
+                    "column_span": int(item["column_span"]),
+                    "text": None,
+                }
+                for item in raw_section["items"]
+                if item.get("field_id") is not None and str(item["field_id"]) in allowed_field_ids
+            ]
+            if not items:
+                continue
+            sections.append(
+                {
+                    "id": str(raw_section["id"]),
+                    "block_id": str(block_id),
+                    "row": int(raw_section["row"]),
+                    "column": int(raw_section["column"]),
+                    "row_span": int(raw_section["row_span"]),
+                    "column_span": int(raw_section["column_span"]),
+                    "items": items,
+                }
+            )
+        return {"columns": 12, "sections": sections}
+
     def _get_active_public_field(self, field_id: UUID) -> FormField:
         field = self.session.get(FormField, field_id)
         if field is None or field.archived_at is not None or not field.is_active:
@@ -1151,6 +1216,7 @@ class PublicLinkService:
             code=field_model.code,
             label=field_model.label,
             field_type=field_model.field_type,
+            required_mode=field_model.required_mode,
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
             options_source_type=field_model.options_source_type,
             options_source_id=field_model.options_source_id,

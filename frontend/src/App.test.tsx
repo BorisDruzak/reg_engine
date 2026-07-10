@@ -492,11 +492,39 @@ const apiPayloads = {
     display_name: "Публичная карточка",
     expires_at: "2026-06-29T12:00:00Z",
     can_edit: true,
+    form_layout: {
+      columns: 12,
+      sections: [
+        {
+          id: "public-section",
+          block_id: "88888888-8888-4888-8888-888888888888",
+          row: 1,
+          column: 1,
+          row_span: 1,
+          column_span: 12,
+          items: [
+            {
+              id: "public-status-item",
+              kind: "field",
+              field_id: "99999999-9999-4999-8999-999999999997",
+              row: 1,
+              column: 1,
+              row_span: 1,
+              column_span: 12,
+              text: null,
+            },
+          ],
+        },
+      ],
+    },
     blocks: [
       {
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "public",
         title: "Публичный блок",
+        is_repeatable: false,
+        layout_columns: 12,
+        display_config_json: null,
         instances: [
           {
             block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -507,9 +535,12 @@ const apiPayloads = {
                 code: "public_status",
                 label: "Публичный статус",
                 field_type: "text",
+                required_mode: "not_required",
                 value: "drafted",
                 options_source_type: null,
                 options_source_id: null,
+                options_config_json: null,
+                display_config_json: null,
                 options: [],
               },
             ],
@@ -630,6 +661,17 @@ beforeEach(() => {
       const url = input instanceof Request ? input.url : String(input);
       const requestUrl = new URL(url, "http://localhost");
       const pathname = requestUrl.pathname;
+      if (url.endsWith("/api/v1/public-links/status")) {
+        return jsonResponse({
+          status: "active",
+          can_edit: true,
+          submitted_at: null,
+          reviewed_at: null,
+          review_comment: null,
+          completed_public_fields: null,
+          total_public_fields: null,
+        });
+      }
       if (url.endsWith("/api/v1/public-links/preview")) {
         return jsonResponse(currentPublicPreview());
       }
@@ -8062,15 +8104,14 @@ test("edits a public-link card without authentication", async () => {
 
   expect(await screen.findByRole("heading", { name: "Публичная карточка" })).toBeInTheDocument();
   expect(screen.getByText("Публичный блок")).toBeInTheDocument();
-  expect(screen.getByText("Публичное редактирование карточки")).toBeInTheDocument();
+  expect(screen.getAllByText("Публичное редактирование карточки")).not.toHaveLength(0);
 
   const statusInput = await screen.findByLabelText("Публичный статус");
   expect(statusInput).toHaveValue("drafted");
   await user.clear(statusInput);
   await user.type(statusInput, "submitted");
-  await user.click(screen.getByRole("button", { name: "Сохранить Публичный статус" }));
 
-  expect(await screen.findByText("Сохранено: Публичный статус")).toBeInTheDocument();
+  expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
   expect(await screen.findByRole("heading", { name: "Вложения" })).toBeInTheDocument();
   expect(screen.getByText("Нет файлов")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Документы" })).not.toBeInTheDocument();

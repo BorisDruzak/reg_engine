@@ -424,12 +424,15 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
         display_name=preview.display_name,
         expires_at=preview.expires_at,
         can_edit=preview.can_edit,
+        form_layout=preview.form_layout,
         blocks=[
             PublicLinkPreviewBlockRead(
                 block_id=block.block_id,
                 code=block.code,
                 title=block.title,
+                is_repeatable=block.is_repeatable,
                 layout_columns=block.layout_columns,
+                display_config_json=block.display_config_json,
                 instances=[
                     PublicLinkPreviewBlockInstanceRead(
                         block_instance_id=instance.block_instance_id,
@@ -440,6 +443,7 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
                                 code=field.code,
                                 label=field.label,
                                 field_type=field.field_type,
+                                required_mode=field.required_mode,
                                 value=field.value,
                                 options_source_type=field.options_source_type,
                                 options_source_id=field.options_source_id,

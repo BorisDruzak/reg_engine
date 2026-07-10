@@ -588,6 +588,7 @@ export type PublicLinkPreviewFieldRead = {
   code: string;
   label: string;
   field_type: string;
+  required_mode: string;
   value: unknown;
   options_source_type: string | null;
   options_source_id: string | null;
@@ -606,7 +607,9 @@ export type PublicLinkPreviewBlockRead = {
   block_id: string;
   code: string;
   title: string;
+  is_repeatable: boolean;
   layout_columns?: number;
+  display_config_json?: Record<string, unknown> | null;
   instances: PublicLinkPreviewBlockInstanceRead[];
 };
 
@@ -615,6 +618,7 @@ export type PublicLinkPreviewRead = {
   display_name: string;
   expires_at: string;
   can_edit: boolean;
+  form_layout: CardTemplateFormLayoutRead;
   blocks: PublicLinkPreviewBlockRead[];
 };
 

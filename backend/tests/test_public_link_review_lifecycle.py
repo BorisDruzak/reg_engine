@@ -21,7 +21,7 @@ import app.api.dependencies as api_dependencies
 from app.api.dependencies import get_db_session, raise_service_http_error
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AuditEvent, Card, CardPublicLink, FieldValue, User
+from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, User
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
@@ -1305,6 +1305,142 @@ def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_sta
     assert denied_manual_edit.status_code == 403, denied_manual_edit.text
     assert denied_manual_edit.json()["detail"] == "Недостаточно прав для выполнения операции."
     assert legacy["raw_token"] not in denied_manual_edit.text
+
+
+def test_public_preview_exposes_only_allowed_sanitized_form_layout(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    with Session(migrated_test_engine) as layout_session:
+        card = layout_session.get(Card, review_api_fixture.card_id)
+        assert card is not None
+        template = layout_session.get(CardTemplate, card.card_template_id)
+        assert template is not None
+        template.field_schema_json = {
+            **template.field_schema_json,
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "public-main",
+                        "block_id": str(review_api_fixture.block_id),
+                        "row": 2,
+                        "column": 4,
+                        "row_span": 2,
+                        "column_span": 6,
+                        "items": [
+                            {
+                                "id": "public-name",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.field_id),
+                                "row": 3,
+                                "column": 7,
+                                "row_span": 2,
+                                "column_span": 6,
+                            },
+                            {
+                                "id": "public-other",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.other_field_id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 6,
+                            },
+                            {
+                                "id": "private-field",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.non_editable_field_id),
+                                "row": 1,
+                                "column": 7,
+                                "row_span": 1,
+                                "column_span": 6,
+                            },
+                            {
+                                "id": "off-template-field",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.off_template_field_id),
+                                "row": 2,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 6,
+                            },
+                        ],
+                    },
+                    {
+                        "id": "off-template-block",
+                        "block_id": str(review_api_fixture.off_template_block_id),
+                        "row": 1,
+                        "column": 1,
+                        "row_span": 1,
+                        "column_span": 3,
+                        "items": [
+                            {
+                                "id": "off-template-block-field",
+                                "kind": "field",
+                                "field_id": str(review_api_fixture.off_template_block_field_id),
+                                "row": 1,
+                                "column": 1,
+                                "row_span": 1,
+                                "column_span": 12,
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+        layout_session.commit()
+
+    created_response = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={
+            "allowed_block_ids": [str(review_api_fixture.block_id)],
+            "allowed_field_ids": [str(review_api_fixture.field_id)],
+        },
+        headers=_actor_headers(review_api_fixture.admin_id),
+    )
+    assert created_response.status_code == 201, created_response.text
+    preview_response = transactional_api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": created_response.json()["raw_token"]},
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert preview["form_layout"] == {
+        "columns": 12,
+        "sections": [
+            {
+                "id": "public-main",
+                "block_id": str(review_api_fixture.block_id),
+                "row": 2,
+                "column": 4,
+                "row_span": 2,
+                "column_span": 6,
+                "items": [
+                    {
+                        "id": "public-name",
+                        "kind": "field",
+                        "field_id": str(review_api_fixture.field_id),
+                        "row": 3,
+                        "column": 7,
+                        "row_span": 2,
+                        "column_span": 6,
+                        "text": None,
+                    }
+                ],
+            }
+        ],
+    }
+    serialized_preview = json.dumps(preview, ensure_ascii=False)
+    for forbidden_id in {
+        review_api_fixture.other_field_id,
+        review_api_fixture.non_editable_field_id,
+        review_api_fixture.off_template_field_id,
+        review_api_fixture.off_template_block_id,
+        review_api_fixture.off_template_block_field_id,
+    }:
+        assert str(forbidden_id) not in serialized_preview
 
 
 def test_public_link_lifecycle_api_flow_and_closed_status_privacy(

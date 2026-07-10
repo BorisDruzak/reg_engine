@@ -1,28 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import {
   downloadPublicLinkAttachmentContent,
+  getPublicLinkStatus,
   listPublicLinkAttachments,
   readPublicLinkPreview,
+  submitPublicLink,
   updatePublicLinkFieldValue,
   uploadPublicLinkAttachment,
 } from "@/api/client";
 import type {
+  CardTemplateLayoutRead,
+  FormBlockRead,
+  FormFieldRead,
   PublicLinkAttachmentRead,
+  PublicLinkPreviewBlockRead,
   PublicLinkPreviewBlockInstanceRead,
   PublicLinkPreviewFieldRead,
+  PublicLinkPreviewRead,
+  PublicLinkSafeStatusRead,
 } from "@/api/types";
-import {
-  fieldTypeLabel,
-  formatUiDateTime,
-  instanceLabel,
-  saveLabel,
-  savedLabel,
-  uiText,
-} from "@/app/uiText";
+import { fieldTypeLabel, formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
 import { errorText } from "@/components/common/dataUtils";
+import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import {
   type FieldEditorState,
@@ -33,11 +35,28 @@ import {
 
 export function PublicLinkEditPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({
+    queryKey: ["public-link-status", rawToken],
+    queryFn: () => getPublicLinkStatus(rawToken),
+    enabled: Boolean(rawToken),
+  });
+  const editableStatus =
+    statusQuery.data?.can_edit === true &&
+    ["active", "changes_requested"].includes(statusQuery.data.status);
   const previewQuery = useQuery({
     queryKey: ["public-link-preview", rawToken],
     queryFn: () => readPublicLinkPreview(rawToken),
-    enabled: Boolean(rawToken),
+    enabled: Boolean(rawToken && editableStatus),
   });
+
+  useEffect(() => {
+    if (!rawToken || !statusQuery.data || editableStatus) return;
+    void queryClient.cancelQueries({ queryKey: ["public-link-preview", rawToken] });
+    void queryClient.cancelQueries({ queryKey: ["public-link-attachments", rawToken] });
+    queryClient.removeQueries({ queryKey: ["public-link-preview", rawToken], exact: true });
+    queryClient.removeQueries({ queryKey: ["public-link-attachments", rawToken], exact: true });
+  }, [editableStatus, queryClient, rawToken, statusQuery.data]);
 
   return (
     <main className="public-shell">
@@ -53,65 +72,399 @@ export function PublicLinkEditPage() {
 
       <section className="public-main">
         {!rawToken && <p className="data-alert">{uiText.publicTokenMissing}</p>}
+        {statusQuery.error && <p className="data-alert">{errorText(statusQuery.error)}</p>}
         {previewQuery.error && <p className="data-alert">{errorText(previewQuery.error)}</p>}
-        {previewQuery.isLoading && <p className="public-muted">{uiText.loadingCard}</p>}
+        {(statusQuery.isLoading || (editableStatus && previewQuery.isLoading)) && (
+          <p className="public-muted">{uiText.loadingCard}</p>
+        )}
 
-        {previewQuery.data && (
+        {editableStatus && statusQuery.data && previewQuery.data && (
           <div className="stack">
             <header className="public-title">
               <div>
-                <p className="section-kicker">{uiText.publicEdit}</p>
-                <h2>{previewQuery.data.display_name}</h2>
+                <p className="section-kicker">{uiText.publicCardEdit}</p>
+                <h2>Публичное заполнение карточки</h2>
+                <h3>{previewQuery.data.display_name}</h3>
               </div>
               <span>
                 {uiText.expires} {formatUiDateTime(previewQuery.data.expires_at)}
               </span>
             </header>
 
-            {previewQuery.data.blocks.length === 0 ? (
-              <p className="data-alert">{uiText.noEditablePublicFields}</p>
-            ) : (
-              previewQuery.data.blocks.map((block) => (
-                <section className="data-panel" key={block.block_id}>
-                  <header>
-                    <h3>{block.title}</h3>
-                  </header>
-                  <div className="field-editor-list">
-                    {publicFieldRows(block.instances).map((row) => (
-                      <div
-                        key={row.row}
-                        className="field-editor-layout-row"
-                        style={publicFieldColumnsStyle(row.columns)}
-                      >
-                        {row.fields.map(({ field, instanceOrdinal, blockInstanceId, key }) =>
-                          field.field_type === "static_text" ? (
-                            <PublicStaticField
-                              key={key}
-                              field={field}
-                              instanceOrdinal={instanceOrdinal}
-                            />
-                          ) : (
-                            <PublicFieldEditor
-                              key={key}
-                              blockInstanceId={blockInstanceId}
-                              field={field}
-                              instanceOrdinal={instanceOrdinal}
-                              rawToken={rawToken}
-                            />
-                          ),
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))
-            )}
-            <PublicLinkAttachmentsPanel rawToken={rawToken} />
+            <PublicEditableCard
+              preview={previewQuery.data}
+              rawToken={rawToken}
+              status={statusQuery.data}
+            />
           </div>
+        )}
+        {statusQuery.data && !editableStatus && (
+          <PublicLinkStatusReceipt status={statusQuery.data} />
         )}
       </section>
     </main>
   );
+}
+
+type PublicFieldSaveState = "idle" | "saving" | "saved" | "error";
+
+function PublicEditableCard({
+  preview,
+  rawToken,
+  status,
+}: {
+  preview: PublicLinkPreviewRead;
+  rawToken: string;
+  status: PublicLinkSafeStatusRead;
+}) {
+  const queryClient = useQueryClient();
+  const [fieldSaveStates, setFieldSaveStates] = useState<Record<string, PublicFieldSaveState>>({});
+  const submitMutation = useMutation({
+    mutationFn: () => submitPublicLink(rawToken),
+    onSuccess: (nextStatus) => {
+      queryClient.setQueryData(["public-link-status", rawToken], nextStatus);
+    },
+  });
+  const hasUnsavedFields = Object.values(fieldSaveStates).some(
+    (saveState) => saveState === "saving" || saveState === "error",
+  );
+
+  return (
+    <div className="stack">
+      {status.status === "changes_requested" && status.review_comment && (
+        <section className="data-panel public-review-comment" aria-label="Комментарий проверяющего">
+          <p className="section-kicker">Карточка возвращена на доработку</p>
+          <h3>Что нужно исправить</h3>
+          <p>{status.review_comment}</p>
+        </section>
+      )}
+      {preview.blocks.length === 0 ? (
+        <p className="data-alert">{uiText.noEditablePublicFields}</p>
+      ) : (
+        <PublicCardLayout
+          preview={preview}
+          rawToken={rawToken}
+          onFieldSaveStateChange={(fieldKey, saveState) =>
+            setFieldSaveStates((current) =>
+              current[fieldKey] === saveState ? current : { ...current, [fieldKey]: saveState },
+            )
+          }
+        />
+      )}
+      <PublicLinkAttachmentsPanel rawToken={rawToken} />
+      <section className="data-panel public-submit-panel">
+        <div>
+          <h3>Проверка заполнения</h3>
+          <p className="public-muted">
+            После отправки редактирование будет закрыто до решения администратора.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={submitMutation.isPending || hasUnsavedFields}
+          onClick={() => submitMutation.mutate()}
+        >
+          {status.status === "changes_requested"
+            ? "Повторно отправить на проверку"
+            : "Отправить на проверку"}
+        </button>
+        {hasUnsavedFields && <p className="inline-alert">Дождитесь сохранения всех изменений.</p>}
+        {submitMutation.error && <p className="inline-alert">{errorText(submitMutation.error)}</p>}
+      </section>
+    </div>
+  );
+}
+
+function PublicLinkStatusReceipt({ status }: { status: PublicLinkSafeStatusRead }) {
+  const receipt = publicStatusReceipt(status.status);
+  return (
+    <section className="data-panel public-status-receipt" aria-live="polite">
+      <p className="section-kicker">Статус публичной ссылки</p>
+      <h2>{receipt.title}</h2>
+      <p>{receipt.description}</p>
+      {status.submitted_at && <p>Отправлено: {formatUiDateTime(status.submitted_at)}</p>}
+      {status.reviewed_at && <p>Рассмотрено: {formatUiDateTime(status.reviewed_at)}</p>}
+      {status.completed_public_fields !== null && status.total_public_fields !== null && (
+        <p>
+          Заполнено полей: {status.completed_public_fields} из {status.total_public_fields}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function publicStatusReceipt(status: PublicLinkSafeStatusRead["status"]) {
+  if (status === "submitted") {
+    return {
+      title: "Карточка отправлена на проверку",
+      description: "Администратор проверит изменения. Редактирование временно закрыто.",
+    };
+  }
+  if (status === "approved") {
+    return {
+      title: "Заполнение завершено",
+      description: "Администратор подтвердил изменения и закрыл доступ к редактированию.",
+    };
+  }
+  if (status === "expired") {
+    return {
+      title: "Срок действия ссылки истёк",
+      description: "Для продолжения запросите у администратора новую публичную ссылку.",
+    };
+  }
+  return {
+    title: "Доступ к карточке закрыт",
+    description: "Редактирование по этой публичной ссылке больше недоступно.",
+  };
+}
+
+function PublicCardLayout({
+  preview,
+  rawToken,
+  onFieldSaveStateChange,
+}: {
+  preview: PublicLinkPreviewRead;
+  rawToken: string;
+  onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
+}) {
+  const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
+  const surfaces = useMemo(() => publicCardSurfaces(preview, layout), [layout, preview]);
+  return (
+    <div className="stack public-card-layout-surfaces">
+      {surfaces.map((surface) => (
+        <PublicCardLayoutSurface
+          key={surface.key}
+          onFieldSaveStateChange={onFieldSaveStateChange}
+          rawToken={rawToken}
+          surface={surface}
+        />
+      ))}
+    </div>
+  );
+}
+
+type PublicFieldContext = {
+  blockId: string;
+  blockInstanceId: string | null;
+  field: PublicLinkPreviewFieldRead;
+  instanceOrdinal: number;
+};
+
+type PublicCardSurface = {
+  key: string;
+  instanceOrdinal: number | null;
+  layout: CardTemplateLayoutRead;
+  fieldsById: Map<string, PublicFieldContext>;
+};
+
+function PublicCardLayoutSurface({
+  surface,
+  rawToken,
+  onFieldSaveStateChange,
+}: {
+  surface: PublicCardSurface;
+  rawToken: string;
+  onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
+}) {
+  return (
+    <section className="public-card-layout-surface">
+      {surface.instanceOrdinal !== null && (
+        <header className="public-repeatable-instance-header">
+          <h3>{instanceLabel(surface.instanceOrdinal)}</h3>
+        </header>
+      )}
+      <CardLayoutRenderer
+        layout={surface.layout}
+        mode="public-edit"
+        responsive
+        testIdPrefix={surface.key === "primary" ? "public" : `public-${surface.key}`}
+        renderFieldValue={({ field }) => {
+          const context = surface.fieldsById.get(field.id);
+          if (!context) return uiText.empty;
+          if (context.field.field_type === "file_ref") {
+            return <span className="public-muted">Редактирование файла недоступно</span>;
+          }
+          if (context.field.field_type === "static_text") {
+            return (
+              <div className="field-editor-static-text-body">
+                {publicStaticTextContent(context.field)}
+              </div>
+            );
+          }
+          return (
+            <PublicFieldEditor
+              key={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
+              fieldKey={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
+              blockInstanceId={context.blockInstanceId}
+              field={context.field}
+              instanceOrdinal={context.instanceOrdinal}
+              onSaveStateChange={onFieldSaveStateChange}
+              rawToken={rawToken}
+            />
+          );
+        }}
+      />
+    </section>
+  );
+}
+
+function publicCardSurfaces(
+  preview: PublicLinkPreviewRead,
+  layout: CardTemplateLayoutRead,
+): PublicCardSurface[] {
+  const previewBlocksById = new Map(preview.blocks.map((block) => [block.block_id, block]));
+  const primarySections = layout.form_layout.sections.filter(
+    (section) => !section.block_id || !previewBlocksById.get(section.block_id)?.is_repeatable,
+  );
+  const surfaces: PublicCardSurface[] = [];
+
+  if (primarySections.length > 0) {
+    const primaryBlockIds = new Set(
+      primarySections.map((section) => section.block_id).filter(Boolean),
+    );
+    surfaces.push({
+      key: "primary",
+      instanceOrdinal: null,
+      layout: publicLayoutWithSections(layout, primarySections),
+      fieldsById: publicFieldsForInstances(
+        preview.blocks
+          .filter((block) => primaryBlockIds.has(block.block_id))
+          .flatMap((block) => block.instances.slice(0, 1).map((instance) => ({ block, instance }))),
+      ),
+    });
+  }
+
+  for (const block of preview.blocks) {
+    if (!block.is_repeatable) continue;
+    const section = layout.form_layout.sections.find(
+      (candidate) => candidate.block_id === block.block_id,
+    );
+    if (!section) continue;
+    for (const instance of block.instances) {
+      if (!instance.block_instance_id) continue;
+      surfaces.push({
+        key: `instance-${instance.block_instance_id}`,
+        instanceOrdinal: instance.ordinal,
+        layout: publicLayoutWithSections(layout, [
+          { ...section, id: `${section.id}-${instance.block_instance_id}` },
+        ]),
+        fieldsById: publicFieldsForInstances([{ block, instance }]),
+      });
+    }
+  }
+
+  return surfaces;
+}
+
+function publicLayoutWithSections(
+  layout: CardTemplateLayoutRead,
+  sections: CardTemplateLayoutRead["form_layout"]["sections"],
+): CardTemplateLayoutRead {
+  const blockIds = new Set(sections.map((section) => section.block_id).filter(Boolean));
+  return {
+    ...layout,
+    structure: {
+      blocks: layout.structure.blocks.filter((block) => blockIds.has(block.id)),
+      fields: layout.structure.fields.filter((field) => blockIds.has(field.block_id)),
+    },
+    form_layout: { ...layout.form_layout, sections },
+  };
+}
+
+function publicFieldsForInstances(
+  entries: Array<{
+    block: PublicLinkPreviewBlockRead;
+    instance: PublicLinkPreviewBlockInstanceRead;
+  }>,
+) {
+  const result = new Map<string, PublicFieldContext>();
+  for (const { block, instance } of entries) {
+    for (const field of instance.fields) {
+      result.set(field.field_id, {
+        blockId: block.block_id,
+        blockInstanceId: instance.block_instance_id,
+        field,
+        instanceOrdinal: instance.ordinal,
+      });
+    }
+  }
+  return result;
+}
+
+function publicCardTemplateLayout(preview: PublicLinkPreviewRead): CardTemplateLayoutRead {
+  const blocks: FormBlockRead[] = preview.blocks.map((block, index) => ({
+    id: block.block_id,
+    registry_id: "public",
+    code: block.code,
+    title: block.title,
+    description: null,
+    position: index,
+    is_repeatable: block.is_repeatable,
+    is_active: true,
+    public_visible: true,
+    public_editable: true,
+    layout_columns: block.layout_columns ?? 12,
+    display_config_json: block.display_config_json ?? null,
+  }));
+  const fields = [...publicPreviewFieldsById(preview.blocks).values()].map(
+    ({ field, blockId }, index): FormFieldRead => ({
+      id: field.field_id,
+      block_id: blockId,
+      code: field.code,
+      label: field.label,
+      description: null,
+      field_type: field.field_type,
+      position: index,
+      required_mode: field.required_mode,
+      options_source_type: field.options_source_type,
+      options_source_id: field.options_source_id,
+      options_config_json: field.options_config_json ?? null,
+      display_config_json: field.display_config_json ?? null,
+      is_active: true,
+      is_list_display: false,
+      public_visible: true,
+      public_editable: field.field_type !== "file_ref" && field.field_type !== "static_text",
+    }),
+  );
+  return {
+    version: "card_template_layout_v1",
+    revision: "public-preview",
+    card_template_id: "public",
+    registry_id: "public",
+    structure: { blocks, fields },
+    form_layout: preview.form_layout,
+    print_views: [],
+    export_settings: { output_filename_template: "card", formats: [] },
+    sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+  };
+}
+
+function publicPreviewFieldsById(blocks: PublicLinkPreviewBlockRead[]) {
+  const result = new Map<
+    string,
+    {
+      blockId: string;
+      blockInstanceId: string | null;
+      field: PublicLinkPreviewFieldRead;
+      instanceOrdinal: number;
+    }
+  >();
+  for (const block of blocks) {
+    for (const instance of block.instances) {
+      for (const field of instance.fields) {
+        if (!result.has(field.field_id)) {
+          result.set(field.field_id, {
+            blockId: block.block_id,
+            blockInstanceId: instance.block_instance_id,
+            field,
+            instanceOrdinal: instance.ordinal,
+          });
+        }
+      }
+    }
+  }
+  return result;
 }
 
 function PublicLinkAttachmentsPanel({ rawToken }: { rawToken: string }) {
@@ -266,48 +619,98 @@ function PublicAttachmentList({
 
 function PublicFieldEditor({
   rawToken,
+  fieldKey,
   blockInstanceId,
   instanceOrdinal,
   field,
+  onSaveStateChange,
 }: {
   rawToken: string;
+  fieldKey: string;
   blockInstanceId: string | null;
   instanceOrdinal: number;
   field: PublicLinkPreviewFieldRead;
+  onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
 }) {
-  const queryClient = useQueryClient();
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
   const [localError, setLocalError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const mutation = useMutation({
-    mutationFn: (value: unknown) =>
-      updatePublicLinkFieldValue(rawToken, field.field_id, value, blockInstanceId),
-    onSuccess: async () => {
-      setSaved(true);
-      await queryClient.invalidateQueries({ queryKey: ["public-link-preview", rawToken] });
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const latestVersionRef = useRef(0);
+  const queuedSaveRef = useRef<{ value: unknown; version: number } | null>(null);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
     },
-  });
+    [],
+  );
+
+  async function drainSaveQueue() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+
+    while (queuedSaveRef.current) {
+      const pendingSave = queuedSaveRef.current;
+      queuedSaveRef.current = null;
+      try {
+        await updatePublicLinkFieldValue(
+          rawToken,
+          field.field_id,
+          pendingSave.value,
+          blockInstanceId,
+        );
+        if (
+          mountedRef.current &&
+          pendingSave.version === latestVersionRef.current &&
+          queuedSaveRef.current === null
+        ) {
+          setLocalError(null);
+          setSaveState("saved");
+          onSaveStateChange(fieldKey, "saved");
+        }
+      } catch (error) {
+        if (
+          mountedRef.current &&
+          pendingSave.version === latestVersionRef.current &&
+          queuedSaveRef.current === null
+        ) {
+          setLocalError(errorText(error));
+          setSaveState("error");
+          onSaveStateChange(fieldKey, "error");
+        }
+      }
+    }
+
+    savingRef.current = false;
+  }
 
   function updateRawValue(nextValue: FieldEditorState) {
     setRawValue(nextValue);
-    setSaved(false);
     setLocalError(null);
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    const version = latestVersionRef.current + 1;
+    latestVersionRef.current = version;
     try {
-      mutation.mutate(coerceEditorValue(field.field_type, rawValue));
+      queuedSaveRef.current = {
+        value: coerceEditorValue(field.field_type, nextValue),
+        version,
+      };
+      setSaveState("saving");
+      onSaveStateChange(fieldKey, "saving");
+      void drainSaveQueue();
     } catch (error) {
+      queuedSaveRef.current = null;
       setLocalError(errorText(error));
+      setSaveState("error");
+      onSaveStateChange(fieldKey, "error");
     }
   }
 
   return (
-    <form
+    <div
       className={["field-editor-row", publicFieldLayoutClassName(field)].filter(Boolean).join(" ")}
       style={publicFieldSpanStyle(field)}
-      onSubmit={handleSubmit}
     >
       <div className="field-editor-meta">
         <strong>{field.label}</strong>
@@ -330,84 +733,11 @@ function PublicFieldEditor({
           />
         </div>
       </label>
-      <button type="submit" className="primary-button" disabled={mutation.isPending}>
-        {saveLabel(field.label)}
-      </button>
-      {(localError || mutation.error) && (
-        <p className="inline-alert">{localError ?? errorText(mutation.error)}</p>
-      )}
-      {saved && <p className="inline-success">{savedLabel(field.label)}</p>}
-    </form>
-  );
-}
-
-function PublicStaticField({
-  field,
-  instanceOrdinal,
-}: {
-  field: PublicLinkPreviewFieldRead;
-  instanceOrdinal: number;
-}) {
-  return (
-    <div
-      className={["field-editor-row", "field-editor-static-row", publicFieldLayoutClassName(field)]
-        .filter(Boolean)
-        .join(" ")}
-      style={publicFieldSpanStyle(field)}
-    >
-      <div className="field-editor-meta">
-        <strong>{field.label}</strong>
-        <span>
-          {instanceLabel(instanceOrdinal)} / {fieldTypeLabel(field.field_type)}
-        </span>
-      </div>
-      <div className="field-editor-control field-editor-static-text">
-        <span>{field.label}</span>
-        <div className="field-editor-static-text-body">{publicStaticTextContent(field)}</div>
-      </div>
+      {saveState === "saving" && <p className="public-muted">Сохранение…</p>}
+      {localError && <p className="inline-alert">{localError}</p>}
+      {saveState === "saved" && <p className="inline-success">Все изменения сохранены</p>}
     </div>
   );
-}
-
-type PublicFieldLayoutItem = {
-  key: string;
-  field: PublicLinkPreviewFieldRead;
-  instanceOrdinal: number;
-  blockInstanceId: string | null;
-};
-
-function publicFieldRows(instances: PublicLinkPreviewBlockInstanceRead[]) {
-  const rows = new Map<number, { row: number; columns: number; fields: PublicFieldLayoutItem[] }>();
-  for (const instance of instances) {
-    instance.fields.forEach((field, index) => {
-      const rowNumber = publicFieldLayoutRow(field, index + 1);
-      const column = publicFieldLayoutColumn(field, 1);
-      const span = Math.min(publicFieldColumnSpan(field), maxVisualColumns - column + 1);
-      const row = rows.get(rowNumber) ?? { row: rowNumber, columns: 1, fields: [] };
-      row.fields.push({
-        key: `${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
-        field,
-        instanceOrdinal: instance.ordinal,
-        blockInstanceId: instance.block_instance_id,
-      });
-      row.columns = Math.max(row.columns, column + span - 1);
-      rows.set(rowNumber, row);
-    });
-  }
-  return [...rows.values()]
-    .map((row) => ({
-      ...row,
-      columns: clampColumns(row.columns),
-      fields: row.fields.sort(
-        (left, right) =>
-          publicFieldLayoutColumn(left.field, 1) - publicFieldLayoutColumn(right.field, 1),
-      ),
-    }))
-    .sort((left, right) => left.row - right.row);
-}
-
-function publicFieldColumnsStyle(columns: number | null | undefined): CSSProperties {
-  return { "--field-editor-columns": String(clampColumns(columns)) } as CSSProperties;
 }
 
 function publicFieldSpanStyle(field: PublicLinkPreviewFieldRead): CSSProperties {
@@ -445,11 +775,6 @@ function displayConfigNumber(field: PublicLinkPreviewFieldRead, key: string, fal
 }
 
 const maxVisualColumns = 5;
-const maxVisualRows = 50;
-
-function publicFieldLayoutRow(field: PublicLinkPreviewFieldRead, fallback: number) {
-  return Math.min(maxVisualRows, Math.max(1, displayConfigNumber(field, "layout_row", fallback)));
-}
 
 function publicFieldLayoutColumn(field: PublicLinkPreviewFieldRead, fallback: number) {
   return Math.min(
@@ -460,13 +785,6 @@ function publicFieldLayoutColumn(field: PublicLinkPreviewFieldRead, fallback: nu
 
 function publicFieldColumnSpan(field: PublicLinkPreviewFieldRead) {
   return Math.min(maxVisualColumns, Math.max(1, displayConfigNumber(field, "column_span", 1)));
-}
-
-function clampColumns(value: number | null | undefined) {
-  if (!Number.isFinite(value)) {
-    return 1;
-  }
-  return Math.min(maxVisualColumns, Math.max(1, Number(value)));
 }
 
 function formatBytes(value: number) {
