@@ -4075,9 +4075,11 @@ Implementation checkpoint:
   Link creation/sending does not change lifecycle status. The manual
   `Активировать карточку` action and its frontend mutation were removed.
 - Web blocks render only the internal rows occupied by fields and align to
-  content, while saved 12 x 4 rectangles remain unchanged. Linked A4 rendering
-  explicitly retains four internal rows. `Создать поле` now follows the field
-  grid in a block footer.
+  content, while saved 12 x 4 rectangles remain unchanged. Outer web rows grow
+  independently with the actual block content, so field-height changes expand
+  their block and move later logical rows instead of overlapping them. Linked
+  A4 rendering explicitly retains four internal rows. `Создать поле` now
+  follows the field grid in a block footer.
 - A design-mode field opens on click or Enter/Space, starts moving only after a
   six-pixel hold-and-drag threshold, and exposes eight edge/corner resize zones
   on hover or focus. The visible `Изменить` and field `⠿` buttons were removed;

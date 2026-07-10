@@ -541,15 +541,67 @@ describe("CardWebLayoutCanvas", () => {
   test("keeps A4 exact height when compact block projection is disabled", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ compactBlockHeight: false })} />);
 
+    const canvas = screen.getByTestId("card-layout-canvas");
     const blockNode = screen.getByTestId("layout-block-block-fio");
     const fieldGrid = blockNode.querySelector<HTMLElement>("[data-layout-grid='fields']");
     expect(fieldGrid).not.toBeNull();
     expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, auto))");
     expect(fieldGrid!.style.minHeight).toBe("12rem");
     expect(blockNode.style.alignSelf).toBe("");
+    expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(6rem, 1fr))");
+    expect(canvas.style.minHeight).toBe("24rem");
   });
 
-  test("uses four canvas rows while compacting web blocks and keeping live previews exact", () => {
+  test("grows the web block row with a resized field without overlapping the next block", () => {
+    const tallFieldLayout: CardTemplateLayoutRead = {
+      ...twoBlockLayout,
+      form_layout: {
+        ...twoBlockLayout.form_layout,
+        sections: [
+          {
+            ...twoBlockLayout.form_layout.sections[0],
+            row: 1,
+            row_span: 1,
+            items: [
+              {
+                ...twoBlockLayout.form_layout.sections[0].items[0],
+                row_span: 4,
+              },
+            ],
+          },
+          {
+            ...twoBlockLayout.form_layout.sections[1],
+            row: 2,
+            row_span: 1,
+          },
+        ],
+      },
+    };
+
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          layout: tallFieldLayout,
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+        })}
+      />,
+    );
+
+    const canvas = screen.getByTestId("card-layout-canvas");
+    const firstBlock = screen.getByTestId("layout-block-block-fio");
+    const nextBlock = screen.getByTestId("layout-block-block-work");
+    const firstGrid = firstBlock.querySelector<HTMLElement>("[data-layout-grid='fields']");
+
+    expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(0, auto))");
+    expect(canvas.style.minHeight).toBe("0");
+    expect(firstGrid!.style.gridTemplateRows).toBe("repeat(4, minmax(3rem, auto))");
+    expect(firstGrid!.style.minHeight).toBe("12rem");
+    expect(firstBlock.style.gridRow).toBe("1 / span 1");
+    expect(nextBlock.style.gridRow).toBe("2 / span 1");
+  });
+
+  test("uses adaptive web canvas rows while keeping live previews exact", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 
     const canvas = screen.getByTestId("card-layout-canvas");
@@ -557,9 +609,8 @@ describe("CardWebLayoutCanvas", () => {
       .getByTestId("layout-field-field-name")
       .closest<HTMLElement>("[data-layout-grid='fields']");
     expect(fieldGrid).not.toBeNull();
-    expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(6rem, 1fr))");
-    expect(canvas.style.gridTemplateRows).not.toContain("auto");
-    expect(canvas.style.minHeight).toBe("24rem");
+    expect(canvas.style.gridTemplateRows).toBe("repeat(4, minmax(0, auto))");
+    expect(canvas.style.minHeight).toBe("0");
     expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(3, minmax(3rem, auto))");
     expect(fieldGrid!.style.minHeight).toBe("9rem");
 

@@ -77,7 +77,9 @@ Target system:
 - Block and field creation, insertion, and editing are disclosed in context
   inside the canvas. `Создать поле` is placed in the block footer below its
   existing fields. Web blocks project only their occupied internal field rows
-  and align to content without changing saved 12 x 4 geometry; linked A4
+  and align to content without changing saved 12 x 4 geometry. Outer web rows
+  grow independently with their block content, so increasing a field's height
+  moves later rows down instead of overlapping the next block; linked A4
   rendering explicitly keeps all four print rows. Inline editors use the real
   schema APIs and preserve the schema-driven block/field contracts; the preview
   stage is fully read-only.
