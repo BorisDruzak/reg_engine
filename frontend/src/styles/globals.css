@@ -4039,13 +4039,12 @@ tr:last-child td {
   padding: 12px;
 }
 
-.public-link-review-fields {
+.public-link-review-field-diffs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
-.public-link-review-fields article {
+.public-link-review-field-diffs article {
   display: grid;
   gap: 4px;
   border-left: 3px solid #d0d5dd;
@@ -4053,12 +4052,13 @@ tr:last-child td {
   background: #f8fafc;
 }
 
-.public-link-review-fields article.is-changed {
+.public-link-review-field-diffs article.is-changed {
   border-left-color: #b54708;
   background: #fffaf2;
 }
 
-.public-link-review-fields span {
+.public-link-review-field-diffs span,
+.public-link-review-out-of-scope {
   color: #475467;
   font-size: 0.8rem;
 }

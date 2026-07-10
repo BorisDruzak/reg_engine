@@ -763,6 +763,7 @@ export function CardsWorkspace({
               cardId={card.id}
               createFormOpen={publicLinkCreateOpen}
               fields={presentationFields}
+              layout={presentationLayout}
               onCreateFormOpenChange={setPublicLinkCreateOpen}
               token={token}
             />

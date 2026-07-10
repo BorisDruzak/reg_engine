@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
+  CardTemplateLayoutRead,
   FormBlockRead,
   FormFieldRead,
   PublicLinkRead,
@@ -34,16 +35,63 @@ const fields: FormFieldRead[] = [
   field("field-private", "private", "Служебное поле", { public_editable: false }),
   field("field-file", "file", "Файл", { field_type: "file_ref" }),
 ];
+const layout: CardTemplateLayoutRead = {
+  version: "card_template_layout_v1",
+  revision: "review-layout-revision",
+  card_template_id: "template-1",
+  registry_id: "registry-1",
+  structure: { blocks: [block], fields },
+  form_layout: {
+    columns: 12,
+    sections: [
+      {
+        id: "section-main",
+        block_id: block.id,
+        row: 2,
+        column: 4,
+        row_span: 2,
+        column_span: 6,
+        items: [
+          {
+            id: "item-name",
+            kind: "field",
+            field_id: "field-name",
+            row: 3,
+            column: 7,
+            row_span: 2,
+            column_span: 5,
+          },
+          {
+            id: "item-surname",
+            kind: "field",
+            field_id: "field-surname",
+            row: 1,
+            column: 1,
+            row_span: 1,
+            column_span: 6,
+          },
+        ],
+      },
+    ],
+  },
+  print_views: [],
+  export_settings: { output_filename_template: "card", formats: ["pdf"] },
+  sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+};
 
 let links: PublicLinkRead[];
 let fetchCalls: { method: string; path: string; body: unknown }[];
 let reviewRequestCount: number;
+let reviewResponseMode: "success" | "slow" | "error";
+let resolveReviewResponse: ((response: Response) => void) | null;
 let clipboardWrite: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   links = [];
   fetchCalls = [];
   reviewRequestCount = 0;
+  reviewResponseMode = "success";
+  resolveReviewResponse = null;
   clipboardWrite = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -121,7 +169,7 @@ describe("PublicLinkReviewPanel", () => {
     expect(reviewRequestCount).toBe(0);
     await user.click(screen.getByRole("button", { name: "Открыть проверку" }));
 
-    expect(await screen.findByRole("heading", { name: "Основные сведения" })).toBeInTheDocument();
+    expect(await screen.findByText("Основные сведения")).toBeInTheDocument();
     expect(screen.getByText("Имя")).toBeInTheDocument();
     expect(screen.getByText("Было: Пусто")).toBeInTheDocument();
     expect(screen.getByText("Стало: Иван")).toBeInTheDocument();
@@ -140,6 +188,66 @@ describe("PublicLinkReviewPanel", () => {
         comment: "Уточните имя",
       }),
     );
+  });
+
+  test("keeps review lifecycle actions unavailable until a slow review request succeeds", async () => {
+    const user = userEvent.setup();
+    reviewResponseMode = "slow";
+    links = [
+      publicLink("submitted", { status: "submitted", submitted_at: "2026-07-10T10:00:00Z" }),
+    ];
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Открыть проверку" }));
+    await waitFor(() => expect(reviewRequestCount).toBe(1));
+    expect(screen.queryByRole("button", { name: "Вернуть на доработку" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Подтвердить и закрыть доступ" }),
+    ).not.toBeInTheDocument();
+
+    resolveReviewResponse?.(jsonResponse(review("submitted")));
+    expect(
+      await screen.findByRole("button", { name: "Подтвердить и закрыть доступ" }),
+    ).toBeInTheDocument();
+  });
+
+  test("keeps review lifecycle actions unavailable when review loading fails", async () => {
+    const user = userEvent.setup();
+    reviewResponseMode = "error";
+    links = [
+      publicLink("submitted", { status: "submitted", submitted_at: "2026-07-10T10:00:00Z" }),
+    ];
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Открыть проверку" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Вернуть на доработку" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Подтвердить и закрыть доступ" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("renders review differences at configured form layout geometry", async () => {
+    const user = userEvent.setup();
+    links = [
+      publicLink("submitted", { status: "submitted", submitted_at: "2026-07-10T10:00:00Z" }),
+    ];
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Открыть проверку" }));
+    await screen.findByText("Стало: Иван");
+
+    expect(screen.getByTestId("review-block-section-main")).toHaveStyle({
+      gridColumn: "4 / span 6",
+      gridRow: "2 / span 2",
+    });
+    const nameField = screen.getByTestId("review-field-item-name");
+    expect(nameField).toHaveStyle({
+      gridColumn: "7 / span 5",
+      gridRow: "3 / span 2",
+    });
+    expect(within(nameField).getByText("Было: Пусто")).toBeInTheDocument();
+    expect(within(nameField).getByText("Стало: Иван")).toBeInTheDocument();
   });
 
   test("confirms approval, renders closed timeline, starts legacy review and preserves disable", async () => {
@@ -214,6 +322,7 @@ function PublicLinkReviewPanelHarness({ initiallyOpen }: { initiallyOpen: boolea
       cardId={cardId}
       createFormOpen={createFormOpen}
       fields={fields}
+      layout={layout}
       onCreateFormOpenChange={setCreateFormOpen}
       token={token}
     />
@@ -245,6 +354,14 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
   const reviewMatch = path.match(/^\/api\/v1\/public-links\/([^/]+)\/review$/);
   if (reviewMatch && method === "GET") {
     reviewRequestCount += 1;
+    if (reviewResponseMode === "slow") {
+      return new Promise<Response>((resolve) => {
+        resolveReviewResponse = resolve;
+      });
+    }
+    if (reviewResponseMode === "error") {
+      return jsonResponse({ detail: "Проверка временно недоступна" }, 500);
+    }
     return jsonResponse(review(reviewMatch[1]!));
   }
   const lifecycleMatch = path.match(
@@ -365,9 +482,9 @@ function field(
   };
 }
 
-function jsonResponse(body: unknown) {
+function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "Content-Type": "application/json" },
   });
 }

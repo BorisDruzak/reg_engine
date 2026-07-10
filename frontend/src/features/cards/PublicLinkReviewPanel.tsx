@@ -11,6 +11,7 @@ import {
   startPublicLinkReviewCycle,
 } from "@/api/client";
 import type {
+  CardTemplateLayoutRead,
   FormBlockRead,
   FormFieldRead,
   PublicLinkCreatePayload,
@@ -26,6 +27,7 @@ import {
 } from "@/components/common/AdminMutation";
 import { Panel } from "@/components/common/DataSurfaces";
 import { formatDate, shortId } from "@/components/common/dataUtils";
+import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import { formatValue } from "./fieldEditorUtils";
 
@@ -41,6 +43,7 @@ export function PublicLinkReviewPanel({
   cardId,
   createFormOpen,
   fields,
+  layout,
   onCreateFormOpenChange,
   token,
 }: {
@@ -48,6 +51,7 @@ export function PublicLinkReviewPanel({
   cardId: string;
   createFormOpen?: boolean;
   fields: FormFieldRead[];
+  layout: CardTemplateLayoutRead | null;
   onCreateFormOpenChange?: (open: boolean) => void;
   token: string;
 }) {
@@ -114,6 +118,7 @@ export function PublicLinkReviewPanel({
     },
     enabled: Boolean(selectedReviewId && selectedReviewLink?.status === "submitted"),
   });
+  const reviewReady = reviewQuery.isSuccess && Boolean(reviewQuery.data);
 
   const invalidateLinkQueries = async () => {
     await Promise.all([
@@ -432,14 +437,16 @@ export function PublicLinkReviewPanel({
             публичный доступ.
           </p>
           {reviewQuery.isLoading ? <p>{uiText.loadingCard}</p> : null}
-          {reviewQuery.data ? (
+          {reviewQuery.data && layout ? (
             <ReviewDiff
-              blocks={blocks}
-              fields={reviewQuery.data.fields}
               attachments={reviewQuery.data.attachments}
+              fields={reviewQuery.data.fields}
+              layout={layout}
             />
+          ) : reviewQuery.data ? (
+            <p className="data-empty">Макет карточки недоступен</p>
           ) : null}
-          {requestChangesOpen ? (
+          {reviewReady && requestChangesOpen ? (
             <form className="public-link-comment-form" onSubmit={submitChangesRequest}>
               <label>
                 <span>Комментарий для пользователя</span>
@@ -475,7 +482,7 @@ export function PublicLinkReviewPanel({
                 </button>
               </div>
             </form>
-          ) : (
+          ) : reviewReady ? (
             <div className="row-actions public-link-review-actions">
               <button
                 type="button"
@@ -492,7 +499,7 @@ export function PublicLinkReviewPanel({
                 Подтвердить и закрыть доступ
               </button>
             </div>
-          )}
+          ) : null}
         </section>
       ) : null}
       {approvalTarget ? (
@@ -634,11 +641,10 @@ function PublicLinkTimelineItem({
 }
 
 function ReviewDiff({
-  blocks,
   fields,
   attachments,
+  layout,
 }: {
-  blocks: FormBlockRead[];
   fields: PublicLinkReviewFieldDiffRead[];
   attachments: {
     attachment_id: string;
@@ -647,37 +653,49 @@ function ReviewDiff({
     content_length_bytes: number;
     change: "added" | "archived";
   }[];
+  layout: CardTemplateLayoutRead;
 }) {
-  const blockIds = [...new Set(fields.map((field) => field.block_id))];
+  const diffsByFieldId = useMemo(() => {
+    const result = new Map<string, PublicLinkReviewFieldDiffRead[]>();
+    for (const field of fields) {
+      const fieldDiffs = result.get(field.field_id) ?? [];
+      fieldDiffs.push(field);
+      result.set(field.field_id, fieldDiffs);
+    }
+    return result;
+  }, [fields]);
   return (
     <div className="public-link-review-layout">
-      {blockIds.map((blockId) => {
-        const block = blocks.find((item) => item.id === blockId);
-        return (
-          <section key={blockId} className="public-link-review-block">
-            <h4>{block?.title ?? "Блок карточки"}</h4>
-            <div className="public-link-review-fields">
-              {fields
-                .filter((field) => field.block_id === blockId)
-                .map((field) => {
-                  const changed = JSON.stringify(field.before) !== JSON.stringify(field.after);
-                  return (
-                    <article
-                      key={`${field.block_instance_id ?? "base"}:${field.field_id}`}
-                      className={changed ? "is-changed" : undefined}
-                    >
-                      <strong>{field.label}</strong>
-                      <span>{`Было: ${formatValue(field.before)}`}</span>
-                      <span>{`Стало: ${formatValue(field.after)}`}</span>
-                    </article>
-                  );
-                })}
+      <CardLayoutRenderer
+        layout={layout}
+        mode="readonly"
+        responsive
+        testIdPrefix="review"
+        renderFieldValue={({ field }) => {
+          const fieldDiffs = diffsByFieldId.get(field.id) ?? [];
+          if (fieldDiffs.length === 0) {
+            return <span className="public-link-review-out-of-scope">Не входило в заполнение</span>;
+          }
+          return (
+            <div className="public-link-review-field-diffs">
+              {fieldDiffs.map((diff, index) => {
+                const changed = JSON.stringify(diff.before) !== JSON.stringify(diff.after);
+                return (
+                  <article
+                    key={`${diff.block_instance_id ?? "base"}:${diff.field_id}:${index}`}
+                    className={changed ? "is-changed" : undefined}
+                  >
+                    <span>{`Было: ${formatValue(diff.before)}`}</span>
+                    <span>{`Стало: ${formatValue(diff.after)}`}</span>
+                  </article>
+                );
+              })}
             </div>
-          </section>
-        );
-      })}
+          );
+        }}
+      />
       {attachments.length > 0 ? (
-        <section className="public-link-review-block">
+        <section className="public-link-review-block public-link-review-attachments">
           <h4>Вложения</h4>
           <ul>
             {attachments.map((attachment) => (
