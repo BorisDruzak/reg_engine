@@ -14,6 +14,7 @@ from app.api.v1.endpoints.attachments import (
 )
 from app.core.config import get_settings
 from app.models import CardAttachment, CardPublicLink
+from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 from app.schemas.cards import FieldValueRead
 from app.schemas.public_links import (
     PublicLinkAttachmentListRead,
@@ -424,7 +425,7 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
         display_name=preview.display_name,
         expires_at=preview.expires_at,
         can_edit=preview.can_edit,
-        form_layout=preview.form_layout,
+        form_layout=CardTemplateFormLayoutRead.model_validate(preview.form_layout),
         blocks=[
             PublicLinkPreviewBlockRead(
                 block_id=block.block_id,
