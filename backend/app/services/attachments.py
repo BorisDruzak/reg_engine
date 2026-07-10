@@ -537,9 +537,12 @@ class AttachmentService:
             raise PermissionDeniedError("Public link is not active.")
 
         now = datetime.now(UTC)
-        if public_link.status != "active" or public_link.expires_at <= now:
-            if public_link.expires_at <= now and public_link.status == "active":
+        editable_statuses = {"active", "changes_requested"}
+        if public_link.status not in editable_statuses or public_link.expires_at <= now:
+            if public_link.expires_at <= now and public_link.status in editable_statuses:
                 public_link.status = "expired"
+                public_link.can_view = False
+                public_link.can_edit = False
                 self.session.flush()
             raise PermissionDeniedError("Public link is not active.")
         if not public_link.can_edit:

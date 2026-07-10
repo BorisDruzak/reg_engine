@@ -1,21 +1,27 @@
 import hashlib
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.constants import PUBLIC_LINK_STATUSES
 from app.models import (
+    AuditEvent,
     Card,
+    CardAttachment,
     CardBlockInstance,
     CardPublicLink,
     FieldValue,
     FieldValueItem,
     FormBlock,
     FormField,
+    StoredFile,
 )
 from app.services.audit import AuditService
 from app.services.cards import CardService, CardServiceError
@@ -23,10 +29,24 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
 
 DEFAULT_PUBLIC_LINK_TTL_DAYS = 7
+EDITABLE_PUBLIC_LINK_STATUSES = {"active", "changes_requested"}
+EXPIRABLE_PUBLIC_LINK_STATUSES = {"active", "changes_requested", "submitted"}
+ALLOWED_PUBLIC_LINK_TRANSITIONS: dict[str, set[str]] = {
+    "active": {"submitted", "disabled", "expired"},
+    "changes_requested": {"submitted", "disabled", "expired"},
+    "submitted": {"changes_requested", "approved", "disabled", "expired"},
+    "approved": set(),
+    "disabled": set(),
+    "expired": set(),
+}
 
 
 class PublicLinkError(ValueError):
     """Raised when a public link cannot be used."""
+
+
+class PublicLinkTransitionError(PublicLinkError):
+    """Raised when a public link lifecycle transition is not allowed."""
 
 
 @dataclass(frozen=True)
@@ -81,6 +101,47 @@ class PublicLinkPreview:
     blocks: list[PublicPreviewBlock] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class PublicLinkSafeStatus:
+    status: str
+    can_edit: bool
+    submitted_at: datetime | None
+    reviewed_at: datetime | None
+    review_comment: str | None
+    completed_public_fields: int | None
+    total_public_fields: int | None
+
+
+@dataclass(frozen=True)
+class PublicLinkReviewFieldDiff:
+    block_id: UUID
+    field_id: UUID
+    block_instance_id: UUID | None
+    label: str
+    field_type: str
+    before: object | None
+    after: object | None
+    changed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class PublicLinkReviewAttachmentDiff:
+    attachment_id: UUID
+    title: str
+    original_filename: str
+    content_length_bytes: int
+    change: str
+
+
+@dataclass(frozen=True)
+class PublicLinkReviewDiff:
+    public_link: CardPublicLink
+    changed_field_count: int
+    changed_attachment_count: int
+    fields: list[PublicLinkReviewFieldDiff] = field(default_factory=list)
+    attachments: list[PublicLinkReviewAttachmentDiff] = field(default_factory=list)
+
+
 def hash_public_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
@@ -96,6 +157,7 @@ class PublicLinkService:
         card_id: UUID,
         expires_in_days: int = DEFAULT_PUBLIC_LINK_TTL_DAYS,
         max_attachment_uploads: int | None = None,
+        review_enabled: bool = False,
     ) -> PublicLinkToken:
         if expires_in_days < 1 or expires_in_days > 30:
             raise PublicLinkError("Public link expiration must be between 1 and 30 days.")
@@ -110,10 +172,13 @@ class PublicLinkService:
             token_hash=hash_public_token(raw_token),
             expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
             max_attachment_uploads=max_attachment_uploads,
+            review_enabled=review_enabled,
             created_by=actor_user_id,
         )
         self.session.add(public_link)
         self.session.flush()
+        if review_enabled:
+            public_link.baseline_snapshot_json = self._review_snapshot(public_link)
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="create",
@@ -123,6 +188,7 @@ class PublicLinkService:
                 "card_id": str(card.id),
                 "expires_at": public_link.expires_at.isoformat(),
                 "max_attachment_uploads": max_attachment_uploads,
+                "review_enabled": review_enabled,
             },
         )
         return PublicLinkToken(raw_token=raw_token, public_link=public_link)
@@ -149,15 +215,15 @@ class PublicLinkService:
         actor_user_id: UUID,
         public_link_id: UUID,
     ) -> CardPublicLink:
-        public_link = self.session.get(CardPublicLink, public_link_id)
-        if public_link is None:
-            raise PublicLinkError("Public link was not found.")
-
+        public_link = self._locked_public_link(public_link_id)
         card = self._get_active_card(public_link.card_id)
         self._require_card_permission(actor_user_id, card)
+        self._require_not_expired(public_link)
+        self._require_transition(public_link, "disabled")
         public_link.status = "disabled"
+        public_link.can_edit = False
+        public_link.can_view = False
         public_link.disabled_at = datetime.now(UTC)
-        self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="disable",
@@ -167,16 +233,249 @@ class PublicLinkService:
         )
         return public_link
 
+    def capture_review_baseline(
+        self,
+        *,
+        actor_user_id: UUID,
+        public_link_id: UUID,
+    ) -> CardPublicLink:
+        public_link = self._locked_public_link(public_link_id)
+        card = self._get_active_card(public_link.card_id)
+        self._require_card_permission(actor_user_id, card)
+        self._require_not_expired(public_link)
+        if public_link.status != "active" or public_link.review_enabled:
+            raise PublicLinkTransitionError("Review baseline cannot be captured in this state.")
+
+        public_link.baseline_snapshot_json = self._review_snapshot(public_link)
+        public_link.review_enabled = True
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="public_link.review_started",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            new_data_json={"status": public_link.status, "review_enabled": True},
+        )
+        return public_link
+
+    def submit_for_review(self, *, raw_token: str) -> CardPublicLink:
+        public_link = self._public_link_for_token(raw_token, lock_for_update=True)
+        self._require_not_expired(public_link)
+        if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
+            raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
+        self._require_transition(public_link, "submitted")
+
+        now = datetime.now(UTC)
+        public_link.status = "submitted"
+        public_link.can_edit = False
+        public_link.submitted_at = now
+        public_link.reviewed_at = None
+        public_link.reviewed_by = None
+        public_link.review_comment = None
+        public_link.submission_summary_json = self._submission_summary(public_link)
+        AuditService(self.session).record_public_link_event(
+            actor_public_link_id=public_link.id,
+            action="public_link.submit",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            new_data_json={
+                "status": public_link.status,
+                "submitted_at": now.isoformat(),
+                **public_link.submission_summary_json,
+            },
+        )
+        return public_link
+
+    def request_changes_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        public_link_id: UUID,
+        comment: str,
+    ) -> CardPublicLink:
+        clean_comment = comment.strip()
+        if not clean_comment:
+            raise PublicLinkError("Review comment is required.")
+        if len(clean_comment) > 2000:
+            raise PublicLinkError("Review comment must not exceed 2000 characters.")
+
+        public_link = self._locked_public_link(public_link_id)
+        card = self._get_active_card(public_link.card_id)
+        self._require_card_permission(actor_user_id, card)
+        self._require_not_expired(public_link)
+        self._require_transition(public_link, "changes_requested")
+
+        now = datetime.now(UTC)
+        public_link.status = "changes_requested"
+        public_link.can_view = True
+        public_link.can_edit = True
+        public_link.reviewed_at = now
+        public_link.reviewed_by = actor_user_id
+        public_link.review_comment = clean_comment
+        public_link.disabled_at = None
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="public_link.request_changes",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            old_data_json={"status": "submitted"},
+            new_data_json={
+                "status": public_link.status,
+                "review_comment": clean_comment,
+                "reviewed_at": now.isoformat(),
+            },
+        )
+        return public_link
+
+    def approve_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        public_link_id: UUID,
+    ) -> CardPublicLink:
+        public_link = self._locked_public_link(public_link_id)
+        card = self._get_active_card(public_link.card_id)
+        self._require_card_permission(actor_user_id, card)
+        self._require_not_expired(public_link)
+        self._require_transition(public_link, "approved")
+
+        now = datetime.now(UTC)
+        public_link.status = "approved"
+        public_link.can_view = False
+        public_link.can_edit = False
+        public_link.reviewed_at = now
+        public_link.reviewed_by = actor_user_id
+        public_link.review_comment = None
+        public_link.disabled_at = now
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="public_link.approve",
+            object_type="card_public_link",
+            object_id=public_link.id,
+            old_data_json={"status": "submitted"},
+            new_data_json={
+                "status": public_link.status,
+                "reviewed_at": now.isoformat(),
+                "access_closed": True,
+            },
+        )
+        return public_link
+
+    def safe_status(self, *, raw_token: str) -> PublicLinkSafeStatus:
+        public_link = self._public_link_for_token(raw_token, lock_for_update=True)
+        self._expire_if_needed(public_link)
+        if public_link.status not in PUBLIC_LINK_STATUSES:
+            raise PublicLinkError("Public link status is not recognized.")
+
+        expose_review_details = public_link.status in {"submitted", "changes_requested"}
+        summary = public_link.submission_summary_json or {}
+        return PublicLinkSafeStatus(
+            status=public_link.status,
+            can_edit=(public_link.status in EDITABLE_PUBLIC_LINK_STATUSES and public_link.can_edit),
+            submitted_at=public_link.submitted_at,
+            reviewed_at=public_link.reviewed_at,
+            review_comment=(
+                public_link.review_comment if public_link.status == "changes_requested" else None
+            ),
+            completed_public_fields=(
+                self._summary_count(summary, "completed_public_fields")
+                if expose_review_details
+                else None
+            ),
+            total_public_fields=(
+                self._summary_count(summary, "total_public_fields")
+                if expose_review_details
+                else None
+            ),
+        )
+
+    def review_diff_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        public_link_id: UUID,
+    ) -> PublicLinkReviewDiff:
+        public_link = self._locked_public_link(public_link_id)
+        card = self._get_active_card(public_link.card_id)
+        self._require_card_permission(actor_user_id, card)
+        if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
+            raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
+
+        baseline = public_link.baseline_snapshot_json
+        current = self._review_snapshot(public_link, include_internal=True)
+        baseline_fields = self._snapshot_items_by_key(baseline, "fields", self._field_snapshot_key)
+        current_fields = self._snapshot_items_by_key(current, "fields", self._field_snapshot_key)
+        changed_at_by_value_id = self._field_change_timestamps(public_link.id)
+        fields: list[PublicLinkReviewFieldDiff] = []
+        changed_field_count = 0
+        field_keys = list(baseline_fields) + [
+            key for key in current_fields if key not in baseline_fields
+        ]
+        for key in field_keys:
+            before_item = baseline_fields.get(key)
+            after_item = current_fields.get(key)
+            source = after_item or before_item
+            if source is None:
+                continue
+            before = before_item.get("value") if before_item is not None else None
+            after = after_item.get("value") if after_item is not None else None
+            changed = before != after
+            changed_field_count += int(changed)
+            value_id = after_item.get("_field_value_id") if after_item is not None else None
+            fields.append(
+                PublicLinkReviewFieldDiff(
+                    block_id=self._snapshot_uuid(source, "block_id"),
+                    field_id=self._snapshot_uuid(source, "field_id"),
+                    block_instance_id=self._optional_snapshot_uuid(source, "block_instance_id"),
+                    label=str(source.get("label") or ""),
+                    field_type=str(source.get("field_type") or ""),
+                    before=before,
+                    after=after,
+                    changed_at=(
+                        changed_at_by_value_id.get(UUID(str(value_id)))
+                        if changed and value_id is not None
+                        else None
+                    ),
+                )
+            )
+
+        baseline_attachments = self._snapshot_items_by_key(
+            baseline,
+            "attachments",
+            lambda item: str(item.get("attachment_id")),
+        )
+        current_attachments = self._snapshot_items_by_key(
+            current,
+            "attachments",
+            lambda item: str(item.get("attachment_id")),
+        )
+        attachment_diffs: list[PublicLinkReviewAttachmentDiff] = []
+        for attachment_id in baseline_attachments.keys() - current_attachments.keys():
+            attachment_diffs.append(
+                self._attachment_diff(baseline_attachments[attachment_id], change="archived")
+            )
+        for attachment_id in current_attachments.keys() - baseline_attachments.keys():
+            attachment_diffs.append(
+                self._attachment_diff(current_attachments[attachment_id], change="added")
+            )
+
+        return PublicLinkReviewDiff(
+            public_link=public_link,
+            changed_field_count=changed_field_count,
+            changed_attachment_count=len(attachment_diffs),
+            fields=fields,
+            attachments=attachment_diffs,
+        )
+
     def validate_public_edit_token(self, *, raw_token: str) -> CardPublicLink:
-        public_link = self._get_active_public_link(raw_token)
+        public_link = self._editable_public_link(raw_token)
         self._require_field_edit_usage_available(public_link)
         return public_link
 
     def validate_public_attachment_token(self, *, raw_token: str) -> CardPublicLink:
-        return self._get_active_public_link(raw_token)
+        return self._editable_public_link(raw_token)
 
     def preview_public_link(self, *, raw_token: str) -> PublicLinkPreview:
-        public_link = self._get_active_public_link(raw_token)
+        public_link = self._editable_public_link(raw_token)
         card = self._get_active_card(public_link.card_id)
         if not public_link.can_edit or not card.public_edit_enabled:
             raise PermissionDeniedError("Public editing is disabled for this card.")
@@ -250,7 +549,7 @@ class PublicLinkService:
         value: object,
         block_instance_id: UUID | None = None,
     ) -> FieldValue:
-        public_link = self._get_active_public_link(raw_token)
+        public_link = self._editable_public_link(raw_token, lock_for_update=True)
         self._require_field_edit_usage_available(public_link)
         card = self._get_active_card(public_link.card_id)
         field = self._get_active_public_field(field_id)
@@ -289,21 +588,260 @@ class PublicLinkService:
         )
         return field_value
 
-    def _get_active_public_link(self, raw_token: str) -> CardPublicLink:
+    def _public_link_for_token(
+        self,
+        raw_token: str,
+        *,
+        lock_for_update: bool = False,
+    ) -> CardPublicLink:
         token_hash = hash_public_token(raw_token)
+        statement = select(CardPublicLink).where(CardPublicLink.token_hash == token_hash)
+        if lock_for_update:
+            statement = statement.execution_options(populate_existing=True).with_for_update()
+        public_link = self.session.scalars(statement).one_or_none()
+        if public_link is None:
+            raise PublicLinkError("Public link was not found.")
+        return public_link
+
+    def _editable_public_link(
+        self,
+        raw_token: str,
+        *,
+        lock_for_update: bool = False,
+    ) -> CardPublicLink:
+        public_link = self._public_link_for_token(
+            raw_token,
+            lock_for_update=lock_for_update,
+        )
+        self._require_not_expired(public_link)
+        if public_link.status not in EDITABLE_PUBLIC_LINK_STATUSES:
+            raise PermissionDeniedError("Public link is not editable.")
+        if not public_link.can_edit:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+        return public_link
+
+    def _locked_public_link(self, public_link_id: UUID) -> CardPublicLink:
         public_link = self.session.scalars(
-            select(CardPublicLink).where(CardPublicLink.token_hash == token_hash)
+            select(CardPublicLink)
+            .where(CardPublicLink.id == public_link_id)
+            .execution_options(populate_existing=True)
+            .with_for_update()
         ).one_or_none()
         if public_link is None:
             raise PublicLinkError("Public link was not found.")
-
-        now = datetime.now(UTC)
-        if public_link.status != "active" or public_link.expires_at <= now:
-            if public_link.expires_at <= now and public_link.status == "active":
-                public_link.status = "expired"
-                self.session.flush()
-            raise PermissionDeniedError("Public link is not active.")
         return public_link
+
+    def _require_not_expired(self, public_link: CardPublicLink) -> None:
+        if self._expire_if_needed(public_link):
+            raise PermissionDeniedError("Public link has expired.")
+
+    def _expire_if_needed(self, public_link: CardPublicLink) -> bool:
+        if (
+            public_link.status in EXPIRABLE_PUBLIC_LINK_STATUSES
+            and public_link.expires_at <= datetime.now(UTC)
+        ):
+            old_status = public_link.status
+            public_link.status = "expired"
+            public_link.can_view = False
+            public_link.can_edit = False
+            AuditService(self.session).record_system_event(
+                action="public_link.expire",
+                object_type="card_public_link",
+                object_id=public_link.id,
+                old_data_json={"status": old_status},
+                new_data_json={"status": "expired"},
+            )
+            return True
+        return public_link.status == "expired"
+
+    def _require_transition(self, public_link: CardPublicLink, target_status: str) -> None:
+        if target_status not in ALLOWED_PUBLIC_LINK_TRANSITIONS.get(public_link.status, set()):
+            raise PublicLinkTransitionError(
+                f"Public link cannot transition from {public_link.status} to {target_status}."
+            )
+
+    def _review_snapshot(
+        self,
+        public_link: CardPublicLink,
+        *,
+        include_internal: bool = False,
+    ) -> dict[str, Any]:
+        card = self._get_active_card(public_link.card_id)
+        schema_rows = [
+            (block, field_model)
+            for block, field_model in self._public_schema_rows(
+                registry_id=card.registry_id,
+                public_link=public_link,
+            )
+            if block.public_editable
+            and field_model.public_editable
+            and field_model.field_type not in {"file_ref", "static_text"}
+        ]
+        field_ids = [field_model.id for _, field_model in schema_rows]
+        values_by_instance_field = self._field_values_by_instance(
+            card_id=card.id,
+            field_ids=field_ids,
+        )
+        item_ids_by_value_id = self._multi_select_item_ids(list(values_by_instance_field.values()))
+        instances_by_block = self._block_instances_for_card(card.id)
+        fields: list[dict[str, Any]] = []
+        for block in self._ordered_public_blocks(schema_rows):
+            instances: list[CardBlockInstance | None] = list(instances_by_block.get(block.id, []))
+            if not instances and not block.is_repeatable:
+                instances = [None]
+            block_fields = [
+                field_model for row_block, field_model in schema_rows if row_block.id == block.id
+            ]
+            for instance in instances:
+                for field_model in block_fields:
+                    field_value = (
+                        values_by_instance_field.get((instance.id, field_model.id))
+                        if instance is not None
+                        else None
+                    )
+                    item = {
+                        "block_id": str(block.id),
+                        "field_id": str(field_model.id),
+                        "block_instance_id": str(instance.id) if instance is not None else None,
+                        "label": field_model.label,
+                        "field_type": field_model.field_type,
+                        "value": self._json_safe_value(
+                            self._read_field_value(
+                                field_model,
+                                field_value,
+                                item_ids_by_value_id,
+                            )
+                        ),
+                    }
+                    if include_internal and field_value is not None:
+                        item["_field_value_id"] = str(field_value.id)
+                    fields.append(item)
+
+        attachments = [
+            {
+                "attachment_id": str(attachment.id),
+                "title": attachment.title,
+                "original_filename": stored_file.original_filename,
+                "content_length_bytes": stored_file.content_length_bytes,
+            }
+            for attachment, stored_file in self.session.execute(
+                select(CardAttachment, StoredFile)
+                .join(StoredFile, StoredFile.id == CardAttachment.stored_file_id)
+                .where(
+                    CardAttachment.card_id == card.id,
+                    CardAttachment.archived_at.is_(None),
+                    StoredFile.archived_at.is_(None),
+                )
+                .order_by(CardAttachment.position, CardAttachment.id)
+            )
+        ]
+        return {"version": 1, "fields": fields, "attachments": attachments}
+
+    def _submission_summary(self, public_link: CardPublicLink) -> dict[str, int]:
+        fields = self._review_snapshot(public_link).get("fields", [])
+        completed = sum(
+            1
+            for item in fields
+            if isinstance(item, dict) and self._review_value_is_completed(item.get("value"))
+        )
+        return {
+            "completed_public_fields": completed,
+            "total_public_fields": len(fields),
+        }
+
+    def _review_value_is_completed(self, value: object) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, list | dict):
+            return bool(value)
+        return True
+
+    def _json_safe_value(self, value: object) -> object:
+        if value is None or isinstance(value, str | int | float | bool):
+            return value
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, datetime | date):
+            return value.isoformat()
+        if isinstance(value, UUID):
+            return str(value)
+        if isinstance(value, list | tuple):
+            return [self._json_safe_value(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): self._json_safe_value(item) for key, item in value.items()}
+        return str(value)
+
+    def _summary_count(self, summary: dict[str, Any], key: str) -> int | None:
+        value = summary.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def _snapshot_items_by_key(
+        self,
+        snapshot: dict[str, Any],
+        section: str,
+        key_func: Callable[[dict[str, Any]], object],
+    ) -> dict[object, dict[str, Any]]:
+        raw_items = snapshot.get(section)
+        if not isinstance(raw_items, list):
+            raise PublicLinkError("Public link review snapshot is invalid.")
+        result: dict[object, dict[str, Any]] = {}
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                raise PublicLinkError("Public link review snapshot is invalid.")
+            result[key_func(raw_item)] = raw_item
+        return result
+
+    def _field_snapshot_key(self, item: dict[str, Any]) -> tuple[str, str | None, str]:
+        return (
+            str(item.get("block_id")),
+            str(item["block_instance_id"]) if item.get("block_instance_id") is not None else None,
+            str(item.get("field_id")),
+        )
+
+    def _snapshot_uuid(self, item: dict[str, Any], key: str) -> UUID:
+        try:
+            return UUID(str(item[key]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PublicLinkError("Public link review snapshot is invalid.") from exc
+
+    def _optional_snapshot_uuid(self, item: dict[str, Any], key: str) -> UUID | None:
+        if item.get(key) is None:
+            return None
+        return self._snapshot_uuid(item, key)
+
+    def _field_change_timestamps(self, public_link_id: UUID) -> dict[UUID, datetime]:
+        timestamps: dict[UUID, datetime] = {}
+        for event in self.session.scalars(
+            select(AuditEvent)
+            .where(
+                AuditEvent.actor_public_link_id == public_link_id,
+                AuditEvent.object_type == "field_value",
+                AuditEvent.action == "public_link.update",
+            )
+            .order_by(AuditEvent.created_at, AuditEvent.id)
+        ):
+            if event.object_id is not None:
+                timestamps[event.object_id] = event.created_at
+        return timestamps
+
+    def _attachment_diff(
+        self,
+        item: dict[str, Any],
+        *,
+        change: str,
+    ) -> PublicLinkReviewAttachmentDiff:
+        content_length = item.get("content_length_bytes")
+        if not isinstance(content_length, int) or isinstance(content_length, bool):
+            raise PublicLinkError("Public link review snapshot is invalid.")
+        return PublicLinkReviewAttachmentDiff(
+            attachment_id=self._snapshot_uuid(item, "attachment_id"),
+            title=str(item.get("title") or ""),
+            original_filename=str(item.get("original_filename") or ""),
+            content_length_bytes=content_length,
+            change=change,
+        )
 
     def _require_field_edit_usage_available(self, public_link: CardPublicLink) -> None:
         if public_link.max_uses is not None and public_link.used_count >= public_link.max_uses:
