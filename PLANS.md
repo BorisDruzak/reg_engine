@@ -4277,8 +4277,7 @@ Live Browser proof:
 
 #### Adaptive free-interval dragging follow-up
 
-Status: implemented and locally verified; production deployment and live
-browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 - Design-mode field surfaces disable native text selection only while they are
   directly draggable. Opening the inline editor restores normal text
@@ -4315,3 +4314,29 @@ browser proof are pending.
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
   The verified local bundle is `index-BJCSk3ri.js` (`562.56 kB`, `160.53 kB`
   gzip) with `index-Cl9DldkN.css`.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized through
+  `d5fea175` (`Release drag click suppression`). No schema or production-data
+  change was required.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-BJCSk3ri.js` and
+  `/assets/index-Cl9DldkN.css`, restarted the API service, and passed health
+  and same-origin frontend smoke checks. The service remained active and the
+  server checkout clean on `main`.
+
+Live Browser proof:
+
+- The deployed editor loaded `/assets/index-BJCSk3ri.js`; all ten directly
+  draggable fields reported `user-select: none`, and browser selection stayed
+  empty during geometry movement.
+- Clicking `tst` immediately opened its inline editor, removed the drag class,
+  and restored `user-select: auto`. Cancel closed the editor without a schema
+  write.
+- Moving `tst` down placed it beside the occupied half-row at row 2/columns
+  7-12. A second downward move crossed the full-width row 3 and placed it at
+  row 4/columns 7-12; the block expanded to four rendered rows and the session
+  stayed valid. Escape restored row 1/columns 1-6, three rendered rows, zero
+  geometry targets, and zero active sessions without saving.
+- Final browser logs contained zero warnings/errors. The current saved layout
+  remained unchanged after the live checks.
