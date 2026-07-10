@@ -4343,8 +4343,7 @@ Live Browser proof:
 
 #### Compact-grid downward drag follow-up
 
-Status: implemented and locally verified; production deployment and live
-browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 - A compact web block renders only occupied rows, so a field in its last
   visible row has no empty drop surface below it. Pointer movement below that
@@ -4371,3 +4370,25 @@ browser proof are pending.
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
   The verified local bundle is `index-DY7MbG9Z.js` (`563.12 kB`, `160.66 kB`
   gzip) with `index-Cl9DldkN.css`.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized through
+  `11700611` (`Capture pending field drags`). No schema or production-data
+  migration was required.
+- `scripts/deploy-frontend.ps1` deployed `/assets/index-DY7MbG9Z.js` and
+  `/assets/index-Cl9DldkN.css`, restarted the API service, and passed health
+  and same-origin frontend smoke checks.
+
+Live Browser proof:
+
+- The deployed editor loaded `/assets/index-DY7MbG9Z.js` with `Положение` in
+  the reported compact one-row state. A real pointer drag moved `tst` from row
+  1 to row 2 and expanded the field grid from one rendered row to two without
+  boundary or collision feedback.
+- The enabled toolbar undo restored `tst` to row 1 and the grid to one rendered
+  row; the UI confirmed `Макет карточки сохранён`. The test movement therefore
+  left the saved layout in its original state.
+- A subsequent keyboard move down and back up previewed rows 2 and 1, then
+  Escape cleared the session with row 1 restored. Final state had zero active
+  geometry sessions/targets and browser logs contained zero warnings/errors.
