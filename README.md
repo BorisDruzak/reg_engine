@@ -44,16 +44,46 @@ Target system:
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
 - Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, card templates, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs with safe upload-limit metadata, authenticated card export API foundation, bounded CSV/XLSX import preview/commit API foundation, authenticated JSON/CSV/XLSX/PDF report template/run API foundation with backend report parameter/schema validation and rollback-safe report output cleanup, read-only MCP-over-API gateway foundation, MCP stdio/config hardening, MCP mutation client foundation for future explicitly approved write tools, MCP registry, schema-builder, card lifecycle, card field-value, card block-instance, card transfer, report-template, report-run, document-template, and generated-document write tools, MCP document metadata read tools, plus MCP report/generated-document content read tools with confirmation, size limits, and normalized errors.
 - Current frontend scope has a bearer-authenticated admin shell with section-scoped data loading, organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive with visual drag/drop field ordering, card-template create/edit/archive for template-driven card creation, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive with unified tag search for free-text, organization, template, archive, and typed schema-field filters, same-organization card org-unit correction, repeatable block-instance add/archive, bulk-primary dynamic value editing with separate `file_ref` editing, authenticated public-link list/create/disable controls with attachment-upload limits and browser-openable public URL display, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV/XLSX card export and CSV/XLSX import preview/commit controls, authenticated report template create/update/archive and JSON/CSV/XLSX/PDF report generate/download/archive controls with template parameter schema/default JSON editing, basic visual run-parameter controls generated from flat schema properties including scalar enum select controls, `oneOf` option titles, date-format string inputs, schema description hints, schema default values, required-parameter validation, scalar `minLength`/`maxLength`/`minimum`/`maximum` validation, `pattern`/`multipleOf` validation, and `exclusiveMinimum`/`exclusiveMaximum` validation, default run-parameter payload fallback when manual JSON is empty, visible run format, filename, parameters, and summary metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download with exhausted-upload state, and full Russian UI browser validation for the core admin setup path.
-- Current A4 print-template scope uses `card_print_layout_v1` document templates
-  with a unified `CardLayoutStudio`, normalized A4 `sections[]`/`overlays[]`
-  layout JSON, legacy `items[]` compatibility, preview validation, blank
-  DOCX/PDF downloads, and generated DOCX/PDF output through the existing
-  generated-document infrastructure. Ordinary card filling remains the primary
-  data-entry workflow.
+- Current card-template layout scope uses one Russian-first contextual
+  `CardLayoutStudio` with the stages `Макет карточки`, `Печатная форма A4`, and
+  `Предпросмотр`. Web/card geometry is stored in the unified
+  `card_template_layout_v1` contract, while A4 views remain internal
+  `card_print_layout_v1` document-template versions. Ordinary card filling
+  remains the primary data-entry workflow.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
 - XLSX card import/export is available as a row-oriented technical exchange
   format. XLSX and PDF report outputs are available for existing report types.
   Additional report polish and broader MCP write tools are later phases.
+
+## Contextual Card Layout Contract
+
+- Every newly saved form layout uses exactly 12 columns and four logical rows.
+  Block and field widths snap to `3`, `6`, `9`, or `12` columns; heights snap
+  to `1`, `2`, `3`, or `4` rows. Backend validation rejects overflow and
+  overlapping blocks or fields. Legacy rows above four remain readable with a
+  warning, but must be brought into the current grid before the layout can be
+  saved again.
+- Mouse pointer capture supports moving and eight-direction resizing. Arrow
+  keys move the active item and `Shift + стрелки` resizes it. `Готово` commits
+  one geometry command, while `Escape` or `Отмена` restores the starting
+  rectangle. Undo and redo operate on the same revision-safe save path.
+- Block and field creation, insertion, and editing are disclosed in context
+  inside the canvas. Inline editors use the real schema APIs and preserve the
+  schema-driven block/field contracts; the preview stage is fully read-only.
+- Form saves send `expected_revision`. Layout PATCH requests use a latest-value
+  queue serialized with schema writes. A `409` keeps the local draft and offers
+  `Сравнить с версией сервера`, `Принять версию сервера`, and
+  `Сохранить локальную версию`; transient failures offer `Повторить`.
+- A linked A4 composition contains exactly one enclosing `card_layout`
+  rectangle plus independently editable print-only overlays. The rectangle is
+  protected from delete/copy/duplicate actions; editing its inner block or
+  field routes back to `Макет карточки`. DOCX/PDF generation expands the
+  linked rectangle from the current form layout without persisting expanded
+  field geometry into the saved A4 JSON.
+- Legacy A4 `items[]` payloads remain readable. Explicit conversion creates a
+  new audited document-template version and leaves the previous version
+  unchanged and readable. User-facing labels, validation, recovery choices,
+  and accessible controls are Russian-first.
 
 ## Local Setup
 
@@ -408,6 +438,25 @@ GET    /api/v1/card-print-templates/{template_id}/blank-pdf
 POST   /api/v1/registries/{registry_id}/card-print-templates/blank-docx
 POST   /api/v1/registries/{registry_id}/card-print-templates/blank-pdf
 ```
+
+Unified card-template layout API used by the contextual studio:
+
+```powershell
+GET    /api/v1/card-templates/{template_id}/layout
+PATCH  /api/v1/card-templates/{template_id}/layout/form
+POST   /api/v1/card-templates/{template_id}/layout/print-views
+PATCH  /api/v1/card-templates/{template_id}/layout/print-views/{print_view_id}
+POST   /api/v1/card-templates/{template_id}/layout/print-views/{print_view_id}/sync
+POST   /api/v1/card-templates/{template_id}/layout/print-views/{print_view_id}/convert-linked-card
+POST   /api/v1/cards/{card_id}/card-template-layout/{template_id}/generate-docx
+POST   /api/v1/cards/{card_id}/card-template-layout/{template_id}/generate-pdf
+```
+
+`PATCH .../layout/form` requires the current `expected_revision`; stale writes
+return HTTP `409` before layout mutation or audit creation. The service locks
+the card-template row through validation and the audited write. Schema
+membership refreshes preserve `field_schema_json.form_layout` and use the same
+row-locking boundary so block/field changes cannot restore stale layout JSON.
 
 `card_print_layout_v1` stores A4 millimeter geometry in layout JSON. New
 layouts prefer `sections[]` plus `overlays[]`; old flat `items[]` payloads are

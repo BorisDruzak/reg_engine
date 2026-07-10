@@ -231,6 +231,10 @@ not a hardcoded employee registry.
   `Макет карточки` workspace where the same selected block/field exposes web
   placement, A4 placement, appearance, access, and technical settings in one
   properties panel. No database migration was required.
+- Phase 8J contextual card-layout studio implementation is complete locally
+  through code checkpoint `383469b2`; Task 7 project-map verification and the
+  cumulative local gate pass. Push, deployment, and live Browser proof have not
+  yet been performed for Phase 8J.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -3589,7 +3593,9 @@ Acceptance criteria:
 
 ## Phase 8J: Contextual Card Layout Studio
 
-Status: planned; visual design and written specification approved on 2026-07-10.
+Status: implementation, Task 7 documentation, and the cumulative local gate are
+complete; ready for push, deployment, and live Browser proof. Phase 8J is not
+deployed or live-verified yet. No database migration is required.
 
 Goal:
 
@@ -3602,6 +3608,78 @@ Design and implementation plan:
 
 - `docs/superpowers/specs/2026-07-10-contextual-card-layout-studio-design.md`
 - `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
+
+Implemented contract:
+
+1. Form geometry is exactly 12 columns by four logical rows. Block and field
+   widths use `3 | 6 | 9 | 12`; heights use `1 | 2 | 3 | 4`. Save-time backend
+   validation rejects overflow and collisions. Legacy form layouts with rows
+   above four remain readable with a warning but must be corrected before the
+   next save.
+2. Mouse interaction uses pointer capture for move and eight-direction resize.
+   Keyboard fallback uses arrows to move and `Shift + стрелки` to resize.
+   Pointer preview does not write; `Готово` commits one command, while
+   `Escape`, pointer cancel, or `Отмена` restores the original rectangle.
+3. The studio has exactly three Russian stages: `Макет карточки`,
+   `Печатная форма A4`, and `Предпросмотр`. Block/field create, insert, and edit
+   controls appear contextually inside the canvas; there is no permanent
+   palette/properties surface in layout or preview, and preview is read-only.
+4. Every form-layout save sends the current `expected_revision`. A one-in-flight
+   latest-value queue serializes layout writes with schema/membership writes.
+   HTTP `409` keeps the local draft and exposes explicit compare, accept-server,
+   and save-local choices. Non-conflict failures retain the newest draft and
+   expose `Повторить`. Undo/redo uses the same queued revision-safe path.
+5. Linked A4 layouts use `composition_mode=linked_card` with exactly one
+   protected `card_layout` rectangle. Only that enclosing rectangle and
+   print-only overlays have A4 geometry; internal block/field editing routes to
+   `Макет карточки`. Generation expands the current form layout into the linked
+   rectangle for DOCX/PDF without writing expanded field geometry back to the
+   saved print view.
+6. Legacy `items[]` A4 layouts remain readable. Explicit conversion creates a
+   new audited document-template version and leaves the prior version unchanged
+   and readable. Marker-free older linked layouts remain compatible; new linked
+   views enforce exactly one linked rectangle.
+7. Inline block writes persist the schema-driven title, description,
+   repeatability, public visibility/editability, ordering/layout values, and
+   approved `title_position` / `collapsible` display settings. Inline field
+   writes persist the technical code, name, description, canonical field type,
+   reference/options/static-text configuration, public visibility/editability,
+   and list-display settings. Backend validation enforces field-code format and
+   registry-wide uniqueness, active same-registry reference sources, safe
+   field-type transitions, permission checks, and audit events. Automatic base
+   template membership refresh locks and reloads the template and preserves
+   `form_layout`.
+8. All user-facing stage names, actions, validation, conflict recovery,
+   geometry feedback, and accessible control names are Russian-first.
+
+Task 7 local verification:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`:
+  passed and regenerated `docs/PROJECT_TREE.md`.
+- `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1 -Check`:
+  passed with `Project tree is current.`
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
+  passed. Python syntax compilation passed. Backend Ruff and Ruff format checks
+  passed (`138 files already formatted`), mypy passed for 79 source files, and
+  pytest reported 213 passed / 175 skipped / one warning. Frontend ESLint and
+  TypeScript passed, Vitest reported 12 files passed with 161 passed / 25
+  skipped tests, the production build passed with 134 modules transformed, and
+  the final project-tree check passed. Remote GitHub/server checks were skipped
+  intentionally by `-SkipRemote`.
+
+Known warnings and limitations:
+
+- PostgreSQL-backed regressions require a disposable `TEST_DATABASE_URL` whose
+  database name ends with `_test`; without it they remain skipped by the local
+  unit gate.
+- The existing Starlette/httpx deprecation warning is outside Phase 8J.
+- The production frontend build retains the existing Vite main-chunk size
+  advisory (`526.02 kB`, `149.03 kB` gzip); Phase 8J adds no dependency and
+  bundle splitting is deferred.
+- Push, server synchronization, frontend deployment, DOCX/PDF live signatures,
+  desktop/mobile rendering, and browser-console proof remain Task 7 deployment
+  handoff work. Do not mark Phase 8J deployed or live-verified until those
+  checks are recorded.
 
 ## Phase 8K: Filled Card Workspace
 
