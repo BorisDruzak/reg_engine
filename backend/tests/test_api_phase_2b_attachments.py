@@ -166,9 +166,11 @@ def _create_role_with_permissions(
     session.flush()
 
     for permission_code in permission_codes:
-        permission = Permission(code=permission_code, description=permission_code)
-        session.add(permission)
-        session.flush()
+        permission = session.scalar(select(Permission).where(Permission.code == permission_code))
+        if permission is None:
+            permission = Permission(code=permission_code, description=permission_code)
+            session.add(permission)
+            session.flush()
         session.execute(
             role_permissions.insert().values(
                 role_id=role.id,
@@ -586,6 +588,8 @@ def test_api_public_link_attachment_upload_respects_card_public_edit_toggle(
     db_session: Session,
 ) -> None:
     context = _attachment_api_context(db_session)
+    context["card"].public_edit_enabled = False
+    db_session.flush()
     public_token = PublicLinkService(db_session).create_public_link_for_actor(
         actor_user_id=context["card_admin"].id,
         card_id=context["card"].id,

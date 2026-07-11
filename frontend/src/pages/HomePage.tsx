@@ -5,14 +5,11 @@ import {
   ApiError,
   getCurrentUser,
   getRegistrySchema,
-  listAccessGrants,
   listAuditEvents,
   listOrganizationCards,
   listOrganizationTree,
   listOrganizations,
-  listPermissions,
   listRegistries,
-  listRoles,
   listUsers,
   readCard,
 } from "@/api/client";
@@ -25,7 +22,6 @@ import {
 } from "@/app/uiText";
 import type { CardFieldFilterPayload } from "@/api/types";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
-import { AccessGrantsTable } from "@/features/access/AccessGrantsTable";
 import { AuditTable } from "@/features/audit/AuditTable";
 import { LoginScreen } from "@/features/auth/LoginScreen";
 import { clearSession, loadSession, saveSession, type SessionState } from "@/features/auth/session";
@@ -73,12 +69,9 @@ export function HomePage() {
   const token = session?.token ?? "";
   const needsRegistrySchema = activeSection === "registries";
   const needsCards = activeSection === "overview" || activeSection === "cards";
-  const needsUsers = activeSection === "users" || activeSection === "access";
-  const needsRoles = activeSection === "users" || activeSection === "access";
-  const needsPermissions = activeSection === "users";
-  const needsAccessGrants = activeSection === "access";
+  const needsUsers = activeSection === "users";
   const needsAudit = activeSection === "audit";
-  const needsOrganizationTree = activeSection === "organizations";
+  const needsOrganizationTree = activeSection === "organizations" || activeSection === "users";
   const currentUserQuery = useQuery({
     queryKey: ["current-user", token],
     queryFn: () => getCurrentUser(token),
@@ -158,21 +151,6 @@ export function HomePage() {
     queryFn: () => listUsers(token),
     enabled: Boolean(token && needsUsers),
   });
-  const rolesQuery = useQuery({
-    queryKey: ["roles", token],
-    queryFn: () => listRoles(token),
-    enabled: Boolean(token && needsRoles),
-  });
-  const permissionsQuery = useQuery({
-    queryKey: ["permissions", token],
-    queryFn: () => listPermissions(token),
-    enabled: Boolean(token && needsPermissions),
-  });
-  const grantsQuery = useQuery({
-    queryKey: ["access-grants", token],
-    queryFn: () => listAccessGrants(token),
-    enabled: Boolean(token && needsAccessGrants),
-  });
   const auditQuery = useQuery({
     queryKey: ["audit-events", token],
     queryFn: () => listAuditEvents(token),
@@ -180,10 +158,7 @@ export function HomePage() {
   });
   const usersSectionDenied =
     activeSection === "users" &&
-    hasAccessDeniedError([usersQuery.error, rolesQuery.error, permissionsQuery.error]);
-  const accessSectionDenied =
-    activeSection === "access" &&
-    hasAccessDeniedError([usersQuery.error, rolesQuery.error, grantsQuery.error]);
+    hasAccessDeniedError([usersQuery.error, organizationTreeQuery.error]);
   const auditSectionDenied = activeSection === "audit" && hasAccessDeniedError([auditQuery.error]);
 
   const currentUser = currentUserQuery.data ?? session?.user ?? null;
@@ -380,10 +355,8 @@ export function HomePage() {
               : null,
             activeSection === "cards" ? cardsQuery.error : null,
             activeSection === "cards" ? cardReadQuery.error : null,
-            activeSection === "users" || activeSection === "access" ? usersQuery.error : null,
-            activeSection === "users" || activeSection === "access" ? rolesQuery.error : null,
-            activeSection === "users" ? permissionsQuery.error : null,
-            activeSection === "access" ? grantsQuery.error : null,
+            activeSection === "users" ? usersQuery.error : null,
+            activeSection === "users" ? organizationTreeQuery.error : null,
             activeSection === "audit" ? auditQuery.error : null,
           ].find(Boolean)}
         />
@@ -448,24 +421,11 @@ export function HomePage() {
             ) : (
               <UsersAndRoles
                 users={usersQuery.data?.items ?? []}
-                roles={rolesQuery.data?.items ?? []}
-                permissions={permissionsQuery.data?.items ?? []}
-                token={token}
-              />
-            )}
-          </>
-        )}
-        {activeSection === "access" && (
-          <>
-            {accessSectionDenied ? (
-              <SectionAccessDenied />
-            ) : (
-              <AccessGrantsTable
-                grants={grantsQuery.data?.items ?? []}
-                users={usersQuery.data?.items ?? []}
-                roles={rolesQuery.data?.items ?? []}
-                organizations={organizationsQuery.data?.items ?? []}
-                registries={registriesQuery.data?.items ?? []}
+                organizationTree={organizationTreeQuery.data?.items ?? []}
+                canConfigureAccess={Boolean(
+                  currentUser?.is_superuser || currentUser?.can_manage_access,
+                )}
+                canToggleAccessDelegation={Boolean(currentUser?.is_superuser)}
                 token={token}
               />
             )}
@@ -584,7 +544,6 @@ function isVisibleSection(value: unknown): value is VisibleSection {
     value === "registries" ||
     value === "cards" ||
     value === "users" ||
-    value === "access" ||
     value === "audit"
   );
 }
@@ -626,12 +585,6 @@ function SectionIcon({ section }: { section: VisibleSection }) {
           <circle cx="9" cy="8" r="3" />
           <circle cx="17" cy="9" r="2.4" />
           <path d="M4 19c.8-3 2.5-5 5-5s4.2 2 5 5M14.5 15.5c1.8.3 3 1.5 3.5 3.5" />
-        </>
-      )}
-      {section === "access" && (
-        <>
-          <circle cx="8" cy="12" r="3.2" />
-          <path d="M11.2 12H20M16 12v3M19 12v3" />
         </>
       )}
       {section === "audit" && (

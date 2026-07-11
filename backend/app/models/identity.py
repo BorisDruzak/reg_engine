@@ -53,6 +53,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     display_name: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, server_default="active")
     is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    can_manage_access: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

@@ -9,6 +9,7 @@ export type CurrentUser = {
   display_name: string;
   status: string;
   is_superuser: boolean;
+  can_manage_access: boolean;
 };
 
 export type LoginResponse = {
@@ -665,12 +666,20 @@ export type PublicLinkAttachmentListRead = {
   can_upload_attachments: boolean;
 };
 
+export type BusinessRoleCode =
+  | "administrator"
+  | "organization_administrator"
+  | "subordinate_organization_administrator";
+
 export type UserRead = {
   id: string;
   email: string;
   display_name: string;
   status: string;
   is_superuser: boolean;
+  role_code: BusinessRoleCode;
+  organization_ids: string[];
+  can_manage_access: boolean;
   archived_at: string | null;
 };
 
@@ -684,6 +693,9 @@ export type UserCreatePayload = {
   password: string;
   status?: string;
   is_superuser?: boolean;
+  role_code?: BusinessRoleCode;
+  organization_ids?: string[];
+  can_manage_access?: boolean;
 };
 
 export type UserUpdatePayload = {
@@ -692,6 +704,9 @@ export type UserUpdatePayload = {
   password?: string | null;
   status?: string | null;
   is_superuser?: boolean | null;
+  role_code?: BusinessRoleCode | null;
+  organization_ids?: string[] | null;
+  can_manage_access?: boolean | null;
 };
 
 export type RoleRead = {

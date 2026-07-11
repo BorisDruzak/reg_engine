@@ -53,4 +53,5 @@ def _current_user_to_read(user: User) -> CurrentUserRead:
         display_name=user.display_name,
         status=user.status,
         is_superuser=user.is_superuser,
+        can_manage_access=user.can_manage_access,
     )

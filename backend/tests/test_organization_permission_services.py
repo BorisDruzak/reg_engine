@@ -19,6 +19,7 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.services.bootstrap import BootstrapService
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -103,8 +104,13 @@ def _create_user(
 
 def _create_role_with_permission(session: Session, role_code: str, permission_code: str) -> Role:
     role = Role(code=role_code, name=role_code)
-    permission = Permission(code=permission_code, description=permission_code)
-    session.add_all([role, permission])
+    permission = session.scalars(
+        select(Permission).where(Permission.code == permission_code)
+    ).one_or_none()
+    if permission is None:
+        permission = Permission(code=permission_code, description=permission_code)
+        session.add(permission)
+    session.add(role)
     session.flush()
     session.execute(
         role_permissions.insert().values(
@@ -121,7 +127,7 @@ def _grant_access(
     *,
     user_id: UUID,
     role_id: UUID,
-    organization_id: UUID,
+    organization_id: UUID | None,
     include_descendants: bool,
     created_by: UUID | None = None,
 ) -> AccessGrant:
@@ -334,3 +340,78 @@ def test_org_units_are_filters_not_rbac_boundaries(db_session: Session) -> None:
     assert permissions.get_organization_scope_ids(org_admin.id) == {root.id}
     assert permissions.can_see_organization(org_admin.id, root.id)
     assert not permissions.can_see_organization(org_admin.id, sibling.id)
+
+
+def test_canonical_roles_apply_hierarchical_scope_and_separate_access_flag(
+    db_session: Session,
+) -> None:
+    BootstrapService(db_session).seed_defaults()
+    system_admin = _create_user(db_session, "canonical-system@example.test", is_superuser=True)
+    subordinate = _create_user(db_session, "canonical-subordinate@example.test")
+    organization_admin = _create_user(db_session, "canonical-organization@example.test")
+    access_delegate = _create_user(db_session, "canonical-access-delegate@example.test")
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="canonical-root",
+        name="Canonical root",
+    )
+    selected_child = organization_service.create_child(
+        parent_id=root.id,
+        code="canonical-selected",
+        name="Canonical selected",
+        created_by=system_admin.id,
+    )
+    descendant = organization_service.create_child(
+        parent_id=selected_child.id,
+        code="canonical-descendant",
+        name="Canonical descendant",
+        created_by=system_admin.id,
+    )
+    sibling = organization_service.create_child(
+        parent_id=root.id,
+        code="canonical-sibling",
+        name="Canonical sibling",
+        created_by=system_admin.id,
+    )
+    subordinate_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
+    organization_admin_role = db_session.scalars(
+        select(Role).where(Role.code == "organization_administrator")
+    ).one()
+    _grant_access(
+        db_session,
+        user_id=subordinate.id,
+        role_id=subordinate_role.id,
+        organization_id=selected_child.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    _grant_access(
+        db_session,
+        user_id=organization_admin.id,
+        role_id=organization_admin_role.id,
+        organization_id=None,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    access_delegate.can_manage_access = True
+    db_session.flush()
+
+    permissions = PermissionService(db_session)
+
+    assert permissions.get_organization_scope_ids(subordinate.id) == {
+        selected_child.id,
+        descendant.id,
+    }
+    assert permissions.can_see_organization(subordinate.id, descendant.id)
+    assert not permissions.can_see_organization(subordinate.id, sibling.id)
+    assert permissions.get_organization_scope_ids(organization_admin.id) == {
+        root.id,
+        selected_child.id,
+        descendant.id,
+        sibling.id,
+    }
+    assert permissions.has_permission(access_delegate.id, "access_grants.manage")
+    assert not permissions.has_permission(access_delegate.id, "registry.schema.manage")

@@ -24,10 +24,9 @@ EXPECTED_PERMISSIONS = {
 }
 
 EXPECTED_ROLE_PERMISSIONS = {
-    "system_admin": EXPECTED_PERMISSIONS,
-    "registry_admin": {"registry.schema.manage", "cards.manage"},
-    "org_admin": {"organizations.manage", "cards.manage"},
-    "auditor": {"audit.read"},
+    "administrator": EXPECTED_PERMISSIONS,
+    "organization_administrator": EXPECTED_PERMISSIONS - {"access_grants.manage"},
+    "subordinate_organization_administrator": {"organizations.manage", "cards.manage"},
 }
 
 
@@ -36,10 +35,9 @@ def test_bootstrap_seed_display_names_are_russian_for_ui() -> None:
     permission_descriptions = {seed.code: seed.description for seed in CORE_PERMISSION_SEEDS}
 
     assert role_names == {
-        "system_admin": "Системный администратор",
-        "registry_admin": "Администратор реестра",
-        "org_admin": "Администратор организации",
-        "auditor": "Аудитор",
+        "administrator": "Администратор",
+        "organization_administrator": "Администратор организации",
+        "subordinate_organization_administrator": "Администратор подведомственной организации",
     }
     assert permission_descriptions["users.manage"] == "Управление пользователями."
     assert permission_descriptions["access_grants.manage"] == "Управление правами доступа."
@@ -200,22 +198,24 @@ def test_bootstrap_seed_creates_expected_roles_permissions_and_is_idempotent(
     first = service.seed_defaults()
     second = service.seed_defaults()
 
-    role_codes = set(db_session.scalars(select(Role.code)).all())
+    active_role_codes = set(
+        db_session.scalars(select(Role.code).where(Role.archived_at.is_(None))).all()
+    )
     permission_codes = set(db_session.scalars(select(Permission.code)).all())
 
-    assert first.roles_created == 4
-    assert first.permissions_created == len(EXPECTED_PERMISSIONS)
+    assert first.roles_created == 0
+    assert first.permissions_created == 0
     assert second.roles_created == 0
     assert second.permissions_created == 0
-    assert set(EXPECTED_ROLE_PERMISSIONS) <= role_codes
-    assert permission_codes >= EXPECTED_PERMISSIONS
+    assert active_role_codes == set(EXPECTED_ROLE_PERMISSIONS)
+    assert permission_codes == EXPECTED_PERMISSIONS
 
     for role in db_session.scalars(select(Role).where(Role.code.in_(EXPECTED_ROLE_PERMISSIONS))):
         assert role.is_system is True
         assert role.archived_at is None
 
     for role_code, expected_permissions in EXPECTED_ROLE_PERMISSIONS.items():
-        assert expected_permissions <= _permissions_for_role(db_session, role_code)
+        assert expected_permissions == _permissions_for_role(db_session, role_code)
 
     total_links = db_session.scalar(select(func.count()).select_from(role_permissions))
     distinct_links = db_session.scalar(
@@ -231,13 +231,15 @@ def test_bootstrap_seed_creates_expected_roles_permissions_and_is_idempotent(
 def test_bootstrap_seed_repairs_missing_role_permission_link(db_session: Session) -> None:
     service = BootstrapService(db_session)
     service.seed_defaults()
-    registry_admin = db_session.scalars(select(Role).where(Role.code == "registry_admin")).one()
+    organization_admin = db_session.scalars(
+        select(Role).where(Role.code == "organization_administrator")
+    ).one()
     cards_manage = db_session.scalars(
         select(Permission).where(Permission.code == "cards.manage")
     ).one()
     db_session.execute(
         delete(role_permissions).where(
-            role_permissions.c.role_id == registry_admin.id,
+            role_permissions.c.role_id == organization_admin.id,
             role_permissions.c.permission_id == cards_manage.id,
         )
     )
@@ -246,7 +248,7 @@ def test_bootstrap_seed_repairs_missing_role_permission_link(db_session: Session
     result = service.seed_defaults()
 
     assert result.role_permission_links_created == 1
-    assert "cards.manage" in _permissions_for_role(db_session, "registry_admin")
+    assert "cards.manage" in _permissions_for_role(db_session, "organization_administrator")
 
 
 def test_create_superadmin_is_repeatable_and_case_insensitive(db_session: Session) -> None:

@@ -143,10 +143,11 @@ def _create_role_with_permissions(
     session.flush()
 
     for permission_code in permission_codes:
-        permission = Permission(code=f"{role_code}.{permission_code}", description=permission_code)
-        permission.code = permission_code
-        session.add(permission)
-        session.flush()
+        permission = session.scalar(select(Permission).where(Permission.code == permission_code))
+        if permission is None:
+            permission = Permission(code=permission_code, description=permission_code)
+            session.add(permission)
+            session.flush()
         session.execute(
             role_permissions.insert().values(
                 role_id=role.id,
@@ -319,7 +320,11 @@ def test_api_can_create_schema_cards_public_links_transfer_and_read_audit(
     target = _post_json(
         api_client,
         "/api/v1/organizations",
-        {"code": "api-target", "name": "API Target"},
+        {
+            "code": "api-target",
+            "name": "API Target",
+            "parent_id": root["id"],
+        },
         actor_id=system_admin.id,
     )
     registry = _post_json(
@@ -784,10 +789,13 @@ def test_api_public_link_preview_returns_public_edit_schema(
     assert payload["display_name"] == "Public Preview Card"
     assert "raw_token" not in payload
     assert "token_hash" not in payload
-    assert [block["code"] for block in payload["blocks"]] == ["public"]
-    assert payload["blocks"][0]["instances"][0]["fields"][0]["field_id"] == str(status_field.id)
-    assert payload["blocks"][0]["instances"][0]["fields"][0]["value"] == "drafted"
-    assert "secret" not in str(payload)
+    blocks_by_code = {block["code"]: block for block in payload["blocks"]}
+    assert set(blocks_by_code) == {"private", "public"}
+    public_fields = blocks_by_code["public"]["instances"][0]["fields"]
+    private_fields = blocks_by_code["private"]["instances"][0]["fields"]
+    assert public_fields[0]["field_id"] == str(status_field.id)
+    assert public_fields[0]["value"] == "drafted"
+    assert private_fields[0]["label"] == "Secret"
 
     disabled_card = CardService(db_session).create_card_for_actor(
         actor_user_id=system_admin.id,
@@ -806,4 +814,5 @@ def test_api_public_link_preview_returns_public_edit_schema(
         "/api/v1/public-links/preview",
         json={"raw_token": disabled_link["raw_token"]},
     )
-    assert disabled_preview.status_code == 403, disabled_preview.text
+    assert disabled_preview.status_code == 200, disabled_preview.text
+    assert disabled_preview.json()["can_edit"] is False

@@ -18,6 +18,8 @@ from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_per
 from app.services.auth import hash_password
 from app.services.bootstrap import BootstrapService
 from app.services.organizations import OrganizationService
+from app.services.references import ReferenceListService
+from app.services.registry_schema import RegistrySchemaService
 
 
 def _require_test_database_url() -> str:
@@ -197,6 +199,21 @@ def test_phase_1j_routes_are_registered_without_database() -> None:
     } <= paths
 
 
+def test_bootstrap_exposes_only_the_three_business_roles(db_session: Session) -> None:
+    BootstrapService(db_session).seed_defaults()
+
+    assert {
+        role.code for role in db_session.scalars(select(Role).where(Role.archived_at.is_(None)))
+    } == {
+        "administrator",
+        "organization_administrator",
+        "subordinate_organization_administrator",
+    }
+
+    created_user = _create_user(db_session, "phase1j-business-role@example.test")
+    assert created_user.can_manage_access is False
+
+
 def test_system_admin_user_role_permission_and_grant_workflow(
     api_client: TestClient,
     db_session: Session,
@@ -209,7 +226,9 @@ def test_system_admin_user_role_permission_and_grant_workflow(
         code="phase1j-system-root",
         name="Phase 1J System Root",
     )
-    org_admin_role = db_session.scalars(select(Role).where(Role.code == "org_admin")).one()
+    subordinate_org_admin_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
 
     created_user = api_client.post(
         "/api/v1/users",
@@ -239,7 +258,9 @@ def test_system_admin_user_role_permission_and_grant_workflow(
     permissions = api_client.get("/api/v1/permissions", headers=headers)
     assert roles.status_code == 200, roles.text
     assert permissions.status_code == 200, permissions.text
-    assert "org_admin" in {role["code"] for role in roles.json()["items"]}
+    assert "subordinate_organization_administrator" in {
+        role["code"] for role in roles.json()["items"]
+    }
     assert "access_grants.manage" in {
         permission["code"] for permission in permissions.json()["items"]
     }
@@ -248,7 +269,7 @@ def test_system_admin_user_role_permission_and_grant_workflow(
         "/api/v1/access-grants",
         json={
             "user_id": created_payload["id"],
-            "role_id": str(org_admin_role.id),
+            "role_id": str(subordinate_org_admin_role.id),
             "organization_id": str(organization.id),
             "include_descendants": True,
         },
@@ -325,7 +346,9 @@ def test_scoped_admin_access_grant_boundaries(
             "access_grants.manage",
         ],
     )
-    org_admin_role = db_session.scalars(select(Role).where(Role.code == "org_admin")).one()
+    subordinate_org_admin_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
     _grant_access(
         db_session,
         user_id=scoped_admin.id,
@@ -337,7 +360,7 @@ def test_scoped_admin_access_grant_boundaries(
     _grant_access(
         db_session,
         user_id=sibling_user.id,
-        role_id=org_admin_role.id,
+        role_id=subordinate_org_admin_role.id,
         organization_id=sibling.id,
         include_descendants=True,
         created_by=system_admin.id,
@@ -376,7 +399,7 @@ def test_scoped_admin_access_grant_boundaries(
         "/api/v1/access-grants",
         json={
             "user_id": created_user.json()["id"],
-            "role_id": str(org_admin_role.id),
+            "role_id": str(subordinate_org_admin_role.id),
             "organization_id": str(grandchild.id),
             "include_descendants": True,
         },
@@ -388,7 +411,7 @@ def test_scoped_admin_access_grant_boundaries(
         "/api/v1/access-grants",
         json={
             "user_id": created_user.json()["id"],
-            "role_id": str(org_admin_role.id),
+            "role_id": str(subordinate_org_admin_role.id),
             "organization_id": str(sibling.id),
             "include_descendants": True,
         },
@@ -398,7 +421,7 @@ def test_scoped_admin_access_grant_boundaries(
         "/api/v1/access-grants",
         json={
             "user_id": created_user.json()["id"],
-            "role_id": str(org_admin_role.id),
+            "role_id": str(subordinate_org_admin_role.id),
             "organization_id": None,
             "include_descendants": True,
         },
@@ -412,3 +435,168 @@ def test_scoped_admin_access_grant_boundaries(
     visible_user_ids = {item["id"] for item in users.json()["items"]}
     assert created_user.json()["id"] in visible_user_ids
     assert str(sibling_user.id) not in visible_user_ids
+
+
+def test_system_admin_creates_subordinate_user_profile_with_multiple_scope_roots(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    BootstrapService(db_session).seed_defaults()
+    system_admin = _create_user(db_session, "profile-system@example.test", is_superuser=True)
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="profile-root",
+        name="Profile root",
+    )
+    root_a = organization_service.create_child(
+        parent_id=root.id,
+        code="profile-root-a",
+        name="Profile root A",
+        created_by=system_admin.id,
+    )
+    root_b = organization_service.create_child(
+        parent_id=root.id,
+        code="profile-root-b",
+        name="Profile root B",
+        created_by=system_admin.id,
+    )
+    headers = _auth_headers(api_client, "profile-system@example.test")
+
+    response = api_client.post(
+        "/api/v1/users",
+        json={
+            "email": "profile-branch@example.test",
+            "display_name": "Profile branch administrator",
+            "password": "branch-pass",
+            "role_code": "subordinate_organization_administrator",
+            "organization_ids": [str(root_a.id), str(root_b.id)],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["role_code"] == "subordinate_organization_administrator"
+    assert set(payload["organization_ids"]) == {str(root_a.id), str(root_b.id)}
+    assert payload["can_manage_access"] is False
+
+
+def test_non_superuser_cannot_enable_access_management_or_assign_global_role(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    BootstrapService(db_session).seed_defaults()
+    system_admin = _create_user(
+        db_session,
+        "profile-boundary-system@example.test",
+        is_superuser=True,
+    )
+    scoped_actor = _create_user(db_session, "profile-boundary-actor@example.test")
+    managed_user = _create_user(db_session, "profile-boundary-user@example.test")
+    organization_service = OrganizationService(db_session)
+    root = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="profile-boundary-root",
+        name="Profile boundary root",
+    )
+    access_manager_role = _create_role_with_existing_permissions(
+        db_session,
+        code="profile_access_manager",
+        permission_codes=["users.manage", "access_grants.manage"],
+    )
+    _grant_access(
+        db_session,
+        user_id=scoped_actor.id,
+        role_id=access_manager_role.id,
+        organization_id=root.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    subordinate_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
+    _grant_access(
+        db_session,
+        user_id=managed_user.id,
+        role_id=subordinate_role.id,
+        organization_id=root.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    headers = _auth_headers(api_client, "profile-boundary-actor@example.test")
+
+    access_flag_response = api_client.patch(
+        f"/api/v1/users/{managed_user.id}",
+        json={"can_manage_access": True},
+        headers=headers,
+    )
+    global_role_response = api_client.patch(
+        f"/api/v1/users/{managed_user.id}",
+        json={
+            "role_code": "organization_administrator",
+            "organization_ids": [],
+        },
+        headers=headers,
+    )
+
+    assert access_flag_response.status_code == 403, access_flag_response.text
+    assert global_role_response.status_code == 403, global_role_response.text
+
+
+def test_subordinate_admin_reads_schema_and_references_but_cannot_mutate_them(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    BootstrapService(db_session).seed_defaults()
+    system_admin = _create_user(db_session, "readonly-system@example.test", is_superuser=True)
+    subordinate = _create_user(db_session, "readonly-subordinate@example.test")
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="readonly-root",
+        name="Read-only root",
+    )
+    registry = RegistrySchemaService(db_session).create_registry_for_actor(
+        actor_user_id=system_admin.id,
+        code="readonly-registry",
+        name="Read-only registry",
+    )
+    ReferenceListService(db_session).create_reference_list_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="readonly-reference",
+        name="Read-only reference",
+    )
+    subordinate_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
+    _grant_access(
+        db_session,
+        user_id=subordinate.id,
+        role_id=subordinate_role.id,
+        organization_id=organization.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    headers = _auth_headers(api_client, "readonly-subordinate@example.test")
+
+    schema_response = api_client.get(f"/api/v1/registries/{registry.id}/schema", headers=headers)
+    references_response = api_client.get(
+        f"/api/v1/registries/{registry.id}/reference-lists",
+        headers=headers,
+    )
+    create_block_response = api_client.post(
+        f"/api/v1/registries/{registry.id}/blocks",
+        json={"code": "forbidden_block", "title": "Forbidden block", "position": 1},
+        headers=headers,
+    )
+    create_reference_response = api_client.post(
+        f"/api/v1/registries/{registry.id}/reference-lists",
+        json={"code": "forbidden_reference", "name": "Forbidden reference"},
+        headers=headers,
+    )
+
+    assert schema_response.status_code == 200, schema_response.text
+    assert references_response.status_code == 200, references_response.text
+    assert create_block_response.status_code == 403, create_block_response.text
+    assert create_reference_response.status_code == 403, create_reference_response.text

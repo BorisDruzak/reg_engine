@@ -15,6 +15,7 @@ class CurrentUserRead(BaseModel):
     display_name: str
     status: str
     is_superuser: bool
+    can_manage_access: bool
 
 
 class LoginResponse(BaseModel):

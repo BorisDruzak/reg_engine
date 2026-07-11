@@ -173,14 +173,20 @@ class ReferenceListService:
             )
 
         permissions = PermissionService(self.session)
-        if not permissions.has_permission(
+        can_manage_schema = permissions.has_permission(
             actor_user_id,
             "registry.schema.manage",
             registry_id=registry_id,
-        ):
+        )
+        can_read_cards = permissions.has_permission(
+            actor_user_id,
+            "cards.manage",
+            registry_id=registry_id,
+        )
+        if not can_manage_schema and not can_read_cards:
             raise PermissionDeniedError("Actor cannot read reference lists.")
 
-        return list(
+        reference_lists = list(
             self.session.scalars(
                 select(ReferenceList)
                 .where(
@@ -191,6 +197,13 @@ class ReferenceListService:
                 .order_by(ReferenceList.code, ReferenceList.id)
             ).all()
         )
+        if can_manage_schema:
+            return reference_lists
+        return [
+            reference_list
+            for reference_list in reference_lists
+            if self._can_read_reference_list(actor_user_id, reference_list)
+        ]
 
     def create_reference_item_for_actor(
         self,
@@ -568,6 +581,13 @@ class ReferenceListService:
             return
 
         raise PermissionDeniedError("Actor cannot read this reference list owner scope.")
+
+    def _can_read_reference_list(self, actor_user_id: UUID, reference_list: ReferenceList) -> bool:
+        try:
+            self._require_reference_read_permission(actor_user_id, reference_list)
+        except PermissionDeniedError:
+            return False
+        return True
 
     def _get_active_reference_list(self, list_id: UUID) -> ReferenceList:
         reference_list = self.session.get(ReferenceList, list_id)

@@ -93,7 +93,7 @@ def create_card_template_print_view(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardTemplatePrintViewRead:
     try:
-        return _layout_service(session).create_print_view_for_actor(
+        return _layout_service(session, with_document_service=True).create_print_view_for_actor(
             actor_user_id=actor_user_id,
             card_template_id=template_id,
             payload=payload,
@@ -116,7 +116,7 @@ def update_card_template_print_view(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardTemplatePrintViewRead:
     try:
-        return _layout_service(session).update_print_view_for_actor(
+        return _layout_service(session, with_document_service=True).update_print_view_for_actor(
             actor_user_id=actor_user_id,
             card_template_id=template_id,
             print_view_id=print_view_id,
@@ -139,7 +139,10 @@ def sync_card_template_print_view(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardTemplatePrintViewRead:
     try:
-        return _layout_service(session).sync_print_view_from_form_layout(
+        return _layout_service(
+            session,
+            with_document_service=True,
+        ).sync_print_view_from_form_layout(
             actor_user_id=actor_user_id,
             card_template_id=template_id,
             print_view_id=print_view_id,
@@ -200,7 +203,7 @@ def generate_card_template_layout_docx(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardTemplateLayoutGeneratedDocumentRead:
-    service = _layout_service(session)
+    service = _layout_service(session, with_document_service=True)
     try:
         generated = service.generate_docx_for_actor(
             actor_user_id=actor_user_id,
@@ -233,7 +236,7 @@ def generate_card_template_layout_pdf(
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardTemplateLayoutGeneratedDocumentRead:
-    service = _layout_service(session)
+    service = _layout_service(session, with_document_service=True)
     try:
         generated = service.generate_pdf_for_actor(
             actor_user_id=actor_user_id,
@@ -254,5 +257,10 @@ def generate_card_template_layout_pdf(
     )
 
 
-def _layout_service(session: Session) -> CardTemplateLayoutService:
-    return CardTemplateLayoutService(session, document_service=_document_service(session))
+def _layout_service(
+    session: Session,
+    *,
+    with_document_service: bool = False,
+) -> CardTemplateLayoutService:
+    document_service = _document_service(session) if with_document_service else None
+    return CardTemplateLayoutService(session, document_service=document_service)

@@ -44,21 +44,13 @@ class PermissionService:
         *,
         registry_id: UUID | None = None,
     ) -> set[UUID]:
-        if self.is_superuser(user_id):
-            return set(
-                self.session.scalars(
-                    select(Organization.id).where(
-                        Organization.archived_at.is_(None),
-                        Organization.is_active.is_(True),
-                    )
-                ).all()
-            )
+        grants = self._active_access_grants(user_id, registry_id=registry_id)
+        if self.is_superuser(user_id) or any(grant.organization_id is None for grant in grants):
+            return self._all_active_organization_ids()
 
         scope_ids: set[UUID] = set()
-        for grant in self._active_access_grants(user_id, registry_id=registry_id):
-            if grant.organization_id is None:
-                continue
-
+        for grant in grants:
+            assert grant.organization_id is not None
             if grant.include_descendants:
                 scope_ids.update(self._active_descendant_ids(grant.organization_id))
             else:
@@ -94,6 +86,13 @@ class PermissionService:
 
         if organization_id is not None and not self._organization_is_active(organization_id):
             return False
+
+        if permission_code == "access_grants.manage" and self.has_access_management_flag(user_id):
+            return organization_id is None or self.can_see_organization(
+                user_id,
+                organization_id,
+                registry_id=registry_id,
+            )
 
         grants = self._active_access_grants_with_permission(
             user_id,
@@ -168,6 +167,26 @@ class PermissionService:
             .where(*criteria)
         )
         return list(self.session.scalars(statement).all())
+
+    def _all_active_organization_ids(self) -> set[UUID]:
+        return set(
+            self.session.scalars(
+                select(Organization.id).where(
+                    Organization.archived_at.is_(None),
+                    Organization.is_active.is_(True),
+                )
+            ).all()
+        )
+
+    def has_access_management_flag(self, user_id: UUID) -> bool:
+        result = self.session.scalar(
+            select(User.can_manage_access).where(
+                User.id == user_id,
+                User.archived_at.is_(None),
+                User.status == "active",
+            )
+        )
+        return bool(result)
 
     def _active_descendant_ids(self, organization_id: UUID) -> set[UUID]:
         return set(

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -19,6 +20,17 @@ from app.services.audit import AuditService
 from app.services.auth import hash_password
 from app.services.permissions import PermissionDeniedError, PermissionService
 
+BUSINESS_ROLE_CODES = frozenset(
+    {
+        "administrator",
+        "organization_administrator",
+        "subordinate_organization_administrator",
+    }
+)
+ADMINISTRATOR_ROLE_CODE = "administrator"
+ORGANIZATION_ADMINISTRATOR_ROLE_CODE = "organization_administrator"
+SUBORDINATE_ORGANIZATION_ADMINISTRATOR_ROLE_CODE = "subordinate_organization_administrator"
+
 
 class UserAccessError(ValueError):
     """Raised when user/access management input is invalid."""
@@ -36,6 +48,20 @@ class UserAccessService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.permissions = PermissionService(session)
+
+    def user_read_data(self, user: User) -> dict[str, object]:
+        profile = self._user_role_profile(user)
+        return {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "status": user.status,
+            "is_superuser": user.is_superuser,
+            "role_code": profile["role_code"],
+            "organization_ids": profile["organization_ids"],
+            "can_manage_access": user.can_manage_access,
+            "archived_at": user.archived_at,
+        }
 
     def list_users_for_actor(self, *, actor_user_id: UUID) -> list[User]:
         if self.permissions.is_superuser(actor_user_id):
@@ -59,7 +85,10 @@ class UserAccessService:
                 .where(
                     User.archived_at.is_(None),
                     AccessGrant.archived_at.is_(None),
-                    AccessGrant.organization_id.in_(scope_ids),
+                    or_(
+                        AccessGrant.organization_id.is_(None),
+                        AccessGrant.organization_id.in_(scope_ids),
+                    ),
                 )
                 .distinct()
                 .order_by(User.email, User.id)
@@ -86,12 +115,28 @@ class UserAccessService:
         password: str,
         status: str = "active",
         is_superuser: bool = False,
+        role_code: str | None = None,
+        organization_ids: Sequence[UUID] = (),
+        can_manage_access: bool = False,
     ) -> User:
         actor_is_superuser = self.permissions.is_superuser(actor_user_id)
         if not actor_is_superuser:
             self._require_permission(actor_user_id, "users.manage")
             if is_superuser:
                 raise PermissionDeniedError("Only a system admin can create superusers.")
+            if can_manage_access:
+                raise PermissionDeniedError("Only a system admin can manage access delegation.")
+
+        requested_role_code = role_code
+        if is_superuser:
+            if requested_role_code not in {None, ADMINISTRATOR_ROLE_CODE}:
+                raise UserAccessError("A superuser must use the administrator role.")
+            requested_role_code = ADMINISTRATOR_ROLE_CODE
+        normalized_organization_ids = self._prepare_role_profile(
+            actor_user_id=actor_user_id,
+            role_code=requested_role_code,
+            organization_ids=organization_ids,
+        )
 
         normalized_email = self._normalize_email(email)
         self._validate_display_name(display_name)
@@ -104,21 +149,24 @@ class UserAccessService:
             display_name=display_name.strip(),
             password_hash=hash_password(password),
             status=status,
-            is_superuser=is_superuser if actor_is_superuser else False,
+            is_superuser=requested_role_code == ADMINISTRATOR_ROLE_CODE,
+            can_manage_access=can_manage_access if actor_is_superuser else False,
         )
         self.session.add(user)
         self.session.flush()
+        if requested_role_code is not None:
+            self._apply_role_profile(
+                actor_user_id=actor_user_id,
+                user=user,
+                role_code=requested_role_code,
+                organization_ids=normalized_organization_ids,
+            )
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="create",
             object_type="user",
             object_id=user.id,
-            new_data_json={
-                "email": user.email,
-                "display_name": user.display_name,
-                "status": user.status,
-                "is_superuser": user.is_superuser,
-            },
+            new_data_json=self._user_audit_data(user),
         )
         return user
 
@@ -132,6 +180,9 @@ class UserAccessService:
         password: str | None = None,
         status: str | None = None,
         is_superuser: bool | None = None,
+        role_code: str | None = None,
+        organization_ids: Sequence[UUID] | None = None,
+        can_manage_access: bool | None = None,
     ) -> User:
         user = self._get_existing_user(user_id)
         actor_is_superuser = self.permissions.is_superuser(actor_user_id)
@@ -139,8 +190,11 @@ class UserAccessService:
             self._assert_can_manage_existing_user(actor_user_id, user)
             if is_superuser is not None and is_superuser != user.is_superuser:
                 raise PermissionDeniedError("Only a system admin can change superuser status.")
+            if can_manage_access is not None:
+                raise PermissionDeniedError("Only a system admin can manage access delegation.")
 
         old_data = self._user_audit_data(user)
+        old_profile = self._user_role_profile(user)
         if email is not None:
             normalized_email = self._normalize_email(email)
             existing = self._user_by_email(normalized_email)
@@ -157,6 +211,33 @@ class UserAccessService:
             user.status = status
         if is_superuser is not None and actor_is_superuser:
             user.is_superuser = is_superuser
+        if can_manage_access is not None and actor_is_superuser:
+            user.can_manage_access = can_manage_access
+
+        profile_changed = role_code is not None or organization_ids is not None
+        if profile_changed:
+            effective_role_code = role_code or str(old_profile["role_code"])
+            effective_organization_ids: Sequence[UUID]
+            if organization_ids is None:
+                saved_organization_ids = old_profile["organization_ids"]
+                if not isinstance(saved_organization_ids, list) or not all(
+                    isinstance(organization_id, UUID) for organization_id in saved_organization_ids
+                ):
+                    raise UserAccessError("User role profile is invalid.")
+                effective_organization_ids = saved_organization_ids
+            else:
+                effective_organization_ids = organization_ids
+            normalized_organization_ids = self._prepare_role_profile(
+                actor_user_id=actor_user_id,
+                role_code=effective_role_code,
+                organization_ids=effective_organization_ids,
+            )
+            self._apply_role_profile(
+                actor_user_id=actor_user_id,
+                user=user,
+                role_code=effective_role_code,
+                organization_ids=normalized_organization_ids,
+            )
 
         self.session.flush()
         AuditService(self.session).record_user_event(
@@ -167,6 +248,15 @@ class UserAccessService:
             old_data_json=old_data,
             new_data_json=self._user_audit_data(user),
         )
+        if profile_changed:
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="update",
+                object_type="user_role_profile",
+                object_id=user.id,
+                old_data_json=old_profile,
+                new_data_json=self._user_role_profile(user),
+            )
         return user
 
     def archive_user_for_actor(self, *, actor_user_id: UUID, user_id: UUID) -> User:
@@ -341,6 +431,199 @@ class UserAccessService:
         )
         return grant
 
+    def _prepare_role_profile(
+        self,
+        *,
+        actor_user_id: UUID,
+        role_code: str | None,
+        organization_ids: Sequence[UUID],
+    ) -> tuple[UUID, ...]:
+        normalized_organization_ids = tuple(dict.fromkeys(organization_ids))
+        if role_code is None:
+            if normalized_organization_ids:
+                raise UserAccessError("Organization scope requires a business role.")
+            return ()
+        if role_code not in BUSINESS_ROLE_CODES:
+            raise UserAccessError("Unsupported business role.")
+        if role_code in {
+            ADMINISTRATOR_ROLE_CODE,
+            ORGANIZATION_ADMINISTRATOR_ROLE_CODE,
+        }:
+            if normalized_organization_ids:
+                raise UserAccessError("Global administrator roles cannot have organization roots.")
+        elif not normalized_organization_ids:
+            raise UserAccessError("A subordinate administrator requires at least one organization.")
+
+        for organization_id in normalized_organization_ids:
+            self._get_active_organization(organization_id)
+        self._assert_actor_can_assign_role_profile(
+            actor_user_id=actor_user_id,
+            role_code=role_code,
+            organization_ids=normalized_organization_ids,
+        )
+        return normalized_organization_ids
+
+    def _assert_actor_can_assign_role_profile(
+        self,
+        *,
+        actor_user_id: UUID,
+        role_code: str,
+        organization_ids: Sequence[UUID],
+    ) -> None:
+        if self.permissions.is_superuser(actor_user_id):
+            return
+
+        self._require_permission(actor_user_id, "users.manage")
+        if role_code != SUBORDINATE_ORGANIZATION_ADMINISTRATOR_ROLE_CODE:
+            raise PermissionDeniedError(
+                "Only a system admin can assign global administrator roles."
+            )
+        if not self.permissions.has_permission(actor_user_id, "access_grants.manage"):
+            raise PermissionDeniedError("Actor cannot manage user access profiles.")
+        for organization_id in organization_ids:
+            if not self.permissions.has_permission(
+                actor_user_id,
+                "access_grants.manage",
+                organization_id=organization_id,
+            ):
+                raise PermissionDeniedError(
+                    "Actor cannot assign an organization outside its scope."
+                )
+
+    def _apply_role_profile(
+        self,
+        *,
+        actor_user_id: UUID,
+        user: User,
+        role_code: str,
+        organization_ids: Sequence[UUID],
+    ) -> None:
+        role_ids_by_code = {
+            code: role_id
+            for code, role_id in self.session.execute(
+                select(Role.code, Role.id).where(
+                    Role.code.in_(BUSINESS_ROLE_CODES),
+                    Role.archived_at.is_(None),
+                )
+            )
+        }
+        if set(role_ids_by_code) != BUSINESS_ROLE_CODES:
+            raise UserAccessError("Business roles are not initialized.")
+
+        now = datetime.now(UTC)
+        for grant in self._active_business_role_grants(user.id):
+            grant.archived_at = now
+
+        user.is_superuser = role_code == ADMINISTRATOR_ROLE_CODE
+        if role_code == ADMINISTRATOR_ROLE_CODE:
+            self.session.flush()
+            return
+
+        role_id = role_ids_by_code[role_code]
+        if role_code == ORGANIZATION_ADMINISTRATOR_ROLE_CODE:
+            self._activate_role_profile_grant(
+                actor_user_id=actor_user_id,
+                user_id=user.id,
+                role_id=role_id,
+                organization_id=None,
+            )
+        else:
+            for organization_id in organization_ids:
+                self._activate_role_profile_grant(
+                    actor_user_id=actor_user_id,
+                    user_id=user.id,
+                    role_id=role_id,
+                    organization_id=organization_id,
+                )
+        self.session.flush()
+
+    def _activate_role_profile_grant(
+        self,
+        *,
+        actor_user_id: UUID,
+        user_id: UUID,
+        role_id: UUID,
+        organization_id: UUID | None,
+    ) -> None:
+        grant = self._matching_grant(
+            user_id=user_id,
+            role_id=role_id,
+            registry_id=None,
+            organization_id=organization_id,
+        )
+        if grant is None:
+            self.session.add(
+                AccessGrant(
+                    user_id=user_id,
+                    role_id=role_id,
+                    organization_id=organization_id,
+                    include_descendants=True,
+                    created_by=actor_user_id,
+                )
+            )
+            return
+
+        grant.include_descendants = True
+        grant.valid_from = None
+        grant.valid_to = None
+        grant.created_by = actor_user_id
+        grant.archived_at = None
+
+    def _active_business_role_grants(self, user_id: UUID) -> list[AccessGrant]:
+        now = datetime.now(UTC)
+        return list(
+            self.session.scalars(
+                select(AccessGrant)
+                .join(Role, Role.id == AccessGrant.role_id)
+                .where(
+                    AccessGrant.user_id == user_id,
+                    AccessGrant.archived_at.is_(None),
+                    Role.archived_at.is_(None),
+                    Role.code.in_(BUSINESS_ROLE_CODES),
+                    or_(AccessGrant.valid_from.is_(None), AccessGrant.valid_from <= now),
+                    or_(AccessGrant.valid_to.is_(None), AccessGrant.valid_to > now),
+                )
+            ).all()
+        )
+
+    def _user_role_profile(self, user: User) -> dict[str, object]:
+        if user.is_superuser:
+            return {
+                "role_code": ADMINISTRATOR_ROLE_CODE,
+                "organization_ids": [],
+            }
+
+        grants = self._active_business_role_grants(user.id)
+        if any(
+            grant.role_id == self._business_role_id(ORGANIZATION_ADMINISTRATOR_ROLE_CODE)
+            for grant in grants
+        ):
+            return {
+                "role_code": ORGANIZATION_ADMINISTRATOR_ROLE_CODE,
+                "organization_ids": [],
+            }
+        return {
+            "role_code": SUBORDINATE_ORGANIZATION_ADMINISTRATOR_ROLE_CODE,
+            "organization_ids": sorted(
+                (
+                    grant.organization_id
+                    for grant in grants
+                    if grant.role_id
+                    == self._business_role_id(SUBORDINATE_ORGANIZATION_ADMINISTRATOR_ROLE_CODE)
+                    and grant.organization_id is not None
+                ),
+                key=str,
+            ),
+        }
+
+    def _business_role_id(self, role_code: str) -> UUID | None:
+        return self.session.scalar(
+            select(Role.id).where(
+                Role.code == role_code,
+                Role.archived_at.is_(None),
+            )
+        )
+
     def _require_permission(
         self,
         actor_user_id: UUID,
@@ -374,8 +657,10 @@ class UserAccessService:
     ) -> None:
         if organization_id is None:
             raise PermissionDeniedError("Only a system admin can create global grants.")
-        if role.code == "system_admin":
-            raise PermissionDeniedError("Only a system admin can assign system_admin.")
+        if role.code in {"administrator", "organization_administrator"}:
+            raise PermissionDeniedError(
+                "Only a system admin can assign a global administrator role."
+            )
         if not self.permissions.has_permission(
             actor_user_id,
             "access_grants.manage",
@@ -397,6 +682,13 @@ class UserAccessService:
         *,
         registry_id: UUID | None,
     ) -> bool:
+        if self.permissions.has_access_management_flag(actor_user_id):
+            return self.permissions.can_see_organization(
+                actor_user_id,
+                organization_id,
+                registry_id=registry_id,
+            )
+
         now = datetime.now(UTC)
         criteria: list[ColumnElement[bool]] = [
             AccessGrant.user_id == actor_user_id,

@@ -2153,7 +2153,10 @@ tr:last-child td {
 
 .filled-card-layout .card-layout-field-node[tabindex="0"] {
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
 }
 
 .filled-card-layout .card-layout-field-node[tabindex="0"]:hover {
@@ -4629,6 +4632,83 @@ tr:last-child td {
 .row-actions .ghost-button,
 .row-actions .danger-button {
   white-space: nowrap;
+}
+
+.user-row-select {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+}
+
+.user-row-select:hover,
+.user-row-select:focus-visible {
+  color: #0b766d;
+  text-decoration: underline;
+}
+
+.table-wrap tr.is-selected > td {
+  background: #effaf8;
+}
+
+.user-inline-profile-row > td {
+  padding: 0;
+  background: #f8fafc;
+}
+
+.user-inline-profile {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.user-inline-profile-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.user-inline-profile-heading span,
+.user-profile-readonly-access,
+.organization-root-selector p {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.user-access-profile-controls,
+.organization-root-selector,
+.organization-root-options {
+  display: grid;
+  gap: 10px;
+}
+
+.organization-root-selector {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d8e3f0;
+  border-radius: 8px;
+}
+
+.organization-root-selector legend {
+  padding: 0 4px;
+  font-weight: 700;
+}
+
+.organization-root-selector p {
+  margin: 0;
+}
+
+.organization-root-option > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .admin-mutation-form {

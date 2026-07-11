@@ -502,7 +502,11 @@ class PublicLinkService:
         return public_link
 
     def validate_public_attachment_token(self, *, raw_token: str) -> CardPublicLink:
-        return self.validate_public_edit_token(raw_token=raw_token)
+        public_link = self._editable_public_link(raw_token)
+        card = self._get_active_card(public_link.card_id)
+        if not card.public_view_enabled or not card.public_edit_enabled:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
+        return public_link
 
     def preview_public_link(self, *, raw_token: str) -> PublicLinkPreview:
         public_link = self._viewable_public_link(raw_token)

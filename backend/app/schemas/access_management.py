@@ -1,7 +1,14 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+BusinessRoleCode = Literal[
+    "administrator",
+    "organization_administrator",
+    "subordinate_organization_administrator",
+]
 
 
 class UserCreate(BaseModel):
@@ -10,6 +17,9 @@ class UserCreate(BaseModel):
     password: str
     status: str = "active"
     is_superuser: bool = False
+    role_code: BusinessRoleCode | None = None
+    organization_ids: list[UUID] = Field(default_factory=list)
+    can_manage_access: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -18,6 +28,9 @@ class UserUpdate(BaseModel):
     password: str | None = None
     status: str | None = None
     is_superuser: bool | None = None
+    role_code: BusinessRoleCode | None = None
+    organization_ids: list[UUID] | None = None
+    can_manage_access: bool | None = None
 
 
 class UserRead(BaseModel):
@@ -28,6 +41,9 @@ class UserRead(BaseModel):
     display_name: str
     status: str
     is_superuser: bool
+    role_code: BusinessRoleCode
+    organization_ids: list[UUID]
+    can_manage_access: bool
     archived_at: datetime | None
 
 

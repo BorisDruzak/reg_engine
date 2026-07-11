@@ -32,7 +32,10 @@ def list_users(
         users = UserAccessService(session).list_users_for_actor(actor_user_id=actor_user_id)
     except Exception as exc:
         raise_service_http_error(exc)
-    return UserListRead(items=[UserRead.model_validate(user) for user in users])
+    service = UserAccessService(session)
+    return UserListRead(
+        items=[UserRead.model_validate(service.user_read_data(user)) for user in users]
+    )
 
 
 @router.post("/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -49,10 +52,13 @@ def create_user(
             password=payload.password,
             status=payload.status,
             is_superuser=payload.is_superuser,
+            role_code=payload.role_code,
+            organization_ids=payload.organization_ids,
+            can_manage_access=payload.can_manage_access,
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return UserRead.model_validate(user)
+    return UserRead.model_validate(UserAccessService(session).user_read_data(user))
 
 
 @router.get("/users/{user_id}", response_model=UserRead)
@@ -68,7 +74,7 @@ def read_user(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return UserRead.model_validate(user)
+    return UserRead.model_validate(UserAccessService(session).user_read_data(user))
 
 
 @router.patch("/users/{user_id}", response_model=UserRead)
@@ -87,10 +93,13 @@ def update_user(
             password=payload.password,
             status=payload.status,
             is_superuser=payload.is_superuser,
+            role_code=payload.role_code,
+            organization_ids=payload.organization_ids,
+            can_manage_access=payload.can_manage_access,
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return UserRead.model_validate(user)
+    return UserRead.model_validate(UserAccessService(session).user_read_data(user))
 
 
 @router.delete("/users/{user_id}", response_model=UserRead)
@@ -106,7 +115,7 @@ def archive_user(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return UserRead.model_validate(user)
+    return UserRead.model_validate(UserAccessService(session).user_read_data(user))
 
 
 @router.get("/roles", response_model=RoleListRead)

@@ -4780,3 +4780,44 @@ Live Browser proof:
   without `Запрос не выполнен` or a request for that removed card.
 - No new production card was created solely for this smoke check, preserving
   the requested empty-card state.
+
+#### Three-role user access and inline user profiles
+
+Status: local implementation and release checks complete; pending commit,
+push, production migration, deployment, and live Browser verification.
+
+- Migration `0025_three_role_access` adds the independent
+  `users.can_manage_access` flag and reconciles the active role catalogue to
+  exactly three business roles: `Администратор`, `Администратор организации`,
+  and `Администратор подведомственной организации`.
+- The migration archives legacy roles and their grants. It preserves existing
+  organization scope by converting active legacy organization-administrator
+  grants to the subordinate-organization role, including descendants, registry
+  scope, and validity dates. It does not delete users, cards, organizations, or
+  audit history.
+- A subordinate administrator works only in explicitly selected root
+  organizations and all their descendants. Organization administrators retain
+  global operational scope but do not receive access-management rights unless
+  a system administrator enables the separate `Может управлять доступом` flag.
+- The `Пользователи` workspace now owns the ordinary access workflow: selecting
+  a user opens one inline profile with Russian role names, hierarchical
+  organization selection, optional access delegation, password reset, and
+  archive confirmation. The technical roles/permissions catalogue, the
+  standalone `Доступ` navigation item, and per-row edit/reset button stack are
+  removed from the visible UI.
+- Scoped administrators can read card templates and reference lists but cannot
+  alter schema or reference data. Backend enforcement continues to be the
+  authority for every request.
+- Card-template reading no longer requires a document storage configuration;
+  storage is initialized only for print-view and DOCX/PDF generation. Public
+  attachment uploads keep a separate quota from the field-edit usage limit.
+- Verification passed locally against the disposable PostgreSQL database:
+  migration tests, focused three-role API tests, full backend `pytest`, frontend
+  Vitest, ESLint, TypeScript, scoped Prettier, and the Vite production build.
+
+Release gate:
+
+- Run the full repository check after the final diff review, commit to `main`,
+  push, create a fresh production backup and preflight report, apply `0025`,
+  deploy API and frontend, then verify the three visible roles and
+  descendant-scope behavior in the live Browser.

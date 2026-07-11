@@ -454,7 +454,6 @@ const sectionLabels = {
   registries: uiText.registries,
   cards: uiText.cards,
   users: uiText.users,
-  access: uiText.access,
   audit: uiText.audit,
 } as const;
 
