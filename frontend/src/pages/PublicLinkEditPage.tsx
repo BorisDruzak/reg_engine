@@ -8,7 +8,6 @@ import {
   getPublicLinkStatus,
   listPublicLinkAttachments,
   readPublicLinkPreview,
-  submitPublicLink,
   updatePublicLinkFieldValue,
   uploadPublicLinkAttachment,
 } from "@/api/client";
@@ -119,7 +118,9 @@ export function PublicLinkEditPage() {
                 <h3>{previewQuery.data.display_name}</h3>
               </div>
               <span>
-                {uiText.expires} {formatUiDateTime(previewQuery.data.expires_at)}
+                {previewQuery.data.expires_at
+                  ? `${uiText.expires} ${formatUiDateTime(previewQuery.data.expires_at)}`
+                  : "Бессрочная ссылка"}
               </span>
             </header>
 
@@ -153,26 +154,11 @@ function PublicEditableCard({
   status: PublicLinkSafeStatusRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
 }) {
-  const queryClient = useQueryClient();
-  const [fieldSaveStates, setFieldSaveStates] = useState<Record<string, PublicFieldSaveState>>({});
   const [confirmedFieldValues, setConfirmedFieldValues] = useState(() =>
     publicConfirmedFieldValues(preview),
   );
-  const [attachmentUploadState, setAttachmentUploadState] =
-    useState<PublicAttachmentUploadState>("idle");
-  const submitMutation = useMutation({
-    mutationFn: () => submitPublicLink(rawToken),
-    onSuccess: (nextStatus) => {
-      queryClient.setQueryData(["public-link-status", rawToken], nextStatus);
-    },
-    onError: (error) => {
-      void onLifecycleDenial(error);
-    },
-  });
-  const hasUnsavedFields = Object.values(fieldSaveStates).some(
-    (saveState) => saveState === "saving" || saveState === "error",
-  );
-  const hasPendingChanges = hasUnsavedFields || attachmentUploadState !== "idle";
+  const saveFieldValue: PublicFieldValueSaver = ({ fieldId, value, blockInstanceId }) =>
+    updatePublicLinkFieldValue(rawToken, fieldId, value, blockInstanceId);
 
   return (
     <div className="stack">
@@ -193,39 +179,15 @@ function PublicEditableCard({
             setConfirmedFieldValues((current) => ({ ...current, [fieldKey]: value }))
           }
           preview={preview}
-          rawToken={rawToken}
-          onFieldSaveStateChange={(fieldKey, saveState) =>
-            setFieldSaveStates((current) =>
-              current[fieldKey] === saveState ? current : { ...current, [fieldKey]: saveState },
-            )
-          }
+          onFieldSaveStateChange={() => undefined}
+          saveFieldValue={saveFieldValue}
         />
       )}
       <PublicLinkAttachmentsPanel
         onLifecycleDenial={onLifecycleDenial}
-        onUploadStateChange={setAttachmentUploadState}
+        onUploadStateChange={() => undefined}
         rawToken={rawToken}
       />
-      <section className="data-panel public-submit-panel">
-        <div>
-          <h3>Проверка заполнения</h3>
-          <p className="public-muted">
-            После отправки редактирование будет закрыто до решения администратора.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="primary-button"
-          disabled={submitMutation.isPending || hasPendingChanges}
-          onClick={() => submitMutation.mutate()}
-        >
-          {status.status === "changes_requested"
-            ? "Повторно отправить на проверку"
-            : "Отправить на проверку"}
-        </button>
-        {hasPendingChanges && <p className="inline-alert">Дождитесь сохранения всех изменений.</p>}
-        {submitMutation.error && <p className="inline-alert">{errorText(submitMutation.error)}</p>}
-      </section>
     </div>
   );
 }
@@ -273,20 +235,28 @@ function publicStatusReceipt(status: PublicLinkSafeStatusRead["status"]) {
   };
 }
 
-function PublicCardLayout({
+type PublicCardPreview = Pick<PublicLinkPreviewRead, "form_layout" | "blocks">;
+
+export type PublicFieldValueSaver = (input: {
+  fieldId: string;
+  value: unknown;
+  blockInstanceId: string | null;
+}) => Promise<{ value: unknown }>;
+
+export function PublicCardLayout({
   preview,
-  rawToken,
   onLifecycleDenial,
   onFieldSaveStateChange,
   confirmedFieldValues,
   onFieldValueConfirmed,
+  saveFieldValue,
 }: {
-  preview: PublicLinkPreviewRead;
-  rawToken: string;
+  preview: PublicCardPreview;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
   confirmedFieldValues: Readonly<Record<string, unknown>>;
   onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
+  saveFieldValue: PublicFieldValueSaver;
 }) {
   const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
   const surfaces = useMemo(() => publicCardSurfaces(preview, layout), [layout, preview]);
@@ -348,7 +318,7 @@ function PublicCardLayout({
             onLifecycleDenial={onLifecycleDenial}
             onFieldSaveStateChange={onFieldSaveStateChange}
             onFieldValueConfirmed={onFieldValueConfirmed}
-            rawToken={rawToken}
+            saveFieldValue={saveFieldValue}
             surface={surface}
           />
         ))}
@@ -375,7 +345,7 @@ function publicFieldKey({ blockInstanceId, instanceOrdinal, field }: PublicField
   return `${blockInstanceId ?? instanceOrdinal}:${field.field_id}`;
 }
 
-function publicConfirmedFieldValues(preview: PublicLinkPreviewRead) {
+function publicConfirmedFieldValues(preview: PublicCardPreview) {
   return Object.fromEntries(
     preview.blocks.flatMap((block) =>
       block.instances.flatMap((instance) =>
@@ -404,17 +374,17 @@ function publicCardBlockAnchorId(surface: PublicCardSurface, blockId: string) {
 
 function PublicCardLayoutSurface({
   surface,
-  rawToken,
   onLifecycleDenial,
   onFieldSaveStateChange,
   onFieldValueConfirmed,
+  saveFieldValue,
   completions,
 }: {
   surface: PublicCardSurface;
-  rawToken: string;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
   onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
+  saveFieldValue: PublicFieldValueSaver;
   completions: CompletionResult | undefined;
 }) {
   return (
@@ -469,7 +439,7 @@ function PublicCardLayoutSurface({
               onLifecycleDenial={onLifecycleDenial}
               onSaveConfirmed={onFieldValueConfirmed}
               onSaveStateChange={onFieldSaveStateChange}
-              rawToken={rawToken}
+              saveFieldValue={saveFieldValue}
             />
           );
         }}
@@ -479,7 +449,7 @@ function PublicCardLayoutSurface({
 }
 
 function publicCardSurfaces(
-  preview: PublicLinkPreviewRead,
+  preview: PublicCardPreview,
   layout: CardTemplateLayoutRead,
 ): PublicCardSurface[] {
   const previewBlocksById = new Map(preview.blocks.map((block) => [block.block_id, block]));
@@ -561,7 +531,7 @@ function publicFieldsForInstances(
   return result;
 }
 
-function publicCardTemplateLayout(preview: PublicLinkPreviewRead): CardTemplateLayoutRead {
+function publicCardTemplateLayout(preview: PublicCardPreview): CardTemplateLayoutRead {
   const blocks: FormBlockRead[] = preview.blocks.map((block, index) => ({
     id: block.block_id,
     registry_id: "public",
@@ -812,21 +782,21 @@ function PublicAttachmentList({
 }
 
 function PublicFieldEditor({
-  rawToken,
   fieldKey,
   blockInstanceId,
   field,
   onLifecycleDenial,
   onSaveStateChange,
   onSaveConfirmed,
+  saveFieldValue,
 }: {
-  rawToken: string;
   fieldKey: string;
   blockInstanceId: string | null;
   field: PublicLinkPreviewFieldRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
   onSaveConfirmed: (fieldKey: string, value: unknown) => void;
+  saveFieldValue: PublicFieldValueSaver;
 }) {
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
   const [localError, setLocalError] = useState<string | null>(null);
@@ -851,12 +821,11 @@ function PublicFieldEditor({
       const pendingSave = queuedSaveRef.current;
       queuedSaveRef.current = null;
       try {
-        const savedFieldValue = await updatePublicLinkFieldValue(
-          rawToken,
-          field.field_id,
-          pendingSave.value,
+        const savedFieldValue = await saveFieldValue({
+          fieldId: field.field_id,
+          value: pendingSave.value,
           blockInstanceId,
-        );
+        });
         if (
           mountedRef.current &&
           pendingSave.version === latestVersionRef.current &&

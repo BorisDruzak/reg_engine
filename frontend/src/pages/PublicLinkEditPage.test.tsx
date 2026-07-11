@@ -23,8 +23,6 @@ let deferredEditResponses: Array<(response: Response) => void>;
 let statusResponseMode: "success" | "deferred" | "error";
 let deferredStatusResponses: Array<(response: Response) => void>;
 let lifecycleDenialPath: string | null;
-let uploadResponseMode: "success" | "deferred" | "error";
-let deferredUploadResponses: Array<(response: Response) => void>;
 
 beforeEach(() => {
   status = safeStatus("active");
@@ -41,8 +39,6 @@ beforeEach(() => {
   statusResponseMode = "success";
   deferredStatusResponses = [];
   lifecycleDenialPath = null;
-  uploadResponseMode = "success";
-  deferredUploadResponses = [];
   vi.stubGlobal("fetch", vi.fn(handleFetch));
 });
 
@@ -85,12 +81,10 @@ describe("PublicLinkEditPage", () => {
     expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-filled");
 
     const attachmentsPanel = screen.getByRole("heading", { name: "Вложения" }).closest("section");
-    const submitPanel = screen
-      .getByRole("button", { name: "Отправить на проверку" })
-      .closest("section");
-    expect(attachmentsPanel?.compareDocumentPosition(submitPanel!)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
+    expect(attachmentsPanel).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Отправить на проверку/i }),
+    ).not.toBeInTheDocument();
   });
 
   test("renders active public fields and attachments at configured card geometry", async () => {
@@ -213,21 +207,18 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByText("Все изменения сохранены")).not.toBeInTheDocument();
   });
 
-  test("reports save errors and recovery under React StrictMode without leaving submit locked", async () => {
+  test("reports save errors and recovery under React StrictMode", async () => {
     editResponseMode = "error";
     renderPage(undefined, true);
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
-    const submitButton = screen.getByRole("button", { name: "Отправить на проверку" });
 
     fireEvent.change(statusInput, { target: { value: "strict rejected" } });
     expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
-    expect(submitButton).toBeDisabled();
 
     editResponseMode = "success";
     fireEvent.change(statusInput, { target: { value: "strict recovered" } });
     expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
     expect(statusInput).toHaveValue("strict recovered");
-    expect(submitButton).toBeEnabled();
   });
 
   test("renders and saves every explicit repeatable block instance in the same layout", async () => {
@@ -260,26 +251,7 @@ describe("PublicLinkEditPage", () => {
     });
   });
 
-  test("submits the editable card, clears private caches, and leaves only a safe receipt", async () => {
-    const queryClient = renderPage();
-    expect(await screen.findByRole("textbox", { name: "Публичный статус" })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeDefined();
-      expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Отправить на проверку" }));
-
-    expect(
-      await screen.findByRole("heading", { name: "Карточка отправлена на проверку" }),
-    ).toBeInTheDocument();
-    expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeUndefined();
-    expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
-    expect(screen.queryByRole("textbox", { name: "Публичный статус" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
-  });
-
-  test("shows the review comment and allows a corrected card to be resubmitted", async () => {
+  test("shows a legacy review comment while leaving the card editable", async () => {
     status = safeStatus("changes_requested", {
       review_comment: "Уточните публичный статус",
       reviewed_at: "2026-07-10T10:30:00Z",
@@ -289,7 +261,9 @@ describe("PublicLinkEditPage", () => {
 
     expect(await screen.findByText("Уточните публичный статус")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Публичный статус" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Повторно отправить на проверку" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /Отправить на проверку/i }),
+    ).not.toBeInTheDocument();
   });
 
   test.each([
@@ -419,7 +393,6 @@ describe("PublicLinkEditPage", () => {
   test.each([
     ["field", "/api/v1/public-links/edit"],
     ["attachment", "/api/v1/public-links/attachments/upload"],
-    ["submit", "/api/v1/public-links/submit"],
   ] as const)(
     "refreshes status and purges card caches when %s action is denied by the lifecycle",
     async (action, denialPath) => {
@@ -438,8 +411,6 @@ describe("PublicLinkEditPage", () => {
           target: { files: [new File(["denied"], "denied.txt", { type: "text/plain" })] },
         });
         fireEvent.click(screen.getByRole("button", { name: "Загрузить файл" }));
-      } else {
-        fireEvent.click(screen.getByRole("button", { name: "Отправить на проверку" }));
       }
 
       expect(
@@ -450,30 +421,6 @@ describe("PublicLinkEditPage", () => {
       expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
     },
   );
-
-  test("blocks submit during a delayed attachment upload and after failure until retry succeeds", async () => {
-    uploadResponseMode = "deferred";
-    renderPage();
-    await screen.findByRole("textbox", { name: "Публичный статус" });
-    const submitButton = screen.getByRole("button", { name: "Отправить на проверку" });
-    const uploadButton = screen.getByRole("button", { name: "Загрузить файл" });
-    fireEvent.change(screen.getByLabelText("Файл"), {
-      target: { files: [new File(["pending"], "pending.txt", { type: "text/plain" })] },
-    });
-
-    fireEvent.click(uploadButton);
-    await waitFor(() => expect(uploadCalls()).toHaveLength(1));
-    expect(submitButton).toBeDisabled();
-
-    resolveNextUpload(jsonResponse({ detail: "Upload failed" }, 400));
-    expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
-    expect(submitButton).toBeDisabled();
-
-    uploadResponseMode = "success";
-    fireEvent.click(uploadButton);
-    expect(await screen.findByText("Файл загружен")).toBeInTheDocument();
-    expect(submitButton).toBeEnabled();
-  });
 });
 
 function renderPage(setup?: (queryClient: QueryClient) => void, strict = false) {
@@ -515,15 +462,8 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
     status = safeStatus("disabled");
     return jsonResponse({ detail: "Public link is no longer editable" }, 409);
   }
-  if (path === "/api/v1/public-links/attachments/upload") {
-    if (uploadResponseMode === "deferred") {
-      return new Promise<Response>((resolve) => deferredUploadResponses.push(resolve));
-    }
-    if (uploadResponseMode === "error") {
-      return jsonResponse({ detail: "Upload failed" }, 400);
-    }
+  if (path === "/api/v1/public-links/attachments/upload")
     return jsonResponse(publicAttachment(), 201);
-  }
   if (path === "/api/v1/public-links/edit") {
     if (editResponseMode === "deferred") {
       return new Promise<Response>((resolve) => deferredEditResponses.push(resolve));
@@ -550,16 +490,6 @@ function editCalls() {
 
 function statusCalls() {
   return fetchCalls.filter((call) => call.path === "/api/v1/public-links/status");
-}
-
-function uploadCalls() {
-  return fetchCalls.filter((call) => call.path === "/api/v1/public-links/attachments/upload");
-}
-
-function resolveNextUpload(response: Response) {
-  const resolve = deferredUploadResponses.shift();
-  if (!resolve) throw new Error("No deferred upload request");
-  resolve(response);
 }
 
 function resolveNextEdit(value: unknown) {

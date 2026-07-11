@@ -533,7 +533,7 @@ export type PublicLinkTokenRead = {
   raw_token: string;
   status: PublicLinkReviewStatus;
   can_edit: boolean;
-  expires_at: string;
+  expires_at: string | null;
   review_enabled: boolean;
 };
 
@@ -543,7 +543,7 @@ export type PublicLinkRead = {
   status: PublicLinkReviewStatus;
   can_view: boolean;
   can_edit: boolean;
-  expires_at: string;
+  expires_at: string | null;
   max_uses: number | null;
   used_count: number;
   max_attachment_uploads: number | null;
@@ -639,10 +639,64 @@ export type PublicLinkPreviewBlockRead = {
 export type PublicLinkPreviewRead = {
   card_id: string;
   display_name: string;
-  expires_at: string;
+  expires_at: string | null;
   can_edit: boolean;
   form_layout: CardTemplateFormLayoutRead;
   blocks: PublicLinkPreviewBlockRead[];
+};
+
+export type CardCreationLinkOrganizationRead = {
+  id: string;
+  name: string;
+};
+
+export type CardCreationLinkCreatedCardRead = {
+  card_id: string;
+  display_name: string;
+  organization_id: string;
+  organization_name: string;
+  child_public_link_id: string;
+  child_raw_token: string;
+};
+
+export type CardCreationLinkRead = {
+  id: string;
+  registry_id: string;
+  card_template_id: string;
+  card_template_name: string;
+  raw_token: string;
+  created_at: string;
+  closed_at: string | null;
+  organizations: CardCreationLinkOrganizationRead[];
+  created_cards: CardCreationLinkCreatedCardRead[];
+};
+
+export type CardCreationLinkListRead = {
+  items: CardCreationLinkRead[];
+};
+
+export type CardCreationLinkCreatePayload = {
+  card_template_id: string;
+  organization_ids: string[];
+};
+
+export type CardCreationLinkCardListRead = {
+  items: CardCreationLinkCreatedCardRead[];
+};
+
+export type CardCreationLinkPublicPreviewRead = {
+  card_template_id: string;
+  card_template_name: string;
+  selected_organization_id: string | null;
+  organizations: CardCreationLinkOrganizationRead[];
+  form_layout: CardTemplateFormLayoutRead;
+  blocks: PublicLinkPreviewBlockRead[];
+};
+
+export type CardCreationLinkFirstSaveRead = {
+  card_id: string;
+  display_name: string;
+  child_raw_token: string;
 };
 
 export type PublicLinkAttachmentRead = {

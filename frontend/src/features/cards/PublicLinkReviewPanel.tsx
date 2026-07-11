@@ -567,7 +567,9 @@ function PublicLinkTimelineItem({
           </span>
         </header>
         <span>
-          {uiText.expires}: {formatDate(publicLink.expires_at)}
+          {publicLink.expires_at
+            ? `${uiText.expires}: ${formatDate(publicLink.expires_at)}`
+            : "Срок действия: бессрочно"}
         </span>
         <span>
           {usageLabel(uiText.publicLinkFieldEditUsage, publicLink.used_count, publicLink.max_uses)}

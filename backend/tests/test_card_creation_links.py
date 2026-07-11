@@ -29,6 +29,7 @@ from app.services.card_creation_links import (
 )
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
+from app.services.public_links import PublicLinkService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -285,6 +286,23 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     )
     assert relation is not None
     assert created.child_raw_token not in relation.child_token_ciphertext
+
+    service.close_for_actor(
+        actor_user_id=admin.id,
+        creation_link_id=creation_link.creation_link.id,
+    )
+    child_preview = PublicLinkService(db_session).preview_public_link(
+        raw_token=created.child_raw_token
+    )
+    assert child_preview.public_link_id == created.child_public_link.id
+
+    with pytest.raises(CardCreationLinkError):
+        service.create_card_from_public_link(
+            raw_token=creation_link.raw_token,
+            organization_id=source_organization.id,
+            field_id=field.id,
+            value="New card after parent close",
+        )
     field_value = db_session.scalar(
         select(FieldValue).where(
             FieldValue.card_id == created.card.id,

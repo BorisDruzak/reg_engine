@@ -186,6 +186,10 @@ def downgrade() -> None:
         "ix_card_creation_links_registry_id", table_name="card_creation_links", schema="public"
     )
     op.drop_table("card_creation_links", schema="public")
+    # The previous schema required an expiry value. Preserve existing child
+    # links during a downgrade by making formerly indefinite links expired,
+    # rather than failing the migration or deleting them.
+    op.execute("UPDATE card_public_links SET expires_at = now() WHERE expires_at IS NULL")
     op.alter_column(
         "card_public_links",
         "expires_at",

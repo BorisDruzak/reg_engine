@@ -25,6 +25,7 @@ import {
   generateCardTemplateLayoutPdf,
   listCardFieldReferenceItems,
   listAttachments,
+  listCardCreationLinksForCard,
   readCardPresentation,
   readCardPublicAccess,
   updateCardFieldValue,
@@ -62,6 +63,7 @@ import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/co
 import { errorText, shortId } from "@/components/common/dataUtils";
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
+import { CardCreationLinksPanel } from "./CardCreationLinksPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
 import { resolveCardPublicFieldAccess } from "./cardPublicAccessDefaults";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
@@ -123,6 +125,10 @@ export function CardsWorkspace({
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | null>(null);
+  const [cardCreationLinkPanelMode, setCardCreationLinkPanelMode] = useState<
+    "create" | "list" | null
+  >(null);
+  const [cardCreateMenuOpen, setCardCreateMenuOpen] = useState(false);
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
@@ -436,12 +442,23 @@ export function CardsWorkspace({
       cardTemplateId: activeCardTemplates[0]?.id ?? "",
     });
     setCardFormMode("create");
+    setCardCreationLinkPanelMode(null);
+    setCardCreateMenuOpen(false);
     setActiveShellTab("list");
     activeCardIdRef.current = null;
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
     resetSelectedCardMutationState();
+  }
+
+  function openCardCreationLinks(mode: "create" | "list") {
+    setCardFormMode(null);
+    setCardCreationLinkPanelMode(mode);
+    setCardCreateMenuOpen(false);
+    setArchiveTarget(null);
+    setSuccessMessage(null);
+    setLocalError(null);
   }
 
   function handleCardFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -527,9 +544,42 @@ export function CardsWorkspace({
       {activeShellTab === "list" ? (
         <Panel title={uiText.cards}>
           <div className="panel-toolbar">
-            <button type="button" className="primary-button" onClick={openCreateForm}>
-              {uiText.createCard}
-            </button>
+            <div className="card-create-menu">
+              <button
+                type="button"
+                className="primary-button"
+                aria-expanded={cardCreateMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setCardCreateMenuOpen((current) => !current)}
+              >
+                {uiText.createCard}
+              </button>
+              {cardCreateMenuOpen && (
+                <div
+                  className="card-download-menu-items"
+                  role="menu"
+                  aria-label="Создание карточек"
+                >
+                  <button type="button" role="menuitem" onClick={openCreateForm}>
+                    Создать карточку
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openCardCreationLinks("create")}
+                  >
+                    Создать ссылку на создание карточки
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openCardCreationLinks("list")}
+                  >
+                    Список ссылок
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <CardListFilters
             cardSearch={cardSearch}
@@ -560,6 +610,16 @@ export function CardsWorkspace({
             onOpen={openCardEditor}
           />
           <MutationFeedback error={archiveCardMutation.error} successMessage={successMessage} />
+          {cardCreationLinkPanelMode && schema && (
+            <CardCreationLinksPanel
+              initialMode={cardCreationLinkPanelMode}
+              organizations={organizations}
+              registryId={schema.registry.id}
+              templates={activeCardTemplates}
+              token={token}
+              onClose={() => setCardCreationLinkPanelMode(null)}
+            />
+          )}
           {cardFormMode === "create" && (
             <div className="panel-form">
               <CardMutationForm
@@ -616,6 +676,7 @@ export function CardsWorkspace({
                     selectedCard ? (
                       <CardBaseBlock
                         card={card}
+                        token={token}
                         completionLabel={completionLabel}
                         organizationName={
                           organizationsById.get(card.organization_id)?.name ??
@@ -745,6 +806,7 @@ type CardFormState = {
 
 function CardBaseBlock({
   card,
+  token,
   completionLabel,
   organizationName,
   fields,
@@ -761,6 +823,7 @@ function CardBaseBlock({
   onArchiveBlockInstance,
 }: {
   card: CardRead;
+  token: string;
   completionLabel: string;
   organizationName: string;
   fields: FormFieldRead[];
@@ -806,6 +869,7 @@ function CardBaseBlock({
           <dd>{completionLabel}</dd>
         </div>
       </dl>
+      <CardCreationLinkContinuation cardId={card.id} canManage={canManage} token={token} />
       <div className="card-base-block-public-settings">
         <div className="card-base-block-public-heading">
           <strong>Публичный доступ</strong>
@@ -903,6 +967,34 @@ function CardBaseBlock({
           />
         ) : null}
       </div>
+    </section>
+  );
+}
+
+function CardCreationLinkContinuation({
+  cardId,
+  canManage,
+  token,
+}: {
+  cardId: string;
+  canManage: boolean;
+  token: string;
+}) {
+  const linksQuery = useQuery({
+    queryKey: ["card-creation-links-for-card", token, cardId],
+    queryFn: () => listCardCreationLinksForCard(token, cardId),
+    enabled: canManage,
+  });
+  const item = linksQuery.data?.items[0];
+  if (!canManage || !item) return null;
+  return (
+    <section className="card-created-public-link" aria-label="Ссылка на карточку">
+      <strong>Ссылка на карточку</strong>
+      <label className="public-link-url-control">
+        <span>Продолжить заполнение</span>
+        <input readOnly value={`${window.location.origin}/public/edit/${item.child_raw_token}`} />
+      </label>
+      {linksQuery.error && <p className="inline-alert">{errorText(linksQuery.error)}</p>}
     </section>
   );
 }

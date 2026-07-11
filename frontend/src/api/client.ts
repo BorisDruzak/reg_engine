@@ -6,6 +6,12 @@ import type {
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
+  CardCreationLinkCardListRead,
+  CardCreationLinkCreatePayload,
+  CardCreationLinkFirstSaveRead,
+  CardCreationLinkListRead,
+  CardCreationLinkPublicPreviewRead,
+  CardCreationLinkRead,
   CardPrintTemplateCreatePayload,
   CardPrintTemplateBlankDownloadPayload,
   CardPrintTemplateVersionCreatePayload,
@@ -697,6 +703,37 @@ export async function readPublicLinkPreview(rawToken: string) {
   });
 }
 
+export async function readPublicCardCreationLinkPreview(
+  rawToken: string,
+  organizationId?: string | null,
+) {
+  return apiRequest<CardCreationLinkPublicPreviewRead>(
+    "/api/v1/public/card-creation-links/preview",
+    {
+      method: "POST",
+      body: { raw_token: rawToken, organization_id: organizationId ?? null },
+    },
+  );
+}
+
+export async function firstSaveCardFromCreationLink(
+  rawToken: string,
+  payload: {
+    organization_id: string;
+    field_id: string;
+    value: unknown;
+    block_instance_id?: string | null;
+  },
+) {
+  return apiRequest<CardCreationLinkFirstSaveRead>(
+    "/api/v1/public/card-creation-links/first-save",
+    {
+      method: "POST",
+      body: { raw_token: rawToken, ...payload },
+    },
+  );
+}
+
 export async function submitPublicLink(rawToken: string) {
   return apiRequest<PublicLinkSafeStatusRead>("/api/v1/public-links/submit", {
     method: "POST",
@@ -1298,6 +1335,38 @@ export async function archiveReportRun(token: string, reportRunId: string) {
 
 export async function listPublicLinks(token: string, cardId: string) {
   return apiRequest<PublicLinkListRead>(`/api/v1/cards/${cardId}/public-links`, { token });
+}
+
+export async function listCardCreationLinks(token: string, registryId: string) {
+  return apiRequest<CardCreationLinkListRead>(
+    `/api/v1/registries/${registryId}/card-creation-links`,
+    { token },
+  );
+}
+
+export async function createCardCreationLink(
+  token: string,
+  registryId: string,
+  payload: CardCreationLinkCreatePayload,
+) {
+  return apiRequest<CardCreationLinkRead>(`/api/v1/registries/${registryId}/card-creation-links`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function closeCardCreationLink(token: string, creationLinkId: string) {
+  return apiRequest<CardCreationLinkRead>(`/api/v1/card-creation-links/${creationLinkId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function listCardCreationLinksForCard(token: string, cardId: string) {
+  return apiRequest<CardCreationLinkCardListRead>(`/api/v1/cards/${cardId}/creation-links`, {
+    token,
+  });
 }
 
 export async function createPublicLink(

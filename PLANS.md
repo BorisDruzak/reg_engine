@@ -23,6 +23,12 @@ not a hardcoded employee registry.
 - Phase 6F production follow-up repaired the existing single-root production
   data to exactly one active root-owned default registry after a fresh
   server-side backup stored outside Git.
+- Phase 8O reusable public card-creation links is implemented locally and
+  ready for release: one reusable parent link creates no card on opening,
+  creates an indefinite child edit link after the first valid public value, and
+  can be closed without blocking already-created child links. Migration
+  `0027_card_creation_links`, server deployment, and live browser proof are
+  the remaining checkpoint.
 - Phase 7A admin UI workspace refactor is implemented on `main`: cards use a
   focused list/detail workflow with tabs, registry administration uses focused
   setup tabs, and row actions use compact visible labels with full accessible

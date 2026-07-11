@@ -3829,6 +3829,49 @@ tr:last-child td {
   outline: 0;
 }
 
+.card-create-menu {
+  position: relative;
+}
+
+.card-create-menu .card-download-menu-items {
+  min-width: 19rem;
+  left: 0;
+  right: auto;
+}
+
+.card-creation-links-panel,
+.card-creation-link-organizations,
+.card-created-public-link,
+.public-card-creation-organization {
+  display: grid;
+  gap: 10px;
+}
+
+.card-creation-link-organizations {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d3deec;
+  border-radius: 8px;
+}
+
+.card-creation-link-organizations legend {
+  padding: 0 4px;
+  color: #1f4267;
+  font-weight: 700;
+}
+
+.card-created-public-link {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #d3deec;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.public-card-creation-organization {
+  max-width: 38rem;
+}
+
 .card-metadata-panel,
 .repeatable-block-controls,
 .bulk-field-form {
