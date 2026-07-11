@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 12:08:11 +05:00
+- Generated: 2026-07-11 12:32:09 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -163,6 +163,7 @@
 - `backend/tests/test_organization_permission_services.py`
 - `backend/tests/test_phase_2a_document_architecture.py`
 - `backend/tests/test_phase_2c_generated_documents_architecture.py`
+- `backend/tests/test_public_link_hint_payloads.py`
 - `backend/tests/test_public_link_review_lifecycle.py`
 - `backend/tests/test_public_link_transfer_audit_services.py`
 - `backend/tests/test_registry_card_services.py`
@@ -252,6 +253,8 @@
 - `frontend/src/features/cardLayout/CardWebLayoutCanvas.tsx`
 - `frontend/src/features/cardLayout/InlineBlockEditor.tsx`
 - `frontend/src/features/cardLayout/InlineFieldEditor.tsx`
+- `frontend/src/features/cardLayout/InlineReferenceEditor.test.tsx`
+- `frontend/src/features/cardLayout/InlineReferenceEditor.tsx`
 - `frontend/src/features/cardLayout/layoutGeometry.test.ts`
 - `frontend/src/features/cardLayout/layoutGeometry.ts`
 - `frontend/src/features/cardLayout/LayoutLivePreview.tsx`
@@ -262,6 +265,7 @@
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/CardTagSearchBar.tsx`
+- `frontend/src/features/cards/FieldEditorControl.test.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.test.ts`
 - `frontend/src/features/cards/fieldEditorUtils.ts`

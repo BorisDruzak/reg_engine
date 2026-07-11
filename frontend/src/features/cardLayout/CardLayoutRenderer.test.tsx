@@ -2154,6 +2154,18 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
   });
 
+  test("keeps compact field and reference editors inside their field width", () => {
+    expect(globalStyles).toMatch(
+      /\.card-layout-inline-editor\s*{[^}]*min-width:\s*0[^}]*width:\s*100%/,
+    );
+    expect(globalStyles).toMatch(
+      /\.card-layout-inline-editor \.row-actions\s*{[^}]*flex-wrap:\s*wrap/,
+    );
+    expect(globalStyles).toMatch(
+      /\.inline-reference-item\s*{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/,
+    );
+  });
+
   test("edits values only inside the selected block and preserves both grid geometries", () => {
     render(
       <CardWebLayoutCanvas

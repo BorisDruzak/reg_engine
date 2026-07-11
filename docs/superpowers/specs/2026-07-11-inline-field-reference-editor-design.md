@@ -23,9 +23,11 @@ This change covers:
 - focused component and integration tests;
 - live browser verification on the deployed administrator surface.
 
-It does not change database tables, REST payload shapes, backend access rules,
-the full `Справочники` workspace, or the meaning of archived reference lists
-and items.
+It does not change database tables, backend access rules, the full
+`Справочники` workspace, or the meaning of archived reference lists and items.
+The public-link preview receives one additive nullable `description` property
+so the already stored hint can be rendered without exposing technical data or
+broadening field visibility.
 
 ## Compact field editor
 

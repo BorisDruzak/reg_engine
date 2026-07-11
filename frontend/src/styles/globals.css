@@ -1916,6 +1916,7 @@ tr:last-child td {
   display: grid;
   gap: 8px;
   min-width: 0;
+  width: 100%;
   max-height: 100%;
   overflow: auto;
 }
@@ -1923,6 +1924,69 @@ tr:last-child td {
 .card-layout-inline-editor label:not(.checkbox-inline) {
   display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.card-layout-inline-editor input,
+.card-layout-inline-editor select,
+.card-layout-inline-editor textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.card-layout-inline-editor .row-actions {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.inline-reference-field-settings,
+.inline-reference-manage,
+.inline-reference-form,
+.inline-reference-items,
+.field-editor-control-with-hint {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inline-reference-editor-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-reference-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #d9dee7;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.inline-reference-item .row-actions {
+  justify-content: flex-start;
+}
+
+.inline-reference-confirmation {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #f0b8c0;
+  border-radius: 6px;
+  background: #fff1f3;
+}
+
+.field-editor-hint {
+  color: #667085;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .card-layout-geometry-session {

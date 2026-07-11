@@ -639,14 +639,14 @@ test("existing field edits send type reference visibility list and static-text c
   renderEditor();
 
   await user.click(await screen.findByTestId("layout-field-field-field-1"));
-  await user.clear(screen.getByLabelText("Технический код"));
-  await user.type(screen.getByLabelText("Технический код"), "status_v2");
+  expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
   await user.clear(screen.getByLabelText("Название поля"));
   await user.type(screen.getByLabelText("Название поля"), "Статус заявки");
-  await user.type(screen.getByLabelText("Описание поля"), "Выберите статус");
+  await user.type(screen.getByLabelText("Подсказка"), "Выберите статус");
   await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
   await user.selectOptions(screen.getByLabelText("Справочник"), "reference-statuses");
-  await user.selectOptions(screen.getByLabelText("Обязательность"), "required");
+  await user.selectOptions(screen.getByLabelText("Обязательность"), "required_on_publish");
+  await user.click(screen.getByText("Публичное редактирование"));
   await user.click(screen.getByLabelText("Видно в публичной ссылке"));
   await user.click(screen.getByLabelText("Доступно для публичного редактирования"));
   await user.click(screen.getByText("Ещё"));
@@ -656,11 +656,11 @@ test("existing field edits send type reference visibility list and static-text c
   await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
   expect(api.updatedFieldPayloads[0]).toEqual(
     expect.objectContaining({
-      code: "status_v2",
+      code: "field-1",
       label: "Статус заявки",
       description: "Выберите статус",
       field_type: "select",
-      required_mode: "required",
+      required_mode: "required_on_publish",
       options_source_type: "reference_list",
       options_source_id: "reference-statuses",
       public_visible: false,
@@ -691,7 +691,7 @@ test("existing field edits send type reference visibility list and static-text c
   await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(3));
   expect(api.updatedFieldPayloads[2]).toEqual(
     expect.objectContaining({
-      code: "status_v2",
+      code: "field-1",
       field_type: "text",
       options_source_type: null,
       options_source_id: null,
@@ -700,22 +700,24 @@ test("existing field edits send type reference visibility list and static-text c
   );
 });
 
-test("keeps the field editor open with its technical code when update fails", async () => {
+test("keeps the field editor open and preserves its hidden technical code when update fails", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock({ fieldUpdateError: true });
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
   await user.click(await screen.findByTestId("layout-field-field-field-1"));
-  const code = screen.getByLabelText("Технический код");
-  await user.clear(code);
-  await user.type(code, "duplicate_code");
+  const name = screen.getByLabelText("Название поля");
+  await user.clear(name);
+  await user.type(name, "Статус заявки");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
   expect(
     await screen.findByText("Технический код уже используется другим полем этого реестра."),
   ).toBeInTheDocument();
-  expect(screen.getByLabelText("Технический код")).toHaveValue("duplicate_code");
+  expect(screen.getByLabelText("Название поля")).toHaveValue("Статус заявки");
+  expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
+  expect(api.updatedFieldPayloads[0]).toEqual(expect.objectContaining({ code: "field-1" }));
 });
 
 test("clears select-only source and options when an existing field changes to text", async () => {

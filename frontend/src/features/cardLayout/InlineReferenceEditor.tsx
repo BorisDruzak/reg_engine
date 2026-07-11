@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import {
@@ -49,9 +49,6 @@ export function InlineReferenceEditor({
     referenceLists.find((referenceList) => referenceList.id === selectedReferenceListId) ?? null;
   const referenceReadOnly = Boolean(selectedReferenceList?.managed_by_system_only);
   const [managedListName, setManagedListName] = useState(selectedReferenceList?.name ?? "");
-  useEffect(() => {
-    setManagedListName(selectedReferenceList?.name ?? "");
-  }, [selectedReferenceList?.id, selectedReferenceList?.name]);
   const itemsQuery = useQuery({
     queryKey: ["inline-reference-items", context.token, selectedReferenceListId],
     queryFn: () => listReferenceItems(context.token, selectedReferenceListId ?? ""),

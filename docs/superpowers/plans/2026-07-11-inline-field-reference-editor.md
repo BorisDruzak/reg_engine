@@ -30,7 +30,7 @@
 - Consumes: `FormFieldRead` and existing `onCommit` / `onCancel` callbacks.
 - Produces: a field form without a technical-code control, with `description` edited as `Подсказка`, binary mandatory UI, and collapsed public settings.
 
-- [ ] **Step 1: Write failing renderer tests**
+- [x] **Step 1: Write failing renderer tests**
 
 Add tests that open a field and assert:
 
@@ -50,7 +50,7 @@ expect(onCommit).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -60,7 +60,7 @@ pnpm -C frontend test:run -- src/features/cardLayout/CardLayoutRenderer.test.tsx
 
 Expected: failures because the technical-code input and three mandatory values are still visible.
 
-- [ ] **Step 3: Implement the compact field form**
+- [x] **Step 3: Implement the compact field form**
 
 Remove the code label/input and code-focused validation UI while preserving `draft.code`. Replace the description textarea with:
 
@@ -88,11 +88,11 @@ Before `onCommit`, normalize every non-optional editable field to
 
 Keep static text forced to `not_required` and hide its hint/mandatory controls.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the Task 1 command. Expected: all matching tests pass.
 
-- [ ] **Step 5: Commit the task**
+- [x] **Step 5: Commit the task**
 
 ```powershell
 git add frontend/src/features/cardLayout/InlineFieldEditor.tsx frontend/src/features/cardLayout/CardLayoutRenderer.test.tsx
@@ -135,21 +135,21 @@ export type InlineReferenceEditorProps = {
   `listReferenceItems`, `createReferenceItem`, `updateReferenceItem`, and
   `archiveReferenceItem` API functions.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Cover empty-name validation, generated technical code in the create POST,
 automatic `onSelect`, item loading, create, rename, reorder, archive, Russian
 mutation errors, and `Назад`. Mock `fetch` at the API boundary rather than
 mocking component internals.
 
-- [ ] **Step 2: Write failing field-editor integration tests**
+- [x] **Step 2: Write failing field-editor integration tests**
 
 Verify that `select` / `multi_select` fields show `Создать новый`, selected
 lists show `Изменить выбранный`, the reference screen replaces the field form,
 and `Назад` restores an unsaved field name and hint. Dispatch an outside click
 while the reference screen is active and assert `onCommit` is not called.
 
-- [ ] **Step 3: Run reference tests and verify RED**
+- [x] **Step 3: Run reference tests and verify RED**
 
 ```powershell
 pnpm -C frontend test:run -- src/features/cardLayout/InlineReferenceEditor.test.tsx src/features/cardLayout/CardLayoutRenderer.test.tsx -t "справочник|reference"
@@ -157,7 +157,7 @@ pnpm -C frontend test:run -- src/features/cardLayout/InlineReferenceEditor.test.
 
 Expected: the new component/actions do not exist.
 
-- [ ] **Step 4: Implement `InlineReferenceEditor`**
+- [x] **Step 4: Implement `InlineReferenceEditor`**
 
 Use separate non-nested forms for create/list metadata and item actions. Keep
 local `screen`, list-name, and item-draft state; query items using:
@@ -175,7 +175,7 @@ enabled while idle so empty submission can show `Введите название
 or `Введите название элемента`. Reorder items by updating only changed
 positions. Show `runtimeError(error)` in an inline alert.
 
-- [ ] **Step 5: Switch field/reference screens without losing the draft**
+- [x] **Step 5: Switch field/reference screens without losing the draft**
 
 Add `editorScreen` state to `InlineFieldEditor`. Use one editor root around a
 conditional field `<form>` or `InlineReferenceEditor`; disable click-away commit
@@ -183,7 +183,7 @@ unless `editorScreen === "field"`. After list creation call `onSelect`, update
 the draft to `options_source_type: "reference_list"` and the created id, then
 remain in manage mode. Escape on reference screens calls `onBack`.
 
-- [ ] **Step 6: Pass registry context through the design renderer**
+- [x] **Step 6: Pass registry context through the design renderer**
 
 Add optional `inlineReferenceEditorContext` props through
 `CardWebLayoutCanvas`, `CardBlockLayoutNode`, and `CardFieldLayoutNode`.
@@ -200,7 +200,7 @@ Add optional `inlineReferenceEditorContext` props through
 
 Do not pass this context in preview, readonly, block-edit, or public-edit modes.
 
-- [ ] **Step 7: Run focused tests and verify GREEN**
+- [x] **Step 7: Run focused tests and verify GREEN**
 
 Run the Task 2 command plus TypeScript:
 
@@ -210,7 +210,7 @@ pnpm -C frontend typecheck
 
 Expected: all focused tests and typecheck pass.
 
-- [ ] **Step 8: Commit the task**
+- [x] **Step 8: Commit the task**
 
 ```powershell
 git add frontend/src/features/cardLayout frontend/src/features/registry/print/CardLayoutStudio.tsx frontend/src/app/uiText.ts
@@ -235,12 +235,12 @@ git commit -m "Embed reference editing in fields"
 - Multi-select, date, date-time, boolean, file, and reference controls render
   `<small className="field-editor-hint">{hint}</small>` inside a wrapper.
 
-- [ ] **Step 1: Write failing control tests**
+- [x] **Step 1: Write failing control tests**
 
 Test text placeholder, select prompt, multi-select fallback, date fallback,
 boolean fallback, and absence when hint is empty.
 
-- [ ] **Step 2: Run control tests and verify RED**
+- [x] **Step 2: Run control tests and verify RED**
 
 ```powershell
 pnpm -C frontend test:run -- src/features/cards/FieldEditorControl.test.tsx
@@ -248,17 +248,17 @@ pnpm -C frontend test:run -- src/features/cards/FieldEditorControl.test.tsx
 
 Expected: `hint` is unsupported and no hint content renders.
 
-- [ ] **Step 3: Implement hint rendering and pass descriptions**
+- [x] **Step 3: Implement hint rendering and pass descriptions**
 
 Add the prop and a small `ControlWithHint` helper. Pass `field.description`
 from every `FieldEditorControl` call site, including authenticated card forms,
 layout block editing, and public-link editing.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run the Task 3 command and relevant public/block editor tests.
 
-- [ ] **Step 5: Commit the task**
+- [x] **Step 5: Commit the task**
 
 ```powershell
 git add frontend/src/features/cards frontend/src/features/cardLayout/CardFieldLayoutNode.tsx frontend/src/pages/PublicLinkEditPage.tsx
@@ -276,12 +276,12 @@ git commit -m "Show field hints during entry"
 - The inline field and reference screens must fit the field rectangle at the
   current compact editor width without horizontal overflow.
 
-- [ ] **Step 1: Add focused compact-editor CSS**
+- [x] **Step 1: Add focused compact-editor CSS**
 
 Use wrapping action rows, `min-width: 0`, full-width controls, compact item
 rows, and `.field-editor-hint` styling. Do not alter unrelated layout geometry.
 
-- [ ] **Step 2: Run the full local gate**
+- [x] **Step 2: Run the full local gate**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
@@ -290,7 +290,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote
 Expected: backend tests, frontend tests, lint, format, typecheck, build, and
 project-map checks pass; only existing documented warnings remain.
 
-- [ ] **Step 3: Update `PLANS.md` with implementation and verification evidence**
+- [x] **Step 3: Update `PLANS.md` with implementation and verification evidence**
 
 Record behavior, test counts, bundle hash, and limitations. Regenerate the
 project map when required.

@@ -98,6 +98,7 @@ export function InlineFieldEditor({
   if (editorScreen !== "field" && inlineReferenceEditorContext) {
     return (
       <InlineReferenceEditor
+        key={`${editorScreen}:${draft.options_source_id ?? "new"}`}
         context={inlineReferenceEditorContext}
         referenceLists={effectiveReferenceLists}
         selectedReferenceListId={draft.options_source_id}

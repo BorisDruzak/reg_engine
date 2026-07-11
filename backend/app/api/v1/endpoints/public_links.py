@@ -446,6 +446,7 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
                                 field_id=field.field_id,
                                 code=field.code,
                                 label=field.label,
+                                description=field.description,
                                 field_type=field.field_type,
                                 required_mode=field.required_mode,
                                 value=field.value,

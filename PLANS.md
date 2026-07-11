@@ -4446,3 +4446,32 @@ Live Browser proof:
 - Undo restored the original two-row layout. Final state had zero geometry
   sessions, targets, and editing fields, an empty browser text selection, and
   zero browser log entries.
+
+#### Compact field settings and inline reference editor
+
+Status: implemented and locally verified; production release pending.
+
+- The inline field editor now hides the immutable technical code, replaces the
+  large description area with a compact `Подсказка` input, and exposes only
+  `Необязательное поле` / `Обязательное поле`. Existing mandatory values are
+  normalized to `required_on_publish`, preserving the empty-draft and
+  filled-active card lifecycle.
+- Public visibility and editability settings are grouped under the closed
+  `Публичное редактирование` section. Existing advanced list/static-text
+  controls remain available without widening the editor.
+- Select and multi-select fields can create a new reference list or manage the
+  selected list without leaving the field. The nested screen supports list
+  naming and item add, rename, reorder, and archive actions; system-managed
+  lists remain read-only. Back navigation preserves the unsaved field draft.
+- Field descriptions now render as filling hints in authenticated and public
+  field controls. The public preview API exposes only the existing nullable
+  description text; no migration or access-boundary change is required.
+- Compact editor and nested reference layouts have explicit overflow guards,
+  responsive controls, and inline validation/confirmation states.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed: backend `229 passed / 196 skipped`, frontend
+  `263 passed / 25 skipped`, Ruff, Ruff format, mypy, ESLint, TypeScript,
+  production build, and project-map checks are green. The existing
+  Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
+  The verified local bundle is `index-Cd5qJEZE.js` (`571.31 kB`, `162.51 kB`
+  gzip) with `index-z633G42S.css`.
