@@ -61,7 +61,7 @@ grant, remove, or elevate their own administrator status.
 ## Backend Rules
 
 1. `PermissionService.is_superuser` remains the authoritative full-access path.
-2. `PermissionService.has_permission(..., "access_grants.manage")` recognizes
+2. `PermissionService.has_permission` recognizes the `access_grants.manage`
    the separate flag only for active, non-archived users; every other permission
    continues to resolve through active role grants.
 3. User-access service methods perform all role/scope authorization on the
@@ -112,9 +112,9 @@ roles, grants, and role-permission links.
    `subordinate_organization_administrator` grants with the same organization,
    registry scope, validity interval, and descendant coverage where the grant
    can be represented safely.
-5. Archive legacy `system_admin`, `registry_admin`, and `auditor` roles and
-   their remaining active grants. Do not automatically upgrade a registry-only
-   or audit-only user to a broader role.
+5. Archive every noncanonical role and its remaining active grants, including
+   legacy `system_admin`, `registry_admin`, and `auditor` roles. Do not
+   automatically upgrade a registry-only or audit-only user to a broader role.
 6. Record every converted, archived, or rejected legacy assignment in audit
    events and emit an operational migration report.
 
