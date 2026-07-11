@@ -2008,6 +2008,30 @@ describe("CardWebLayoutCanvas", () => {
 });
 
 describe("CardLayoutRenderer", () => {
+  test("renders completion presentation metadata without changing the layout", () => {
+    render(
+      <CardLayoutRenderer
+        {...canvasProps({ mode: "readonly" })}
+        blockPresentation={() => ({
+          anchorId: "card-block-primary-fio",
+          state: "attention",
+          description: "Нужно заполнить 1 из 2 полей",
+        })}
+        fieldPresentation={() => ({
+          state: "required-missing",
+          description: "Нужно заполнить обязательное поле",
+        })}
+      />,
+    );
+
+    expect(screen.getByLabelText("Блок ФИО")).toHaveAttribute("id", "card-block-primary-fio");
+    expect(screen.getByLabelText("Блок ФИО")).toHaveClass("is-attention");
+    expect(screen.getByTestId("layout-field-field-name")).toHaveClass("is-required-missing");
+    expect(screen.getByTestId("layout-field-field-name")).toHaveAccessibleDescription(
+      "Нужно заполнить обязательное поле",
+    );
+  });
+
   test.each([
     ["design", "Редактор макета карточки"],
     ["preview", "Предпросмотр макета карточки"],

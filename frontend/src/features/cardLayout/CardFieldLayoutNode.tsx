@@ -8,7 +8,11 @@ import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorContr
 import type { FieldEditorOption, FieldEditorState } from "@/features/cards/fieldEditorUtils";
 import { formatValue, initialEditorValue } from "@/features/cards/fieldEditorUtils";
 
-import type { CardLayoutRendererMode, CardLayoutSelection } from "./CardLayoutRenderer";
+import type {
+  CardLayoutFieldPresentation,
+  CardLayoutRendererMode,
+  CardLayoutSelection,
+} from "./CardLayoutRenderer";
 import { InlineFieldEditor } from "./InlineFieldEditor";
 import type { InlineReferenceEditorContext } from "./InlineReferenceEditor";
 import { snapQuarterRect } from "./layoutGeometry";
@@ -49,6 +53,7 @@ export type CardFieldLayoutNodeProps = {
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
+  presentation?: CardLayoutFieldPresentation;
   onSelect: (selection: CardLayoutSelection) => void;
   onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
   onCancelField?: (fieldId: string) => void;
@@ -71,6 +76,7 @@ export function CardFieldLayoutNode({
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
   renderFieldValue,
+  presentation,
   onSelect,
   onCommitField,
   onCancelField,
@@ -108,6 +114,9 @@ export function CardFieldLayoutNode({
     targetKind: "field",
     original: toLayoutRect(item),
   };
+  const completionDescriptionId = presentation?.description
+    ? `${testIdPrefix}-field-${item.id}-completion`
+    : undefined;
 
   useEffect(
     () => () => {
@@ -311,7 +320,7 @@ export function CardFieldLayoutNode({
 
   return (
     <article
-      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}`}
+      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}${presentation?.state ? ` is-${presentation.state}` : ""}`}
       data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
       tabIndex={designMode && onCommitField ? 0 : undefined}
@@ -320,6 +329,7 @@ export function CardFieldLayoutNode({
           ? `Поле ${field.label}. Нажмите, чтобы изменить; удерживайте и перетащите, чтобы переместить.`
           : undefined
       }
+      aria-describedby={completionDescriptionId}
       onClick={(event) => {
         event.stopPropagation();
         if (isInteractiveTarget(event.target)) {
@@ -338,6 +348,11 @@ export function CardFieldLayoutNode({
       onPointerCancel={handlePointerCancel}
       onLostPointerCapture={handleLostPointerCapture}
     >
+      {completionDescriptionId ? (
+        <span id={completionDescriptionId} className="card-layout-presentation-description">
+          {presentation?.description}
+        </span>
+      ) : null}
       {schemaEditing && onCommitField ? (
         <InlineFieldEditor
           field={retryDraft ?? field}

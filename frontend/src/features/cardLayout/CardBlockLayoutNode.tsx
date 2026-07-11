@@ -14,6 +14,8 @@ import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
   CardLayoutBlockRenderContext,
+  CardLayoutBlockPresentation,
+  CardLayoutFieldPresentationRenderer,
   CardLayoutRendererMode,
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
@@ -40,6 +42,8 @@ export type CardBlockLayoutNodeProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   renderBlockActions?: CardLayoutBlockActionsRenderer;
+  blockPresentation?: CardLayoutBlockPresentation;
+  fieldPresentation?: CardLayoutFieldPresentationRenderer;
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
   onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelect: (selection: CardLayoutSelection) => void;
@@ -73,6 +77,8 @@ export function CardBlockLayoutNode({
   testIdPrefix = "layout",
   renderFieldValue,
   renderBlockActions,
+  blockPresentation,
+  fieldPresentation,
   canActivateBlock,
   onActivateBlock,
   onSelect,
@@ -125,14 +131,19 @@ export function CardBlockLayoutNode({
     targetKind: "block",
     original: toLayoutRect(section),
   };
+  const completionDescriptionId = blockPresentation?.description
+    ? `${testIdPrefix}-block-${section.id}-completion`
+    : undefined;
 
   return (
     <section
-      className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}${blockActivatable ? " is-activatable" : ""}`}
+      className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}${blockActivatable ? " is-activatable" : ""}${blockPresentation?.state ? ` is-${blockPresentation.state}` : ""}`}
+      id={blockPresentation?.anchorId}
       data-layout-block-id={nodeId}
       data-layout-block-activatable={blockActivatable || undefined}
       data-testid={`${testIdPrefix}-block-${section.id}`}
       style={style}
+      aria-describedby={completionDescriptionId}
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
       onClick={(event) => {
         event.stopPropagation();
@@ -141,6 +152,11 @@ export function CardBlockLayoutNode({
         }
       }}
     >
+      {completionDescriptionId ? (
+        <span id={completionDescriptionId} className="card-layout-presentation-description">
+          {blockPresentation?.description}
+        </span>
+      ) : null}
       {schemaEditing && block && onCommitBlock ? (
         <InlineBlockEditor
           block={block}
@@ -223,6 +239,7 @@ export function CardBlockLayoutNode({
             {rowMajor(section.items).map((item) => {
               const field = item.field_id ? (fieldsById.get(item.field_id) ?? null) : null;
               const valueKey = field?.id ?? item.id;
+              const value = fieldValues?.[valueKey];
               return (
                 <CardFieldLayoutNode
                   key={item.id}
@@ -232,7 +249,7 @@ export function CardBlockLayoutNode({
                   selection={selection}
                   valueEditing={valueEditing}
                   renderedValue={renderedValues?.[valueKey]}
-                  value={fieldValues?.[valueKey]}
+                  value={value}
                   options={fieldOptions?.[valueKey]}
                   fileRefOptions={fileRefOptions?.[valueKey]}
                   referenceLists={referenceLists}
@@ -240,6 +257,9 @@ export function CardBlockLayoutNode({
                   showGeometryDiagnostics={showGeometryDiagnostics}
                   testIdPrefix={testIdPrefix}
                   renderFieldValue={renderFieldValue}
+                  presentation={
+                    field ? fieldPresentation?.({ field, item, value, mode }) : undefined
+                  }
                   onSelect={onSelect}
                   onCommitField={onCommitField}
                   onCancelField={onCancelField}

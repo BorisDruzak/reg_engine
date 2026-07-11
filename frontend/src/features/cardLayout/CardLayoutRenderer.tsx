@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from "react";
 import type { CardTemplateFormLayoutSectionRead, FormBlockRead } from "@/api/types";
 
 import { CardWebLayoutCanvas } from "./CardWebLayoutCanvas";
+import type { CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
 
 export type CardLayoutRendererMode =
   | "design"
@@ -20,6 +21,25 @@ export type CardLayoutBlockRenderContext = {
 };
 
 export type CardLayoutBlockActionsRenderer = (context: CardLayoutBlockRenderContext) => ReactNode;
+
+export type CardLayoutBlockPresentation = {
+  anchorId?: string;
+  state?: "complete" | "attention" | "empty";
+  description?: string;
+};
+
+export type CardLayoutFieldPresentation = {
+  state?: "filled" | "required-missing" | "empty";
+  description?: string;
+};
+
+export type CardLayoutBlockPresentationRenderer = (
+  context: CardLayoutBlockRenderContext,
+) => CardLayoutBlockPresentation | undefined;
+
+export type CardLayoutFieldPresentationRenderer = (
+  context: CardLayoutFieldRenderContext,
+) => CardLayoutFieldPresentation | undefined;
 
 export type CardLayoutRendererProps = ComponentProps<typeof CardWebLayoutCanvas>;
 

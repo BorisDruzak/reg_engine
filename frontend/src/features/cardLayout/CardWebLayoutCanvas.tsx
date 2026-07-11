@@ -16,6 +16,8 @@ import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
   CardLayoutBlockRenderContext,
+  CardLayoutBlockPresentationRenderer,
+  CardLayoutFieldPresentationRenderer,
   CardLayoutRendererMode,
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
@@ -55,6 +57,8 @@ export type CardWebLayoutCanvasProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   renderBlockActions?: CardLayoutBlockActionsRenderer;
+  blockPresentation?: CardLayoutBlockPresentationRenderer;
+  fieldPresentation?: CardLayoutFieldPresentationRenderer;
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
   onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
@@ -93,6 +97,8 @@ function CardWebLayoutCanvasSession({
   testIdPrefix = "layout",
   renderFieldValue,
   renderBlockActions,
+  blockPresentation,
+  fieldPresentation,
   canActivateBlock,
   onActivateBlock,
   onSelectionChange,
@@ -194,41 +200,46 @@ function CardWebLayoutCanvasSession({
         data-layout-grid="canvas"
         style={canvasStyle}
       >
-        {orderedSections.map((section, index) => (
-          <CardBlockLayoutNode
-            key={section.id}
-            section={section}
-            block={section.block_id ? (blocksById.get(section.block_id) ?? null) : null}
-            fieldsById={fieldsById}
-            mode={mode}
-            selection={activeSelection}
-            renderedValues={renderedValues}
-            fieldValues={fieldValues}
-            fieldOptions={fieldOptions}
-            fileRefOptions={fileRefOptions}
-            referenceLists={referenceLists}
-            inlineReferenceEditorContext={inlineReferenceEditorContext}
-            compactBlockHeight={compactBlockHeight}
-            showGeometryDiagnostics={showGeometryDiagnostics}
-            testIdPrefix={testIdPrefix}
-            renderFieldValue={renderFieldValue}
-            renderBlockActions={renderBlockActions}
-            canActivateBlock={canActivateBlock}
-            onActivateBlock={onActivateBlock}
-            onSelect={select}
-            onCreateField={onCreateField}
-            onCommitBlock={onCommitBlock}
-            onCancelBlock={onCancelBlock}
-            onCommitField={onCommitField}
-            onCancelField={onCancelField}
-            onFieldValueChange={onFieldValueChange}
-            geometry={geometryEnabled ? geometry : undefined}
-            onMoveBlock={onMoveBlock}
-            canMoveBlockUp={index > 0}
-            canMoveBlockDown={index < orderedSections.length - 1}
-            blockOrderingDisabled={blockOrderingDisabled}
-          />
-        ))}
+        {orderedSections.map((section, index) => {
+          const block = section.block_id ? (blocksById.get(section.block_id) ?? null) : null;
+          return (
+            <CardBlockLayoutNode
+              key={section.id}
+              section={section}
+              block={block}
+              fieldsById={fieldsById}
+              mode={mode}
+              selection={activeSelection}
+              renderedValues={renderedValues}
+              fieldValues={fieldValues}
+              fieldOptions={fieldOptions}
+              fileRefOptions={fileRefOptions}
+              referenceLists={referenceLists}
+              inlineReferenceEditorContext={inlineReferenceEditorContext}
+              compactBlockHeight={compactBlockHeight}
+              showGeometryDiagnostics={showGeometryDiagnostics}
+              testIdPrefix={testIdPrefix}
+              renderFieldValue={renderFieldValue}
+              renderBlockActions={renderBlockActions}
+              blockPresentation={block ? blockPresentation?.({ block, section, mode }) : undefined}
+              fieldPresentation={fieldPresentation}
+              canActivateBlock={canActivateBlock}
+              onActivateBlock={onActivateBlock}
+              onSelect={select}
+              onCreateField={onCreateField}
+              onCommitBlock={onCommitBlock}
+              onCancelBlock={onCancelBlock}
+              onCommitField={onCommitField}
+              onCancelField={onCancelField}
+              onFieldValueChange={onFieldValueChange}
+              geometry={geometryEnabled ? geometry : undefined}
+              onMoveBlock={onMoveBlock}
+              canMoveBlockUp={index > 0}
+              canMoveBlockDown={index < orderedSections.length - 1}
+              blockOrderingDisabled={blockOrderingDisabled}
+            />
+          );
+        })}
         {designMode && !geometryActive && emptyPosition && (onCreateBlock || onInsertBlock) ? (
           <div
             className="card-layout-empty-area-actions"
