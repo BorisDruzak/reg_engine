@@ -23,7 +23,9 @@ from app.api.dependencies import get_db_session, raise_service_http_error
 from app.core.config import get_settings
 from app.main import create_app
 from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, FormBlock, User
+from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
+from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.permissions import (
@@ -177,6 +179,26 @@ def review_fixture(db_session: Session, tmp_path: Path) -> ReviewFixture:
         display_name="Карточка проверки",
         public_edit_enabled=True,
     )
+    CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=admin.id,
+        card_id=card.id,
+        payload=CardPublicAccessUpdate(
+            public_view_enabled=True,
+            public_edit_enabled=True,
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=text_field.id,
+                    public_visible=True,
+                    public_editable=True,
+                ),
+                CardPublicFieldSettingUpdate(
+                    field_id=number_field.id,
+                    public_visible=True,
+                    public_editable=True,
+                ),
+            ],
+        ),
+    )
     card_service = CardService(db_session)
     card_service.set_field_value_for_actor(
         actor_user_id=admin.id,
@@ -229,6 +251,54 @@ def _read_text_value(session: Session, fixture: ReviewFixture) -> str | None:
         )
     )
     return value.value_text if value is not None else None
+
+
+def test_active_public_link_uses_current_card_access_settings(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    public_links = PublicLinkService(db_session)
+    token = public_links.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+    )
+
+    CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+        payload=CardPublicAccessUpdate(
+            public_view_enabled=True,
+            public_edit_enabled=False,
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=review_fixture.text_field_id,
+                    public_visible=False,
+                    public_editable=False,
+                ),
+                CardPublicFieldSettingUpdate(
+                    field_id=review_fixture.number_field_id,
+                    public_visible=True,
+                    public_editable=False,
+                ),
+            ],
+        ),
+    )
+
+    preview = public_links.preview_public_link(raw_token=token.raw_token)
+
+    assert preview.can_edit is False
+    assert [
+        field.field_id
+        for block in preview.blocks
+        for instance in block.instances
+        for field in instance.fields
+    ] == [review_fixture.number_field_id]
+    with pytest.raises(PermissionDeniedError):
+        public_links.edit_card_field_with_token(
+            raw_token=token.raw_token,
+            field_id=review_fixture.number_field_id,
+            value=Decimal("2.50"),
+        )
 
 
 def _json_keys(value: object) -> set[str]:
@@ -1157,6 +1227,31 @@ def review_api_fixture(
             card_template_id=card_template.id,
             public_edit_enabled=True,
         )
+        CardPublicAccessService(session).update_for_actor(
+            actor_user_id=admin.id,
+            card_id=card.id,
+            payload=CardPublicAccessUpdate(
+                public_view_enabled=True,
+                public_edit_enabled=True,
+                fields=[
+                    CardPublicFieldSettingUpdate(
+                        field_id=field.id,
+                        public_visible=True,
+                        public_editable=True,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=other_field.id,
+                        public_visible=True,
+                        public_editable=True,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=non_editable_field.id,
+                        public_visible=True,
+                        public_editable=False,
+                    ),
+                ],
+            ),
+        )
         off_template_field = schema_service.create_field_for_actor(
             actor_user_id=admin.id,
             block_id=block.id,
@@ -1226,7 +1321,7 @@ def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
     } <= schemas
 
 
-def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
+def test_public_link_create_api_uses_card_settings_not_allowlists(
     migrated_test_engine: Engine,
     transactional_api_client: TestClient,
     review_api_fixture: ReviewApiFixture,
@@ -1246,8 +1341,8 @@ def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
     with Session(migrated_test_engine) as verify_session:
         public_link = verify_session.get(CardPublicLink, UUID(created["id"]))
         assert public_link is not None
-        assert public_link.allowed_blocks_json == {"ids": [str(review_api_fixture.block_id)]}
-        assert public_link.allowed_fields_json == {"ids": [str(review_api_fixture.field_id)]}
+        assert public_link.allowed_blocks_json is None
+        assert public_link.allowed_fields_json is None
 
     preview_response = transactional_api_client.post(
         "/api/v1/public-links/preview",
@@ -1255,41 +1350,20 @@ def test_public_link_create_api_persists_and_enforces_safe_schema_allowlists(
     )
     assert preview_response.status_code == 200, preview_response.text
     preview = preview_response.json()
-    assert [block["block_id"] for block in preview["blocks"]] == [str(review_api_fixture.block_id)]
-    assert [
+    assert {block["block_id"] for block in preview["blocks"]} == {str(review_api_fixture.block_id)}
+    assert {
         field["field_id"]
         for block in preview["blocks"]
         for instance in block["instances"]
         for field in instance["fields"]
-    ] == [str(review_api_fixture.field_id)]
-    assert str(review_api_fixture.other_field_id) not in preview_response.text
-
-    rejected_payloads = [
-        {
-            "allowed_block_ids": [str(review_api_fixture.block_id)],
-            "allowed_field_ids": [str(review_api_fixture.non_editable_field_id)],
-        },
-        {
-            "allowed_block_ids": [str(review_api_fixture.foreign_block_id)],
-            "allowed_field_ids": [str(review_api_fixture.foreign_field_id)],
-        },
-        {
-            "allowed_block_ids": [str(review_api_fixture.off_template_block_id)],
-        },
-    ]
-    for payload in rejected_payloads:
-        rejected_response = transactional_api_client.post(
-            f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
-            json=payload,
-            headers=admin_headers,
-        )
-        assert rejected_response.status_code == 400, rejected_response.text
-        assert rejected_response.json()["detail"] == ("Операция с публичной ссылкой недоступна.")
-        rejected_ids = payload.get("allowed_block_ids", []) + payload.get("allowed_field_ids", [])
-        assert all(object_id not in rejected_response.text for object_id in rejected_ids)
+    } == {
+        str(review_api_fixture.field_id),
+        str(review_api_fixture.other_field_id),
+        str(review_api_fixture.non_editable_field_id),
+    }
 
 
-def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_stays_legacy(
+def test_active_links_ignore_stored_allowlists_and_follow_card_settings(
     migrated_test_engine: Engine,
     transactional_api_client: TestClient,
     review_api_fixture: ReviewApiFixture,
@@ -1313,8 +1387,11 @@ def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_sta
         for instance in block["instances"]
         for field in instance["fields"]
     }
-    assert str(review_api_fixture.off_template_field_id) in legacy_field_ids
-    assert str(review_api_fixture.off_template_block_field_id) in legacy_field_ids
+    assert legacy_field_ids == {
+        str(review_api_fixture.field_id),
+        str(review_api_fixture.other_field_id),
+        str(review_api_fixture.non_editable_field_id),
+    }
 
     partial_response = transactional_api_client.post(
         f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
@@ -1337,6 +1414,7 @@ def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_sta
     assert partial_field_ids == {
         str(review_api_fixture.field_id),
         str(review_api_fixture.other_field_id),
+        str(review_api_fixture.non_editable_field_id),
     }
     denied_partial_edit = transactional_api_client.post(
         "/api/v1/public-links/edit",
@@ -1361,7 +1439,17 @@ def test_explicit_partial_allowlists_intersect_frozen_template_and_both_none_sta
         json={"raw_token": legacy["raw_token"]},
     )
     assert manual_preview_response.status_code == 200, manual_preview_response.text
-    assert manual_preview_response.json()["blocks"] == []
+    manual_field_ids = {
+        field["field_id"]
+        for block in manual_preview_response.json()["blocks"]
+        for instance in block["instances"]
+        for field in instance["fields"]
+    }
+    assert manual_field_ids == {
+        str(review_api_fixture.field_id),
+        str(review_api_fixture.other_field_id),
+        str(review_api_fixture.non_editable_field_id),
+    }
     denied_manual_edit = transactional_api_client.post(
         "/api/v1/public-links/edit",
         json={
@@ -1459,6 +1547,31 @@ def test_public_preview_exposes_only_allowed_sanitized_form_layout(
             },
         }
         layout_session.commit()
+
+    access_response = transactional_api_client.patch(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-access",
+        json={
+            "fields": [
+                {
+                    "field_id": str(review_api_fixture.field_id),
+                    "public_visible": True,
+                    "public_editable": True,
+                },
+                {
+                    "field_id": str(review_api_fixture.other_field_id),
+                    "public_visible": False,
+                    "public_editable": False,
+                },
+                {
+                    "field_id": str(review_api_fixture.non_editable_field_id),
+                    "public_visible": False,
+                    "public_editable": False,
+                },
+            ]
+        },
+        headers=_actor_headers(review_api_fixture.admin_id),
+    )
+    assert access_response.status_code == 200, access_response.text
 
     created_response = transactional_api_client.post(
         f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
@@ -1612,6 +1725,39 @@ def test_public_preview_keeps_static_text_only_for_selected_blocks_and_legacy_li
                 ],
             },
         }
+        CardPublicAccessService(setup_session).update_for_actor(
+            actor_user_id=review_api_fixture.admin_id,
+            card_id=card.id,
+            payload=CardPublicAccessUpdate(
+                fields=[
+                    CardPublicFieldSettingUpdate(
+                        field_id=review_api_fixture.field_id,
+                        public_visible=True,
+                        public_editable=True,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=review_api_fixture.other_field_id,
+                        public_visible=False,
+                        public_editable=False,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=review_api_fixture.non_editable_field_id,
+                        public_visible=False,
+                        public_editable=False,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=selected_static.id,
+                        public_visible=True,
+                        public_editable=False,
+                    ),
+                    CardPublicFieldSettingUpdate(
+                        field_id=other_static.id,
+                        public_visible=False,
+                        public_editable=False,
+                    ),
+                ],
+            ),
+        )
         setup_session.commit()
         selected_static_id = selected_static.id
         other_static_id = other_static.id
@@ -1655,13 +1801,13 @@ def test_public_preview_keeps_static_text_only_for_selected_blocks_and_legacy_li
         {"allowed_field_ids": [str(review_api_fixture.field_id)]}
     )
     field_only_serialized = json.dumps(field_only_preview, ensure_ascii=False)
-    assert str(selected_static_id) not in field_only_serialized
+    assert str(selected_static_id) in field_only_serialized
     assert str(other_static_id) not in field_only_serialized
 
     legacy_preview, _ = create_and_preview({})
     legacy_serialized = json.dumps(legacy_preview, ensure_ascii=False)
     assert str(selected_static_id) in legacy_serialized
-    assert str(other_static_id) in legacy_serialized
+    assert str(other_static_id) not in legacy_serialized
 
 
 def test_public_link_lifecycle_api_flow_and_closed_status_privacy(

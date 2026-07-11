@@ -915,6 +915,23 @@ def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
     assert updated.public_edit_enabled is True
 
 
+def test_card_creation_keeps_public_view_enabled_when_public_edit_is_enabled(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        public_view_enabled=False,
+        public_edit_enabled=True,
+    )
+
+    assert card.public_view_enabled is True
+    assert card.public_edit_enabled is True
+
+
 def test_card_creation_without_explicit_template_uses_base_template(
     db_session: Session,
 ) -> None:

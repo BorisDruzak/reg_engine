@@ -25,6 +25,7 @@ from app.models import (
     StoredFile,
 )
 from app.services.audit import AuditService
+from app.services.card_public_access import CardPublicAccessService
 from app.services.card_template_projection import resolve_card_template_form_layout
 from app.services.cards import CardService, CardServiceError
 from app.services.permissions import (
@@ -180,20 +181,12 @@ class PublicLinkService:
             raise PublicLinkError("Public attachment upload limit must not be negative.")
         card = self._get_active_card(card_id)
         self._require_card_permission(actor_user_id, card)
-        allowed_blocks_json, allowed_fields_json = self._validated_public_schema_allowlists(
-            card=card,
-            allowed_block_ids=allowed_block_ids,
-            allowed_field_ids=allowed_field_ids,
-        )
-
         raw_token = secrets.token_urlsafe(32)
         public_link = CardPublicLink(
             card_id=card.id,
             token_hash=hash_public_token(raw_token),
             expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
             max_attachment_uploads=max_attachment_uploads,
-            allowed_blocks_json=allowed_blocks_json,
-            allowed_fields_json=allowed_fields_json,
             review_enabled=review_enabled,
             created_by=actor_user_id,
         )
@@ -211,8 +204,7 @@ class PublicLinkService:
                 "expires_at": public_link.expires_at.isoformat(),
                 "max_attachment_uploads": max_attachment_uploads,
                 "review_enabled": review_enabled,
-                "allowed_block_count": len(allowed_block_ids or []),
-                "allowed_field_count": len(allowed_field_ids or []),
+                "public_scope": "card_settings",
             },
         )
         return PublicLinkToken(raw_token=raw_token, public_link=public_link)
@@ -498,6 +490,9 @@ class PublicLinkService:
 
     def validate_public_edit_token(self, *, raw_token: str) -> CardPublicLink:
         public_link = self._editable_public_link(raw_token)
+        card = self._get_active_card(public_link.card_id)
+        if not card.public_view_enabled or not card.public_edit_enabled:
+            raise PermissionDeniedError("Public editing is disabled for this card.")
         self._require_field_edit_usage_available(public_link)
         return public_link
 
@@ -507,18 +502,15 @@ class PublicLinkService:
         return public_link
 
     def validate_public_attachment_token(self, *, raw_token: str) -> CardPublicLink:
-        return self._editable_public_link(raw_token)
+        return self.validate_public_edit_token(raw_token=raw_token)
 
     def preview_public_link(self, *, raw_token: str) -> PublicLinkPreview:
-        public_link = self._editable_public_link(raw_token)
+        public_link = self._viewable_public_link(raw_token)
         card = self._get_active_card(public_link.card_id)
-        if not public_link.can_edit or not card.public_edit_enabled:
-            raise PermissionDeniedError("Public editing is disabled for this card.")
+        if not card.public_view_enabled:
+            raise PermissionDeniedError("Public viewing is disabled for this card.")
 
-        schema_rows = self._public_schema_rows(
-            registry_id=card.registry_id,
-            public_link=public_link,
-        )
+        schema_rows = CardPublicAccessService(self.session).public_schema_rows_for_card(card)
         field_ids = [field_model.id for _, field_model in schema_rows]
         values_by_instance_field = self._field_values_by_instance(
             card_id=card.id,
@@ -574,7 +566,11 @@ class PublicLinkService:
             card_id=card.id,
             display_name=card.display_name,
             expires_at=public_link.expires_at,
-            can_edit=public_link.can_edit and card.public_edit_enabled,
+            can_edit=(
+                public_link.status in EDITABLE_PUBLIC_LINK_STATUSES
+                and public_link.can_edit
+                and card.public_edit_enabled
+            ),
             form_layout=self._sanitized_public_form_layout(card, schema_rows),
             blocks=blocks,
         )
@@ -624,22 +620,13 @@ class PublicLinkService:
 
         if block.registry_id != card.registry_id:
             raise PermissionDeniedError("Public link cannot edit fields from another registry.")
-        if not public_link.can_edit or not card.public_edit_enabled:
+        if not public_link.can_edit or not card.public_view_enabled or not card.public_edit_enabled:
             raise PermissionDeniedError("Public editing is disabled for this card.")
-        if field.field_type == "file_ref":
-            raise PermissionDeniedError("Public links cannot edit file reference fields.")
-        if field.field_type == "static_text":
-            raise PermissionDeniedError("Public links cannot edit static text fields.")
-        if not block.public_editable or not field.public_editable:
+        if not CardPublicAccessService(self.session).is_field_publicly_editable(
+            card=card,
+            field_id=field.id,
+        ):
             raise PermissionDeniedError("Field is not public editable.")
-        if self._public_link_uses_explicit_allowlists(
-            public_link
-        ) and field.id not in self._card_template_field_ids(card):
-            raise PermissionDeniedError("Public link cannot edit fields outside its card template.")
-        if not self._public_link_allows(public_link.allowed_blocks_json, block.id):
-            raise PermissionDeniedError("Public link cannot edit this block.")
-        if not self._public_link_allows(public_link.allowed_fields_json, field.id):
-            raise PermissionDeniedError("Public link cannot edit this field.")
         return card, field
 
     def _public_link_for_token(
@@ -674,6 +661,13 @@ class PublicLinkService:
             raise PermissionDeniedError("Public link is not editable.")
         if not public_link.can_edit:
             raise PermissionDeniedError("Public editing is disabled for this card.")
+        return public_link
+
+    def _viewable_public_link(self, raw_token: str) -> CardPublicLink:
+        public_link = self._public_link_for_token(raw_token)
+        self._require_not_expired(public_link)
+        if not public_link.can_view:
+            raise PermissionDeniedError("Public viewing is disabled for this card.")
         return public_link
 
     def _locked_public_link(self, public_link_id: UUID) -> CardPublicLink:
@@ -723,16 +717,9 @@ class PublicLinkService:
         include_internal: bool = False,
     ) -> dict[str, Any]:
         card = self._get_active_card(public_link.card_id)
-        schema_rows = [
-            (block, field_model)
-            for block, field_model in self._public_schema_rows(
-                registry_id=card.registry_id,
-                public_link=public_link,
-            )
-            if block.public_editable
-            and field_model.public_editable
-            and field_model.field_type not in {"file_ref", "static_text"}
-        ]
+        schema_rows = CardPublicAccessService(self.session).public_editable_schema_rows_for_card(
+            card
+        )
         field_ids = [field_model.id for _, field_model in schema_rows]
         values_by_instance_field = self._field_values_by_instance(
             card_id=card.id,
@@ -915,6 +902,7 @@ class PublicLinkService:
             card is not None
             and card.archived_at is None
             and card.lifecycle_status not in {"archived", "superseded"}
+            and card.public_view_enabled
             and card.public_edit_enabled
         )
 

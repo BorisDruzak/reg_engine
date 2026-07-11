@@ -146,6 +146,25 @@ class CardPublicAccessService:
             if field_model.id in visible_field_ids
         ]
 
+    def public_editable_schema_rows_for_card(
+        self,
+        card: Card,
+    ) -> list[tuple[FormBlock, FormField]]:
+        """Returns current card-template fields that a public visitor may change."""
+        if not card.public_edit_enabled:
+            return []
+        settings_by_field_id = self._settings_by_field_id(card.id)
+        return [
+            (block, field_model)
+            for block, field_model in self._active_template_fields(card)
+            if (
+                (setting := settings_by_field_id.get(field_model.id)) is not None
+                and setting.public_visible
+                and setting.public_editable
+                and field_model.field_type not in {"file_ref", "static_text"}
+            )
+        ]
+
     def is_field_publicly_editable(self, *, card: Card, field_id: UUID) -> bool:
         if not card.public_edit_enabled:
             return False

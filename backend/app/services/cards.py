@@ -164,7 +164,7 @@ class CardService:
             display_name=display_name,
             card_template_id=card_template_id,
             org_unit_id=org_unit_id,
-            public_view_enabled=public_view_enabled,
+            public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
             created_by=actor_user_id,
         )
@@ -201,7 +201,7 @@ class CardService:
             organization_id=organization_id,
             display_name=display_name,
             card_template_id=card_template_id,
-            public_view_enabled=public_view_enabled,
+            public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
         )
 
@@ -235,7 +235,7 @@ class CardService:
             org_unit_id=org_unit_id,
             display_name=resolved_display_name,
             lifecycle_status="draft",
-            public_view_enabled=public_view_enabled,
+            public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
             created_by=created_by,
             updated_by=created_by,

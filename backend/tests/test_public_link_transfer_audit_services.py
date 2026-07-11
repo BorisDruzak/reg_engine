@@ -26,7 +26,9 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
 from app.services.audit import AuditService
+from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import CardService, InvalidFieldValueError
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
@@ -257,6 +259,26 @@ def _phase_1e_context(db_session: Session) -> dict[str, Any]:
         display_name="Phase 1E Card",
         public_edit_enabled=True,
     )
+    CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=source_admin.id,
+        card_id=card.id,
+        payload=CardPublicAccessUpdate(
+            public_view_enabled=True,
+            public_edit_enabled=True,
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=public_field.id,
+                    public_visible=True,
+                    public_editable=True,
+                ),
+                CardPublicFieldSettingUpdate(
+                    field_id=private_field.id,
+                    public_visible=False,
+                    public_editable=False,
+                ),
+            ],
+        ),
+    )
 
     return {
         "system_admin": system_admin,
@@ -355,6 +377,19 @@ def test_public_link_preview_includes_visible_static_text_without_editing(
         public_visible=True,
         public_editable=True,
     )
+    CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+        payload=CardPublicAccessUpdate(
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=static_field.id,
+                    public_visible=True,
+                    public_editable=False,
+                )
+            ]
+        ),
+    )
     public_link_service = PublicLinkService(db_session)
     created = public_link_service.create_public_link_for_actor(
         actor_user_id=context["source_admin"].id,
@@ -378,7 +413,7 @@ def test_public_link_preview_includes_visible_static_text_without_editing(
         "label_position": "left",
         "separator_style": "line",
     }
-    with pytest.raises(PermissionDeniedError, match="static text"):
+    with pytest.raises(PermissionDeniedError):
         public_link_service.edit_card_field_with_token(
             raw_token=created.raw_token,
             field_id=static_field.id,
@@ -457,6 +492,19 @@ def test_public_link_uses_card_organization_effective_reference_list(
             "allow_owner_override": True,
         },
         public_editable=True,
+    )
+    CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+        payload=CardPublicAccessUpdate(
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=public_select_field.id,
+                    public_visible=True,
+                    public_editable=True,
+                )
+            ]
+        ),
     )
     public_link_service = PublicLinkService(db_session)
     created = public_link_service.create_public_link_for_actor(
