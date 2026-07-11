@@ -236,13 +236,14 @@ not a hardcoded employee registry.
   synchronization, frontend deployment, desktop/mobile Browser proof,
   conversion follow-up, and live DOCX/PDF signature checks pass. No database
   migration was required.
-- Phase 8N advanced registry navigation and block ordering is implemented and
-  locally verified: the primary registry workspace now keeps only `Схема
+- Phase 8N advanced registry navigation and block ordering is completed on
+  `main`, pushed, deployed, server-checked, and live Browser verified: the
+  primary registry workspace now keeps only `Схема
   карточки`, `Импорт и экспорт`, and `Расширенное`; the nested advanced tabs
   contain only `Реестры`, `Справочники`, and `Отчёты`; blocks move through
   guarded up/down arrows with atomic full-layout undo; the duplicate template
-  header and geometry redo action are removed. Deployment and live Browser
-  proof remain for this checkpoint. No database migration is required.
+  header and geometry redo action are removed. No database migration is
+  required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -4510,8 +4511,7 @@ Live Browser proof:
 
 #### Advanced registry navigation and atomic block ordering
 
-Status: implementation complete and locally verified; production release and
-live Browser proof pending.
+Status: complete, pushed, deployed, server-checked, and live Browser verified.
 
 - The primary registry workspace exposes exactly `Схема карточки`, `Импорт и
   экспорт`, and `Расширенное`. The nested advanced workspace exposes exactly
@@ -4540,3 +4540,29 @@ live Browser proof pending.
   `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
   and
   `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`.
+
+Production release evidence:
+
+- Local `main`, `origin/main`, and the server checkout were synchronized at
+  `5e7181f7` (`Document advanced registry block ordering`). No database schema
+  or production-data change was required.
+- `scripts/deploy.ps1` passed server checkout, service, PostgreSQL, and
+  attachment-storage checks. `scripts/deploy-frontend.ps1` deployed
+  `/assets/index-hqUwJYtl.js` and `/assets/index-Dl5aZK2d.css`, restarted the
+  API service, and passed health and same-origin frontend smoke checks.
+
+Live Browser proof:
+
+- After a cache-busting reload, the primary registry tablist contained exactly
+  `Схема карточки`, `Импорт и экспорт`, and `Расширенное`; the advanced tablist
+  contained exactly `Реестры`, `Справочники`, and `Отчёты`.
+- The selected template rendered one canonical studio header, zero
+  `.schema-template-editor-header` elements, zero `Повторить изменение`
+  buttons, zero exact legacy block-drag buttons, and six accessible up/down
+  order arrows for the three blocks.
+- Moving `Положение` down produced three non-overlapping full-width rows in
+  deterministic order: `ФИО` at row 1, `Положение` at row 2, and `тест2` at row
+  3. Boundary arrows for the first and last blocks were disabled.
+- `Отменить изменение` restored the exact original block-id order and confirmed
+  `Макет карточки сохранён`. The live reorder/undo check was repeated once;
+  both runs left production layout data in its original order.
