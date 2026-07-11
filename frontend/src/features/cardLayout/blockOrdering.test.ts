@@ -12,8 +12,8 @@ function section(
   id: string,
   row: number,
   column: number,
-  rowSpan: number,
-  columnSpan: number,
+  rowSpan: CardTemplateFormLayoutSectionRead["row_span"],
+  columnSpan: CardTemplateFormLayoutSectionRead["column_span"],
 ): CardTemplateFormLayoutSectionRead {
   return {
     id,
@@ -37,14 +37,14 @@ function hasCollision(sections: CardTemplateFormLayoutSectionRead[]) {
         {
           row: left.row,
           column: left.column,
-          rowSpan: left.row_span,
-          columnSpan: left.column_span,
+          rowSpan: left.row_span as 1 | 2 | 3 | 4,
+          columnSpan: left.column_span as 3 | 6 | 9 | 12,
         },
         {
           row: right.row,
           column: right.column,
-          rowSpan: right.row_span,
-          columnSpan: right.column_span,
+          rowSpan: right.row_span as 1 | 2 | 3 | 4,
+          columnSpan: right.column_span as 3 | 6 | 9 | 12,
         },
       ),
     ),

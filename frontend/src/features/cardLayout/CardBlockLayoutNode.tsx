@@ -10,6 +10,7 @@ import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorContr
 import type { FieldEditorOption, FieldEditorState } from "@/features/cards/fieldEditorUtils";
 
 import { CardFieldLayoutNode, type CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
+import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
   CardLayoutRendererMode,
@@ -46,6 +47,10 @@ export type CardBlockLayoutNodeProps = {
   onCancelField?: (fieldId: string) => void;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
   geometry?: LayoutGeometryControls;
+  onMoveBlock?: (sectionId: string, direction: BlockOrderDirection) => void;
+  canMoveBlockUp?: boolean;
+  canMoveBlockDown?: boolean;
+  blockOrderingDisabled?: boolean;
 };
 
 export function CardBlockLayoutNode({
@@ -73,6 +78,10 @@ export function CardBlockLayoutNode({
   onCancelField,
   onFieldValueChange,
   geometry,
+  onMoveBlock,
+  canMoveBlockUp = false,
+  canMoveBlockDown = false,
+  blockOrderingDisabled = false,
 }: CardBlockLayoutNodeProps) {
   const nodeId = block?.id ?? section.id;
   const designMode = mode === "design";
@@ -136,16 +145,43 @@ export function CardBlockLayoutNode({
               <strong>{block?.title ?? "Блок недоступен"}</strong>
               {block?.is_repeatable ? <small>Повторяемый блок</small> : null}
             </div>
-            {block && designMode && !geometryActive && onCommitBlock ? (
+            {block && designMode && !geometryActive && (onCommitBlock || onMoveBlock) ? (
               <div className="row-actions">
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-label={`Изменить блок ${block.title}`}
-                  onClick={() => onSelect({ kind: "block", id: block.id })}
-                >
-                  Изменить блок
-                </button>
+                {onCommitBlock ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    aria-label={`Изменить блок ${block.title}`}
+                    onClick={() => onSelect({ kind: "block", id: block.id })}
+                  >
+                    Изменить блок
+                  </button>
+                ) : null}
+                {onMoveBlock ? (
+                  <span
+                    className="card-layout-block-order-actions"
+                    aria-label={`Порядок блока ${block.title}`}
+                  >
+                    <button
+                      type="button"
+                      className="ghost-button card-layout-block-order-button"
+                      aria-label={`Переместить блок ${block.title} вверх`}
+                      disabled={blockOrderingDisabled || !canMoveBlockUp}
+                      onClick={() => onMoveBlock(section.id, "up")}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button card-layout-block-order-button"
+                      aria-label={`Переместить блок ${block.title} вниз`}
+                      disabled={blockOrderingDisabled || !canMoveBlockDown}
+                      onClick={() => onMoveBlock(section.id, "down")}
+                    >
+                      ↓
+                    </button>
+                  </span>
+                ) : null}
               </div>
             ) : null}
             {block && !designMode ? renderBlockActions?.({ block, section, mode }) : null}
@@ -278,25 +314,6 @@ function LayoutGeometryAffordances({
 
   return (
     <span className="card-layout-geometry-affordances">
-      <button
-        type="button"
-        className="card-layout-move-handle"
-        aria-label={`Переместить блок ${objectLabel}`}
-        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-        title="Стрелки — перемещение; Shift + стрелки — изменение размера"
-        style={{ position: "absolute", right: 8, top: 8, zIndex: 2, cursor: "move" }}
-        onKeyDown={(event) => geometry.keyboard(event, target)}
-        onPointerDown={(event) => {
-          const grid = gridFor(event);
-          if (grid) geometry.beginMove(event, target, grid);
-        }}
-        onPointerMove={geometry.pointerMove}
-        onPointerUp={geometry.pointerUp}
-        onPointerCancel={geometry.pointerCancel}
-        onLostPointerCapture={geometry.lostPointerCapture}
-      >
-        ⠿
-      </button>
       {resizeHandles.map((handle) => (
         <button
           key={handle}

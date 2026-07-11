@@ -12,6 +12,7 @@ import type { FieldEditorOption, FieldEditorState } from "@/features/cards/field
 
 import { CardBlockLayoutNode } from "./CardBlockLayoutNode";
 import type { CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
+import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
   CardLayoutRendererMode,
@@ -63,6 +64,8 @@ export type CardWebLayoutCanvasProps = {
   onCancelField?: (fieldId: string) => void;
   onFieldValueChange?: (field: FormFieldRead, value: FieldEditorState) => void;
   onGeometryCommit?: (command: LayoutGeometryCommand) => void;
+  onMoveBlock?: (sectionId: string, direction: BlockOrderDirection) => void;
+  blockOrderingDisabled?: boolean;
 };
 
 export function CardWebLayoutCanvas({ mode, ...props }: CardWebLayoutCanvasProps) {
@@ -97,6 +100,8 @@ function CardWebLayoutCanvasSession({
   onCancelField,
   onFieldValueChange,
   onGeometryCommit,
+  onMoveBlock,
+  blockOrderingDisabled = false,
 }: CardWebLayoutCanvasProps) {
   const selectionControlled = selection !== undefined;
   const [uncontrolledSelection, setUncontrolledSelection] = useState<CardLayoutSelection>(null);
@@ -184,7 +189,7 @@ function CardWebLayoutCanvasSession({
         data-layout-grid="canvas"
         style={canvasStyle}
       >
-        {orderedSections.map((section) => (
+        {orderedSections.map((section, index) => (
           <CardBlockLayoutNode
             key={section.id}
             section={section}
@@ -211,6 +216,10 @@ function CardWebLayoutCanvasSession({
             onCancelField={onCancelField}
             onFieldValueChange={onFieldValueChange}
             geometry={geometryEnabled ? geometry : undefined}
+            onMoveBlock={onMoveBlock}
+            canMoveBlockUp={index > 0}
+            canMoveBlockDown={index < orderedSections.length - 1}
+            blockOrderingDisabled={blockOrderingDisabled}
           />
         ))}
         {designMode && !geometryActive && emptyPosition && (onCreateBlock || onInsertBlock) ? (

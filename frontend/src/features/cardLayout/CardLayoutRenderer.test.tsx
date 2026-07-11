@@ -238,16 +238,6 @@ function pointerEvent(
   return event;
 }
 
-function blockMoveHandle() {
-  const handle = screen
-    .getByTestId("layout-block-block-fio")
-    .querySelector<HTMLButtonElement>(
-      ":scope > .card-layout-geometry-affordances > .card-layout-move-handle",
-    );
-  expect(handle).not.toBeNull();
-  return handle!;
-}
-
 describe("CardWebLayoutCanvas", () => {
   test("renders responsive grids in row-major DOM order with a single-column CSS contract", () => {
     const unsortedLayout: CardTemplateLayoutRead = {
@@ -382,138 +372,60 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByRole("button", { name: "Переместить поле Имя" })).not.toBeInTheDocument();
   });
 
-  test("moves a block through one captured pointer session and commits only on pointer up", () => {
-    const onGeometryCommit = vi.fn();
-    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 17, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 17, clientX: 400, clientY: 150 });
-
-    expect(capture.setPointerCapture).toHaveBeenCalledOnce();
-    expect(capture.setPointerCapture).toHaveBeenCalledWith(17);
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "4 / span 6",
-      gridRow: "2 / span 2",
-    });
-    expect(screen.getByText("Размер: 6 из 12 × 2 из 4")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Готово" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Отмена изменения геометрии" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Область свободна");
-    expect(
-      screen.queryByRole("button", { name: "Создать поле в блоке ФИО" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Изменить поле Имя" })).not.toBeInTheDocument();
-
-    const webPreview = screen.getByRole("region", { name: "Предпросмотр веб-карточки" });
-    const a4Preview = screen.getByRole("region", {
-      name: "Предпросмотр связанной карточки A4",
-    });
-    expect(webPreview).toHaveAttribute(
-      "data-layout-identity",
-      a4Preview.getAttribute("data-layout-identity"),
+  test("uses visible block order arrows with safe boundaries instead of block dragging", async () => {
+    const user = userEvent.setup();
+    const onMoveBlock = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+          layout: twoBlockLayout,
+          onGeometryCommit: vi.fn(),
+          onMoveBlock,
+        })}
+      />,
     );
-    expect(within(webPreview).getByTestId("live-layout-block-block-fio")).toHaveStyle({
-      gridColumn: "4 / span 6",
-      gridRow: "2 / span 2",
-    });
-    expect(within(a4Preview).getByTestId("live-layout-block-block-fio")).toHaveStyle({
-      gridColumn: "4 / span 6",
-      gridRow: "2 / span 2",
-    });
 
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 17, clientX: 400, clientY: 150 });
+    expect(screen.queryByRole("button", { name: "Переместить блок ФИО" })).not.toBeInTheDocument();
+    const firstUp = screen.getByRole("button", { name: "Переместить блок ФИО вверх" });
+    const firstDown = screen.getByRole("button", { name: "Переместить блок ФИО вниз" });
+    const lastUp = screen.getByRole("button", { name: "Переместить блок Работа вверх" });
+    const lastDown = screen.getByRole("button", { name: "Переместить блок Работа вниз" });
 
-    expect(capture.releasePointerCapture).toHaveBeenCalledOnce();
-    expect(capture.releasePointerCapture).toHaveBeenCalledWith(17);
-    expect(onGeometryCommit).toHaveBeenCalledOnce();
-    expect(onGeometryCommit).toHaveBeenCalledWith({
-      target: { id: block.id, kind: "block" },
-      before: { row: 1, column: 1, rowSpan: 2, columnSpan: 6 },
-      after: { row: 2, column: 4, rowSpan: 2, columnSpan: 6 },
-    });
+    expect(firstUp).toBeDisabled();
+    expect(firstDown).toBeEnabled();
+    expect(lastUp).toBeEnabled();
+    expect(lastDown).toBeDisabled();
+    await user.click(firstDown);
+    expect(onMoveBlock).toHaveBeenCalledWith(block.id, "down");
+    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
+    expect(
+      screen.getByRole("article", {
+        name: "Поле Имя. Нажмите, чтобы изменить; удерживайте и перетащите, чтобы переместить.",
+      }),
+    ).toBeInTheDocument();
   });
 
-  test("rolls back a failed pointer capture so a later pointer session can start", () => {
-    const onGeometryCommit = vi.fn();
-    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
+  test("disables every block order arrow while ordering is unavailable", () => {
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          blocks: [block, secondaryBlock],
+          fields: [...fields, secondaryField],
+          layout: twoBlockLayout,
+          onMoveBlock: vi.fn(),
+          blockOrderingDisabled: true,
+        })}
+      />,
+    );
 
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = blockMoveHandle();
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-    capture.setPointerCapture.mockImplementationOnce(() => {
-      throw new Error("capture unavailable");
-    });
-
-    expect(() =>
-      dispatchPointer(moveHandle, "pointerdown", { pointerId: 101, clientX: 100, clientY: 50 }),
-    ).not.toThrow();
-    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
-
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 102, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 102, clientX: 400, clientY: 150 });
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 102, clientX: 400, clientY: 150 });
-
-    expect(capture.setPointerCapture).toHaveBeenCalledTimes(2);
-    expect(onGeometryCommit).toHaveBeenCalledOnce();
-  });
-
-  test("cancels and restores an active session when pointer capture is lost", () => {
-    const onGeometryCommit = vi.fn();
-    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = blockMoveHandle();
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 103, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 103, clientX: 400, clientY: 150 });
-
-    dispatchPointer(moveHandle, "lostpointercapture", {
-      pointerId: 103,
-      clientX: 400,
-      clientY: 150,
-    });
-
-    expect(capture.releasePointerCapture).not.toHaveBeenCalled();
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "1 / span 6",
-      gridRow: "1 / span 2",
-    });
-    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
-  });
-
-  test("ignores lost capture emitted by an intentional pointer release", () => {
-    const onGeometryCommit = vi.fn();
-    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = blockMoveHandle();
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-    capture.releasePointerCapture.mockImplementation((pointerId: number) => {
-      dispatchPointer(moveHandle, "lostpointercapture", {
-        pointerId,
-        clientX: 400,
-        clientY: 150,
-      });
-    });
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 104, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 104, clientX: 400, clientY: 150 });
-
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 104, clientX: 400, clientY: 150 });
-
-    expect(capture.releasePointerCapture).toHaveBeenCalledOnce();
-    expect(onGeometryCommit).toHaveBeenCalledOnce();
-    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Переместить блок .* (вверх|вниз)/ })).toHaveLength(
+      4,
+    );
+    for (const button of screen.getAllByRole("button", { name: /Переместить блок/ })) {
+      expect(button).toBeDisabled();
+    }
   });
 
   test("renders a compact block from its occupied field rows", () => {
@@ -632,10 +544,12 @@ describe("CardWebLayoutCanvas", () => {
     expect(fieldGrid!.style.gridTemplateRows).toBe("repeat(3, minmax(3rem, auto))");
     expect(fieldGrid!.style.minHeight).toBe("9rem");
 
-    const moveHandle = blockMoveHandle();
+    const resizeHandle = screen.getByRole("button", {
+      name: "Изменить размер блока ФИО: нижний правый угол",
+    });
     mockGridRect(canvas);
-    installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 105, clientX: 100, clientY: 50 });
+    installPointerCapture(resizeHandle);
+    dispatchPointer(resizeHandle, "pointerdown", { pointerId: 105, clientX: 100, clientY: 50 });
 
     const liveCanvasGrids = document.querySelectorAll<HTMLElement>(".layout-live-preview-grid");
     const liveFieldGrids = document.querySelectorAll<HTMLElement>(
@@ -1488,206 +1402,10 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
   });
 
-  test("releases pointer capture and restores geometry on pointer cancel", () => {
-    const onGeometryCommit = vi.fn();
-    render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 31, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 31, clientX: 400, clientY: 150 });
-
-    dispatchPointer(moveHandle, "pointercancel", { pointerId: 31, clientX: 400, clientY: 150 });
-
-    expect(capture.releasePointerCapture).toHaveBeenCalledWith(31);
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "1 / span 6",
-      gridRow: "1 / span 2",
-    });
-    expect(
-      screen.queryByRole("region", { name: "Предпросмотр веб-карточки" }),
-    ).not.toBeInTheDocument();
-  });
-
-  test("restores the original geometry on Escape and on the cancel button without commit", async () => {
+  test("supports documented Shift plus arrow field resizing with one Done commit", async () => {
     const user = userEvent.setup();
     const onGeometryCommit = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 37, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 37, clientX: 400, clientY: 150 });
-
-    fireEvent.keyDown(window, { key: "Escape" });
-
-    expect(capture.releasePointerCapture).toHaveBeenCalledWith(37);
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "1 / span 6",
-      gridRow: "1 / span 2",
-    });
-
-    const keyboardHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    keyboardHandle.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "2 / span 6",
-    });
-    await user.click(screen.getByRole("button", { name: "Отмена изменения геометрии" }));
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "1 / span 6",
-    });
-  });
-
-  test("rejects invalid pointer commits and releases the geometry session", () => {
-    const onGeometryCommit = vi.fn();
-    render(
-      <CardWebLayoutCanvas
-        {...canvasProps({
-          blocks: [block, secondaryBlock],
-          fields: [...fields, secondaryField],
-          layout: twoBlockLayout,
-          onGeometryCommit,
-        })}
-      />,
-    );
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    mockGridRect(canvas);
-    installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 41, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 41, clientX: 700, clientY: 250 });
-
-    expect(screen.getByRole("status")).toHaveTextContent("Пересечение с другим блоком");
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 41, clientX: 700, clientY: 250 });
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
-
-    const nextMoveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    installPointerCapture(nextMoveHandle);
-    dispatchPointer(nextMoveHandle, "pointerdown", {
-      pointerId: 43,
-      clientX: 100,
-      clientY: 50,
-    });
-    dispatchPointer(nextMoveHandle, "pointermove", {
-      pointerId: 43,
-      clientX: -100,
-      clientY: 50,
-    });
-
-    expect(screen.getByRole("status")).toHaveTextContent("за границы сетки 12 × 4");
-    dispatchPointer(nextMoveHandle, "pointerup", {
-      pointerId: 43,
-      clientX: -100,
-      clientY: 50,
-    });
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(document.querySelector(".card-layout-geometry-session")).not.toBeInTheDocument();
-  });
-
-  test("revalidates immediately when a controlled layout removes the active obstacle", () => {
-    const onGeometryCommit = vi.fn();
-    const { rerender } = render(
-      <CardWebLayoutCanvas
-        {...canvasProps({
-          blocks: [block, secondaryBlock],
-          fields: [...fields, secondaryField],
-          layout: twoBlockLayout,
-          onGeometryCommit,
-        })}
-      />,
-    );
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = blockMoveHandle();
-    mockGridRect(canvas);
-    installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 106, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 106, clientX: 700, clientY: 250 });
-    expect(screen.getByRole("status")).toHaveClass("is-invalid");
-
-    rerender(<CardWebLayoutCanvas {...canvasProps({ layout, onGeometryCommit })} />);
-
-    const doneButton = document.querySelector<HTMLButtonElement>(
-      ".card-layout-geometry-session button:not(.ghost-button)",
-    );
-    expect(screen.getByRole("status")).toHaveClass("is-valid");
-    expect(doneButton).not.toBeNull();
-    expect(doneButton).toBeEnabled();
-    fireEvent.click(doneButton!);
-    expect(onGeometryCommit).toHaveBeenCalledOnce();
-  });
-
-  test("revalidates immediately when a controlled layout adds an active obstacle", () => {
-    const onGeometryCommit = vi.fn();
-    const { rerender } = render(
-      <CardWebLayoutCanvas {...canvasProps({ layout, onGeometryCommit })} />,
-    );
-
-    const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = blockMoveHandle();
-    mockGridRect(canvas);
-    installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 107, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 107, clientX: 700, clientY: 250 });
-    expect(screen.getByRole("status")).toHaveClass("is-valid");
-
-    rerender(
-      <CardWebLayoutCanvas
-        {...canvasProps({
-          blocks: [block, secondaryBlock],
-          fields: [...fields, secondaryField],
-          layout: twoBlockLayout,
-          onGeometryCommit,
-        })}
-      />,
-    );
-
-    const doneButton = document.querySelector<HTMLButtonElement>(
-      ".card-layout-geometry-session button:not(.ghost-button)",
-    );
-    expect(screen.getByRole("status")).toHaveClass("is-invalid");
-    expect(doneButton).not.toBeNull();
-    expect(doneButton).toBeDisabled();
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-  });
-
-  test("supports arrow movement and documented Shift plus arrow resizing with one Done commit", async () => {
-    const user = userEvent.setup();
-    const onGeometryCommit = vi.fn();
-    const { rerender } = render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
-
-    const blockMoveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
-    expect(blockMoveHandle).toHaveAttribute(
-      "title",
-      "Стрелки — перемещение; Shift + стрелки — изменение размера",
-    );
-    blockMoveHandle.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(onGeometryCommit).not.toHaveBeenCalled();
-    expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
-      gridColumn: "2 / span 6",
-    });
-    await user.click(screen.getByRole("button", { name: "Готово" }));
-    expect(onGeometryCommit).toHaveBeenCalledOnce();
-    expect(onGeometryCommit).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        target: { id: block.id, kind: "block" },
-        after: expect.objectContaining({ column: 2 }),
-      }),
-    );
-
-    onGeometryCommit.mockClear();
-    rerender(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
     const fieldNode = screen.getByTestId("layout-field-field-name");
     fieldNode.focus();
     await user.keyboard("{Shift>}{ArrowLeft}{/Shift}");
@@ -1711,11 +1429,13 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
 
     const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
+    const resizeHandle = screen.getByRole("button", {
+      name: "Изменить размер блока ФИО: нижний правый угол",
+    });
     mockGridRect(canvas);
-    installPointerCapture(moveHandle);
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 45, clientX: 0, clientY: 0 });
-    dispatchPointer(moveHandle, "pointermove", { pointerId: 45, clientX: 100, clientY: 0 });
+    installPointerCapture(resizeHandle);
+    dispatchPointer(resizeHandle, "pointerdown", { pointerId: 45, clientX: 0, clientY: 0 });
+    dispatchPointer(resizeHandle, "pointermove", { pointerId: 45, clientX: 100, clientY: 0 });
 
     expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(8);
     expect(
@@ -1775,12 +1495,14 @@ describe("CardWebLayoutCanvas", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit })} />);
 
     const canvas = screen.getByTestId("card-layout-canvas");
-    const moveHandle = screen.getByRole("button", { name: "Переместить блок ФИО" });
+    const resizeHandle = screen.getByRole("button", {
+      name: "Изменить размер блока ФИО: нижний правый угол",
+    });
     mockGridRect(canvas);
-    const capture = installPointerCapture(moveHandle);
+    const capture = installPointerCapture(resizeHandle);
 
-    dispatchPointer(moveHandle, "pointerdown", { pointerId: 47, clientX: 100, clientY: 50 });
-    dispatchPointer(moveHandle, "pointerup", { pointerId: 47, clientX: 100, clientY: 50 });
+    dispatchPointer(resizeHandle, "pointerdown", { pointerId: 47, clientX: 100, clientY: 50 });
+    dispatchPointer(resizeHandle, "pointerup", { pointerId: 47, clientX: 100, clientY: 50 });
 
     expect(capture.releasePointerCapture).toHaveBeenCalledWith(47);
     expect(onGeometryCommit).not.toHaveBeenCalled();
