@@ -128,7 +128,11 @@ export function HomePage() {
       }),
     enabled: Boolean(token && cardListOrganizationId && needsCards),
   });
-  const activeCardId = selectedCardId ?? cardsQuery.data?.items[0]?.id ?? "";
+  const visibleCards = cardsQuery.data?.items ?? [];
+  const activeCardId =
+    selectedCardId && visibleCards.some((card) => card.id === selectedCardId)
+      ? selectedCardId
+      : (visibleCards[0]?.id ?? "");
   const cardWorkflowRegistryId =
     cardsQuery.data?.items.find((item) => item.id === activeCardId)?.registry_id ??
     cardsQuery.data?.items[0]?.registry_id ??

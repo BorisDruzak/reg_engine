@@ -2945,6 +2945,41 @@ test("logs in and renders authenticated admin workspace", async () => {
   });
 });
 
+test("opens the empty card workspace when a stored card was removed", async () => {
+  cardItems = [];
+  localStorage.setItem(
+    "reg_engine.admin_workspace_state.v1",
+    JSON.stringify({
+      activeSection: "cards",
+      isSidebarCollapsed: false,
+      selectedRegistryId: null,
+      selectedCardId: "deleted-card-id",
+      cardSearch: "",
+      cardOrganizationIds: [],
+      cardIncludeDescendantOrganizations: true,
+      cardTemplateIds: [],
+      cardFieldFilters: [],
+      includeArchivedCards: false,
+    }),
+  );
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+
+  expect(await screen.findByRole("button", { name: "Создать карточку" })).toBeInTheDocument();
+  expect(screen.queryByText("Запрос не выполнен")).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([input]) => String(input).endsWith("/api/v1/cards/deleted-card-id")),
+    ).toBe(false);
+  });
+});
+
 test("removes the navigation toggle while keeping sections accessible", async () => {
   const user = userEvent.setup();
   render(<App />);
