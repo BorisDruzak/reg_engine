@@ -36,6 +36,7 @@ EXPECTED_TABLES = {
     "audit_events",
     "card_block_instances",
     "card_attachments",
+    "card_public_field_settings",
     "card_public_links",
     "card_relations",
     "card_templates",
@@ -124,6 +125,16 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "'mcp'" in sql
     assert "ALTER TABLE public.audit_events ALTER COLUMN created_at SET DEFAULT now()" in sql
     assert "CREATE TABLE employees" not in sql
+
+
+def test_card_public_access_migration_creates_field_scope_table() -> None:
+    sql = _render_upgrade_sql("head")
+
+    assert (
+        "CREATE TABLE card_public_field_settings" in sql
+        or "CREATE TABLE public.card_public_field_settings" in sql
+    )
+    assert "uq_card_public_field_settings_card_field" in sql
 
 
 def test_alembic_revision_ids_fit_version_table_limit() -> None:

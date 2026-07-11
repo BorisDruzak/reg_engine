@@ -54,6 +54,31 @@ class CardUpdate(BaseModel):
     public_edit_enabled: bool | None = None
 
 
+class CardPublicFieldSettingUpdate(BaseModel):
+    field_id: UUID
+    public_visible: bool
+    public_editable: bool
+
+
+class CardPublicAccessUpdate(BaseModel):
+    public_view_enabled: bool | None = None
+    public_edit_enabled: bool | None = None
+    fields: list[CardPublicFieldSettingUpdate] = Field(default_factory=list)
+
+
+class CardPublicFieldSettingRead(BaseModel):
+    field_id: UUID
+    public_visible: bool
+    public_editable: bool
+
+
+class CardPublicAccessRead(BaseModel):
+    card_id: UUID
+    public_view_enabled: bool
+    public_edit_enabled: bool
+    fields: list[CardPublicFieldSettingRead] = Field(default_factory=list)
+
+
 class FieldValueUpdate(BaseModel):
     value: Any
     block_instance_id: UUID | None = None

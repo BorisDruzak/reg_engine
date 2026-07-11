@@ -69,6 +69,33 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     archive_reason: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class CardPublicFieldSetting(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "card_public_field_settings"
+    __table_args__ = (
+        UniqueConstraint(
+            "card_id",
+            "field_id",
+            name="uq_card_public_field_settings_card_field",
+        ),
+        Index("ix_card_public_field_settings_card_id", "card_id"),
+        Index("ix_card_public_field_settings_field_id", "field_id"),
+    )
+
+    card_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("cards.id"))
+    field_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("form_fields.id"))
+    public_visible: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+    public_editable: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+    updated_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+
+
 class CardBlockInstance(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "card_block_instances"
     __table_args__ = (
