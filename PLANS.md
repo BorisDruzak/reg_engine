@@ -4621,7 +4621,7 @@ Live Browser proof:
 
 #### Sticky desktop navigation rail
 
-Status: local implementation verified; publication and live Browser proof pending.
+Status: complete, pushed, deployed, server-checked, and live Browser verified.
 
 - The desktop navigation rail now stays at the top of the viewport while the
   workspace scrolls. It has its own vertical scroll when navigation content is
@@ -4631,3 +4631,23 @@ Status: local implementation verified; publication and live Browser proof pendin
 - The focused navigation-style regression test passes. ESLint, TypeScript,
   scoped Prettier, and the production frontend build pass; no API, database,
   migration, or production-data change is required.
+- The published frontend bundle is `index-DHQuS7Wb.js` (`572.27 kB`, `163.05
+  kB` gzip) with `index-BRp1BssT.css` (`65.40 kB`, `11.72 kB` gzip).
+
+Production release evidence:
+
+- Local `main`, `origin/main`, and the server checkout were synchronized at
+  `dee920f6` (`Keep navigation visible while scrolling`). `scripts/deploy.ps1`
+  passed the server checkout, PostgreSQL, attachment-storage, and API health
+  checks. `scripts/deploy-frontend.ps1 -SkipBuild` uploaded the verified
+  frontend bundle and passed the same-origin frontend/API smoke check.
+
+Live Browser proof:
+
+- At `1263 x 912`, scrolling the page from `0` to `620px` kept the sidebar at
+  `top: 0` with `height: 912px`, `position: sticky`, and `overflow-y: auto`.
+- At `390 x 844`, the sidebar used `position: static` with visible overflow;
+  all seven navigation labels were visible at the top of the page, and there
+  was no horizontal overflow.
+- The published page had no framework error overlay and no browser console
+  warnings or errors.
