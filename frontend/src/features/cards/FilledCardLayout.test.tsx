@@ -471,6 +471,45 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
+  test("opens the editable primary block editor when its body is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ values: [value("first-name", "Иван"), ...values] }}
+      />,
+    );
+
+    await user.click(screen.getByTestId("filled-block-fio"));
+
+    expect(screen.getByLabelText("Имя")).toHaveValue("Иван");
+  });
+
+  test("opens only the clicked repeatable block instance", async () => {
+    const user = userEvent.setup();
+    const onEditBlock = vi.fn();
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{
+          ...repeatableProps(),
+          editableFieldIds: new Set(["contact-value"]),
+          onEditBlock,
+        }}
+      />,
+    );
+
+    const secondInstanceTestId =
+      "filled-instance-contact-instance-2-block-contacts-contact-instance-2";
+    await user.click(screen.getByTestId(secondInstanceTestId));
+
+    expect(onEditBlock).toHaveBeenCalledWith(repeatableBlock.id, "contact-instance-2");
+    expect(within(screen.getByTestId(secondInstanceTestId)).getByLabelText("Контакт")).toHaveValue(
+      "Второй контакт",
+    );
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+  });
+
   test("maps each non-repeatable block to its production UUID instance", async () => {
     const user = userEvent.setup();
     const saveValues = vi.fn().mockResolvedValue(undefined);

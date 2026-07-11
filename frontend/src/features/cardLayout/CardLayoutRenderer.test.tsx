@@ -388,15 +388,17 @@ describe("CardWebLayoutCanvas", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Переместить блок ФИО" })).not.toBeInTheDocument();
-    const firstUp = screen.getByRole("button", { name: "Переместить блок ФИО вверх" });
+    expect(
+      screen.queryByRole("button", { name: "Переместить блок ФИО вверх" }),
+    ).not.toBeInTheDocument();
     const firstDown = screen.getByRole("button", { name: "Переместить блок ФИО вниз" });
     const lastUp = screen.getByRole("button", { name: "Переместить блок Работа вверх" });
-    const lastDown = screen.getByRole("button", { name: "Переместить блок Работа вниз" });
 
-    expect(firstUp).toBeDisabled();
     expect(firstDown).toBeEnabled();
     expect(lastUp).toBeEnabled();
-    expect(lastDown).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Переместить блок Работа вниз" }),
+    ).not.toBeInTheDocument();
     await user.click(firstDown);
     expect(onMoveBlock).toHaveBeenCalledWith(block.id, "down");
     expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
@@ -420,9 +422,9 @@ describe("CardWebLayoutCanvas", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: /Переместить блок .* (вверх|вниз)/ })).toHaveLength(
-      4,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /Переместить блок .* (вверх|вниз)/ }),
+    ).toHaveLength(2);
     for (const button of screen.getAllByRole("button", { name: /Переместить блок/ })) {
       expect(button).toBeDisabled();
     }

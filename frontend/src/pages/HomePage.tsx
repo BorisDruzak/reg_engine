@@ -56,7 +56,7 @@ export function HomePage() {
   const [workspaceUiState, setWorkspaceUiState] = useState<WorkspaceUiState>(() =>
     loadWorkspaceUiState(),
   );
-  const [sidebarPinnedExpanded, setSidebarPinnedExpanded] = useState(false);
+  const [sidebarHoverPreview, setSidebarHoverPreview] = useState(false);
   const {
     activeSection,
     isSidebarCollapsed,
@@ -202,32 +202,22 @@ export function HomePage() {
     saveWorkspaceUiState(workspaceUiState);
   }, [workspaceUiState]);
 
-  useEffect(() => {
-    if (activeSection === "registries" && !sidebarPinnedExpanded && !isSidebarCollapsed) {
-      setSidebarCollapsed(true);
-    }
-  }, [activeSection, isSidebarCollapsed, sidebarPinnedExpanded]);
-
   function setActiveSection(value: VisibleSection) {
-    setWorkspaceUiState((current) => ({ ...current, activeSection: value }));
+    setWorkspaceUiState((current) => ({
+      ...current,
+      activeSection: value,
+      isSidebarCollapsed: value === "registries" || current.isSidebarCollapsed,
+    }));
   }
 
-  function setSidebarCollapsed(value: boolean) {
-    setWorkspaceUiState((current) => ({ ...current, isSidebarCollapsed: value }));
-  }
-
-  function handleSidebarToggle() {
-    const nextCollapsed = !isSidebarCollapsed;
-    setSidebarPinnedExpanded(!nextCollapsed);
-    setSidebarCollapsed(nextCollapsed);
-  }
-
-  function handleSidebarInteraction() {
-    if (!isSidebarCollapsed) {
-      return;
+  function handleSidebarPointerEnter() {
+    if (isSidebarCollapsed) {
+      setSidebarHoverPreview(true);
     }
-    setSidebarPinnedExpanded(true);
-    setSidebarCollapsed(false);
+  }
+
+  function handleSidebarPointerLeave() {
+    setSidebarHoverPreview(false);
   }
 
   function setSelectedRegistryId(value: string | null) {
@@ -315,12 +305,18 @@ export function HomePage() {
 
   return (
     <main
-      className={isSidebarCollapsed ? "workspace-shell is-sidebar-collapsed" : "workspace-shell"}
+      className={
+        isSidebarCollapsed
+          ? `workspace-shell is-sidebar-collapsed${sidebarHoverPreview ? " is-sidebar-hover-preview" : ""}`
+          : "workspace-shell"
+      }
     >
       <aside
         className="workspace-sidebar"
         aria-label={uiText.primaryNavigation}
-        onClick={handleSidebarInteraction}
+        onPointerEnter={handleSidebarPointerEnter}
+        onPointerMove={handleSidebarPointerEnter}
+        onPointerLeave={handleSidebarPointerLeave}
       >
         <div className="sidebar-header">
           <div className="brand-lockup">
@@ -330,18 +326,6 @@ export function HomePage() {
               <span>{uiText.brandSubtitle}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className="ghost-button icon-button sidebar-toggle"
-            aria-label={isSidebarCollapsed ? uiText.expandNavigation : uiText.collapseNavigation}
-            title={isSidebarCollapsed ? uiText.expandNavigation : uiText.collapseNavigation}
-            onClick={(event) => {
-              event.stopPropagation();
-              handleSidebarToggle();
-            }}
-          >
-            <span aria-hidden="true">{isSidebarCollapsed ? ">" : "<"}</span>
-          </button>
         </div>
         <nav className="workspace-nav">
           {visibleSections.map((section) => (
@@ -523,10 +507,14 @@ function loadWorkspaceUiState(): WorkspaceUiState {
       return defaultWorkspaceUiState();
     }
     const parsed = JSON.parse(raw) as Partial<WorkspaceUiState>;
+    const activeSection = isVisibleSection(parsed.activeSection)
+      ? parsed.activeSection
+      : "overview";
     return {
-      activeSection: isVisibleSection(parsed.activeSection) ? parsed.activeSection : "overview",
+      activeSection,
       isSidebarCollapsed:
-        typeof parsed.isSidebarCollapsed === "boolean" ? parsed.isSidebarCollapsed : false,
+        activeSection === "registries" ||
+        (typeof parsed.isSidebarCollapsed === "boolean" ? parsed.isSidebarCollapsed : false),
       selectedRegistryId:
         typeof parsed.selectedRegistryId === "string" ? parsed.selectedRegistryId : null,
       selectedCardId: typeof parsed.selectedCardId === "string" ? parsed.selectedCardId : null,

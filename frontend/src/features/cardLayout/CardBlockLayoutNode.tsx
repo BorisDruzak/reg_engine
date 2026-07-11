@@ -13,6 +13,7 @@ import { CardFieldLayoutNode, type CardLayoutFieldRenderContext } from "./CardFi
 import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
+  CardLayoutBlockRenderContext,
   CardLayoutRendererMode,
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
@@ -39,6 +40,8 @@ export type CardBlockLayoutNodeProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   renderBlockActions?: CardLayoutBlockActionsRenderer;
+  canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
+  onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelect: (selection: CardLayoutSelection) => void;
   onCreateField?: (blockId: string) => void;
   onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
@@ -70,6 +73,8 @@ export function CardBlockLayoutNode({
   testIdPrefix = "layout",
   renderFieldValue,
   renderBlockActions,
+  canActivateBlock,
+  onActivateBlock,
   onSelect,
   onCreateField,
   onCommitBlock,
@@ -96,6 +101,14 @@ export function CardBlockLayoutNode({
     selection.id === nodeId;
   const valueEditing =
     mode === "block-edit" && selection?.kind === "block" && selection.id === nodeId;
+  const blockActivationContext = block ? { block, section, mode } : null;
+  const blockActivatable = Boolean(
+    blockActivationContext &&
+    !designMode &&
+    !valueEditing &&
+    canActivateBlock?.(blockActivationContext) &&
+    onActivateBlock,
+  );
   const occupiedRowCount = section.items.reduce(
     (lastRow, item) => Math.max(lastRow, item.row + item.row_span - 1),
     1,
@@ -115,12 +128,18 @@ export function CardBlockLayoutNode({
 
   return (
     <section
-      className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}`}
+      className={`card-layout-block-node${schemaEditing || valueEditing ? " is-editing" : ""}${blockActivatable ? " is-activatable" : ""}`}
       data-layout-block-id={nodeId}
+      data-layout-block-activatable={blockActivatable || undefined}
       data-testid={`${testIdPrefix}-block-${section.id}`}
       style={style}
       aria-label={block ? `Блок ${block.title}` : "Недоступный блок"}
-      onClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (blockActivatable && blockActivationContext && !isInteractiveTarget(event.target)) {
+          onActivateBlock?.(blockActivationContext);
+        }
+      }}
     >
       {schemaEditing && block && onCommitBlock ? (
         <InlineBlockEditor
@@ -162,24 +181,28 @@ export function CardBlockLayoutNode({
                     className="card-layout-block-order-actions"
                     aria-label={`Порядок блока ${block.title}`}
                   >
-                    <button
-                      type="button"
-                      className="ghost-button card-layout-block-order-button"
-                      aria-label={`Переместить блок ${block.title} вверх`}
-                      disabled={blockOrderingDisabled || !canMoveBlockUp}
-                      onClick={() => onMoveBlock(section.id, "up")}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-button card-layout-block-order-button"
-                      aria-label={`Переместить блок ${block.title} вниз`}
-                      disabled={blockOrderingDisabled || !canMoveBlockDown}
-                      onClick={() => onMoveBlock(section.id, "down")}
-                    >
-                      ↓
-                    </button>
+                    {canMoveBlockUp ? (
+                      <button
+                        type="button"
+                        className="ghost-button card-layout-block-order-button"
+                        aria-label={`Переместить блок ${block.title} вверх`}
+                        disabled={blockOrderingDisabled}
+                        onClick={() => onMoveBlock(section.id, "up")}
+                      >
+                        ↑
+                      </button>
+                    ) : null}
+                    {canMoveBlockDown ? (
+                      <button
+                        type="button"
+                        className="ghost-button card-layout-block-order-button"
+                        aria-label={`Переместить блок ${block.title} вниз`}
+                        disabled={blockOrderingDisabled}
+                        onClick={() => onMoveBlock(section.id, "down")}
+                      >
+                        ↓
+                      </button>
+                    ) : null}
                   </span>
                 ) : null}
               </div>
@@ -359,4 +382,13 @@ function toLayoutRect(rect: {
 
 function rowMajor<T extends { row: number; column: number }>(items: T[]): T[] {
   return [...items].sort((left, right) => left.row - right.row || left.column - right.column);
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest("a, button, input, select, textarea, summary, [role='button'], [role='link']"),
+    )
+  );
 }

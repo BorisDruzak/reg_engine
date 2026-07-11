@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 13:57:57 +05:00
+- Generated: 2026-07-11 14:37:02 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -207,6 +207,7 @@
 - `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
+- `docs/superpowers/plans/2026-07-11-card-layout-navigation-hover.md`
 - `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
 - `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
@@ -215,6 +216,7 @@
 - `docs/superpowers/specs/2026-07-10-contextual-card-layout-studio-design.md`
 - `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
 - `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
+- `docs/superpowers/specs/2026-07-11-card-layout-navigation-hover-design.md`
 - `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
 - `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
 - `frontend/.prettierignore`

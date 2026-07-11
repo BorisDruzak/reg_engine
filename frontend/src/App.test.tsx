@@ -2941,27 +2941,20 @@ test("logs in and renders authenticated admin workspace", async () => {
   });
 });
 
-test("collapses and restores the admin navigation while keeping sections accessible", async () => {
+test("removes the navigation toggle while keeping sections accessible", async () => {
   const user = userEvent.setup();
-  const { container } = render(<App />);
+  render(<App />);
 
   await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
 
   expect(await screen.findByRole("main")).not.toHaveClass("is-sidebar-collapsed");
-
-  await user.click(screen.getByRole("button", { name: "Свернуть навигацию" }));
-
-  expect(container.querySelector(".workspace-shell")).toHaveClass("is-sidebar-collapsed");
+  expect(screen.queryByRole("button", { name: /навигацию/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Реестры" })).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Развернуть навигацию" }));
-
-  expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-collapsed");
 });
 
-test("auto-collapses the navigation in registry work and expands from sidebar interaction", async () => {
+test("auto-collapses the navigation in registry work and expands temporarily on hover", async () => {
   const user = userEvent.setup();
   const { container } = render(<App />);
 
@@ -2975,9 +2968,17 @@ test("auto-collapses the navigation in registry work and expands from sidebar in
   });
 
   const sidebar = screen.getByLabelText("Основная навигация");
-  fireEvent.click(sidebar);
+  fireEvent.pointerEnter(sidebar);
 
-  expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-collapsed");
+  expect(container.querySelector(".workspace-shell")).toHaveClass(
+    "is-sidebar-collapsed",
+    "is-sidebar-hover-preview",
+  );
+
+  fireEvent.pointerLeave(sidebar);
+
+  expect(container.querySelector(".workspace-shell")).toHaveClass("is-sidebar-collapsed");
+  expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-hover-preview");
 });
 
 test("renders refactored card workspace with focused tabs and simple metadata", async () => {
@@ -3631,11 +3632,11 @@ test("renders registry workspace as focused schema tabs", async () => {
   const primaryTabs = await screen.findByRole("tablist", {
     name: "Разделы настройки реестра",
   });
-  expect(within(primaryTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-    "Схема карточки",
-    "Импорт и экспорт",
-    "Расширенное",
-  ]);
+  expect(
+    within(primaryTabs)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent),
+  ).toEqual(["Схема карточки", "Импорт и экспорт", "Расширенное"]);
   expect(within(primaryTabs).getByRole("tab", { name: "Схема карточки" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -3646,11 +3647,11 @@ test("renders registry workspace as focused schema tabs", async () => {
   const advancedTabs = screen.getByRole("tablist", {
     name: "Расширенные разделы настройки реестра",
   });
-  expect(within(advancedTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-    "Реестры",
-    "Справочники",
-    "Отчеты",
-  ]);
+  expect(
+    within(advancedTabs)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent),
+  ).toEqual(["Реестры", "Справочники", "Отчеты"]);
   expect(within(advancedTabs).getByRole("tab", { name: "Реестры" })).toHaveAttribute(
     "aria-selected",
     "true",

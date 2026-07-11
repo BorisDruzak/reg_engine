@@ -117,7 +117,12 @@ export function FilledCardLayout({
       }
       const closeResult = editorState.requestClose();
       const insideLayout = Boolean(layoutRootRef.current?.contains(event.target));
-      const switchingBlock = Boolean(event.target.closest(".filled-card-edit-block"));
+      const switchingBlock =
+        Boolean(event.target.closest(".filled-card-edit-block")) ||
+        Boolean(
+          clickedBlock?.dataset.layoutBlockActivatable === "true" &&
+          !isInteractiveTarget(event.target),
+        );
       if (closeResult === "confirm-discard" && (!insideLayout || !switchingBlock)) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -169,6 +174,30 @@ export function FilledCardLayout({
                 surface.blockInstanceIds.get(activeBlock.blockId) === activeBlock.blockInstanceId
               ? activeBlock
               : null;
+          const canEditBlock = (
+            candidate: FormBlockRead | null,
+            section: CardTemplateFormLayoutSectionRead,
+          ) =>
+            Boolean(
+              candidate &&
+              hasEditableSectionField(
+                candidate.id,
+                section,
+                fieldsById,
+                editableFieldIds,
+                Boolean(renderFileRefControl),
+              ),
+            );
+          const openBlockEditor = (
+            candidate: FormBlockRead,
+            section: CardTemplateFormLayoutSectionRead,
+          ) => {
+            if (!canEditBlock(candidate, section)) return;
+            const blockInstanceId = surface.blockInstanceIds.get(candidate.id) ?? null;
+            const blockValues = valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
+            onEditBlock?.(candidate.id, blockInstanceId);
+            blockEditor?.open(candidate.id, blockInstanceId, sectionValues(section, blockValues));
+          };
 
           return (
             <section
@@ -203,6 +232,10 @@ export function FilledCardLayout({
                 responsive
                 showGeometryDiagnostics={false}
                 testIdPrefix={surface.surfaceInstanceId ? `filled-${surface.key}` : "filled"}
+                canActivateBlock={({ block, section }) => canEditBlock(block, section)}
+                onActivateBlock={({ block, section }) => {
+                  if (block) openBlockEditor(block, section);
+                }}
                 renderFieldValue={({ field, mode }) => {
                   const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
                   const value = surfaceFieldValue(surface, field, valuesByInstance);
@@ -245,23 +278,12 @@ export function FilledCardLayout({
                   );
                 }}
                 renderBlockActions={({ block, section }) => {
-                  if (
-                    !block ||
-                    !hasEditableSectionField(
-                      block.id,
-                      section,
-                      fieldsById,
-                      editableFieldIds,
-                      Boolean(renderFileRefControl),
-                    )
-                  ) {
+                  if (!block || !canEditBlock(block, section)) {
                     return null;
                   }
-                  const blockInstanceId = surface.blockInstanceIds.get(block.id) ?? null;
-                  const blockValues =
-                    valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
                   const editorActive =
-                    blockEditor?.key === blockEditorKey(block.id, blockInstanceId);
+                    blockEditor?.key ===
+                    blockEditorKey(block.id, surface.blockInstanceIds.get(block.id) ?? null);
                   if (editorActive && blockEditor) {
                     return (
                       <div className="row-actions filled-card-block-edit-actions">
@@ -296,14 +318,7 @@ export function FilledCardLayout({
                       type="button"
                       className="ghost-button filled-card-edit-block"
                       aria-label={`Изменить блок ${block.title}`}
-                      onClick={() => {
-                        onEditBlock?.(block.id, blockInstanceId);
-                        blockEditor?.open(
-                          block.id,
-                          blockInstanceId,
-                          sectionValues(section, blockValues),
-                        );
-                      }}
+                      onClick={() => openBlockEditor(block, section)}
                     >
                       Изменить блок
                     </button>
@@ -491,6 +506,15 @@ function valueMap(result: Map<string, Map<string, unknown>>, blockInstanceId: st
 
 function instanceKey(blockInstanceId: string | null) {
   return blockInstanceId ?? "primary";
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest("a, button, input, select, textarea, summary, [role='button'], [role='link']"),
+    )
+  );
 }
 
 function hasEditableSectionField(

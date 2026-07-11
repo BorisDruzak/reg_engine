@@ -15,6 +15,7 @@ import type { CardLayoutFieldRenderContext } from "./CardFieldLayoutNode";
 import type { BlockOrderDirection } from "./blockOrdering";
 import type {
   CardLayoutBlockActionsRenderer,
+  CardLayoutBlockRenderContext,
   CardLayoutRendererMode,
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
@@ -54,6 +55,8 @@ export type CardWebLayoutCanvasProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   renderBlockActions?: CardLayoutBlockActionsRenderer;
+  canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
+  onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
   onCreateBlock?: (position: CardLayoutCreatePosition) => void;
   onInsertBlock?: (position: CardLayoutCreatePosition) => void;
@@ -90,6 +93,8 @@ function CardWebLayoutCanvasSession({
   testIdPrefix = "layout",
   renderFieldValue,
   renderBlockActions,
+  canActivateBlock,
+  onActivateBlock,
   onSelectionChange,
   onCreateBlock,
   onInsertBlock,
@@ -208,6 +213,8 @@ function CardWebLayoutCanvasSession({
             testIdPrefix={testIdPrefix}
             renderFieldValue={renderFieldValue}
             renderBlockActions={renderBlockActions}
+            canActivateBlock={canActivateBlock}
+            onActivateBlock={onActivateBlock}
             onSelect={select}
             onCreateField={onCreateField}
             onCommitBlock={onCommitBlock}

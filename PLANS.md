@@ -4566,3 +4566,29 @@ Live Browser proof:
 - `Отменить изменение` restored the exact original block-id order and confirmed
   `Макет карточки сохранён`. The live reorder/undo check was repeated once;
   both runs left production layout data in its original order.
+
+#### Card layout interactions and hover-only navigation
+
+Status: implemented and locally verified; GitHub/server synchronization and
+live Browser proof are pending.
+
+- The first block no longer renders an unavailable up arrow; the last block no
+  longer renders an unavailable down arrow. A single block has no ordering
+  controls. Available arrows remain disabled during a save or layout conflict.
+- Clicking an editable block in a filled card now opens that exact block's
+  existing in-place editor. The visible `Изменить блок` action remains for
+  keyboard access. Interactive content does not trigger block editing, and
+  repeatable instances keep their own value scope and dirty-draft handoff.
+- The navigation expand/collapse button is removed. A collapsed desktop rail
+  temporarily expands on pointer entry and returns to the compact state on
+  pointer exit; this preview does not alter the persisted collapsed state.
+- Focused renderer, filled-card, and app navigation suites pass. Backend
+  verification reports `229 passed / 196 skipped`; ESLint, TypeScript, the
+  full frontend Vitest run, Vite production build, and the project-map check
+  pass. The verified local bundle is `index-BTVl3j3b.js` (`572.27 kB`,
+  `163.05 kB` gzip) with `index-D6qc8aJj.css`.
+- `scripts/format.ps1 -Check` is still blocked by five pre-existing unrelated
+  frontend files outside this change (`blockOrdering.*`,
+  `CardPrintTemplateEditor.test.tsx`, `CardLayoutStudio.tsx`, and
+  `RegistriesAndSchema.tsx`); all changed files pass their scoped Prettier
+  check. No database migration or production-data change is required.
