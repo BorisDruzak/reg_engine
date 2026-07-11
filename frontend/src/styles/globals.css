@@ -3471,7 +3471,7 @@ tr:last-child td {
   margin: 0;
 }
 
-.card-tag-input-form label > span {
+.card-tag-input-form .search-input-label {
   position: absolute;
   width: 1px;
   height: 1px;

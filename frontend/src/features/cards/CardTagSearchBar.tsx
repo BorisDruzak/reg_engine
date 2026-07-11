@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import { listReferenceItems } from "@/api/client";
 import type {
@@ -29,6 +36,8 @@ type ActiveMenuItem =
   | { type: "templates" }
   | { type: "field"; fieldId: string }
   | { type: "organizations" };
+
+type SearchDraft = { type: "text" } | { type: "field"; fieldId: string } | null;
 
 export function CardTagSearchBar({
   token,
@@ -66,11 +75,12 @@ export function CardTagSearchBar({
   onIncludeArchiveChange: (value: boolean) => void;
 }) {
   const searchRootRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
   const [isOrganizationFilterOpen, setIsOrganizationFilterOpen] = useState(false);
   const [activeMenuItem, setActiveMenuItem] = useState<ActiveMenuItem | null>(null);
-  const [fieldDraftValues, setFieldDraftValues] = useState<Record<string, string>>({});
+  const [searchDraft, setSearchDraft] = useState<SearchDraft>(null);
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const templatesById = useMemo(
     () => new Map(cardTemplates.map((template) => [template.id, template])),
@@ -105,6 +115,24 @@ export function CardTagSearchBar({
   );
   const activeField =
     activeMenuItem?.type === "field" ? (fieldById.get(activeMenuItem.fieldId) ?? null) : null;
+  const draftField =
+    searchDraft?.type === "field" ? (fieldById.get(searchDraft.fieldId) ?? null) : null;
+  const draftLabel =
+    searchDraft?.type === "text"
+      ? uiText.textSearchChoice
+      : (draftField?.label ?? uiText.cardSearch);
+  const searchInputLabel = searchDraft ? `${uiText.filterValue} ${draftLabel}` : uiText.cardSearch;
+  const searchInputType = draftField ? scalarInputType(draftField) : "text";
+  const searchTerm = searchDraft ? "" : searchInput.trim().toLocaleLowerCase();
+  const matchesSearchTerm = (value: string) =>
+    !searchTerm || value.toLocaleLowerCase().includes(searchTerm);
+  const matchingTemplates = activeTemplates.filter((template) => matchesSearchTerm(template.name));
+  const matchingFields = searchableFields.filter((field) => matchesSearchTerm(field.label));
+  const showsTemplateTag = matchesSearchTerm(uiText.cardTemplate) || matchingTemplates.length > 0;
+  const hasBasicTagMatch =
+    [uiText.textSearchChoice, uiText.organizations, uiText.showArchivedCards].some(
+      matchesSearchTerm,
+    ) || showsTemplateTag;
   const activeReferenceListId =
     activeField && isReferenceFieldType(activeField.field_type)
       ? activeField.options_source_id
@@ -116,6 +144,12 @@ export function CardTagSearchBar({
   });
 
   useEffect(() => {
+    if (searchDraft) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchDraft]);
+
+  useEffect(() => {
     if (!isTagMenuOpen && !isOrganizationFilterOpen) {
       return;
     }
@@ -124,6 +158,8 @@ export function CardTagSearchBar({
       setIsTagMenuOpen(false);
       setIsOrganizationFilterOpen(false);
       setActiveMenuItem(null);
+      setSearchDraft(null);
+      setSearchInput("");
     }
 
     function handlePointerDown(event: PointerEvent) {
@@ -136,6 +172,12 @@ export function CardTagSearchBar({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        if (searchDraft) {
+          event.preventDefault();
+          setSearchDraft(null);
+          setSearchInput("");
+          return;
+        }
         closeSearchPopovers();
       }
     }
@@ -146,18 +188,38 @@ export function CardTagSearchBar({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOrganizationFilterOpen, isTagMenuOpen]);
+  }, [isOrganizationFilterOpen, isTagMenuOpen, searchDraft]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextQuery = searchInput.trim();
-    if (!nextQuery) {
+    applySearchDraft();
+  }
+
+  function applySearchDraft() {
+    const value = searchInput.trim();
+    if (!value || !searchDraft) {
       return;
     }
-    onTextQueryChange(nextQuery);
+    if (searchDraft.type === "text") {
+      onTextQueryChange(value);
+    } else if (draftField) {
+      const payload = buildFieldFilterPayload(draftField, value);
+      if (payload) {
+        applyFieldFilter(draftField, payload);
+      }
+    }
     setSearchInput("");
+    setSearchDraft(null);
     setIsTagMenuOpen(false);
     setActiveMenuItem(null);
+  }
+
+  function handleSearchInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || !searchDraft) {
+      return;
+    }
+    event.preventDefault();
+    applySearchDraft();
   }
 
   function openTagMenu() {
@@ -169,6 +231,8 @@ export function CardTagSearchBar({
     setIsTagMenuOpen(false);
     setIsOrganizationFilterOpen(true);
     setActiveMenuItem({ type: "organizations" });
+    setSearchDraft(null);
+    setSearchInput("");
   }
 
   function toggleTemplateFilter(templateId: string) {
@@ -188,6 +252,13 @@ export function CardTagSearchBar({
   }
 
   function activateFieldMenu(field: FormFieldRead) {
+    if (isScalarFieldType(field.field_type)) {
+      setSearchDraft({ type: "field", fieldId: field.id });
+      setSearchInput("");
+      setActiveMenuItem(null);
+      openTagMenu();
+      return;
+    }
     openTagMenu();
     setActiveMenuItem((current) =>
       current?.type === "field" && current.fieldId === field.id
@@ -196,13 +267,11 @@ export function CardTagSearchBar({
     );
   }
 
-  function submitInlineFieldFilter(field: FormFieldRead) {
-    const payload = buildFieldFilterPayload(field, fieldDraftValues[field.id] ?? "");
-    if (!payload) {
-      return;
-    }
-    applyFieldFilter(field, payload);
-    setFieldDraftValues((current) => ({ ...current, [field.id]: "" }));
+  function activateTextSearch() {
+    setSearchDraft({ type: "text" });
+    setSearchInput("");
+    setIsOrganizationFilterOpen(false);
+    setIsTagMenuOpen(true);
     setActiveMenuItem(null);
   }
 
@@ -346,12 +415,17 @@ export function CardTagSearchBar({
         )}
         <form className="card-tag-input-form" onSubmit={submitSearch}>
           <label>
-            <span>{uiText.cardSearch}</span>
+            <span className={searchDraft ? "search-draft-prefix" : "search-input-label"}>
+              {draftLabel}
+            </span>
             <input
-              aria-label={uiText.cardSearch}
-              placeholder={uiText.cardSearchPlaceholder}
+              ref={searchInputRef}
+              aria-label={searchInputLabel}
+              type={searchInputType}
+              placeholder={searchDraft ? undefined : uiText.cardSearchPlaceholder}
               value={searchInput}
               onChange={(event) => setSearchInput(event.currentTarget.value)}
+              onKeyDown={handleSearchInputKeyDown}
               onFocus={openTagMenu}
               onClick={openTagMenu}
             />
@@ -362,79 +436,106 @@ export function CardTagSearchBar({
         <div className="search-tag-popover" role="listbox" aria-label={uiText.searchTagMenu}>
           <div className="search-tag-section">
             <p>{uiText.basicSearchTags}</p>
-            <div className="search-filter-option">
-              <button type="button" className="search-tag-option" onClick={openOrganizationFilter}>
-                <span>{uiText.organizations}</span>
-                <small>{organizationFilterSummary}</small>
-              </button>
-            </div>
-            <div className="search-filter-option">
-              <button
-                type="button"
-                className="search-tag-option"
-                aria-label={uiText.cardTemplate}
-                onClick={() =>
-                  setActiveMenuItem((current) =>
-                    current?.type === "templates" ? null : { type: "templates" },
-                  )
-                }
-              >
-                <span>{uiText.cardTemplate}</span>
-                <small>{selectedCardTemplateIds.length || fieldTypeLabel("select")}</small>
-              </button>
-              {activeMenuItem?.type === "templates" && (
-                <div className="search-inline-options">
-                  {activeTemplates.length === 0 ? (
-                    <p className="data-empty">{uiText.noData}</p>
-                  ) : (
-                    activeTemplates.map((template) => {
-                      const isSelected = selectedCardTemplateIds.includes(template.id);
-                      return (
-                        <button
-                          type="button"
-                          key={template.id}
-                          className={[
-                            "search-tag-option",
-                            "search-inline-option",
-                            isSelected ? "is-selected" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          aria-label={template.name}
-                          aria-pressed={isSelected}
-                          onClick={() => toggleTemplateFilter(template.id)}
-                        >
-                          <span>{template.name}</span>
-                          <small>{template.code}</small>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="search-filter-option">
-              <button
-                type="button"
-                className="search-tag-option"
-                disabled={includeArchive}
-                onClick={() => {
-                  onIncludeArchiveChange(true);
-                  setIsTagMenuOpen(false);
-                  setActiveMenuItem(null);
-                }}
-              >
-                <span>{uiText.showArchivedCards}</span>
-              </button>
-            </div>
+            {!hasBasicTagMatch ? (
+              <p className="data-empty">{uiText.noData}</p>
+            ) : (
+              <>
+                {matchesSearchTerm(uiText.textSearchChoice) && (
+                  <div className="search-filter-option">
+                    <button
+                      type="button"
+                      className="search-tag-option"
+                      onClick={activateTextSearch}
+                    >
+                      <span>{uiText.textSearchChoice}</span>
+                    </button>
+                  </div>
+                )}
+                {matchesSearchTerm(uiText.organizations) && (
+                  <div className="search-filter-option">
+                    <button
+                      type="button"
+                      className="search-tag-option"
+                      onClick={openOrganizationFilter}
+                    >
+                      <span>{uiText.organizations}</span>
+                      <small>{organizationFilterSummary}</small>
+                    </button>
+                  </div>
+                )}
+                {showsTemplateTag && (
+                  <div className="search-filter-option">
+                    <button
+                      type="button"
+                      className="search-tag-option"
+                      aria-label={uiText.cardTemplate}
+                      onClick={() =>
+                        setActiveMenuItem((current) =>
+                          current?.type === "templates" ? null : { type: "templates" },
+                        )
+                      }
+                    >
+                      <span>{uiText.cardTemplate}</span>
+                      <small>{selectedCardTemplateIds.length || fieldTypeLabel("select")}</small>
+                    </button>
+                    {activeMenuItem?.type === "templates" && (
+                      <div className="search-inline-options">
+                        {matchingTemplates.length === 0 ? (
+                          <p className="data-empty">{uiText.noData}</p>
+                        ) : (
+                          matchingTemplates.map((template) => {
+                            const isSelected = selectedCardTemplateIds.includes(template.id);
+                            return (
+                              <button
+                                type="button"
+                                key={template.id}
+                                className={[
+                                  "search-tag-option",
+                                  "search-inline-option",
+                                  isSelected ? "is-selected" : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                                aria-label={template.name}
+                                aria-pressed={isSelected}
+                                onClick={() => toggleTemplateFilter(template.id)}
+                              >
+                                <span>{template.name}</span>
+                                <small>{template.code}</small>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {matchesSearchTerm(uiText.showArchivedCards) && (
+                  <div className="search-filter-option">
+                    <button
+                      type="button"
+                      className="search-tag-option"
+                      disabled={includeArchive}
+                      onClick={() => {
+                        onIncludeArchiveChange(true);
+                        setIsTagMenuOpen(false);
+                        setActiveMenuItem(null);
+                      }}
+                    >
+                      <span>{uiText.showArchivedCards}</span>
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div className="search-tag-section">
             <p>{uiText.cardFields}</p>
-            {searchableFields.length === 0 ? (
+            {matchingFields.length === 0 ? (
               <p className="data-empty">{uiText.noData}</p>
             ) : (
               <div className="search-field-menu">
-                {searchableFields.map((field) => {
+                {matchingFields.map((field) => {
                   const isExpanded =
                     activeMenuItem?.type === "field" && activeMenuItem.fieldId === field.id;
                   return (
@@ -451,17 +552,9 @@ export function CardTagSearchBar({
                       {isExpanded && (
                         <FieldInlineFilterControls
                           field={field}
-                          value={fieldDraftValues[field.id] ?? ""}
                           referenceItems={referenceItemsQuery.data?.items ?? []}
                           isReferenceLoading={referenceItemsQuery.isLoading}
                           selectedFilters={fieldFilters}
-                          onValueChange={(value) =>
-                            setFieldDraftValues((current) => ({
-                              ...current,
-                              [field.id]: value,
-                            }))
-                          }
-                          onSubmit={() => submitInlineFieldFilter(field)}
                           onBoolSelect={(value) => addBoolFilter(field, value)}
                           onReferenceSelect={(item) => addReferenceFilter(field, item)}
                         />
@@ -510,22 +603,16 @@ export function CardTagSearchBar({
 
 function FieldInlineFilterControls({
   field,
-  value,
   referenceItems,
   isReferenceLoading,
   selectedFilters,
-  onValueChange,
-  onSubmit,
   onBoolSelect,
   onReferenceSelect,
 }: {
   field: FormFieldRead;
-  value: string;
   referenceItems: ReferenceItemRead[];
   isReferenceLoading: boolean;
   selectedFilters: CardFieldFilterPayload[];
-  onValueChange: (value: string) => void;
-  onSubmit: () => void;
   onBoolSelect: (value: boolean) => void;
   onReferenceSelect: (item: ReferenceItemRead) => void;
 }) {
@@ -579,32 +666,7 @@ function FieldInlineFilterControls({
     );
   }
 
-  const inputType =
-    field.field_type === "date" ? "date" : field.field_type === "number" ? "number" : "text";
-  return (
-    <form
-      className="search-inline-value-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <label>
-        <span>
-          {uiText.filterValue} {field.label}
-        </span>
-        <input
-          aria-label={`${uiText.filterValue} ${field.label}`}
-          type={inputType}
-          value={value}
-          onChange={(event) => onValueChange(event.currentTarget.value)}
-        />
-      </label>
-      <button type="submit" className="primary-button">
-        {uiText.addFilter} {field.label}
-      </button>
-    </form>
-  );
+  return null;
 }
 
 function OrganizationFilterNode({
@@ -703,6 +765,22 @@ function formatFieldFilterValue(filter: CardFieldFilterPayload, field: FormField
 
 function isReferenceFieldType(fieldType: string) {
   return fieldType === "select" || fieldType === "multi_select";
+}
+
+function isScalarFieldType(fieldType: string) {
+  return (
+    fieldType === "text" ||
+    fieldType === "number" ||
+    fieldType === "date" ||
+    fieldType === "datetime"
+  );
+}
+
+function scalarInputType(field: FormFieldRead) {
+  if (field.field_type === "date") return "date";
+  if (field.field_type === "datetime") return "datetime-local";
+  if (field.field_type === "number") return "number";
+  return "text";
 }
 
 function organizationFilterLabel({

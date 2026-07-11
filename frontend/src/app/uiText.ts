@@ -86,6 +86,7 @@ export const uiText = {
   cardSearchPlaceholder: "Текст карточки или поля",
   cardTagSearch: "Поисковая строка карточек",
   textSearchTag: "Текст",
+  textSearchChoice: "Текст карточки",
   addFilter: "Добавить фильтр",
   searchTagMenu: "Доступные теги поиска",
   basicSearchTags: "Основные фильтры",

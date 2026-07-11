@@ -5007,7 +5007,17 @@ test("filters cards by search organization and archive visibility", async () => 
   ).not.toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
-  await user.type(within(searchBar).getByLabelText("Поиск карточек"), "Архивная{enter}");
+  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  await user.click(
+    within(await screen.findByRole("listbox", { name: "Доступные теги поиска" })).getByRole(
+      "button",
+      { name: "Текст карточки" },
+    ),
+  );
+  await user.type(
+    within(searchBar).getByLabelText("Значение фильтра Текст карточки"),
+    "Архивная{enter}",
+  );
   expect(within(searchBar).getByText("Текст: Архивная")).toBeInTheDocument();
   expect(screen.queryByText("Архивная карточка")).not.toBeInTheDocument();
 
@@ -5096,21 +5106,20 @@ test("adds dynamic field filters from the unified card search bar", async () => 
   expect(await screen.findByText("Карточка актива")).toBeInTheDocument();
   expect(screen.getByText("Карточка без статуса")).toBeInTheDocument();
 
-  await user.click(within(searchBar).getByLabelText("Поиск карточек"));
+  const searchInput = within(searchBar).getByLabelText("Поиск карточек");
+  await user.click(searchInput);
   const tagMenu = await screen.findByRole("listbox", { name: "Доступные теги поиска" });
+  await user.type(searchInput, "Статус");
+  expect(within(tagMenu).getByRole("button", { name: "Статус" })).toBeInTheDocument();
+  expect(
+    within(tagMenu).queryByRole("button", { name: "Показывать архивные и замененные карточки" }),
+  ).not.toBeInTheDocument();
   const statusButton = within(tagMenu).getByRole("button", { name: "Статус" });
-  const statusOption = statusButton.closest(".search-field-option");
-  expect(statusOption).not.toBeNull();
   await user.click(statusButton);
-  await user.type(
-    await within(statusOption as HTMLElement).findByLabelText("Значение фильтра Статус"),
-    "drafted",
-  );
-  await user.click(
-    within(statusOption as HTMLElement).getByRole("button", {
-      name: "Добавить фильтр Статус",
-    }),
-  );
+  const valueInput = within(searchBar).getByLabelText("Значение фильтра Статус");
+  expect(valueInput.closest(".card-tag-input-form")).not.toBeNull();
+  expect(screen.queryByRole("button", { name: "Добавить фильтр Статус" })).not.toBeInTheDocument();
+  await user.type(valueInput, "drafted{enter}");
 
   expect(within(searchBar).getByText("Статус: drafted")).toBeInTheDocument();
   await waitFor(() => {
@@ -5285,18 +5294,12 @@ test("adds template bool and date filters from inline search tag choices", async
   await user.click(await within(boolOption as HTMLElement).findByRole("button", { name: "Да" }));
 
   const dateButton = within(tagMenu).getByRole("button", { name: "Дата регистрации" });
-  const dateOption = dateButton.closest(".search-field-option");
-  expect(dateOption).not.toBeNull();
   await user.click(dateButton);
   await user.type(
-    await within(dateOption as HTMLElement).findByLabelText("Значение фильтра Дата регистрации"),
+    within(searchBar).getByLabelText("Значение фильтра Дата регистрации"),
     "2026-07-02",
   );
-  await user.click(
-    within(dateOption as HTMLElement).getByRole("button", {
-      name: "Добавить фильтр Дата регистрации",
-    }),
-  );
+  await user.keyboard("{Enter}");
 
   expect(
     within(searchBar).getByText("Шаблон карточки: Муниципальная карточка"),
