@@ -2585,6 +2585,23 @@ async function openDefaultSchemaTemplateEditor(user: ReturnType<typeof userEvent
   });
 }
 
+async function openAdvancedRegistryTab(
+  user: ReturnType<typeof userEvent.setup>,
+  tabName: "Реестры" | "Справочники" | "Отчеты",
+) {
+  const primaryTabs = await screen.findByRole("tablist", {
+    name: "Разделы настройки реестра",
+  });
+  await user.click(within(primaryTabs).getByRole("tab", { name: "Расширенное" }));
+  const advancedTabs = await screen.findByRole("tablist", {
+    name: "Расширенные разделы настройки реестра",
+  });
+  const target = within(advancedTabs).getByRole("tab", { name: tabName });
+  if (target.getAttribute("aria-selected") !== "true") {
+    await user.click(target);
+  }
+}
+
 type TestOrganizationTreeNode = OrganizationRead & {
   children: TestOrganizationTreeNode[];
 };
@@ -2867,6 +2884,7 @@ test("logs in and renders authenticated admin workspace", async () => {
   expect(screen.queryByText("System admin")).not.toBeInTheDocument();
   expect(screen.queryByText("Manage users.")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Реестры" }));
+  await openAdvancedRegistryTab(user, "Реестры");
   expect((await screen.findAllByText("Реестр активов")).length).toBeGreaterThan(0);
   await user.click(screen.getByRole("tab", { name: "Схема карточки" }));
   await openDefaultSchemaTemplateEditor(user);
@@ -3610,29 +3628,49 @@ test("renders registry workspace as focused schema tabs", async () => {
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
 
-  expect(
-    await screen.findByRole("tablist", { name: "Разделы настройки реестра" }),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Реестры" })).toHaveAttribute("aria-selected", "true");
-  expect(screen.getByRole("tab", { name: "Схема карточки" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Справочники" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Импорт и экспорт" })).toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "Отчеты" })).toBeInTheDocument();
-  expect(screen.getAllByRole("heading", { name: "Реестры" }).length).toBeGreaterThan(0);
-  expect(screen.queryByRole("heading", { name: "Схема карточки" })).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("tab", { name: "Схема карточки" }));
-  expect(screen.getByRole("tab", { name: "Схема карточки" })).toHaveAttribute(
+  const primaryTabs = await screen.findByRole("tablist", {
+    name: "Разделы настройки реестра",
+  });
+  expect(within(primaryTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    "Схема карточки",
+    "Импорт и экспорт",
+    "Расширенное",
+  ]);
+  expect(within(primaryTabs).getByRole("tab", { name: "Схема карточки" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
   expect(await screen.findByRole("heading", { name: "Схема карточки" })).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Справочники" })).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: "Справочники" }));
-  expect(screen.getByRole("tab", { name: "Справочники" })).toHaveAttribute("aria-selected", "true");
+  await user.click(within(primaryTabs).getByRole("tab", { name: "Расширенное" }));
+  const advancedTabs = screen.getByRole("tablist", {
+    name: "Расширенные разделы настройки реестра",
+  });
+  expect(within(advancedTabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    "Реестры",
+    "Справочники",
+    "Отчеты",
+  ]);
+  expect(within(advancedTabs).getByRole("tab", { name: "Реестры" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getAllByRole("heading", { name: "Реестры" }).length).toBeGreaterThan(0);
+
+  await user.click(within(advancedTabs).getByRole("tab", { name: "Справочники" }));
+  expect(within(advancedTabs).getByRole("tab", { name: "Справочники" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Импорт и экспорт" })).not.toBeInTheDocument();
+
+  await user.click(within(primaryTabs).getByRole("tab", { name: "Импорт и экспорт" }));
+  expect(await screen.findByRole("heading", { name: "Импорт и экспорт" })).toBeInTheDocument();
+  await user.click(within(primaryTabs).getByRole("tab", { name: "Расширенное" }));
+  expect(within(advancedTabs).getByRole("tab", { name: "Справочники" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
 });
 
 test.skip("renders a visual card schema editor with fields inside blocks", async () => {
@@ -4640,7 +4678,7 @@ test("renders reference lists as one expandable editor list", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+  await openAdvancedRegistryTab(user, "Справочники");
 
   const referenceWorkspace = await screen.findByRole("region", {
     name: "Список справочников",
@@ -4680,7 +4718,7 @@ test("edits reference metadata inline and creates items from the bottom add slot
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+  await openAdvancedRegistryTab(user, "Справочники");
 
   const referenceWorkspace = await screen.findByRole("region", {
     name: "Список справочников",
@@ -4776,7 +4814,7 @@ test("reorders reference items by mouse drag", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+  await openAdvancedRegistryTab(user, "Справочники");
 
   const activeRow = await screen.findByRole("row", { name: /Активен/ });
   const inactiveRow = await screen.findByRole("row", { name: /Неактивен/ });
@@ -4820,6 +4858,7 @@ test("uses compact visible row actions with full accessible labels", async () =>
   expect(archiveOrganization).toHaveTextContent("В архив");
 
   await user.click(screen.getByRole("button", { name: "Реестры" }));
+  await openAdvancedRegistryTab(user, "Реестры");
   const editRegistry = await screen.findByRole("button", {
     name: "Редактировать реестр Реестр активов",
   });
@@ -6086,6 +6125,7 @@ test("creates edits and archives registries in Russian UI", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await openAdvancedRegistryTab(user, "Реестры");
 
   const registryPostCount = () =>
     vi
@@ -6194,6 +6234,7 @@ test("shows localized registry mutation denial text", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
+  await openAdvancedRegistryTab(user, "Реестры");
 
   await user.click(screen.getByRole("button", { name: "Редактировать реестр Реестр активов" }));
   const editNameInput = await screen.findByLabelText("Название реестра");
@@ -6448,7 +6489,7 @@ test("creates edits and archives reference lists and items in Russian UI", async
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+  await openAdvancedRegistryTab(user, "Справочники");
 
   expect(await screen.findByRole("heading", { name: "Справочники" })).toBeInTheDocument();
   expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
@@ -6895,7 +6936,7 @@ test("shows localized locked reference list denial text", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+  await openAdvancedRegistryTab(user, "Справочники");
 
   expect((await screen.findAllByText("Статусы актива")).length).toBeGreaterThan(0);
   expect(screen.getByText("Заблокирован для дочерних организаций")).toBeInTheDocument();
@@ -7418,7 +7459,7 @@ test("manages report templates and report runs in Russian registry UI", async ()
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   expect(await screen.findByRole("heading", { name: "Отчеты" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Сформированные отчеты" })).toBeInTheDocument();
@@ -7730,7 +7771,7 @@ test("uses report template default parameters when run JSON is empty", async () 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   expect(await screen.findByLabelText("Лимит")).toHaveValue(30);
   expect(screen.getByLabelText("Раздел")).toHaveValue("cards");
@@ -7791,7 +7832,7 @@ test("uses report parameter schema defaults when template defaults are empty", a
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   expect(await screen.findByLabelText("Лимит")).toHaveValue(15);
   expect(screen.getByLabelText("Архив")).toBeChecked();
@@ -7854,7 +7895,7 @@ test("blocks report generation when required schema parameters are empty", async
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   expect(await screen.findByLabelText("Раздел")).toHaveValue("");
   await user.click(screen.getByRole("button", { name: "Сформировать отчет" }));
@@ -7905,7 +7946,7 @@ test("blocks report generation when scalar schema constraints fail", async () =>
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   await user.type(await screen.findByLabelText("Лимит"), "0");
   await user.type(screen.getByLabelText("Раздел"), "ab");
@@ -7958,7 +7999,7 @@ test("blocks report generation when pattern or multipleOf constraints fail", asy
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   await user.type(await screen.findByLabelText("Код отчета"), "ABC");
   await user.type(screen.getByLabelText("Шаг"), "3");
@@ -8011,7 +8052,7 @@ test("blocks report generation when exclusive numeric bounds fail", async () => 
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   await user.type(await screen.findByLabelText("Минимальный балл"), "10");
   await user.type(screen.getByLabelText("Коэффициент"), "1");
@@ -8059,7 +8100,7 @@ test("renders date report parameters as date inputs", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   const dateInput = await screen.findByLabelText("Дата начала");
   expect(dateInput).toHaveAttribute("type", "date");
@@ -8114,7 +8155,7 @@ test("renders report parameter descriptions from schema", async () => {
   await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
   await user.click(screen.getByRole("button", { name: "Войти" }));
   await user.click(await screen.findByRole("button", { name: "Реестры" }));
-  await user.click(await screen.findByRole("tab", { name: "Отчеты" }));
+  await openAdvancedRegistryTab(user, "Отчеты");
 
   expect(await screen.findByLabelText("Раздел")).toHaveValue("cards");
   expect(screen.getByText("Выберите часть реестра для включения в отчет")).toBeInTheDocument();

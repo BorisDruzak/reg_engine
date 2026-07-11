@@ -1013,12 +1013,15 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Manage users.", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
+  await page.getByRole("tab", { name: "Расширенное" }).click();
+  await page.getByRole("tab", { name: "Реестры" }).click();
   await expect(page.getByRole("cell", { name: "Реестр активов", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Схема карточки" }).click();
   const schemaEditor = page.getByRole("region", {
     name: "Визуальный редактор схемы карточки",
   });
   await expect(schemaEditor.getByText("Статус").first()).toBeVisible();
+  await page.getByRole("tab", { name: "Расширенное" }).click();
   await page.getByRole("tab", { name: "Справочники" }).click();
   await expect(page.getByRole("heading", { name: "Справочники" })).toBeVisible();
   await expect(page.getByText("Статусы актива").first()).toBeVisible();
@@ -2263,6 +2266,8 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("operator@example.test").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
+  await page.getByRole("tab", { name: "Расширенное" }).click();
+  await page.getByRole("tab", { name: "Реестры" }).click();
   await page.getByRole("button", { name: "Создать реестр" }).click();
   await expect(page.getByLabel("Код реестра")).toHaveCount(0);
   await page.getByLabel("Название реестра").fill("Реестр проверок");
@@ -2301,6 +2306,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Блок формы создан")).toBeVisible();
   await expect(page.getByText("Основные сведения").first()).toBeVisible();
 
+  await page.getByRole("tab", { name: "Расширенное" }).click();
   await page.getByRole("tab", { name: "Справочники" }).click();
   await page.getByRole("button", { name: "Создать справочник" }).click();
   await expect(page.getByLabel("Код справочника")).toHaveCount(0);

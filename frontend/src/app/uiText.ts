@@ -152,6 +152,8 @@ export const uiText = {
   schemaFields: "Поля формы",
   cardSchema: "Схема карточки",
   registrySettingsSections: "Разделы настройки реестра",
+  advanced: "Расширенное",
+  advancedRegistrySettings: "Расширенные разделы настройки реестра",
   visualCardSchemaEditor: "Визуальный редактор схемы карточки",
   formBlock: "Блок формы",
   formField: "Поле формы",

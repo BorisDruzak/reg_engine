@@ -81,13 +81,18 @@ type ReferenceItemFormState = {
   position: string;
 };
 
-type RegistryWorkspaceTab = "registries" | "schema" | "references" | "importExport" | "reports";
+type RegistryPrimaryTab = "schema" | "importExport" | "advanced";
+type RegistryAdvancedTab = "registries" | "references" | "reports";
 
-const registryWorkspaceTabs: { id: RegistryWorkspaceTab; label: string }[] = [
-  { id: "registries", label: uiText.registries },
+const registryPrimaryTabs: { id: RegistryPrimaryTab; label: string }[] = [
   { id: "schema", label: uiText.cardSchema },
-  { id: "references", label: uiText.referenceLists },
   { id: "importExport", label: uiText.importExport },
+  { id: "advanced", label: uiText.advanced },
+];
+
+const registryAdvancedTabs: { id: RegistryAdvancedTab; label: string }[] = [
+  { id: "registries", label: uiText.registries },
+  { id: "references", label: uiText.referenceLists },
   { id: "reports", label: uiText.reports },
 ];
 
@@ -108,7 +113,8 @@ export function RegistriesAndSchema({
 }) {
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<RegistryFormState | null>(null);
-  const [activeTab, setActiveTab] = useState<RegistryWorkspaceTab>("registries");
+  const [activeTab, setActiveTab] = useState<RegistryPrimaryTab>("schema");
+  const [advancedTab, setAdvancedTab] = useState<RegistryAdvancedTab>("registries");
   const [archiveTarget, setArchiveTarget] = useState<RegistryRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -236,16 +242,28 @@ export function RegistriesAndSchema({
     setArchiveTarget(registry);
   }
 
+  const showRegistries = activeTab === "advanced" && advancedTab === "registries";
+  const showReferences = activeTab === "advanced" && advancedTab === "references";
+  const showReports = activeTab === "advanced" && advancedTab === "reports";
+
   return (
     <div className="stack">
       <WorkspaceTabs
-        tabs={registryWorkspaceTabs}
+        tabs={registryPrimaryTabs}
         activeTab={activeTab}
         ariaLabel={uiText.registrySettingsSections}
         onChange={setActiveTab}
       />
-      <div className={activeTab === "registries" ? "registry-workspace-grid" : "stack"}>
-        {activeTab === "registries" && (
+      {activeTab === "advanced" ? (
+        <WorkspaceTabs
+          tabs={registryAdvancedTabs}
+          activeTab={advancedTab}
+          ariaLabel={uiText.advancedRegistrySettings}
+          onChange={setAdvancedTab}
+        />
+      ) : null}
+      <div className={showRegistries ? "registry-workspace-grid" : "stack"}>
+        {showRegistries && (
           <Panel title={uiText.registries}>
             <div className="panel-toolbar">
               <button type="button" className="primary-button" onClick={openCreateForm}>
@@ -350,7 +368,7 @@ export function RegistriesAndSchema({
               />
             </Panel>
           )}
-          {activeTab === "references" && (
+          {showReferences && (
             <Panel title={uiText.referenceLists}>
               <ReferenceListsPanel
                 organizations={organizations}
@@ -363,7 +381,7 @@ export function RegistriesAndSchema({
           {activeTab === "importExport" && (
             <ImportExportPanel selectedRegistryId={selectedRegistryId} token={token} />
           )}
-          {activeTab === "reports" && (
+          {showReports && (
             <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
           )}
         </div>
