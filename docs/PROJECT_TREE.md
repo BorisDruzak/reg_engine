@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 12:32:09 +05:00
+- Generated: 2026-07-11 13:57:57 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -208,6 +208,7 @@
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
 - `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
+- `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -215,6 +216,7 @@
 - `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
 - `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
 - `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
+- `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -246,6 +248,8 @@
 - `frontend/src/features/auth/session.ts`
 - `frontend/src/features/cardLayout/A4LinkedCardCanvas.tsx`
 - `frontend/src/features/cardLayout/a4LinkedCardLayout.ts`
+- `frontend/src/features/cardLayout/blockOrdering.test.ts`
+- `frontend/src/features/cardLayout/blockOrdering.ts`
 - `frontend/src/features/cardLayout/CardBlockLayoutNode.tsx`
 - `frontend/src/features/cardLayout/CardFieldLayoutNode.tsx`
 - `frontend/src/features/cardLayout/CardLayoutRenderer.test.tsx`

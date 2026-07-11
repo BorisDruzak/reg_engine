@@ -236,6 +236,13 @@ not a hardcoded employee registry.
   synchronization, frontend deployment, desktop/mobile Browser proof,
   conversion follow-up, and live DOCX/PDF signature checks pass. No database
   migration was required.
+- Phase 8N advanced registry navigation and block ordering is implemented and
+  locally verified: the primary registry workspace now keeps only `Схема
+  карточки`, `Импорт и экспорт`, and `Расширенное`; the nested advanced tabs
+  contain only `Реестры`, `Справочники`, and `Отчёты`; blocks move through
+  guarded up/down arrows with atomic full-layout undo; the duplicate template
+  header and geometry redo action are removed. Deployment and live Browser
+  proof remain for this checkpoint. No database migration is required.
 - This file was cleaned on 2026-07-01 to replace the old live-verification plan
   with the current product/UI architecture plan.
 - Phase 6A is documentation/product decision work. Do not change backend code,
@@ -4500,3 +4507,36 @@ Live Browser proof:
 - Cancelling the field discarded the temporary hint. Final state had zero
   active field/reference editors, no page-level horizontal overflow, the
   original two available reference lists, and zero browser warnings/errors.
+
+#### Advanced registry navigation and atomic block ordering
+
+Status: implementation complete and locally verified; production release and
+live Browser proof pending.
+
+- The primary registry workspace exposes exactly `Схема карточки`, `Импорт и
+  экспорт`, and `Расширенное`. The nested advanced workspace exposes exactly
+  `Реестры`, `Справочники`, and `Отчёты` and preserves its selected subsection
+  while the primary tab changes.
+- Block drag handles are removed. Every block has visible up/down order arrows;
+  unavailable boundary actions and all actions during a busy/conflict state are
+  disabled.
+- Adjacent swaps are calculated by the pure `reorderBlockSections` helper. It
+  sorts deterministically, preserves block width/height, clamps columns to the
+  12-column grid, and repacks vertical bands without overlap.
+- A reorder saves the full form layout once. Undo restores the complete
+  previous layout snapshot in one action; the separate redo history and
+  `Повторить изменение` button are removed.
+- The duplicate outer selected-template header is removed while the canonical
+  studio heading and `Закрыть` action remain. Field drag/resize and block resize
+  behavior remain available.
+- `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`
+  passed after regenerating `docs/PROJECT_TREE.md`: backend
+  `229 passed / 196 skipped`, frontend `262 passed / 25 skipped`, Ruff, Ruff
+  format, mypy, ESLint, TypeScript, production build, and project-map checks are
+  green. The existing Starlette/httpx deprecation and Vite main-chunk advisories
+  remain unchanged. The verified local bundle is `index-hqUwJYtl.js`
+  (`571.75 kB`, `162.82 kB` gzip) with `index-Dl5aZK2d.css`.
+- Design and implementation records:
+  `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
+  and
+  `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`.
