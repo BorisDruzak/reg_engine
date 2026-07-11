@@ -294,7 +294,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     child_preview = PublicLinkService(db_session).preview_public_link(
         raw_token=created.child_raw_token
     )
-    assert child_preview.public_link_id == created.child_public_link.id
+    assert child_preview.card_id == created.card.id
 
     with pytest.raises(CardCreationLinkError):
         service.create_card_from_public_link(
