@@ -13,6 +13,9 @@ import { AdminMutationDialog } from "@/components/common/AdminMutation";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import { BlockFieldControl } from "./BlockFieldControl";
+import { CardPresentationShell } from "./CardPresentationShell";
+import type { CardBlockNavigationItem } from "./CardBlockNavigator";
+import { buildBlockCompletions } from "./cardCompletion";
 import type { FieldEditorState } from "./fieldEditorUtils";
 import { formatValue as formatEditorValue } from "./fieldEditorUtils";
 import { blockEditorKey, type BlockEditorState } from "./useBlockEditor";
@@ -93,6 +96,56 @@ export function FilledCardLayout({
     () => buildValuesByInstance(blockInstances, values),
     [blockInstances, values],
   );
+  const completionBySurface = useMemo(
+    () =>
+      new Map(
+        surfaces.map((surface) => {
+          const blockIds = new Set(
+            surface.layout.form_layout.sections.flatMap((section) =>
+              section.block_id ? [section.block_id] : [],
+            ),
+          );
+          return [
+            surface.key,
+            buildBlockCompletions({
+              blocks: blocks.filter((block) => block.is_active && blockIds.has(block.id)),
+              fields: fields.filter((field) => field.is_active && blockIds.has(field.block_id)),
+              valueForField: (field) => {
+                const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
+                return valuesByInstance.get(instanceKey(blockInstanceId))?.get(field.id);
+              },
+            }),
+          ] as const;
+        }),
+      ),
+    [blocks, fields, surfaces, valuesByInstance],
+  );
+  const navigationItems = useMemo<readonly CardBlockNavigationItem[]>(
+    () =>
+      surfaces.flatMap((surface) => {
+        const completions = completionBySurface.get(surface.key);
+        return surface.layout.form_layout.sections.flatMap((section) => {
+          const blockId = section.block_id;
+          const block = blockId ? blocks.find((candidate) => candidate.id === blockId) : null;
+          const completion = blockId ? completions?.blocks.get(blockId) : null;
+          if (!block || !completion) return [];
+          return [
+            {
+              anchorId: cardBlockAnchorId(surface, block.id),
+              label:
+                surface.instanceOrdinal === null
+                  ? block.title
+                  : `${block.title} — ${instanceLabel(surface.instanceOrdinal)}`,
+              state: completion.state,
+              filledCount: completion.filledCount,
+              totalCount: completion.totalCount,
+              requiredMissingCount: completion.requiredMissingCount,
+            },
+          ];
+        });
+      }),
+    [blocks, completionBySurface, surfaces],
+  );
   const closeError = blockEditor ? Object.values(blockEditor.errors)[0] : undefined;
   const layoutRootRef = useRef<HTMLDivElement>(null);
   const lastEditorFocusRef = useRef<HTMLElement | null>(null);
@@ -134,201 +187,227 @@ export function FilledCardLayout({
 
   return (
     <>
-      <div
-        ref={layoutRootRef}
-        className="filled-card-layout"
-        data-testid="filled-card-layout"
-        onFocusCapture={(event) => {
-          if (blockEditor?.target && event.target instanceof HTMLElement) {
-            lastEditorFocusRef.current = event.target;
-          }
-        }}
-      >
-        {surfaces.map((surface) => {
-          const fieldValues = Object.fromEntries(
-            fields.map((field) => [field.id, surfaceFieldValue(surface, field, valuesByInstance)]),
-          );
-          const renderedValues = Object.fromEntries(
-            fields.map((field) => [
-              field.id,
-              renderReadValue(
-                field,
+      <CardPresentationShell items={navigationItems}>
+        <div
+          ref={layoutRootRef}
+          className="filled-card-layout"
+          data-testid="filled-card-layout"
+          onFocusCapture={(event) => {
+            if (blockEditor?.target && event.target instanceof HTMLElement) {
+              lastEditorFocusRef.current = event.target;
+            }
+          }}
+        >
+          {surfaces.map((surface) => {
+            const fieldValues = Object.fromEntries(
+              fields.map((field) => [
+                field.id,
                 surfaceFieldValue(surface, field, valuesByInstance),
-                referenceOptions[field.id] ?? [],
-              ),
-            ]),
-          );
-          const editorTarget =
-            blockEditor?.target &&
-            surface.blockInstanceIds.get(blockEditor.target.blockId) ===
-              blockEditor.target.blockInstanceId
-              ? blockEditor.target
-              : null;
-          const firstEditableId =
-            editorTarget && blockEditor
-              ? firstEditableFieldId(surface.layout, blockEditor)
-              : undefined;
-          const surfaceActiveBlock = blockEditor
-            ? editorTarget
-            : activeBlock &&
-                surface.blockInstanceIds.get(activeBlock.blockId) === activeBlock.blockInstanceId
-              ? activeBlock
-              : null;
-          const canEditBlock = (
-            candidate: FormBlockRead | null,
-            section: CardTemplateFormLayoutSectionRead,
-          ) =>
-            Boolean(
-              candidate &&
-              hasEditableSectionField(
-                candidate.id,
-                section,
-                fieldsById,
-                editableFieldIds,
-                Boolean(renderFileRefControl),
-              ),
+              ]),
             );
-          const openBlockEditor = (
-            candidate: FormBlockRead,
-            section: CardTemplateFormLayoutSectionRead,
-          ) => {
-            if (!canEditBlock(candidate, section)) return;
-            const blockInstanceId = surface.blockInstanceIds.get(candidate.id) ?? null;
-            const blockValues = valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
-            onEditBlock?.(candidate.id, blockInstanceId);
-            blockEditor?.open(candidate.id, blockInstanceId, sectionValues(section, blockValues));
-          };
+            const renderedValues = Object.fromEntries(
+              fields.map((field) => [
+                field.id,
+                renderReadValue(
+                  field,
+                  surfaceFieldValue(surface, field, valuesByInstance),
+                  referenceOptions[field.id] ?? [],
+                ),
+              ]),
+            );
+            const editorTarget =
+              blockEditor?.target &&
+              surface.blockInstanceIds.get(blockEditor.target.blockId) ===
+                blockEditor.target.blockInstanceId
+                ? blockEditor.target
+                : null;
+            const firstEditableId =
+              editorTarget && blockEditor
+                ? firstEditableFieldId(surface.layout, blockEditor)
+                : undefined;
+            const surfaceActiveBlock = blockEditor
+              ? editorTarget
+              : activeBlock &&
+                  surface.blockInstanceIds.get(activeBlock.blockId) === activeBlock.blockInstanceId
+                ? activeBlock
+                : null;
+            const canEditBlock = (
+              candidate: FormBlockRead | null,
+              section: CardTemplateFormLayoutSectionRead,
+            ) =>
+              Boolean(
+                candidate &&
+                hasEditableSectionField(
+                  candidate.id,
+                  section,
+                  fieldsById,
+                  editableFieldIds,
+                  Boolean(renderFileRefControl),
+                ),
+              );
+            const openBlockEditor = (
+              candidate: FormBlockRead,
+              section: CardTemplateFormLayoutSectionRead,
+            ) => {
+              if (!canEditBlock(candidate, section)) return;
+              const blockInstanceId = surface.blockInstanceIds.get(candidate.id) ?? null;
+              const blockValues = valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
+              onEditBlock?.(candidate.id, blockInstanceId);
+              blockEditor?.open(candidate.id, blockInstanceId, sectionValues(section, blockValues));
+            };
 
-          return (
-            <section
-              key={surface.key}
-              className={
-                surface.surfaceInstanceId
-                  ? "filled-card-repeatable-instance"
-                  : "filled-card-primary"
-              }
-              data-filled-card-instance={surface.surfaceInstanceId ?? "primary"}
-              aria-label={
-                surface.instanceOrdinal === null
-                  ? "Основные данные карточки"
-                  : instanceLabel(surface.instanceOrdinal)
-              }
-            >
-              {surface.instanceOrdinal === null ? null : (
-                <h4 className="filled-card-instance-title">
-                  {instanceLabel(surface.instanceOrdinal)}
-                </h4>
-              )}
-              <CardLayoutRenderer
-                layout={surface.layout}
-                blocks={blocks}
-                fields={fields}
-                mode={surfaceActiveBlock ? "block-edit" : "readonly"}
-                selection={
-                  surfaceActiveBlock ? { kind: "block", id: surfaceActiveBlock.blockId } : null
+            return (
+              <section
+                key={surface.key}
+                className={
+                  surface.surfaceInstanceId
+                    ? "filled-card-repeatable-instance"
+                    : "filled-card-primary"
                 }
-                renderedValues={editorTarget ? undefined : renderedValues}
-                fieldValues={fieldValues}
-                responsive
-                showGeometryDiagnostics={false}
-                testIdPrefix={surface.surfaceInstanceId ? `filled-${surface.key}` : "filled"}
-                canActivateBlock={({ block, section }) => canEditBlock(block, section)}
-                onActivateBlock={({ block, section }) => {
-                  if (block) openBlockEditor(block, section);
-                }}
-                renderFieldValue={({ field, mode }) => {
-                  const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
-                  const value = surfaceFieldValue(surface, field, valuesByInstance);
-                  const readValue = renderReadValue(field, value, referenceOptions[field.id] ?? []);
-                  if (
-                    mode !== "block-edit" ||
-                    !blockEditor ||
-                    editorTarget?.blockId !== field.block_id
-                  ) {
-                    return readValue;
+                data-filled-card-instance={surface.surfaceInstanceId ?? "primary"}
+                aria-label={
+                  surface.instanceOrdinal === null
+                    ? "Основные данные карточки"
+                    : instanceLabel(surface.instanceOrdinal)
+                }
+              >
+                {surface.instanceOrdinal === null ? null : (
+                  <h4 className="filled-card-instance-title">
+                    {instanceLabel(surface.instanceOrdinal)}
+                  </h4>
+                )}
+                <CardLayoutRenderer
+                  layout={surface.layout}
+                  blocks={blocks}
+                  fields={fields}
+                  mode={surfaceActiveBlock ? "block-edit" : "readonly"}
+                  selection={
+                    surfaceActiveBlock ? { kind: "block", id: surfaceActiveBlock.blockId } : null
                   }
-                  const editable = Object.prototype.hasOwnProperty.call(
-                    blockEditor.values,
-                    field.id,
-                  );
-                  return (
-                    <BlockFieldControl
-                      field={field}
-                      value={editable ? blockEditor.values[field.id] : undefined}
-                      editable={editable}
-                      pending={blockEditor.pending}
-                      error={blockEditor.errors[field.id]}
-                      options={referenceOptions[field.id]}
-                      readValue={readValue}
-                      fileRefControl={
-                        field.field_type === "file_ref" && editableFieldIds.has(field.id)
-                          ? renderFileRefControl?.({
-                              field,
-                              blockInstanceId,
-                              value,
-                              readValue,
-                            })
-                          : undefined
-                      }
-                      autoFocus={editable && firstEditableId === field.id}
-                      onChange={(nextValue: FieldEditorState) =>
-                        blockEditor.update(field.id, nextValue)
-                      }
-                    />
-                  );
-                }}
-                renderBlockActions={({ block, section }) => {
-                  if (!block || !canEditBlock(block, section)) {
-                    return null;
-                  }
-                  const editorActive =
-                    blockEditor?.key ===
-                    blockEditorKey(block.id, surface.blockInstanceIds.get(block.id) ?? null);
-                  if (editorActive && blockEditor) {
-                    return (
-                      <div className="row-actions filled-card-block-edit-actions">
-                        {blockEditor.errors._form && !blockEditor.confirmClose ? (
-                          <p className="inline-alert" role="alert">
-                            {blockEditor.errors._form}
-                          </p>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="primary-button"
-                          aria-label={`Сохранить блок ${block.title}`}
-                          disabled={blockEditor.pending}
-                          onClick={() => void blockEditor.save()}
-                        >
-                          Сохранить
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          aria-label={`Отмена блока ${block.title}`}
-                          disabled={blockEditor.pending}
-                          onClick={blockEditor.cancel}
-                        >
-                          Отмена
-                        </button>
-                      </div>
+                  renderedValues={editorTarget ? undefined : renderedValues}
+                  fieldValues={fieldValues}
+                  responsive
+                  showGeometryDiagnostics={false}
+                  testIdPrefix={surface.surfaceInstanceId ? `filled-${surface.key}` : "filled"}
+                  blockPresentation={({ block }) => {
+                    if (!block) return undefined;
+                    const completion = completionBySurface.get(surface.key)?.blocks.get(block.id);
+                    return completion
+                      ? {
+                          anchorId: cardBlockAnchorId(surface, block.id),
+                          state: completion.state,
+                          description: completion.label,
+                        }
+                      : undefined;
+                  }}
+                  fieldPresentation={({ field }) => {
+                    const completion = completionBySurface.get(surface.key)?.fields.get(field.id);
+                    return completion
+                      ? { state: completion.state, description: completion.label }
+                      : undefined;
+                  }}
+                  canActivateBlock={({ block, section }) => canEditBlock(block, section)}
+                  onActivateBlock={({ block, section }) => {
+                    if (block) openBlockEditor(block, section);
+                  }}
+                  renderFieldValue={({ field, mode }) => {
+                    const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
+                    const value = surfaceFieldValue(surface, field, valuesByInstance);
+                    const readValue = renderReadValue(
+                      field,
+                      value,
+                      referenceOptions[field.id] ?? [],
                     );
-                  }
-                  return (
-                    <button
-                      type="button"
-                      className="ghost-button filled-card-edit-block"
-                      aria-label={`Изменить блок ${block.title}`}
-                      onClick={() => openBlockEditor(block, section)}
-                    >
-                      Изменить блок
-                    </button>
-                  );
-                }}
-              />
-            </section>
-          );
-        })}
-      </div>
+                    if (
+                      mode !== "block-edit" ||
+                      !blockEditor ||
+                      editorTarget?.blockId !== field.block_id
+                    ) {
+                      return readValue;
+                    }
+                    const editable = Object.prototype.hasOwnProperty.call(
+                      blockEditor.values,
+                      field.id,
+                    );
+                    return (
+                      <BlockFieldControl
+                        field={field}
+                        value={editable ? blockEditor.values[field.id] : undefined}
+                        editable={editable}
+                        pending={blockEditor.pending}
+                        error={blockEditor.errors[field.id]}
+                        options={referenceOptions[field.id]}
+                        readValue={readValue}
+                        fileRefControl={
+                          field.field_type === "file_ref" && editableFieldIds.has(field.id)
+                            ? renderFileRefControl?.({
+                                field,
+                                blockInstanceId,
+                                value,
+                                readValue,
+                              })
+                            : undefined
+                        }
+                        autoFocus={editable && firstEditableId === field.id}
+                        onChange={(nextValue: FieldEditorState) =>
+                          blockEditor.update(field.id, nextValue)
+                        }
+                      />
+                    );
+                  }}
+                  renderBlockActions={({ block, section }) => {
+                    if (!block || !canEditBlock(block, section)) {
+                      return null;
+                    }
+                    const editorActive =
+                      blockEditor?.key ===
+                      blockEditorKey(block.id, surface.blockInstanceIds.get(block.id) ?? null);
+                    if (editorActive && blockEditor) {
+                      return (
+                        <div className="row-actions filled-card-block-edit-actions">
+                          {blockEditor.errors._form && !blockEditor.confirmClose ? (
+                            <p className="inline-alert" role="alert">
+                              {blockEditor.errors._form}
+                            </p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="primary-button"
+                            aria-label={`Сохранить блок ${block.title}`}
+                            disabled={blockEditor.pending}
+                            onClick={() => void blockEditor.save()}
+                          >
+                            Сохранить
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            aria-label={`Отмена блока ${block.title}`}
+                            disabled={blockEditor.pending}
+                            onClick={blockEditor.cancel}
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <button
+                        type="button"
+                        className="ghost-button filled-card-edit-block"
+                        aria-label={`Изменить блок ${block.title}`}
+                        onClick={() => openBlockEditor(block, section)}
+                      >
+                        Изменить блок
+                      </button>
+                    );
+                  }}
+                />
+              </section>
+            );
+          })}
+        </div>
+      </CardPresentationShell>
       {blockEditor?.confirmClose ? (
         <AdminMutationDialog
           title="Несохранённые изменения"
@@ -382,6 +461,10 @@ function sectionValues(
       item.field_id ? [[item.field_id, values.get(item.field_id)]] : [],
     ),
   );
+}
+
+function cardBlockAnchorId(surface: FilledCardSurface, blockId: string) {
+  return `card-block-${surface.key}-${blockId}`;
 }
 
 function firstEditableFieldId(layout: CardTemplateLayoutRead, editor: BlockEditorState) {

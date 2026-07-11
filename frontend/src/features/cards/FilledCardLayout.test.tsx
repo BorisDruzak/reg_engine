@@ -253,6 +253,50 @@ function props(overrides: Partial<FilledCardLayoutProps> = {}): FilledCardLayout
 }
 
 describe("FilledCardLayout", () => {
+  test("shows a completion navigator with required-field presentation", () => {
+    const requiredFields = fields.map((item) =>
+      item.id === "first-name" ? { ...item, required_mode: "required" } : item,
+    );
+
+    render(<FilledCardLayout {...props({ fields: requiredFields })} />);
+
+    expect(screen.getByRole("navigation", { name: "Содержание карточки" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ФИО: нужно заполнить 1 из 5" })).toBeInTheDocument();
+    expect(screen.getByTestId("filled-field-first-name")).toHaveClass("is-required-missing");
+    expect(screen.getByLabelText("Блок ФИО")).toHaveAttribute("id", "card-block-primary-fio");
+  });
+
+  test("keeps completion anchors and states separate for repeatable instances", () => {
+    const repeatableFixture = repeatableProps();
+    const repeatableInstances = repeatableFixture.blockInstances?.map((instance) =>
+      instance.block_instance_id === "contact-instance-1"
+        ? {
+            ...instance,
+            fields: {
+              ...instance.fields,
+              contact_value: { ...instance.fields.contact_value, value: null },
+            },
+          }
+        : instance,
+    );
+
+    render(
+      <FilledCardLayout
+        {...props({ ...repeatableFixture, blockInstances: repeatableInstances })}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("filled-instance-contact-instance-1-block-contacts-contact-instance-1"),
+    ).toHaveAttribute("id", "card-block-instance-contact-instance-1-contacts");
+    expect(
+      screen.getByTestId("filled-instance-contact-instance-1-block-contacts-contact-instance-1"),
+    ).toHaveClass("is-empty");
+    expect(
+      screen.getByTestId("filled-instance-contact-instance-2-block-contacts-contact-instance-2"),
+    ).toHaveClass("is-complete");
+  });
+
   test("renders the configured geometry, Russian empty values, and block-scoped actions", async () => {
     const user = userEvent.setup();
     const onEditBlock = vi.fn();
