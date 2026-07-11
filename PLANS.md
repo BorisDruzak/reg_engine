@@ -4914,8 +4914,7 @@ Browser verified.
 
 #### Inline public and administrator field rows
 
-Status: implementation and local verification complete; release and live Browser
-verification pending.
+Status: complete, pushed to `main`, deployed, and live Browser verified.
 
 - Publicly editable fields now render as one row: the field name is on the left
   and the active field control is on the right. The duplicated instance/type and
@@ -4932,3 +4931,14 @@ verification pending.
   Frontend TypeScript, ESLint, and the Vite production build also pass. ESLint
   retains the pre-existing `FilledCardLayout` hook-dependency warning; Vite
   retains its existing bundle-size advisory.
+- Release commit `b9f70876` is pushed to `main`. The frontend deployment
+  published `/assets/index-BKTcNrzO.js` and `/assets/index-gVlXXW0-.css`, then
+  passed the same-origin frontend/API smoke check. `scripts/deploy.ps1` fast-
+  forwarded the server checkout to `b9f7087` and passed service, PostgreSQL,
+  attachment-storage, and API health checks.
+- Live Browser proof used cache-busting `?release=b9f70876` URLs. An active
+  public link showed each field once as its title plus a real editable control,
+  with no instance/type/current-value duplicate. In the authenticated card,
+  the value surface showed no type metadata; clicking `Имя` opened the real
+  input with its existing value (`123`) in the same inline field. No value was
+  changed during the check.
