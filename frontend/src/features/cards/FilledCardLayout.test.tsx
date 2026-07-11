@@ -279,6 +279,23 @@ describe("FilledCardLayout", () => {
     expect(onEditBlock).toHaveBeenCalledWith(block.id, null);
   });
 
+  test("shows the configured field hint while filling a block", async () => {
+    const user = userEvent.setup();
+    const hintedFields = fields.map((item) =>
+      item.id === "first-name" ? { ...item, description: "Введите имя полностью" } : item,
+    );
+    render(
+      <EditableFilledCard
+        saveValues={vi.fn().mockResolvedValue(undefined)}
+        overrides={{ fields: hintedFields }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Изменить блок ФИО" }));
+
+    expect(screen.getByLabelText("Имя")).toHaveAttribute("placeholder", "Введите имя полностью");
+  });
+
   test("uses existing type display behavior without inventing missing values", () => {
     render(<FilledCardLayout {...props()} />);
 

@@ -386,6 +386,28 @@ def test_public_link_preview_includes_visible_static_text_without_editing(
         )
 
 
+def test_public_link_preview_includes_field_hint(db_session: Session) -> None:
+    context = _phase_1e_context(db_session)
+    context["public_field"].description = "Введите значение полностью"
+    db_session.flush()
+    public_link_service = PublicLinkService(db_session)
+    created = public_link_service.create_public_link_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    preview = public_link_service.preview_public_link(raw_token=created.raw_token)
+    preview_field = next(
+        field
+        for block in preview.blocks
+        for instance in block.instances
+        for field in instance.fields
+        if field.field_id == context["public_field"].id
+    )
+
+    assert preview_field.description == "Введите значение полностью"
+
+
 def test_public_link_uses_card_organization_effective_reference_list(
     db_session: Session,
 ) -> None:

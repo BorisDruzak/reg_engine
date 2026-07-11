@@ -1276,6 +1276,7 @@ function CardFieldEditor({
         <FieldEditorControl
           fieldType={field.field.field_type}
           label={field.label}
+          hint={field.schema?.description}
           options={referenceItemsQuery.data?.items ?? []}
           fileRefOptions={fileRefOptions}
           value={rawValue}

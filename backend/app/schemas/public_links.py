@@ -89,6 +89,7 @@ class PublicLinkPreviewFieldRead(BaseModel):
     field_id: UUID
     code: str
     label: str
+    description: str | None
     field_type: str
     required_mode: str
     value: Any

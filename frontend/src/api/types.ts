@@ -587,6 +587,7 @@ export type PublicLinkPreviewFieldRead = {
   field_id: string;
   code: string;
   label: string;
+  description: string | null;
   field_type: string;
   required_mode: string;
   value: unknown;

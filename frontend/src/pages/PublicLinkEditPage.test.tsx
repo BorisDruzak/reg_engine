@@ -107,6 +107,17 @@ describe("PublicLinkEditPage", () => {
     },
   );
 
+  test("shows the public field hint inside the filling control", async () => {
+    preview.blocks[0].instances[0].fields[0].description = "Введите публичный статус";
+
+    renderPage();
+
+    expect(await screen.findByRole("textbox", { name: "Публичный статус" })).toHaveAttribute(
+      "placeholder",
+      "Введите публичный статус",
+    );
+  });
+
   test("serializes field autosaves and confirms only the latest local value", async () => {
     editResponseMode = "deferred";
     renderPage();
@@ -606,6 +617,7 @@ function previewField(
     field_id,
     code,
     label,
+    description: null,
     field_type,
     required_mode: "not_required",
     value,

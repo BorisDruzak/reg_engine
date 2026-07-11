@@ -809,6 +809,7 @@ function PublicFieldEditor({
           <FieldEditorControl
             fieldType={field.field_type}
             label={field.label}
+            hint={field.description}
             options={field.options}
             value={rawValue}
             onChange={updateRawValue}

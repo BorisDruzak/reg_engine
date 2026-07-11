@@ -558,6 +558,7 @@ function defaultFieldValue({
       <FieldEditorControl
         fieldType={field.field_type}
         label={field.label}
+        hint={field.description}
         options={options}
         fileRefOptions={fileRefOptions}
         value={initialEditorValue({ field_type: field.field_type, value })}

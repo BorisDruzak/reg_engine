@@ -62,6 +62,7 @@ export function BlockFieldControl({
       <FieldEditorControl
         fieldType={field.field_type}
         label={field.label}
+        hint={field.description}
         options={options.map((option) => ({ id: option.id, label: option.label }))}
         value={value}
         disabled={pending}

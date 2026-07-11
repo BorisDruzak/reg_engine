@@ -75,6 +75,7 @@ class PublicPreviewField:
     field_id: UUID
     code: str
     label: str
+    description: str | None
     field_type: str
     required_mode: str
     value: object | None
@@ -1253,6 +1254,7 @@ class PublicLinkService:
             field_id=field_model.id,
             code=field_model.code,
             label=field_model.label,
+            description=field_model.description,
             field_type=field_model.field_type,
             required_mode=field_model.required_mode,
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
