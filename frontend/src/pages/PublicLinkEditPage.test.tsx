@@ -51,6 +51,48 @@ afterEach(() => {
 });
 
 describe("PublicLinkEditPage", () => {
+  test("shows public completion navigation and updates it after a confirmed field save", async () => {
+    editResponseMode = "deferred";
+    preview.blocks[0].instances[0].fields[0] = {
+      ...preview.blocks[0].instances[0].fields[0],
+      required_mode: "required",
+      value: "",
+    };
+    renderPage();
+
+    expect(
+      await screen.findByRole("navigation", { name: "Содержание карточки" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Основные сведения: нужно заполнить 1 из 4" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-required-missing");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Публичный статус" }), {
+      target: { value: "Подтверждено" },
+    });
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
+    expect(
+      screen.getByRole("button", { name: "Основные сведения: нужно заполнить 1 из 4" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-required-missing");
+
+    resolveNextEdit("Подтверждено");
+
+    expect(
+      await screen.findByRole("button", { name: "Основные сведения: заполнено 4 из 4" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-filled");
+
+    const attachmentsPanel = screen.getByRole("heading", { name: "Вложения" }).closest("section");
+    const submitPanel = screen
+      .getByRole("button", { name: "Отправить на проверку" })
+      .closest("section");
+    expect(attachmentsPanel?.compareDocumentPosition(submitPanel!)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   test("renders active public fields and attachments at configured card geometry", async () => {
     renderPage();
 

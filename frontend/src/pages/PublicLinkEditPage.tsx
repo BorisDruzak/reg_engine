@@ -26,7 +26,10 @@ import type {
 import { fieldTypeLabel, formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
 import { errorText } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
+import { CardPresentationShell } from "@/features/cards/CardPresentationShell";
+import type { CardBlockNavigationItem } from "@/features/cards/CardBlockNavigator";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
+import { buildBlockCompletions, type CompletionResult } from "@/features/cards/cardCompletion";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -153,8 +156,14 @@ function PublicEditableCard({
 }) {
   const queryClient = useQueryClient();
   const [fieldSaveStates, setFieldSaveStates] = useState<Record<string, PublicFieldSaveState>>({});
+  const [confirmedFieldValues, setConfirmedFieldValues] = useState(() =>
+    publicConfirmedFieldValues(preview),
+  );
   const [attachmentUploadState, setAttachmentUploadState] =
     useState<PublicAttachmentUploadState>("idle");
+  useEffect(() => {
+    setConfirmedFieldValues(publicConfirmedFieldValues(preview));
+  }, [preview]);
   const submitMutation = useMutation({
     mutationFn: () => submitPublicLink(rawToken),
     onSuccess: (nextStatus) => {
@@ -182,7 +191,11 @@ function PublicEditableCard({
         <p className="data-alert">{uiText.noEditablePublicFields}</p>
       ) : (
         <PublicCardLayout
+          confirmedFieldValues={confirmedFieldValues}
           onLifecycleDenial={onLifecycleDenial}
+          onFieldValueConfirmed={(fieldKey, value) =>
+            setConfirmedFieldValues((current) => ({ ...current, [fieldKey]: value }))
+          }
           preview={preview}
           rawToken={rawToken}
           onFieldSaveStateChange={(fieldKey, saveState) =>
@@ -269,26 +282,82 @@ function PublicCardLayout({
   rawToken,
   onLifecycleDenial,
   onFieldSaveStateChange,
+  confirmedFieldValues,
+  onFieldValueConfirmed,
 }: {
   preview: PublicLinkPreviewRead;
   rawToken: string;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
+  confirmedFieldValues: Readonly<Record<string, unknown>>;
+  onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
 }) {
   const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
   const surfaces = useMemo(() => publicCardSurfaces(preview, layout), [layout, preview]);
+  const completionBySurface = useMemo(
+    () =>
+      new Map(
+        surfaces.map(
+          (surface) =>
+            [
+              surface.key,
+              buildBlockCompletions({
+                blocks: surface.layout.structure.blocks,
+                fields: surface.layout.structure.fields,
+                valueForField: (field) => {
+                  const context = surface.fieldsById.get(field.id);
+                  return context ? confirmedFieldValue(context, confirmedFieldValues) : undefined;
+                },
+              }),
+            ] as const,
+        ),
+      ),
+    [confirmedFieldValues, surfaces],
+  );
+  const navigationItems = useMemo<readonly CardBlockNavigationItem[]>(
+    () =>
+      surfaces.flatMap((surface) => {
+        const completions = completionBySurface.get(surface.key);
+        return surface.layout.form_layout.sections.flatMap((section) => {
+          const blockId = section.block_id;
+          const block = blockId
+            ? surface.layout.structure.blocks.find((candidate) => candidate.id === blockId)
+            : null;
+          const completion = blockId ? completions?.blocks.get(blockId) : null;
+          if (!block || !completion) return [];
+          return [
+            {
+              anchorId: publicCardBlockAnchorId(surface, block.id),
+              label:
+                surface.instanceOrdinal === null
+                  ? block.title
+                  : `${block.title} — ${instanceLabel(surface.instanceOrdinal)}`,
+              state: completion.state,
+              filledCount: completion.filledCount,
+              totalCount: completion.totalCount,
+              requiredMissingCount: completion.requiredMissingCount,
+            },
+          ];
+        });
+      }),
+    [completionBySurface, surfaces],
+  );
   return (
-    <div className="stack public-card-layout-surfaces">
-      {surfaces.map((surface) => (
-        <PublicCardLayoutSurface
-          key={surface.key}
-          onLifecycleDenial={onLifecycleDenial}
-          onFieldSaveStateChange={onFieldSaveStateChange}
-          rawToken={rawToken}
-          surface={surface}
-        />
-      ))}
-    </div>
+    <CardPresentationShell items={navigationItems}>
+      <div className="stack public-card-layout-surfaces">
+        {surfaces.map((surface) => (
+          <PublicCardLayoutSurface
+            key={surface.key}
+            completions={completionBySurface.get(surface.key)}
+            onLifecycleDenial={onLifecycleDenial}
+            onFieldSaveStateChange={onFieldSaveStateChange}
+            onFieldValueConfirmed={onFieldValueConfirmed}
+            rawToken={rawToken}
+            surface={surface}
+          />
+        ))}
+      </div>
+    </CardPresentationShell>
   );
 }
 
@@ -306,16 +375,51 @@ type PublicCardSurface = {
   fieldsById: Map<string, PublicFieldContext>;
 };
 
+function publicFieldKey({ blockInstanceId, instanceOrdinal, field }: PublicFieldContext) {
+  return `${blockInstanceId ?? instanceOrdinal}:${field.field_id}`;
+}
+
+function publicConfirmedFieldValues(preview: PublicLinkPreviewRead) {
+  return Object.fromEntries(
+    preview.blocks.flatMap((block) =>
+      block.instances.flatMap((instance) =>
+        instance.fields.map((field) => [
+          `${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
+          field.value,
+        ]),
+      ),
+    ),
+  ) as Record<string, unknown>;
+}
+
+function confirmedFieldValue(
+  context: PublicFieldContext,
+  confirmedFieldValues: Readonly<Record<string, unknown>>,
+) {
+  const key = publicFieldKey(context);
+  return Object.prototype.hasOwnProperty.call(confirmedFieldValues, key)
+    ? confirmedFieldValues[key]
+    : context.field.value;
+}
+
+function publicCardBlockAnchorId(surface: PublicCardSurface, blockId: string) {
+  return `card-block-${surface.key}-${blockId}`;
+}
+
 function PublicCardLayoutSurface({
   surface,
   rawToken,
   onLifecycleDenial,
   onFieldSaveStateChange,
+  onFieldValueConfirmed,
+  completions,
 }: {
   surface: PublicCardSurface;
   rawToken: string;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
+  onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
+  completions: CompletionResult | undefined;
 }) {
   return (
     <section className="public-card-layout-surface">
@@ -329,6 +433,23 @@ function PublicCardLayoutSurface({
         mode="public-edit"
         responsive
         testIdPrefix={surface.key === "primary" ? "public" : `public-${surface.key}`}
+        blockPresentation={({ block }) => {
+          if (!block) return undefined;
+          const completion = completions?.blocks.get(block.id);
+          return completion
+            ? {
+                anchorId: publicCardBlockAnchorId(surface, block.id),
+                state: completion.state,
+                description: completion.label,
+              }
+            : undefined;
+        }}
+        fieldPresentation={({ field }) => {
+          const completion = completions?.fields.get(field.id);
+          return completion
+            ? { state: completion.state, description: completion.label }
+            : undefined;
+        }}
         renderFieldValue={({ field }) => {
           const context = surface.fieldsById.get(field.id);
           if (!context) return uiText.empty;
@@ -345,11 +466,12 @@ function PublicCardLayoutSurface({
           return (
             <PublicFieldEditor
               key={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
-              fieldKey={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
+              fieldKey={publicFieldKey(context)}
               blockInstanceId={context.blockInstanceId}
               field={context.field}
               instanceOrdinal={context.instanceOrdinal}
               onLifecycleDenial={onLifecycleDenial}
+              onSaveConfirmed={onFieldValueConfirmed}
               onSaveStateChange={onFieldSaveStateChange}
               rawToken={rawToken}
             />
@@ -701,6 +823,7 @@ function PublicFieldEditor({
   field,
   onLifecycleDenial,
   onSaveStateChange,
+  onSaveConfirmed,
 }: {
   rawToken: string;
   fieldKey: string;
@@ -709,6 +832,7 @@ function PublicFieldEditor({
   field: PublicLinkPreviewFieldRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
+  onSaveConfirmed: (fieldKey: string, value: unknown) => void;
 }) {
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
   const [localError, setLocalError] = useState<string | null>(null);
@@ -750,6 +874,7 @@ function PublicFieldEditor({
           setLocalError(null);
           setSaveState("saved");
           onSaveStateChange(fieldKey, "saved");
+          onSaveConfirmed(fieldKey, savedFieldValue.value);
         }
       } catch (error) {
         void onLifecycleDenial(error);
