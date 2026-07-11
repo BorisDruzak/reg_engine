@@ -367,6 +367,27 @@ export type CardUpdatePayload = {
   public_edit_enabled?: boolean | null;
 };
 
+export type CardPublicFieldSettingPayload = {
+  field_id: string;
+  public_visible: boolean;
+  public_editable: boolean;
+};
+
+export type CardPublicAccessPayload = {
+  public_view_enabled?: boolean | null;
+  public_edit_enabled?: boolean | null;
+  fields?: CardPublicFieldSettingPayload[];
+};
+
+export type CardPublicFieldSettingRead = CardPublicFieldSettingPayload;
+
+export type CardPublicAccessRead = {
+  card_id: string;
+  public_view_enabled: boolean;
+  public_edit_enabled: boolean;
+  fields: CardPublicFieldSettingRead[];
+};
+
 export type CardTransferPayload = {
   target_organization_id: string;
 };

@@ -239,7 +239,7 @@ not a hardcoded employee registry.
 - Phase 8N advanced registry navigation and block ordering is completed on
   `main`, pushed, deployed, server-checked, and live Browser verified: the
   primary registry workspace now keeps only `Схема
-  карточки`, `Импорт и экспорт`, and `Расширенное`; the nested advanced tabs
+карточки`, `Импорт и экспорт`, and `Расширенное`; the nested advanced tabs
   contain only `Реестры`, `Справочники`, and `Отчёты`; blocks move through
   guarded up/down arrows with atomic full-layout undo; the duplicate template
   header and geometry redo action are removed. No database migration is
@@ -1192,7 +1192,7 @@ Verification completed:
 - `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
   and checked `docs/PROJECT_TREE.md`.
 - `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
-  "Implement organization tag card filtering" -SkipCheck`: committed and pushed
+"Implement organization tag card filtering" -SkipCheck`: committed and pushed
   implementation commit `ee68e9b` to `origin/main`.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
   fast-forwarded to `ee68e9b`, backend editable package installed, and
@@ -1289,11 +1289,11 @@ Verification completed so far:
 - `pnpm -C frontend test:run src/App.test.tsx -t "dynamic field filters"`:
   passed.
 - `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
-  organization"`: passed.
+organization"`: passed.
 - `pnpm -C frontend test:run`: 6 files passed, 57 tests passed.
 - `pnpm -C frontend typecheck`: passed.
 - `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
-  organization|dynamic field filters"`: passed for the Phase 7E.1 search-menu
+organization|dynamic field filters"`: passed for the Phase 7E.1 search-menu
   regression.
 - `pnpm -C frontend lint`: passed for the Phase 7E.1 UI polish.
 - `pnpm -C frontend format:check`: passed for the Phase 7E.1 UI polish.
@@ -1304,7 +1304,7 @@ Verification completed so far:
 - `pnpm -C frontend e2e`: 3 Playwright smoke tests passed for the Phase 7E.1
   UI polish.
 - `pnpm -C frontend test:run src/App.test.tsx -t "filters cards by search
-  organization|dynamic field filters"`: passed for the Phase 7E.2 inline-entry
+organization|dynamic field filters"`: passed for the Phase 7E.2 inline-entry
   regression.
 - `pnpm -C frontend lint`: passed for the Phase 7E.2 UI polish.
 - `pnpm -C frontend format:check`: passed for the Phase 7E.2 UI polish.
@@ -1317,8 +1317,8 @@ Verification completed so far:
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.2 UI polish.
 - `pnpm -C frontend test:run src/App.test.tsx -t "warns before closing a dirty
-  card tab|shows card editor actions in the sticky card panel|filters cards by
-  search organization"`: passed for the Phase 7E.3 card editor/search
+card tab|shows card editor actions in the sticky card panel|filters cards by
+search organization"`: passed for the Phase 7E.3 card editor/search
   regressions.
 - `pnpm -C frontend test:run`: 6 files passed, 59 tests passed for the Phase
   7E.3 UI hardening.
@@ -1331,7 +1331,7 @@ Verification completed so far:
 - `powershell -ExecutionPolicy Bypass -File scripts/check.ps1 -SkipRemote`:
   passed for the Phase 7E.3 UI hardening.
 - `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
-  "Harden card editor actions"`: committed and pushed `765c6b28` to
+"Harden card editor actions"`: committed and pushed `765c6b28` to
   `origin/main` after the full local check passed.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
   checkout fast-forwarded to `765c6b2` and server checks passed.
@@ -1368,10 +1368,10 @@ Verification completed so far:
   timed out during this check, so the deployed UI was verified with the
   project's Playwright runtime.
 - `backend\.venv\Scripts\ruff.exe check
-  backend\app\api\v1\endpoints\cards.py backend\app\services\cards.py
-  backend\tests\test_api_phase_1g.py`: passed.
+backend\app\api\v1\endpoints\cards.py backend\app\services\cards.py
+backend\tests\test_api_phase_1g.py`: passed.
 - `backend\.venv\Scripts\mypy.exe backend\app\api\v1\endpoints\cards.py
-  backend\app\services\cards.py`: passed.
+backend\app\services\cards.py`: passed.
 - `backend\.venv\Scripts\python.exe -m pytest`: 128 passed, 162 skipped.
 - `backend\.venv\Scripts\ruff.exe check backend`: passed.
 - `backend\.venv\Scripts\ruff.exe format --check backend`: passed.
@@ -1387,7 +1387,7 @@ Verification completed so far:
 - `powershell -ExecutionPolicy Bypass -File scripts/project-map.ps1`: updated
   and checked `docs/PROJECT_TREE.md`.
 - `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
-  "Implement unified card tag search" -SkipCheck`: committed and pushed
+"Implement unified card tag search" -SkipCheck`: committed and pushed
   implementation commit `455a310` to `origin/main`.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server checkout
   fast-forwarded to `455a310` and server checks passed.
@@ -1450,8 +1450,8 @@ Non-goals:
 Verification completed so far:
 
 - `pnpm -C frontend test:run src/App.test.tsx -t "schema blocks|reference
-  lists|wires select|registry workspace|required mode|visual card schema|visual
-  block|one editor"`: 8 tests passed.
+lists|wires select|registry workspace|required mode|visual card schema|visual
+block|one editor"`: 8 tests passed.
 - `pnpm -C frontend test:run`: 6 files passed, 62 tests passed.
 - `pnpm -C frontend lint`: passed.
 - `pnpm -C frontend format:check`: passed.
@@ -1462,7 +1462,7 @@ Verification completed so far:
   passed, including backend ruff/format/mypy/pytest, frontend lint/typecheck/
   test/build, and project-map check.
 - `powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message
-  "Add visual registry editors" -SkipCheck`: committed and pushed
+"Add visual registry editors" -SkipCheck`: committed and pushed
   implementation commit `b680340b` to `origin/main`.
 - `powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1`: server
   checkout fast-forwarded to `b680340b` and server checks passed.
@@ -1471,9 +1471,10 @@ Verification completed so far:
   passed same-origin frontend/API smoke.
 - Live Playwright smoke on `http://192.168.100.12:8000/` verified the deployed
   page title `Реестровая система`, visible `Визуальный редактор схемы
-  карточки`, visible `Добавить блок формы`, two `Добавить поле в блок` actions,
+карточки`, visible `Добавить блок формы`, two `Добавить поле в блок` actions,
   no manual `Код блока формы` create field, visible `Редактор справочника`,
   visible `Создать элемент справочника`, and no browser console warnings/errors.
+
 ## Phase 7G: Visual Schema Polish And Card List Display Fields
 
 Status: completed, pushed to `main`, deployed, and live-smoke verified.
@@ -1518,9 +1519,9 @@ Non-goals:
 Verification completed so far:
 
 - `backend\.venv\Scripts\python.exe -m pytest
-  backend\tests\test_required_field_payloads.py -q`: passed.
+backend\tests\test_required_field_payloads.py -q`: passed.
 - `pnpm -C frontend test:run src/App.test.tsx -t "field form compact|changes
-  field order|display in the card list"`: passed.
+field order|display in the card list"`: passed.
 - `backend\.venv\Scripts\python.exe -m pytest`: passed, 129 passed, 162
   skipped, 1 warning.
 - `pnpm -C frontend test:run`: passed, 65 passed.
@@ -1528,7 +1529,7 @@ Verification completed so far:
 - `powershell -ExecutionPolicy Bypass -File scripts\check.ps1 -SkipRemote`:
   passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
-  "Polish visual schema editor fields"`: passed; code commit `66c10cc4` was
+"Polish visual schema editor fields"`: passed; code commit `66c10cc4` was
   pushed to `origin/main`.
 - `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
   server checkout fast-forwarded to `66c10cc4` and server checks passed.
@@ -1590,9 +1591,9 @@ Non-goals:
 Verification completed so far:
 
 - `backend\.venv\Scripts\python.exe -m pytest
-  backend\tests\test_required_field_payloads.py -q`: passed.
+backend\tests\test_required_field_payloads.py -q`: passed.
 - `pnpm -C frontend test:run src/App.test.tsx -t "card title label|acted
-  row|bottom add-block|search organization and archive|expandable editor"`:
+row|bottom add-block|search organization and archive|expandable editor"`:
   passed, 5 tests.
 - `backend\.venv\Scripts\python.exe -m pytest`: passed, 130 passed, 162
   skipped, 1 warning.
@@ -1774,7 +1775,7 @@ Verification completed locally:
 Synchronization and live verification:
 
 - `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -SkipCheck
-  -Message "Fix card search reference filters"`: passed, creating commit
+-Message "Fix card search reference filters"`: passed, creating commit
   `bf8d41a9` on `main` and pushing it to `origin/main`.
 - `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: passed;
   server checkout fast-forwarded to `bf8d41a9`.
@@ -2065,7 +2066,7 @@ Deployment and live evidence:
 - Browser live check at `http://192.168.100.12:8000/` passed: `Схема карточки`
   opens with `Шаблоны карточек` only, `Добавить блок формы` is hidden until a
   template is opened, opening `Базовый шаблон` shows `Редактор шаблона:
-  Базовый шаблон`, existing blocks/fields are visible inside that editor, and
+Базовый шаблон`, existing blocks/fields are visible inside that editor, and
   the removed default-value template editor is not rendered.
 
 ## Phase 7J: Schema Layout Static Text And Collapsible Navigation
@@ -2148,7 +2149,7 @@ Migration, deployment, and live evidence:
   synchronized before the production migration.
 - Disposable PostgreSQL verification on `reg_engine_0020_test` passed:
   `tests/test_database_smoke.py tests/test_registry_card_services.py
-  tests/test_public_link_transfer_audit_services.py -q` returned 35 passed.
+tests/test_public_link_transfer_audit_services.py -q` returned 35 passed.
 - Production preflight before migration confirmed Alembic
   `0019_base_card_templates`, no existing `form_blocks.layout_columns`, no
   existing `form_fields.display_config_json`, and zero existing `static_text`
@@ -2697,16 +2698,16 @@ Implemented scope:
 Verification completed:
 
 - `backend\.venv\Scripts\python.exe -m pytest tests/test_card_print_layout_services.py
-  tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
-  tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
-  tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql -q`:
+tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
+tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
+tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql -q`:
   passed, 6 tests.
 - `backend\.venv\Scripts\python.exe -m pytest tests/test_card_print_layout_services.py
-  tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
-  tests/test_document_generation_services.py::test_pdf_renderer_supports_cyrillic_text
-  tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
-  tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql
-  tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
+tests/test_document_generation_services.py::test_card_print_layout_renderers_use_structured_layout_and_card_values
+tests/test_document_generation_services.py::test_pdf_renderer_supports_cyrillic_text
+tests/test_models_smoke.py::test_generated_document_metadata_tables_use_required_columns
+tests/test_migrations.py::test_alembic_can_render_core_schema_upgrade_sql
+tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`:
   passed, with the PostgreSQL-backed API test skipped because local
   `TEST_DATABASE_URL` is not set.
 - `backend\.venv\Scripts\python.exe -m ruff check app tests`: passed.
@@ -2732,8 +2733,8 @@ Production deployment and live evidence:
 - Disposable PostgreSQL verification on `reg_engine_0022_test` passed after
   applying Alembic from empty DB to head:
   `tests/test_database_smoke.py tests/test_models_smoke.py
-  tests/test_migrations.py
-  tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`
+tests/test_migrations.py
+tests/test_api_phase_2d_documents.py::test_card_print_layout_template_versions_and_generates_pdf_docx -q`
   returned 19 passed, and post-check confirmed Alembic
   `0022_card_print_layout_templates`, `document_template_versions.layout_json`,
   and `document_templates.card_template_id`.
@@ -2854,15 +2855,15 @@ Verification completed:
   frontend reported 95 passed, frontend production build passed, and project
   tree check was current.
 - `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
-  "Improve A4 print template editor UX"`: committed and pushed `242a4a05`.
+"Improve A4 print template editor UX"`: committed and pushed `242a4a05`.
 - `powershell -ExecutionPolicy Bypass -File scripts\push-git.ps1 -Message
-  "Handle invalid A4 print style validation" -SkipCheck`: committed and pushed
+"Handle invalid A4 print style validation" -SkipCheck`: committed and pushed
   `b7b9f995` after the full local check had already passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1`: server
   checkout fast-forwarded to `b7b9f99`, backend package was reinstalled, and
   server checks passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\service.ps1 -Command
-  restart`: `reg-engine.service` restarted and healthcheck passed on
+restart`: `reg-engine.service` restarted and healthcheck passed on
   `0.0.0.0:8000`.
 - `powershell -ExecutionPolicy Bypass -File scripts\deploy-frontend.ps1`:
   built and uploaded `frontend/dist`, restarted `reg-engine.service`, and
@@ -3696,8 +3697,8 @@ Task 7 live follow-up defect and repair:
   and generation behavior for already normalized linked layouts are unchanged.
 - Focused verification passed with the repository virtual environment:
   `python -m pytest tests/test_document_generation_services.py
-  tests/test_card_print_layout_services.py
-  tests/test_card_template_layout_services.py -q -ra`; the ten disposable
+tests/test_card_print_layout_services.py
+tests/test_card_template_layout_services.py -q -ra`; the ten disposable
   PostgreSQL cases remained skipped because `TEST_DATABASE_URL` was not set, and
   the existing Starlette/httpx warning remained. The repaired conversion still
   requires deployment and a repeat of the production live conversion before
@@ -3868,7 +3869,7 @@ Deployment and live Browser proof:
   displayed `Поля карточки сохранены`; the temporary live-test value was then
   removed and the field verified again as `Не заполнено`. Clicking another tab
   with a dirty block opened the three-way dialog `Сохранить / Не сохранять /
-  Продолжить редактирование`.
+Продолжить редактирование`.
 - `Печатная форма`, `Вложения`, `Документы`, `Публичные ссылки`, and `История`
   opened successfully. Header DOCX and PDF actions completed with the visible
   confirmations `DOCX печатной формы скачан` and
@@ -4434,7 +4435,7 @@ Production release evidence:
 
 - The implementation was committed and synchronized across local `main`,
   `origin/main`, and the server checkout at `4cbaa5a3` (`Fix field drag pointer
-  ownership`). No schema or production-data change was required.
+ownership`). No schema or production-data change was required.
 - `scripts/deploy.ps1` passed server checkout, service, PostgreSQL, and
   attachment-storage checks. `scripts/deploy-frontend.ps1` deployed
   `/assets/index-CXChXVIt.js` and `/assets/index-Cl9DldkN.css`, restarted the
@@ -4514,7 +4515,7 @@ Live Browser proof:
 Status: complete, pushed, deployed, server-checked, and live Browser verified.
 
 - The primary registry workspace exposes exactly `Схема карточки`, `Импорт и
-  экспорт`, and `Расширенное`. The nested advanced workspace exposes exactly
+экспорт`, and `Расширенное`. The nested advanced workspace exposes exactly
   `Реестры`, `Справочники`, and `Отчёты` and preserves its selected subsection
   while the primary tab changes.
 - Block drag handles are removed. Every block has visible up/down order arrows;
@@ -4561,8 +4562,7 @@ Live Browser proof:
   buttons, zero exact legacy block-drag buttons, and six accessible up/down
   order arrows for the three blocks.
 - Moving `Положение` down produced three non-overlapping full-width rows in
-  deterministic order: `ФИО` at row 1, `Положение` at row 2, and `тест2` at row
-  3. Boundary arrows for the first and last blocks were disabled.
+  deterministic order: `ФИО` at row 1, `Положение` at row 2, and `тест2` at row 3. Boundary arrows for the first and last blocks were disabled.
 - `Отменить изменение` restored the exact original block-id order and confirmed
   `Макет карточки сохранён`. The live reorder/undo check was repeated once;
   both runs left production layout data in its original order.
@@ -4608,7 +4608,7 @@ Live Browser proof:
   first-down, middle-up/down, and last-up actions.
 - In card `213`, clicking the body of `Блок Положение` opened
   `Редактирование блока карточки` with the existing field controls. `Отмена
-  блока Положение` returned to read mode without a value write.
+блока Положение` returned to read mode without a value write.
 - On the registry page the collapsed navigation rail measured `74px`, its
   labels had opacity `0`, and no `.sidebar-toggle` existed. Pointer entry
   expanded the rail to `260px` with label opacity `1` while preserving the
@@ -4632,7 +4632,7 @@ Status: complete, pushed, deployed, server-checked, and live Browser verified.
   scoped Prettier, and the production frontend build pass; no API, database,
   migration, or production-data change is required.
 - The published frontend bundle is `index-DHQuS7Wb.js` (`572.27 kB`, `163.05
-  kB` gzip) with `index-BRp1BssT.css` (`65.40 kB`, `11.72 kB` gzip).
+kB` gzip) with `index-BRp1BssT.css` (`65.40 kB`, `11.72 kB` gzip).
 
 Production release evidence:
 
@@ -4702,3 +4702,38 @@ Production release evidence:
   available controls did not navigate the tab to a new cache-busting URL, so
   it is not used as proof of the newly deployed layout. A user/browser refresh
   is required before recording final visual interaction proof.
+
+#### Card-specific public access and inline field workspace
+
+Status: implemented locally; release, production migration, card-data cleanup,
+and live Browser proof are pending.
+
+- Public visibility and editability are now configured per card through the
+  dedicated card access API. Public links dynamically use those current card
+  settings, including existing active links; legacy template-level scopes are
+  no longer used by public preview or writes.
+- The card workspace starts with a web-only `Базовый блок`, which contains the
+  card identity, organisation, completion state, public card toggles, per-field
+  access settings, public-link creation, and repeatable-block controls. It does
+  not display the card template name and is not part of the print layout.
+- The sticky card navigator contains `Базовый блок`, schema blocks, and
+  `Вложения`. Attachments follow the fields in the document flow; the single
+  DOCX/PDF download menu and the separate card archive panel are at the bottom.
+- Clicking an ordinary field opens only that field. Text values save after a
+  short typing pause; choices and date/boolean controls save immediately.
+  Explicit save/cancel buttons and the block-level edit action are removed.
+- Deleting a template field now opens a Russian confirmation. The field is
+  archived: empty value rows are removed, while filled values remain retained
+  behind the archived field and no longer appear in cards.
+- The template editor no longer exposes public visibility/editability controls;
+  those settings belong to each card's base block.
+- Local verification passed with the backend virtual environment: targeted
+  public-access, public-link, migration and field-archive tests; Ruff, Ruff
+  format and mypy. Frontend TypeScript, ESLint, the full Vitest suite and the
+  production Vite build passed. The test database is not configured locally, so
+  production migration and destructive data cleanup require the planned remote
+  backup/preflight gate before release.
+- Design and execution records:
+  `docs/superpowers/specs/2026-07-11-card-public-access-and-inline-editing-design.md`
+  and
+  `docs/superpowers/plans/2026-07-11-card-public-access-and-inline-editing.md`.

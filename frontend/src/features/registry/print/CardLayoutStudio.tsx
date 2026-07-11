@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
+  archiveFormField,
   convertCardTemplatePrintViewToLinkedCard,
   createCardTemplatePrintView,
   createFormBlock,
@@ -34,6 +35,7 @@ import type {
   ReferenceListRead,
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
+import { AdminMutationDialog } from "@/components/common/AdminMutation";
 import { DataAlert } from "@/components/common/DataSurfaces";
 import { A4LinkedCardCanvas } from "@/features/cardLayout/A4LinkedCardCanvas";
 import type { PrintOnlyItemKind } from "@/features/cardLayout/A4LinkedCardCanvas";
@@ -149,6 +151,7 @@ function CardLayoutStudioSession({
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [insertDialog, setInsertDialog] = useState<InsertBlockDialogState | null>(null);
+  const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [printViews, setPrintViews] = useState(initialDraft.print_views);
   const initialPrintView = printViews[0];
   const [selectedPrintView, setSelectedPrintView] = useState(initialPrintView);
@@ -426,7 +429,8 @@ function CardLayoutStudioSession({
   }
 
   function moveBlock(sectionId: string, direction: BlockOrderDirection) {
-    if (conflictActive.current || schemaWritesInFlight.current > 0 || formSaveRunning.current) return;
+    if (conflictActive.current || schemaWritesInFlight.current > 0 || formSaveRunning.current)
+      return;
     const next = reorderBlockSections(draftLayoutRef.current.form_layout, sectionId, direction);
     if (next) recordFormLayoutChange(next);
   }
@@ -456,7 +460,7 @@ function CardLayoutStudioSession({
       position: allBlocks.length,
       is_repeatable: false,
       is_active: true,
-      public_visible: true,
+      public_visible: false,
       public_editable: false,
       layout_columns: 1,
       display_config_json: null,
@@ -499,8 +503,6 @@ function CardLayoutStudioSession({
           description: block.description,
           position: block.position,
           is_repeatable: block.is_repeatable,
-          public_visible: block.public_visible,
-          public_editable: block.public_editable,
           layout_columns: block.layout_columns,
           display_config_json: block.display_config_json,
         });
@@ -520,8 +522,6 @@ function CardLayoutStudioSession({
         description: block.description,
         position: block.position,
         is_repeatable: block.is_repeatable,
-        public_visible: block.public_visible,
-        public_editable: block.public_editable,
         layout_columns: block.layout_columns,
         display_config_json: block.display_config_json,
       });
@@ -579,7 +579,7 @@ function CardLayoutStudioSession({
       display_config_json: null,
       is_active: true,
       is_list_display: false,
-      public_visible: true,
+      public_visible: false,
       public_editable: false,
     };
     const position = firstEmptyFieldPosition(section.items);
@@ -635,8 +635,6 @@ function CardLayoutStudioSession({
           options_config_json: field.options_config_json,
           display_config_json: field.display_config_json,
           is_list_display: field.is_list_display,
-          public_visible: field.public_visible,
-          public_editable: field.public_editable,
         });
         await appendFieldsToTemplate([created.id]);
         const next = replaceField(draftLayoutRef.current, field.id, created);
@@ -663,8 +661,6 @@ function CardLayoutStudioSession({
         display_config_json: field.display_config_json,
         is_active: field.is_active,
         is_list_display: field.is_list_display,
-        public_visible: field.public_visible,
-        public_editable: field.public_editable,
       });
       updateDraftLayout((current) => {
         const structure = {
@@ -689,10 +685,39 @@ function CardLayoutStudioSession({
   }
 
   function cancelField(fieldId: string) {
-    if (!temporaryFieldIds.current.delete(fieldId)) return;
-    const next = removeTemporaryField(draftLayoutRef.current, fieldId);
-    localStructure.current = next.structure;
-    updateDraftLayout(next);
+    if (temporaryFieldIds.current.delete(fieldId)) {
+      const next = removeTemporaryField(draftLayoutRef.current, fieldId);
+      localStructure.current = next.structure;
+      updateDraftLayout(next);
+      return;
+    }
+    const field = allFields.find((item) => item.id === fieldId) ?? null;
+    if (field) setFieldArchiveTarget(field);
+  }
+
+  async function archiveField(field: FormFieldRead) {
+    let releaseGate: (() => void) | null = null;
+    setSchemaPending(true);
+    setLocalError(null);
+    try {
+      releaseGate = await beginSchemaWrite();
+      await archiveFormField(token, field.id);
+      const next = removeTemporaryField(draftLayoutRef.current, field.id);
+      localStructure.current = next.structure;
+      updateDraftLayout(next);
+      const save = saveNextFormLayout(next.form_layout);
+      releaseGate();
+      releaseGate = null;
+      await save;
+      setLocalMessage("Поле перенесено в архив");
+      setFieldArchiveTarget(null);
+      await onSchemaChanged?.();
+    } catch (error) {
+      setLocalError(schemaErrorMessage(error));
+    } finally {
+      releaseGate?.();
+      setSchemaPending(false);
+    }
   }
 
   function openInsertBlock(position: CardLayoutCreatePosition) {
@@ -1270,6 +1295,33 @@ function CardLayoutStudioSession({
             </div>
           </section>
         </div>
+      ) : null}
+
+      {fieldArchiveTarget ? (
+        <AdminMutationDialog title="Удалить поле">
+          <p>
+            Поле «{fieldArchiveTarget.label}» будет перенесено в архив. Заполненные значения
+            сохранятся в архиве и перестанут отображаться в карточках.
+          </p>
+          <div className="admin-mutation-actions">
+            <button
+              type="button"
+              className="danger-button"
+              disabled={schemaPending}
+              onClick={() => void archiveField(fieldArchiveTarget)}
+            >
+              Удалить поле
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={schemaPending}
+              onClick={() => setFieldArchiveTarget(null)}
+            >
+              Отмена
+            </button>
+          </div>
+        </AdminMutationDialog>
       ) : null}
 
       <span className="visually-hidden" aria-live="polite">

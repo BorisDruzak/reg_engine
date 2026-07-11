@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 16:51:49 +05:00
+- Generated: 2026-07-11 18:49:32 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -94,6 +94,7 @@
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
 - `backend/app/services/card_print.py`
+- `backend/app/services/card_public_access.py`
 - `backend/app/services/card_template_layout.py`
 - `backend/app/services/card_template_projection.py`
 - `backend/app/services/cards.py`
@@ -131,6 +132,7 @@
 - `backend/migrations/versions/0021_block_display_config.py`
 - `backend/migrations/versions/0022_card_print_layout_templates.py`
 - `backend/migrations/versions/0023_public_link_review_lifecycle.py`
+- `backend/migrations/versions/0024_card_public_field_settings.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -148,6 +150,7 @@
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
 - `backend/tests/test_card_print_layout_services.py`
+- `backend/tests/test_card_public_access.py`
 - `backend/tests/test_card_template_layout_services.py`
 - `backend/tests/test_config.py`
 - `backend/tests/test_core_service_hardening.py`
@@ -208,6 +211,7 @@
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
 - `docs/superpowers/plans/2026-07-11-card-layout-navigation-hover.md`
+- `docs/superpowers/plans/2026-07-11-card-public-access-and-inline-editing.md`
 - `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
 - `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`
 - `docs/superpowers/plans/2026-07-11-role-aware-card-workspace.md`
@@ -218,6 +222,7 @@
 - `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
 - `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
 - `docs/superpowers/specs/2026-07-11-card-layout-navigation-hover-design.md`
+- `docs/superpowers/specs/2026-07-11-card-public-access-and-inline-editing-design.md`
 - `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
 - `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
 - `docs/superpowers/specs/2026-07-11-role-aware-card-workspace-design.md`

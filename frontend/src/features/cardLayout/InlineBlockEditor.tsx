@@ -101,22 +101,6 @@ export function InlineBlockEditor({ block, onCommit, onCancel }: InlineBlockEdit
       <label className="checkbox-inline">
         <input
           type="checkbox"
-          checked={draft.public_visible}
-          onChange={(event) => setDraft({ ...draft, public_visible: event.currentTarget.checked })}
-        />
-        <span>Виден в публичной ссылке</span>
-      </label>
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
-          checked={draft.public_editable}
-          onChange={(event) => setDraft({ ...draft, public_editable: event.currentTarget.checked })}
-        />
-        <span>Доступен для публичного редактирования</span>
-      </label>
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
           checked={draft.display_config_json?.collapsible === true}
           onChange={(event) =>
             setDraft({

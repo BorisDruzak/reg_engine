@@ -688,6 +688,10 @@ def test_archive_field_refresh_locks_and_reloads_base_template_before_schema_mer
     )
     statements: list[object] = []
 
+    class EmptyScalarResult:
+        def all(self) -> list[object]:
+            return []
+
     class RecordingSession:
         def scalar(self, statement: object) -> CardTemplate:
             statements.append(statement)
@@ -700,6 +704,9 @@ def test_archive_field_refresh_locks_and_reloads_base_template_before_schema_mer
                     "form_layout": fresh_layout,
                 }
             return template
+
+        def scalars(self, _statement: object) -> EmptyScalarResult:
+            return EmptyScalarResult()
 
         def flush(self) -> None:
             pass

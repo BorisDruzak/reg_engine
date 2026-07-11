@@ -105,7 +105,9 @@ test("merges a deferred block create into the newest geometry before the first l
         sections: expect.arrayContaining([
           expect.objectContaining({
             block_id: "block-1",
-            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", row: 2 })]),
+            items: expect.arrayContaining([
+              expect.objectContaining({ field_id: "field-1", row: 2 }),
+            ]),
           }),
           expect.objectContaining({ block_id: "block-created" }),
         ]),
@@ -211,7 +213,9 @@ test("waits for an in-flight layout PATCH before a block update and saves geomet
       form_layout: expect.objectContaining({
         sections: expect.arrayContaining([
           expect.objectContaining({
-            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", column: 3 })]),
+            items: expect.arrayContaining([
+              expect.objectContaining({ field_id: "field-1", column: 3 }),
+            ]),
           }),
         ]),
       }),
@@ -279,7 +283,9 @@ test("reorders adjacent blocks atomically and restores the previous layout with 
     "block-2",
     "block-1",
   ]);
-  expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.row)).toEqual([1, 2]);
+  expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.row)).toEqual([
+    1, 2,
+  ]);
 
   await user.click(screen.getByRole("button", { name: "Отменить изменение" }));
 
@@ -366,7 +372,9 @@ test("uses a conflicting local draft only after the explicit reviewed overwrite 
       form_layout: expect.objectContaining({
         sections: expect.arrayContaining([
           expect.objectContaining({
-            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", column: 2 })]),
+            items: expect.arrayContaining([
+              expect.objectContaining({ field_id: "field-1", column: 2 }),
+            ]),
           }),
         ]),
       }),
@@ -634,7 +642,7 @@ test("preview is readonly for linked and legacy print layouts", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("existing block edits send the complete semantic payload", async () => {
+test("existing block edits keep public access out of the template payload", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
@@ -642,8 +650,8 @@ test("existing block edits send the complete semantic payload", async () => {
 
   await user.click(await screen.findByRole("button", { name: "Изменить блок Основной блок" }));
   await user.click(screen.getByLabelText("Повторяемый блок"));
-  await user.click(screen.getByLabelText("Виден в публичной ссылке"));
-  await user.click(screen.getByLabelText("Доступен для публичного редактирования"));
+  expect(screen.queryByLabelText("Виден в публичной ссылке")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Доступен для публичного редактирования")).not.toBeInTheDocument();
   await user.click(screen.getByLabelText("Можно свернуть"));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -653,14 +661,12 @@ test("existing block edits send the complete semantic payload", async () => {
     description: null,
     position: 0,
     is_repeatable: true,
-    public_visible: false,
-    public_editable: true,
     layout_columns: 1,
     display_config_json: { collapsible: true },
   });
 });
 
-test("existing field edits send type reference visibility list and static-text controls", async () => {
+test("existing field edits send type reference list and static-text controls without public access", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
@@ -674,9 +680,7 @@ test("existing field edits send type reference visibility list and static-text c
   await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
   await user.selectOptions(screen.getByLabelText("Справочник"), "reference-statuses");
   await user.selectOptions(screen.getByLabelText("Обязательность"), "required_on_publish");
-  await user.click(screen.getByText("Публичное редактирование"));
-  await user.click(screen.getByLabelText("Видно в публичной ссылке"));
-  await user.click(screen.getByLabelText("Доступно для публичного редактирования"));
+  expect(screen.queryByText("Публичное редактирование")).not.toBeInTheDocument();
   await user.click(screen.getByText("Ещё"));
   await user.click(screen.getByLabelText("Показывать в списке карточек"));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -691,8 +695,6 @@ test("existing field edits send type reference visibility list and static-text c
       required_mode: "required_on_publish",
       options_source_type: "reference_list",
       options_source_id: "reference-statuses",
-      public_visible: false,
-      public_editable: true,
       is_list_display: true,
     }),
   );
@@ -726,6 +728,24 @@ test("existing field edits send type reference visibility list and static-text c
       options_config_json: null,
     }),
   );
+});
+
+test("archives a field only after the inline delete confirmation", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
+  await user.click(screen.getByRole("button", { name: "Удалить поле" }));
+
+  const confirmation = await screen.findByRole("dialog", { name: "Удалить поле" });
+  expect(within(confirmation).getByText(/будет перенесено в архив/i)).toBeInTheDocument();
+  expect(api.archivedFieldIds).toEqual([]);
+
+  await user.click(within(confirmation).getByRole("button", { name: "Удалить поле" }));
+  await waitFor(() => expect(api.archivedFieldIds).toEqual(["field-1"]));
+  expect(screen.queryByTestId("layout-field-field-field-1")).not.toBeInTheDocument();
 });
 
 test("keeps the field editor open and preserves its hidden technical code when update fails", async () => {
@@ -880,6 +900,7 @@ function createEditorFetchMock(
   const createdFieldPayloads: Record<string, unknown>[] = [];
   const updatedBlockPayloads: Record<string, unknown>[] = [];
   const updatedFieldPayloads: Record<string, unknown>[] = [];
+  const archivedFieldIds: string[] = [];
   const templateUpdatePayloads: Record<string, unknown>[] = [];
   const blankDownloadPayloads: Array<{ layout_json: CardPrintLayout }> = [];
   let conversionCalls = 0;
@@ -1016,6 +1037,11 @@ function createEditorFetchMock(
       };
       return jsonResponse(updated);
     }
+    if (url.endsWith("/api/v1/fields/field-1") && init?.method === "DELETE") {
+      archivedFieldIds.push("field-1");
+      const current = layout.structure.fields.find((field) => field.id === "field-1");
+      return jsonResponse({ ...current, is_active: false });
+    }
     if (url.endsWith("/api/v1/card-templates/template-1") && init?.method === "PATCH") {
       templateUpdatePayloads.push(body);
       return jsonResponse(cardTemplateFixture());
@@ -1097,6 +1123,7 @@ function createEditorFetchMock(
     createdFieldPayloads,
     updatedBlockPayloads,
     updatedFieldPayloads,
+    archivedFieldIds,
     templateUpdatePayloads,
     blankDownloadPayloads,
     get conversionCalls() {

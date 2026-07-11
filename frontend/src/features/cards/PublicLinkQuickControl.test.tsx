@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { FormBlockRead, FormFieldRead } from "@/api/types";
+import type { CardPublicAccessRead, FormBlockRead, FormFieldRead } from "@/api/types";
 
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
 
@@ -75,8 +75,6 @@ describe("PublicLinkQuickControl", () => {
         expires_in_days: 7,
         max_attachment_uploads: null,
         review_enabled: true,
-        allowed_block_ids: ["block-a"],
-        allowed_field_ids: ["field-a"],
       }),
     );
     expect(
@@ -85,17 +83,36 @@ describe("PublicLinkQuickControl", () => {
   });
 
   test("explains why no request is made when no field is eligible", () => {
-    renderQuick({ fields: [{ ...field, public_editable: false }] });
+    renderQuick({ publicAccess: { ...publicAccess, fields: [] } });
 
     expect(screen.getByRole("button", { name: "Публичная ссылка" })).toBeDisabled();
     expect(
-      screen.getByText("Сначала настройте публичное редактирование полей в шаблоне карточки."),
+      screen.getByText("Сначала настройте публичное отображение полей в карточке."),
     ).toBeInTheDocument();
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 });
 
-function renderQuick(overrides: { blocks?: FormBlockRead[]; fields?: FormFieldRead[] } = {}) {
+const publicAccess: CardPublicAccessRead = {
+  card_id: "card-1",
+  public_view_enabled: true,
+  public_edit_enabled: false,
+  fields: [
+    {
+      field_id: "field-a",
+      public_visible: true,
+      public_editable: false,
+    },
+  ],
+};
+
+function renderQuick(
+  overrides: {
+    blocks?: FormBlockRead[];
+    fields?: FormFieldRead[];
+    publicAccess?: CardPublicAccessRead;
+  } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -104,6 +121,7 @@ function renderQuick(overrides: { blocks?: FormBlockRead[]; fields?: FormFieldRe
         cardId="card-1"
         fields={overrides.fields ?? [field]}
         layout={null}
+        publicAccess={overrides.publicAccess ?? publicAccess}
         token="admin-token"
       />
     </QueryClientProvider>,

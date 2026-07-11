@@ -26,14 +26,16 @@ import {
   listCardFieldReferenceItems,
   listAttachments,
   readCardPresentation,
+  readCardPublicAccess,
   updateCardFieldValue,
   updateCardFieldValues,
+  updateCardPublicAccess,
 } from "@/api/client";
 import type {
   CardFieldFilterPayload,
+  CardPublicAccessRead,
   CardRead,
   CardSummaryRead,
-  CardTemplateLayoutRead,
   CardTemplateRead,
   FieldValuesBulkUpdatePayload,
   FormBlockRead,
@@ -58,8 +60,6 @@ import {
 } from "@/components/common/AdminMutation";
 import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { errorText, shortId } from "@/components/common/dataUtils";
-import { A4TemplateRenderer } from "@/features/registry/print/A4TemplateRenderer";
-
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
@@ -152,6 +152,15 @@ export function CardsWorkspace({
     enabled: Boolean(token && card),
   });
   const presentationLayout = cardPresentationQuery.data?.layout ?? null;
+  const publicAccessQuery = useQuery({
+    queryKey: ["card-public-access", token, card?.id],
+    queryFn: () => {
+      if (!card) throw new Error(uiText.notFound);
+      return readCardPublicAccess(token, card.id);
+    },
+    enabled: Boolean(token && card),
+  });
+  const publicAccess = publicAccessQuery.data ?? null;
   const presentationFields = useMemo(
     () => presentationLayout?.structure.fields ?? schema?.fields ?? [],
     [presentationLayout, schema?.fields],
@@ -311,6 +320,21 @@ export function CardsWorkspace({
       setActiveShellTab("list");
       activeCardIdRef.current = null;
       onSelectCard(nextCardId);
+    },
+  });
+  const updatePublicAccessMutation = useMutation({
+    mutationFn: async (payload: Parameters<typeof updateCardPublicAccess>[2]) => {
+      if (!card) throw new Error(uiText.notFound);
+      return updateCardPublicAccess(token, card.id, payload);
+    },
+    onSuccess: async (updated) => {
+      if (!card) return;
+      await queryClient.invalidateQueries({ queryKey: ["card-public-access", token, card.id] });
+      await invalidateCardQueries(queryClient, token, card.registry_id, card.id);
+      if (activeCardIdRef.current === card.id) {
+        setSuccessMessage("Настройки публичного доступа сохранены");
+      }
+      return updated;
     },
   });
   const createBlockInstanceMutation = useMutation({
@@ -551,99 +575,8 @@ export function CardsWorkspace({
         </Panel>
       ) : (
         <div className="stack">
-          {card && selectedCard && (
-            <CardActionPanel
-              card={card}
-              selectedCard={selectedCard}
-              isDirty={blockEditor.dirty}
-              canManage={card.can_manage}
-              completionLabel={completionLabel}
-              publicLinkControl={
-                card.can_manage ? (
-                  <PublicLinkQuickControl
-                    blocks={presentationBlocks}
-                    cardId={card.id}
-                    fields={presentationFields}
-                    layout={presentationLayout}
-                    token={token}
-                  />
-                ) : null
-              }
-              canDownloadPrint={Boolean(selectedCardPrintView)}
-              isDownloadingPrint={
-                downloadCardPrintDocxMutation.isPending || downloadCardPrintPdfMutation.isPending
-              }
-              actionError={
-                archiveCardMutation.error ??
-                downloadCardPrintDocxMutation.error ??
-                downloadCardPrintPdfMutation.error
-              }
-              successMessage={successMessage}
-              onDownloadPrintDocx={() => downloadCardPrintDocxMutation.mutate()}
-              onDownloadPrintPdf={() => downloadCardPrintPdfMutation.mutate()}
-              onArchive={() => {
-                setArchiveTarget(selectedCard);
-                setCardFormMode(null);
-                setSuccessMessage(null);
-              }}
-            />
-          )}
-          <Panel
-            title={
-              cardFormMode === "create" ? uiText.newCard : card ? card.display_name : uiText.card
-            }
-          >
-            {card && selectedCard ? (
-              <div className="card-metadata-panel">
-                <dl className="metadata-list">
-                  <div>
-                    <dt>{uiText.cardTemplate}</dt>
-                    <dd>{card.card_template_name ?? card.display_name}</dd>
-                  </div>
-                  <div>
-                    <dt>{uiText.organization}</dt>
-                    <dd>
-                      {organizationsById.get(card.organization_id)?.name ??
-                        shortId(card.organization_id)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{uiText.status}</dt>
-                    <dd>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</dd>
-                  </div>
-                  <div>
-                    <dt>{uiText.publicViewCard}</dt>
-                    <dd>{selectedCard.public_view_enabled ? uiText.yes : uiText.no}</dd>
-                  </div>
-                  <div>
-                    <dt>{uiText.publicEditCard}</dt>
-                    <dd>{selectedCard.public_edit_enabled ? uiText.yes : uiText.no}</dd>
-                  </div>
-                </dl>
-                {card.can_manage && repeatableBlocks.length > 0 && (
-                  <RepeatableBlockControls
-                    blocks={repeatableBlocks}
-                    card={card}
-                    isCreating={createBlockInstanceMutation.isPending}
-                    isArchiving={archiveBlockInstanceMutation.isPending}
-                    onAdd={(blockId) => createBlockInstanceMutation.mutate(blockId)}
-                    onArchive={(blockInstanceId) =>
-                      archiveBlockInstanceMutation.mutate(blockInstanceId)
-                    }
-                  />
-                )}
-                {card.can_manage ? (
-                  <MutationFeedback
-                    error={createBlockInstanceMutation.error ?? archiveBlockInstanceMutation.error}
-                  />
-                ) : null}
-              </div>
-            ) : (
-              <p className="data-empty">{uiText.noData}</p>
-            )}
-          </Panel>
           {card && (
-            <Panel title={uiText.cardFields}>
+            <>
               {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
               <DataAlert error={cardPresentationQuery.error} />
               {presentationLayout ? (
@@ -657,6 +590,104 @@ export function CardsWorkspace({
                   blockEditor={blockEditor}
                   referenceOptions={referenceOptions}
                   onEditBlock={() => setSuccessMessage(null)}
+                  navigationBefore={[
+                    {
+                      anchorId: "card-base-block",
+                      label: "Базовый блок",
+                      state: "neutral",
+                      filledCount: 0,
+                      totalCount: 0,
+                      requiredMissingCount: 0,
+                    },
+                  ]}
+                  navigationAfter={[
+                    {
+                      anchorId: "card-attachments-block",
+                      label: "Вложения",
+                      state: "neutral",
+                      filledCount: 0,
+                      totalCount: 0,
+                      requiredMissingCount: 0,
+                    },
+                  ]}
+                  beforeContent={
+                    selectedCard ? (
+                      <CardBaseBlock
+                        card={card}
+                        completionLabel={completionLabel}
+                        organizationName={
+                          organizationsById.get(card.organization_id)?.name ??
+                          shortId(card.organization_id)
+                        }
+                        fields={presentationFields}
+                        canManage={card.can_manage}
+                        publicAccess={publicAccess}
+                        publicAccessError={publicAccessQuery.error}
+                        isUpdatingPublicAccess={updatePublicAccessMutation.isPending}
+                        repeatableBlocks={repeatableBlocks}
+                        isCreatingBlockInstance={createBlockInstanceMutation.isPending}
+                        isArchivingBlockInstance={archiveBlockInstanceMutation.isPending}
+                        publicLinkControl={
+                          card.can_manage ? (
+                            <PublicLinkQuickControl
+                              blocks={presentationBlocks}
+                              cardId={card.id}
+                              fields={presentationFields}
+                              layout={presentationLayout}
+                              publicAccess={publicAccess}
+                              token={token}
+                            />
+                          ) : null
+                        }
+                        onPublicAccessChange={(payload) =>
+                          updatePublicAccessMutation.mutate(payload)
+                        }
+                        onAddBlockInstance={(blockId) =>
+                          createBlockInstanceMutation.mutate(blockId)
+                        }
+                        onArchiveBlockInstance={(blockInstanceId) =>
+                          archiveBlockInstanceMutation.mutate(blockInstanceId)
+                        }
+                      />
+                    ) : null
+                  }
+                  afterContent={
+                    <>
+                      <section
+                        id="card-attachments-block"
+                        className="card-workspace-following-block"
+                      >
+                        <CardAttachmentsPanel
+                          cardId={card.id}
+                          token={token}
+                          canManage={card.can_manage}
+                        />
+                      </section>
+                      {card.can_manage ? (
+                        <CardWorkspaceFooter
+                          card={card}
+                          canDownloadPrint={Boolean(selectedCardPrintView)}
+                          isDownloading={
+                            downloadCardPrintDocxMutation.isPending ||
+                            downloadCardPrintPdfMutation.isPending
+                          }
+                          error={
+                            archiveCardMutation.error ??
+                            downloadCardPrintDocxMutation.error ??
+                            downloadCardPrintPdfMutation.error
+                          }
+                          onDownloadDocx={() => downloadCardPrintDocxMutation.mutate()}
+                          onDownloadPdf={() => downloadCardPrintPdfMutation.mutate()}
+                          onArchive={() => {
+                            if (!selectedCard) return;
+                            setArchiveTarget(selectedCard);
+                            setCardFormMode(null);
+                            setSuccessMessage(null);
+                          }}
+                        />
+                      ) : null}
+                    </>
+                  }
                   renderFileRefControl={
                     card.can_manage
                       ? ({ field, blockInstanceId, readValue }) => {
@@ -683,10 +714,7 @@ export function CardsWorkspace({
               {!cardPresentationQuery.isLoading &&
                 !cardPresentationQuery.error &&
                 !presentationLayout && <p className="data-empty">{uiText.noData}</p>}
-            </Panel>
-          )}
-          {card && (
-            <CardAttachmentsPanel cardId={card.id} token={token} canManage={card.can_manage} />
+            </>
           )}
         </div>
       )}
@@ -705,60 +733,6 @@ export function CardsWorkspace({
   );
 }
 
-// Kept for a later print-view return; the card workspace no longer renders it directly.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function CardPrintPreviewPanel({
-  card,
-  layout: cardTemplateLayout,
-  fields,
-  registryName,
-  organizationName,
-}: {
-  card: CardRead;
-  layout: CardTemplateLayoutRead | null;
-  fields: FormFieldRead[];
-  registryName: string | null;
-  organizationName: string | null;
-}) {
-  const printView = cardTemplateLayout?.print_views[0] ?? null;
-  const layout = printView?.layout_json ?? null;
-  const fieldValues = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.values(card.fields).map((field) => [field.field_id, field.value] as const),
-      ),
-    [card.fields],
-  );
-  const metadataValues = useMemo(
-    () => ({
-      "card.display_name": card.display_name,
-      "card.id": card.id,
-      "registry.name": registryName ?? "",
-      "organization.name": organizationName ?? "",
-    }),
-    [card.display_name, card.id, organizationName, registryName],
-  );
-
-  return (
-    <Panel title="Печатная форма">
-      {!layout ? (
-        <p className="data-empty">Для шаблона карточки пока нет печатной формы A4</p>
-      ) : (
-        <A4TemplateRenderer
-          layout={layout}
-          fields={fields}
-          mode="readonly"
-          zoom={0.64}
-          showGrid={false}
-          showTechnicalData={false}
-          fieldValues={fieldValues}
-          metadataValues={metadataValues}
-        />
-      )}
-    </Panel>
-  );
-}
-
 type CardFormState = {
   organizationId: string;
   cardTemplateId: string;
@@ -766,87 +740,231 @@ type CardFormState = {
   publicEditEnabled: boolean;
 };
 
-function CardActionPanel({
+function CardBaseBlock({
   card,
-  selectedCard,
-  isDirty,
-  canManage,
   completionLabel,
+  organizationName,
+  fields,
+  canManage,
+  publicAccess,
+  publicAccessError,
+  isUpdatingPublicAccess,
+  repeatableBlocks,
+  isCreatingBlockInstance,
+  isArchivingBlockInstance,
   publicLinkControl,
+  onPublicAccessChange,
+  onAddBlockInstance,
+  onArchiveBlockInstance,
+}: {
+  card: CardRead;
+  completionLabel: string;
+  organizationName: string;
+  fields: FormFieldRead[];
+  canManage: boolean;
+  publicAccess: CardPublicAccessRead | null;
+  publicAccessError: Error | null;
+  isUpdatingPublicAccess: boolean;
+  repeatableBlocks: FormBlockRead[];
+  isCreatingBlockInstance: boolean;
+  isArchivingBlockInstance: boolean;
+  publicLinkControl: ReactNode;
+  onPublicAccessChange: (payload: Parameters<typeof updateCardPublicAccess>[2]) => void;
+  onAddBlockInstance: (blockId: string) => void;
+  onArchiveBlockInstance: (blockInstanceId: string) => void;
+}) {
+  const settingsByFieldId = useMemo(
+    () => new Map(publicAccess?.fields.map((setting) => [setting.field_id, setting]) ?? []),
+    [publicAccess?.fields],
+  );
+  const publicFields = fields.filter((field) => field.is_active);
+  const publicViewEnabled = publicAccess?.public_view_enabled ?? false;
+  const publicEditEnabled = publicAccess?.public_edit_enabled ?? false;
+
+  return (
+    <section id="card-base-block" className="card-base-block" aria-label="Базовый блок">
+      <header className="card-base-block-header">
+        <div>
+          <strong>Базовый блок</strong>
+          <small>Основная информация и публичный доступ</small>
+        </div>
+      </header>
+      <dl className="metadata-list card-base-block-metadata">
+        <div>
+          <dt>Карточка</dt>
+          <dd>{card.display_name}</dd>
+        </div>
+        <div>
+          <dt>{uiText.organization}</dt>
+          <dd>{organizationName}</dd>
+        </div>
+        <div>
+          <dt>{uiText.status}</dt>
+          <dd>{completionLabel}</dd>
+        </div>
+      </dl>
+      <div className="card-base-block-public-settings">
+        <div className="card-base-block-public-heading">
+          <strong>Публичный доступ</strong>
+          {canManage ? publicLinkControl : null}
+        </div>
+        <DataAlert error={publicAccessError} />
+        <div className="card-base-toggle-grid">
+          <label className="checkbox-control">
+            <input
+              type="checkbox"
+              checked={publicViewEnabled}
+              disabled={!canManage || isUpdatingPublicAccess || publicEditEnabled}
+              onChange={(event) =>
+                onPublicAccessChange({ public_view_enabled: event.currentTarget.checked })
+              }
+            />
+            <span>{uiText.publicViewCard}</span>
+          </label>
+          <label className="checkbox-control">
+            <input
+              type="checkbox"
+              checked={publicEditEnabled}
+              disabled={!canManage || isUpdatingPublicAccess}
+              onChange={(event) =>
+                onPublicAccessChange({ public_edit_enabled: event.currentTarget.checked })
+              }
+            />
+            <span>{uiText.publicEditCard}</span>
+          </label>
+        </div>
+        {canManage ? (
+          <details className="card-base-field-access">
+            <summary>Настройки полей для публичной ссылки</summary>
+            <div className="card-base-field-access-list">
+              {publicFields.map((field) => {
+                const setting = settingsByFieldId.get(field.id);
+                const visible = setting?.public_visible ?? false;
+                const editable = setting?.public_editable ?? false;
+                const fieldCanEdit = !["file_ref", "static_text"].includes(field.field_type);
+                return (
+                  <div key={field.id} className="card-base-field-access-row">
+                    <span>{field.label}</span>
+                    <label className="checkbox-control">
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        disabled={isUpdatingPublicAccess}
+                        onChange={(event) =>
+                          onPublicAccessChange({
+                            fields: [
+                              {
+                                field_id: field.id,
+                                public_visible: event.currentTarget.checked,
+                                public_editable: event.currentTarget.checked && editable,
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <span>Показывать</span>
+                    </label>
+                    <label className="checkbox-control">
+                      <input
+                        type="checkbox"
+                        checked={editable}
+                        disabled={isUpdatingPublicAccess || !fieldCanEdit}
+                        onChange={(event) =>
+                          onPublicAccessChange({
+                            fields: [
+                              {
+                                field_id: field.id,
+                                public_visible: visible || event.currentTarget.checked,
+                                public_editable: event.currentTarget.checked,
+                              },
+                            ],
+                          })
+                        }
+                      />
+                      <span>Разрешить изменение</span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ) : null}
+        {canManage && repeatableBlocks.length > 0 ? (
+          <RepeatableBlockControls
+            blocks={repeatableBlocks}
+            card={card}
+            isCreating={isCreatingBlockInstance}
+            isArchiving={isArchivingBlockInstance}
+            onAdd={onAddBlockInstance}
+            onArchive={onArchiveBlockInstance}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CardWorkspaceFooter({
+  card,
   canDownloadPrint,
-  isDownloadingPrint,
-  actionError,
-  successMessage,
-  onDownloadPrintDocx,
-  onDownloadPrintPdf,
+  isDownloading,
+  error,
+  onDownloadDocx,
+  onDownloadPdf,
   onArchive,
 }: {
   card: CardRead;
-  selectedCard: CardSummaryRead;
-  isDirty: boolean;
-  canManage: boolean;
-  completionLabel: string;
-  publicLinkControl: ReactNode;
   canDownloadPrint: boolean;
-  isDownloadingPrint: boolean;
-  actionError?: unknown;
-  successMessage?: string | null;
-  onDownloadPrintDocx: () => void;
-  onDownloadPrintPdf: () => void;
+  isDownloading: boolean;
+  error: unknown;
+  onDownloadDocx: () => void;
+  onDownloadPdf: () => void;
   onArchive: () => void;
 }) {
   const [downloadOpen, setDownloadOpen] = useState(false);
   return (
-    <div className="card-action-panel" role="group" aria-label={uiText.cardActionPanel}>
-      <div className="card-action-status">
-        <strong>{card.display_name}</strong>
-        <span>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</span>
-        <span>{completionLabel}</span>
-        {isDirty && <p className="inline-alert">{uiText.unsavedCardChanges}</p>}
-        <MutationFeedback error={actionError} successMessage={successMessage} />
-      </div>
-      <div className="row-actions card-action-buttons">
-        {canManage ? (
-          <>
-            {publicLinkControl}
-            <div className="card-download-menu">
-              <button
-                type="button"
-                className="ghost-button"
-                aria-expanded={downloadOpen}
-                aria-haspopup="menu"
-                disabled={!canDownloadPrint || isDownloadingPrint}
-                onClick={() => setDownloadOpen((current) => !current)}
-              >
-                Скачать
-              </button>
-              {downloadOpen ? (
-                <div
-                  className="card-download-menu-items"
-                  role="menu"
-                  aria-label="Формат скачивания"
-                >
-                  <button type="button" role="menuitem" onClick={onDownloadPrintDocx}>
-                    DOCX
-                  </button>
-                  <button type="button" role="menuitem" onClick={onDownloadPrintPdf}>
-                    PDF
-                  </button>
-                </div>
-              ) : null}
-            </div>
+    <>
+      <section className="card-workspace-footer-panel" aria-label="Скачать карточку">
+        <strong>Скачать карточку</strong>
+        <div className="row-actions">
+          <div className="card-download-menu">
             <button
               type="button"
-              className="danger-button"
-              aria-label={`${uiText.archiveCard} ${card.display_name}`}
-              onClick={onArchive}
+              className="ghost-button"
+              aria-expanded={downloadOpen}
+              aria-haspopup="menu"
+              disabled={!canDownloadPrint || isDownloading}
+              onClick={() => setDownloadOpen((current) => !current)}
             >
-              {uiText.archive}
+              Скачать
             </button>
-          </>
-        ) : null}
-      </div>
-    </div>
+            {downloadOpen ? (
+              <div className="card-download-menu-items" role="menu" aria-label="Формат скачивания">
+                <button type="button" role="menuitem" onClick={onDownloadDocx}>
+                  DOCX
+                </button>
+                <button type="button" role="menuitem" onClick={onDownloadPdf}>
+                  PDF
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <MutationFeedback error={error} />
+      </section>
+      <section className="card-workspace-archive-panel" aria-label="Архивирование карточки">
+        <strong>Архивирование карточки</strong>
+        <p>Архивная карточка остаётся доступной в архиве.</p>
+        <button
+          type="button"
+          className="danger-button"
+          aria-label={`${uiText.archiveCard} ${card.display_name}`}
+          onClick={onArchive}
+        >
+          {uiText.archive}
+        </button>
+      </section>
+    </>
   );
 }
 

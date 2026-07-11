@@ -1653,17 +1653,8 @@ describe("CardWebLayoutCanvas", () => {
     ).toEqual(["Необязательное поле", "Обязательное поле"]);
     expect(mandatory).toHaveValue("required_on_publish");
 
-    const publicSettings = screen.getByText("Публичное редактирование").closest("details");
-    expect(publicSettings).not.toBeNull();
-    expect(publicSettings).not.toHaveAttribute("open");
-    expect(
-      within(publicSettings!).getByRole("checkbox", { name: "Видно в публичной ссылке" }),
-    ).toBeInTheDocument();
-    expect(
-      within(publicSettings!).getByRole("checkbox", {
-        name: "Доступно для публичного редактирования",
-      }),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Публичное редактирование")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удалить поле" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
@@ -1822,13 +1813,25 @@ describe("CardWebLayoutCanvas", () => {
     );
   });
 
-  test("cancels field editing with Escape", async () => {
+  test("closes field editing with Escape without archiving the field", async () => {
     const user = userEvent.setup();
     const onCancelField = vi.fn();
     render(<CardWebLayoutCanvas {...canvasProps({ onCancelField })} />);
 
     await user.click(screen.getByTestId("layout-field-field-name"));
     await user.keyboard("{Escape}");
+
+    expect(onCancelField).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
+  });
+
+  test("archives a field from the inline editor", async () => {
+    const user = userEvent.setup();
+    const onCancelField = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onCancelField })} />);
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    await user.click(screen.getByRole("button", { name: "Удалить поле" }));
 
     expect(onCancelField).toHaveBeenCalledWith(fields[0].id);
     expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();

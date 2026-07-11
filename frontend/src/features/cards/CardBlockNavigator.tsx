@@ -5,7 +5,7 @@ import type { CardBlockCompletionState } from "./cardCompletion";
 export type CardBlockNavigationItem = {
   anchorId: string;
   label: string;
-  state: CardBlockCompletionState;
+  state: CardBlockCompletionState | "neutral";
   filledCount: number;
   totalCount: number;
   requiredMissingCount: number;
@@ -16,6 +16,7 @@ type CardBlockNavigatorProps = {
 };
 
 function itemStatus(item: CardBlockNavigationItem) {
+  if (item.state === "neutral") return "дополнительный раздел";
   if (item.state === "attention") {
     return `нужно заполнить ${item.requiredMissingCount} из ${item.totalCount}`;
   }
@@ -26,12 +27,14 @@ function itemStatus(item: CardBlockNavigationItem) {
 }
 
 function statusTitle(item: CardBlockNavigationItem) {
+  if (item.state === "neutral") return "Раздел карточки";
   if (item.state === "attention") return "Нужно заполнить";
   if (item.state === "complete") return "Заполнено";
   return item.totalCount === 0 ? "Нет полей" : "Не заполнено";
 }
 
 function statusCount(item: CardBlockNavigationItem) {
+  if (item.state === "neutral") return null;
   if (item.state === "attention") return `${item.requiredMissingCount} из ${item.totalCount}`;
   if (item.state === "complete") return `${item.filledCount} из ${item.totalCount}`;
   return item.totalCount > 0 ? `0 из ${item.totalCount}` : null;

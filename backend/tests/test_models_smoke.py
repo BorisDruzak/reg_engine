@@ -9,6 +9,7 @@ EXPECTED_TABLES = {
     "audit_events",
     "card_block_instances",
     "card_attachments",
+    "card_public_field_settings",
     "card_public_links",
     "card_relations",
     "card_templates",

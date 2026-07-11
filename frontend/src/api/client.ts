@@ -29,6 +29,8 @@ import type {
   CardPrintPreviewPayload,
   CardPrintPreviewRead,
   CardPresentationRead,
+  CardPublicAccessPayload,
+  CardPublicAccessRead,
   CardRead,
   CardSummaryRead,
   CardTransferPayload,
@@ -442,6 +444,22 @@ export async function readCardPresentation(token: string, cardId: string) {
 
 export async function updateCard(token: string, cardId: string, payload: CardUpdatePayload) {
   return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function readCardPublicAccess(token: string, cardId: string) {
+  return apiRequest<CardPublicAccessRead>(`/api/v1/cards/${cardId}/public-access`, { token });
+}
+
+export async function updateCardPublicAccess(
+  token: string,
+  cardId: string,
+  payload: CardPublicAccessPayload,
+) {
+  return apiRequest<CardPublicAccessRead>(`/api/v1/cards/${cardId}/public-access`, {
     method: "PATCH",
     token,
     body: payload,

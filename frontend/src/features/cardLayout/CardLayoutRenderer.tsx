@@ -41,6 +41,9 @@ export type CardLayoutFieldPresentationRenderer = (
   context: CardLayoutFieldRenderContext,
 ) => CardLayoutFieldPresentation | undefined;
 
+export type CardLayoutFieldActivationRenderer = (context: CardLayoutFieldRenderContext) => boolean;
+export type CardLayoutFieldActivationHandler = (context: CardLayoutFieldRenderContext) => void;
+
 export type CardLayoutRendererProps = ComponentProps<typeof CardWebLayoutCanvas>;
 
 const modeAccessibleNames: Record<CardLayoutRendererMode, string> = {

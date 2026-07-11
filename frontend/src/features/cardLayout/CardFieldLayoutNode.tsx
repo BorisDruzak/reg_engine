@@ -9,6 +9,8 @@ import type { FieldEditorOption, FieldEditorState } from "@/features/cards/field
 import { formatValue, initialEditorValue } from "@/features/cards/fieldEditorUtils";
 
 import type {
+  CardLayoutFieldActivationHandler,
+  CardLayoutFieldActivationRenderer,
   CardLayoutFieldPresentation,
   CardLayoutRendererMode,
   CardLayoutSelection,
@@ -54,6 +56,8 @@ export type CardFieldLayoutNodeProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   presentation?: CardLayoutFieldPresentation;
+  canActivateField?: CardLayoutFieldActivationRenderer;
+  onActivateField?: CardLayoutFieldActivationHandler;
   onSelect: (selection: CardLayoutSelection) => void;
   onCommitField?: (field: FormFieldRead) => boolean | void | Promise<boolean | void>;
   onCancelField?: (fieldId: string) => void;
@@ -77,6 +81,8 @@ export function CardFieldLayoutNode({
   testIdPrefix = "layout",
   renderFieldValue,
   presentation,
+  canActivateField,
+  onActivateField,
   onSelect,
   onCommitField,
   onCancelField,
@@ -100,6 +106,13 @@ export function CardFieldLayoutNode({
     selection?.kind === "field" &&
     selection.id === nodeId;
   const blockValueEditing = mode === "block-edit" && valueEditing && Boolean(onFieldValueChange);
+  const fieldActivationContext = field ? { field, item, value, mode } : null;
+  const fieldActivatable = Boolean(
+    fieldActivationContext &&
+    !designMode &&
+    canActivateField?.(fieldActivationContext) &&
+    onActivateField,
+  );
   const directInteraction =
     designMode && Boolean(onCommitField) && !schemaEditing && !blockValueEditing;
   const style: CSSProperties = {
@@ -323,11 +336,13 @@ export function CardFieldLayoutNode({
       className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}${presentation?.state ? ` is-${presentation.state}` : ""}`}
       data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
-      tabIndex={designMode && onCommitField ? 0 : undefined}
+      tabIndex={designMode && onCommitField ? 0 : fieldActivatable ? 0 : undefined}
       aria-label={
         designMode && onCommitField
           ? `Поле ${field.label}. Нажмите, чтобы изменить; удерживайте и перетащите, чтобы переместить.`
-          : undefined
+          : fieldActivatable
+            ? `Поле ${field.label}. Нажмите, чтобы изменить значение.`
+            : undefined
       }
       aria-describedby={completionDescriptionId}
       onClick={(event) => {
@@ -339,9 +354,25 @@ export function CardFieldLayoutNode({
           suppressClickRef.current = false;
           return;
         }
+        if (fieldActivatable && fieldActivationContext) {
+          onActivateField?.(fieldActivationContext);
+          return;
+        }
         openFieldEditor();
       }}
-      onKeyDown={handleFieldKeyDown}
+      onKeyDown={(event) => {
+        if (
+          fieldActivatable &&
+          fieldActivationContext &&
+          (event.key === "Enter" || event.key === " ") &&
+          !isInteractiveTarget(event.target)
+        ) {
+          event.preventDefault();
+          onActivateField?.(fieldActivationContext);
+          return;
+        }
+        handleFieldKeyDown(event);
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -371,7 +402,11 @@ export function CardFieldLayoutNode({
               })
               .catch(() => onSelect({ kind: "field", id: field.id }));
           }}
-          onCancel={() => {
+          onClose={() => {
+            setRetryDraft(null);
+            onSelect(null);
+          }}
+          onDelete={() => {
             setRetryDraft(null);
             onCancelField?.(field.id);
             onSelect(null);

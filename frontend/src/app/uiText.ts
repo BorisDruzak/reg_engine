@@ -108,7 +108,7 @@ export const uiText = {
   disablePublicLink: "Отключить публичную ссылку",
   publicLinkCreated: "Публичная ссылка создана",
   publicLinkDisabled: "Публичная ссылка отключена",
-  publicLinkSchemaRequired: "Сначала настройте публичное редактирование полей в шаблоне карточки.",
+  publicLinkSchemaRequired: "Сначала настройте публичное отображение полей в карточке.",
   publicLinkDisableConfirmation:
     "Публичная ссылка станет недоступна для просмотра и редактирования.",
   publicLinkToken: "Токен публичной ссылки",

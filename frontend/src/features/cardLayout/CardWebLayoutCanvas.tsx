@@ -17,6 +17,8 @@ import type {
   CardLayoutBlockActionsRenderer,
   CardLayoutBlockRenderContext,
   CardLayoutBlockPresentationRenderer,
+  CardLayoutFieldActivationHandler,
+  CardLayoutFieldActivationRenderer,
   CardLayoutFieldPresentationRenderer,
   CardLayoutRendererMode,
   CardLayoutSelection,
@@ -59,6 +61,8 @@ export type CardWebLayoutCanvasProps = {
   renderBlockActions?: CardLayoutBlockActionsRenderer;
   blockPresentation?: CardLayoutBlockPresentationRenderer;
   fieldPresentation?: CardLayoutFieldPresentationRenderer;
+  canActivateField?: CardLayoutFieldActivationRenderer;
+  onActivateField?: CardLayoutFieldActivationHandler;
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
   onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
@@ -99,6 +103,8 @@ function CardWebLayoutCanvasSession({
   renderBlockActions,
   blockPresentation,
   fieldPresentation,
+  canActivateField,
+  onActivateField,
   canActivateBlock,
   onActivateBlock,
   onSelectionChange,
@@ -223,6 +229,8 @@ function CardWebLayoutCanvasSession({
               renderBlockActions={renderBlockActions}
               blockPresentation={block ? blockPresentation?.({ block, section, mode }) : undefined}
               fieldPresentation={fieldPresentation}
+              canActivateField={canActivateField}
+              onActivateField={onActivateField}
               canActivateBlock={canActivateBlock}
               onActivateBlock={onActivateBlock}
               onSelect={select}

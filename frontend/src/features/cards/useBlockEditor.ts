@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   FieldValueBulkItemUpdatePayload,
@@ -23,14 +23,14 @@ export type BlockEditorState = {
   dirty: boolean;
   pending: boolean;
   errors: Record<string, string>;
-  confirmClose: boolean;
-  open: (blockId: string, blockInstanceId: string | null, initial: Record<string, unknown>) => void;
-  update: (fieldId: string, value: FieldEditorState) => void;
-  save: () => Promise<boolean>;
+  openField: (
+    blockId: string,
+    blockInstanceId: string | null,
+    fieldId: string,
+    initial: Record<string, unknown>,
+  ) => void;
+  updateAndSave: (fieldId: string, value: FieldEditorState, delayMs: number) => void;
   cancel: () => void;
-  requestClose: () => "closed" | "confirm-discard";
-  discard: () => void;
-  continueEditing: () => void;
 };
 
 export type UseBlockEditorOptions = {
@@ -40,6 +40,7 @@ export type UseBlockEditorOptions = {
 };
 
 type BlockEditorSession = {
+  id: number;
   key: BlockEditorKey;
   target: BlockEditorTarget;
   initialValues: Record<string, FieldEditorState>;
@@ -47,8 +48,8 @@ type BlockEditorSession = {
   dirty: boolean;
   pending: boolean;
   errors: Record<string, string>;
-  confirmClose: boolean;
   pendingOpen: BlockEditorSession | null;
+  autoSaveDelayMs: number | null;
 };
 
 const emptyValues: Record<string, FieldEditorState> = {};
@@ -61,25 +62,33 @@ export function useBlockEditor({
 }: UseBlockEditorOptions): BlockEditorState {
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const [session, setSession] = useState<BlockEditorSession | null>(null);
+  const sessionIdRef = useRef(0);
 
-  const open = useCallback(
-    (blockId: string, blockInstanceId: string | null, initial: Record<string, unknown>) => {
+  const openField = useCallback(
+    (
+      blockId: string,
+      blockInstanceId: string | null,
+      fieldId: string,
+      initial: Record<string, unknown>,
+    ) => {
       const nextSession = createSession(
         { blockId, blockInstanceId },
-        initial,
+        { [fieldId]: initial[fieldId] },
         fieldsById,
         editableFieldIds,
+        ++sessionIdRef.current,
       );
       setSession((current) => {
         if (!current || !current.dirty) return nextSession;
-        if (current.key === nextSession.key) return current;
-        return { ...current, confirmClose: true, pendingOpen: nextSession };
+        const currentFieldId = Object.keys(current.values)[0] ?? null;
+        if (current.key === nextSession.key && currentFieldId === fieldId) return current;
+        return { ...current, pendingOpen: nextSession, autoSaveDelayMs: 0 };
       });
     },
     [editableFieldIds, fieldsById],
   );
 
-  const update = useCallback((fieldId: string, value: FieldEditorState) => {
+  const updateAndSave = useCallback((fieldId: string, value: FieldEditorState, delayMs: number) => {
     setSession((current) => {
       if (!current || current.pending || !(fieldId in current.values)) return current;
       const values = { ...current.values, [fieldId]: value };
@@ -91,6 +100,7 @@ export function useBlockEditor({
         values,
         errors,
         dirty: isDirty(current.initialValues, values),
+        autoSaveDelayMs: delayMs,
       };
     });
   }, []);
@@ -121,7 +131,7 @@ export function useBlockEditor({
 
     if (Object.keys(validationErrors).length > 0) {
       setSession((current) =>
-        current?.key === session.key
+        current?.id === session.id
           ? { ...current, pending: false, errors: validationErrors }
           : current,
       );
@@ -130,23 +140,23 @@ export function useBlockEditor({
 
     if (changedValues.length === 0) {
       setSession((current) =>
-        current?.key === session.key ? (current.pendingOpen ?? null) : current,
+        current?.id === session.id ? (current.pendingOpen ?? null) : current,
       );
       return true;
     }
 
     setSession((current) =>
-      current?.key === session.key ? { ...current, pending: true, errors: {} } : current,
+      current?.id === session.id ? { ...current, pending: true, errors: {} } : current,
     );
     try {
       await saveValues({ values: changedValues });
       setSession((current) =>
-        current?.key === session.key ? (current.pendingOpen ?? null) : current,
+        current?.id === session.id ? (current.pendingOpen ?? null) : current,
       );
       return true;
     } catch (error) {
       setSession((current) =>
-        current?.key === session.key
+        current?.id === session.id
           ? { ...current, pending: false, errors: { _form: runtimeError(error) } }
           : current,
       );
@@ -154,29 +164,15 @@ export function useBlockEditor({
     }
   }, [editableFieldIds, fieldsById, saveValues, session]);
 
+  useEffect(() => {
+    if (!session?.dirty || session.pending || session.autoSaveDelayMs === null) return;
+    const timer = window.setTimeout(() => {
+      void save();
+    }, session.autoSaveDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [save, session?.autoSaveDelayMs, session?.dirty, session?.pending, session?.values]);
+
   const cancel = useCallback(() => setSession(null), []);
-
-  const requestClose = useCallback(() => {
-    if (!session) return "closed" as const;
-    if (!session.dirty) {
-      setSession(null);
-      return "closed" as const;
-    }
-    setSession((current) =>
-      current ? { ...current, confirmClose: true, pendingOpen: null } : current,
-    );
-    return "confirm-discard" as const;
-  }, [session]);
-
-  const discard = useCallback(() => {
-    setSession((current) => current?.pendingOpen ?? null);
-  }, []);
-
-  const continueEditing = useCallback(() => {
-    setSession((current) =>
-      current ? { ...current, confirmClose: false, pendingOpen: null } : current,
-    );
-  }, []);
 
   return {
     key: session?.key ?? null,
@@ -185,14 +181,9 @@ export function useBlockEditor({
     dirty: session?.dirty ?? false,
     pending: session?.pending ?? false,
     errors: session?.errors ?? emptyErrors,
-    confirmClose: session?.confirmClose ?? false,
-    open,
-    update,
-    save,
+    openField,
+    updateAndSave,
     cancel,
-    requestClose,
-    discard,
-    continueEditing,
   };
 }
 
@@ -205,6 +196,7 @@ function createSession(
   initial: Record<string, unknown>,
   fieldsById: ReadonlyMap<string, FormFieldRead>,
   editableFieldIds: ReadonlySet<string>,
+  id: number,
 ): BlockEditorSession {
   const initialValues: Record<string, FieldEditorState> = {};
   for (const [fieldId, value] of Object.entries(initial)) {
@@ -219,6 +211,7 @@ function createSession(
     initialValues[fieldId] = initialEditorValue({ field_type: field.field_type, value });
   }
   return {
+    id,
     key: blockEditorKey(target.blockId, target.blockInstanceId),
     target,
     initialValues,
@@ -226,8 +219,8 @@ function createSession(
     dirty: false,
     pending: false,
     errors: {},
-    confirmClose: false,
     pendingOpen: null,
+    autoSaveDelayMs: null,
   };
 }
 

@@ -11,7 +11,8 @@ export type InlineFieldEditorProps = {
   referenceLists?: ReferenceListRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   onCommit: (field: FormFieldRead) => void;
-  onCancel: () => void;
+  onClose: () => void;
+  onDelete: () => void;
 };
 
 export function InlineFieldEditor({
@@ -19,7 +20,8 @@ export function InlineFieldEditor({
   referenceLists = [],
   inlineReferenceEditorContext,
   onCommit,
-  onCancel,
+  onClose,
+  onDelete,
 }: InlineFieldEditorProps) {
   const rootRef = useRef<HTMLFormElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
@@ -80,7 +82,7 @@ export function InlineFieldEditor({
     }
     event.preventDefault();
     event.stopPropagation();
-    onCancel();
+    onClose();
   }
 
   const usesReferenceList = draft.field_type === "select" || draft.field_type === "multi_select";
@@ -167,7 +169,6 @@ export function InlineFieldEditor({
                   ? null
                   : draft.options_config_json,
               is_list_display: staticTextField ? false : draft.is_list_display,
-              public_editable: staticTextField ? false : draft.public_editable,
             });
           }}
         >
@@ -264,29 +265,6 @@ export function InlineFieldEditor({
           />
         </label>
       ) : null}
-      <details aria-label="Публичное редактирование">
-        <summary>Публичное редактирование</summary>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={draft.public_visible}
-            onChange={(event) =>
-              setDraft({ ...draft, public_visible: event.currentTarget.checked })
-            }
-          />
-          <span>Видно в публичной ссылке</span>
-        </label>
-        <label className="checkbox-inline">
-          <input
-            type="checkbox"
-            checked={draft.public_editable}
-            onChange={(event) =>
-              setDraft({ ...draft, public_editable: event.currentTarget.checked })
-            }
-          />
-          <span>Доступно для публичного редактирования</span>
-        </label>
-      </details>
       <details>
         <summary>Ещё</summary>
         <label className="checkbox-inline">
@@ -304,8 +282,8 @@ export function InlineFieldEditor({
         <button type="submit" className="primary-button">
           Сохранить
         </button>
-        <button type="button" className="ghost-button" onClick={onCancel}>
-          Отмена
+        <button type="button" className="danger-button" onClick={onDelete}>
+          Удалить поле
         </button>
       </div>
     </form>

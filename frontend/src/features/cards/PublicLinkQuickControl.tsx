@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { createPublicLink } from "@/api/client";
 import type {
   CardTemplateLayoutRead,
+  CardPublicAccessRead,
   FormBlockRead,
   FormFieldRead,
   PublicLinkTokenRead,
@@ -12,23 +13,32 @@ import { uiText } from "@/app/uiText";
 import { errorText } from "@/components/common/dataUtils";
 
 import { PublicLinkReviewPanel } from "./PublicLinkReviewPanel";
-import { eligiblePublicLinkSchema } from "./publicLinkSchema";
 
 export function PublicLinkQuickControl({
   blocks,
   cardId,
   fields,
   layout,
+  publicAccess = null,
   token,
 }: {
   blocks: FormBlockRead[];
   cardId: string;
   fields: FormFieldRead[];
   layout: CardTemplateLayoutRead | null;
+  publicAccess?: CardPublicAccessRead | null;
   token: string;
 }) {
   const queryClient = useQueryClient();
-  const eligible = useMemo(() => eligiblePublicLinkSchema(blocks, fields), [blocks, fields]);
+  const eligibleFieldIds = useMemo(
+    () =>
+      new Set(
+        publicAccess?.fields
+          .filter((field) => field.public_visible)
+          .map((field) => field.field_id) ?? [],
+      ),
+    [publicAccess?.fields],
+  );
   const [created, setCreated] = useState<PublicLinkTokenRead | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const createMutation = useMutation({
@@ -37,8 +47,6 @@ export function PublicLinkQuickControl({
         expires_in_days: 7,
         max_attachment_uploads: null,
         review_enabled: true,
-        allowed_block_ids: eligible.blocks.map((block) => block.id),
-        allowed_field_ids: eligible.fields.map((field) => field.id),
       }),
     onSuccess: async (nextCreated) => {
       setCreated(nextCreated);
@@ -46,7 +54,7 @@ export function PublicLinkQuickControl({
       await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
     },
   });
-  const canCreate = eligible.blocks.length > 0 && eligible.fields.length > 0;
+  const canCreate = Boolean(publicAccess?.public_view_enabled && eligibleFieldIds.size > 0);
   const url = created ? publicLinkEditUrl(created.raw_token) : null;
 
   async function copyUrl() {
