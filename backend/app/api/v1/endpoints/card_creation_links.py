@@ -18,6 +18,13 @@ from app.schemas.card_creation_links import (
     CardCreationLinkPublicPreviewRequest,
     CardCreationLinkRead,
 )
+from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
+from app.schemas.public_links import (
+    PublicLinkPreviewBlockInstanceRead,
+    PublicLinkPreviewBlockRead,
+    PublicLinkPreviewFieldRead,
+    PublicLinkPreviewOptionRead,
+)
 from app.services.card_creation_links import (
     CardCreationLinkCardValue,
     CardCreationLinkError,
@@ -197,18 +204,57 @@ def _card_to_read(value: CardCreationLinkCardValue) -> CardCreationLinkCreatedCa
 def _public_preview_to_read(
     value: CardCreationLinkPublicPreviewValue,
 ) -> CardCreationLinkPublicPreviewRead:
-    return CardCreationLinkPublicPreviewRead.model_validate(
-        {
-            "card_template_id": value.card_template_id,
-            "card_template_name": value.card_template_name,
-            "selected_organization_id": value.selected_organization_id,
-            "organizations": [
-                CardCreationLinkOrganizationRead(id=item.id, name=item.name)
-                for item in value.organizations
-            ],
-            "form_layout": value.form_layout,
-            "blocks": value.blocks,
-        }
+    return CardCreationLinkPublicPreviewRead(
+        card_template_id=value.card_template_id,
+        card_template_name=value.card_template_name,
+        selected_organization_id=value.selected_organization_id,
+        organizations=[
+            CardCreationLinkOrganizationRead(id=item.id, name=item.name)
+            for item in value.organizations
+        ],
+        form_layout=CardTemplateFormLayoutRead.model_validate(value.form_layout),
+        blocks=[
+            PublicLinkPreviewBlockRead(
+                block_id=block.block_id,
+                code=block.code,
+                title=block.title,
+                is_repeatable=block.is_repeatable,
+                layout_columns=block.layout_columns,
+                display_config_json=block.display_config_json,
+                instances=[
+                    PublicLinkPreviewBlockInstanceRead(
+                        block_instance_id=instance.block_instance_id,
+                        ordinal=instance.ordinal,
+                        fields=[
+                            PublicLinkPreviewFieldRead(
+                                field_id=field.field_id,
+                                code=field.code,
+                                label=field.label,
+                                description=field.description,
+                                field_type=field.field_type,
+                                required_mode=field.required_mode,
+                                value=field.value,
+                                options_source_type=field.options_source_type,
+                                options_source_id=field.options_source_id,
+                                options_config_json=field.options_config_json,
+                                display_config_json=field.display_config_json,
+                                options=[
+                                    PublicLinkPreviewOptionRead(
+                                        id=option.id,
+                                        code=option.code,
+                                        label=option.label,
+                                    )
+                                    for option in field.options
+                                ],
+                            )
+                            for field in instance.fields
+                        ],
+                    )
+                    for instance in block.instances
+                ],
+            )
+            for block in value.blocks
+        ],
     )
 
 
