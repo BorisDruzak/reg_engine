@@ -4705,8 +4705,8 @@ Production release evidence:
 
 #### Card-specific public access and inline field workspace
 
-Status: implemented locally; release, production migration, card-data cleanup,
-and live Browser proof are pending.
+Status: completed on `main`, pushed to GitHub, deployed to the server,
+production-migrated, and live Browser verified.
 
 - Public visibility and editability are now configured per card through the
   dedicated card access API. Public links dynamically use those current card
@@ -4727,13 +4727,47 @@ and live Browser proof are pending.
   behind the archived field and no longer appear in cards.
 - The template editor no longer exposes public visibility/editability controls;
   those settings belong to each card's base block.
-- Local verification passed with the backend virtual environment: targeted
-  public-access, public-link, migration and field-archive tests; Ruff, Ruff
-  format and mypy. Frontend TypeScript, ESLint, the full Vitest suite and the
-  production Vite build passed. The test database is not configured locally, so
-  production migration and destructive data cleanup require the planned remote
-  backup/preflight gate before release.
+- Verification: backend virtual environment reports `233 passed / 201 skipped`;
+  Ruff, Ruff format, and mypy pass. Frontend ESLint, TypeScript, the focused
+  card layout/renderer/template/public-link suites, the stale-selected-card
+  regression test, and the Vite production build pass. The legacy broad
+  `App.test.tsx` still contains historical expectations for the intentionally
+  removed block-edit and action-panel controls, so it is not reported as a
+  green full-suite gate. Scoped Prettier passes for changed files; the global
+  check still reports four unrelated pre-existing frontend files.
 - Design and execution records:
   `docs/superpowers/specs/2026-07-11-card-public-access-and-inline-editing-design.md`
   and
   `docs/superpowers/plans/2026-07-11-card-public-access-and-inline-editing.md`.
+
+Production release and cleanup evidence:
+
+- Migration `0024_card_public_access` was first upgraded against the isolated
+  `reg_engine_migration_test` database, where `card_public_field_settings`
+  was present and Alembic reported head. Before the production upgrade, a fresh
+  server-side backup was created, schema/preflight counts were recorded, and
+  the active production revision was `0023_public_link_review`.
+- Production was upgraded to `0024_card_public_access`. The user then approved
+  removal of all existing cards and their public links. One transaction removed
+  the seven cards and dependent card values, block instances, attachments,
+  generated documents, and two public links; public-link actor references in
+  audit events were cleared first. Users, organisations, and card templates
+  were retained. The post-transaction count for cards, public links, field
+  values, block instances, attachments, generated documents, and card
+  relations was zero. Stored files remain under the existing retention policy.
+- Code was released through `88e8d139` and the stale-selection safeguard
+  `0bca2f5d`. The server checkout tracks `origin/main` at `0bca2f5d`.
+  `scripts/deploy-frontend.ps1` published
+  `/assets/index-CgXtZmug.js`, restarted the API service, and passed the
+  same-origin frontend/API smoke check; `scripts/deploy.ps1` then passed server
+  checkout, PostgreSQL, attachment-storage, and API health checks.
+
+Live Browser proof:
+
+- A cache-busting reload at `?release=0bca2f5d` loaded the published bundle.
+  The browser intentionally retained an identifier of a deleted card from
+  before the cleanup. The `Карточки` workspace nevertheless rendered its
+  selected `Список карточек`, the `Создать карточку` control, and `Нет данных`,
+  without `Запрос не выполнен` or a request for that removed card.
+- No new production card was created solely for this smoke check, preserving
+  the requested empty-card state.
