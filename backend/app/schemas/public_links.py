@@ -21,7 +21,7 @@ class PublicLinkTokenRead(BaseModel):
     raw_token: str
     status: str
     can_edit: bool
-    expires_at: datetime
+    expires_at: datetime | None
     review_enabled: bool
 
 
@@ -31,7 +31,7 @@ class PublicLinkRead(BaseModel):
     status: str
     can_view: bool
     can_edit: bool
-    expires_at: datetime
+    expires_at: datetime | None
     max_uses: int | None
     used_count: int
     max_attachment_uploads: int | None
@@ -119,7 +119,7 @@ class PublicLinkPreviewBlockRead(BaseModel):
 class PublicLinkPreviewRead(BaseModel):
     card_id: UUID
     display_name: str
-    expires_at: datetime
+    expires_at: datetime | None
     can_edit: bool
     form_layout: CardTemplateFormLayoutRead
     blocks: list[PublicLinkPreviewBlockRead]

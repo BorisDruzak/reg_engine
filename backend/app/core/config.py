@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     allow_dev_actor_header: bool = False
     auth_token_secret: str = DEVELOPMENT_AUTH_TOKEN_SECRET
     auth_access_token_minutes: int = 480
+    public_link_token_encryption_key: str | None = Field(
+        default=None,
+        validation_alias="REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY",
+    )
     cors_allowed_origins: str = ""
     storage_backend: str = Field(
         default="local_filesystem",
@@ -85,6 +89,12 @@ def validate_runtime_configuration(settings: Settings) -> None:
     if settings.auth_token_secret == DEVELOPMENT_AUTH_TOKEN_SECRET:
         raise RuntimeError(
             "AUTH_TOKEN_SECRET must be set to a non-development value when APP_ENV is "
+            f"production-like ({settings.app_env})."
+        )
+
+    if not settings.public_link_token_encryption_key:
+        raise RuntimeError(
+            "REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY must be set when APP_ENV is "
             f"production-like ({settings.app_env})."
         )
 

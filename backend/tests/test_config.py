@@ -55,6 +55,21 @@ def test_production_like_app_requires_attachment_allowed_types(monkeypatch) -> N
         get_settings.cache_clear()
 
 
+def test_production_like_app_requires_public_link_token_encryption_key(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_TOKEN_SECRET", "not-the-development-secret")
+    monkeypatch.setenv("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", "application/pdf")
+    monkeypatch.delenv("REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
+    get_settings.cache_clear()
+
+    try:
+        with pytest.raises(RuntimeError, match="REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY"):
+            create_app()
+    finally:
+        get_settings.cache_clear()
+
+
 def test_unsupported_malware_scanner_mode_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("REG_ENGINE_MALWARE_SCANNER", "clamav")

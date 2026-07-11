@@ -109,7 +109,7 @@ class PublicPreviewBlock:
 class PublicLinkPreview:
     card_id: UUID
     display_name: str
-    expires_at: datetime
+    expires_at: datetime | None
     can_edit: bool
     form_layout: dict[str, Any]
     blocks: list[PublicPreviewBlock] = field(default_factory=list)
@@ -692,6 +692,7 @@ class PublicLinkService:
     def _expire_if_needed(self, public_link: CardPublicLink) -> bool:
         if (
             public_link.status in EXPIRABLE_PUBLIC_LINK_STATUSES
+            and public_link.expires_at is not None
             and public_link.expires_at <= datetime.now(UTC)
         ):
             old_status = public_link.status

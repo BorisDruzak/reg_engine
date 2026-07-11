@@ -9,6 +9,11 @@ from app.models.card import (
     FieldValue,
     FieldValueItem,
 )
+from app.models.card_creation_link import (
+    CardCreationLink,
+    CardCreationLinkCard,
+    CardCreationLinkOrganization,
+)
 from app.models.document import DocumentTemplate, DocumentTemplateVersion, GeneratedDocument
 from app.models.identity import Permission, Role, User, role_permissions
 from app.models.organization import AccessGrant, Organization, OrganizationClosure, OrgUnit
@@ -22,6 +27,9 @@ __all__ = [
     "AuditEvent",
     "Base",
     "Card",
+    "CardCreationLink",
+    "CardCreationLinkCard",
+    "CardCreationLinkOrganization",
     "CardAttachment",
     "CardBlockInstance",
     "CardPublicFieldSetting",

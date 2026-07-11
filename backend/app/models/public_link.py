@@ -52,7 +52,7 @@ class CardPublicLink(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     status: Mapped[str] = mapped_column(String, nullable=False, server_default="active")
     can_view: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     can_edit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
     used_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     max_attachment_uploads: Mapped[int | None] = mapped_column(Integer, nullable=True)

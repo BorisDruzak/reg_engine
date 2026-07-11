@@ -18,6 +18,7 @@ dependencies = [
     "python-multipart>=0.0.20,<1.0",
     "openpyxl>=3.1,<4.0",
     "reportlab>=4.2,<5.0",
+    "cryptography>=43,<46",
 ]
 
 [project.scripts]

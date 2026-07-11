@@ -38,6 +38,9 @@ EXPECTED_TABLES = {
     "card_attachments",
     "card_public_field_settings",
     "card_public_links",
+    "card_creation_link_cards",
+    "card_creation_link_organizations",
+    "card_creation_links",
     "card_relations",
     "card_templates",
     "cards",
@@ -135,6 +138,26 @@ def test_card_public_access_migration_creates_field_scope_table() -> None:
         or "CREATE TABLE public.card_public_field_settings" in sql
     )
     assert "uq_card_public_field_settings_card_field" in sql
+
+
+def test_card_creation_link_migration_creates_normalized_tables_and_indefinite_links() -> None:
+    sql = _render_upgrade_sql("head")
+
+    assert "0027_card_creation_links" in sql
+    assert (
+        "CREATE TABLE card_creation_links" in sql
+        or "CREATE TABLE public.card_creation_links" in sql
+    )
+    assert (
+        "CREATE TABLE card_creation_link_organizations" in sql
+        or "CREATE TABLE public.card_creation_link_organizations" in sql
+    )
+    assert (
+        "CREATE TABLE card_creation_link_cards" in sql
+        or "CREATE TABLE public.card_creation_link_cards" in sql
+    )
+    assert "uq_card_creation_links_token_hash" in sql
+    assert "ALTER COLUMN expires_at DROP NOT NULL" in sql
 
 
 def test_alembic_revision_ids_fit_version_table_limit() -> None:
