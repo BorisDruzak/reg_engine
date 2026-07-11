@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 14:37:02 +05:00
+- Generated: 2026-07-11 16:51:49 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -210,6 +210,7 @@
 - `docs/superpowers/plans/2026-07-11-card-layout-navigation-hover.md`
 - `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
 - `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`
+- `docs/superpowers/plans/2026-07-11-role-aware-card-workspace.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -219,6 +220,7 @@
 - `docs/superpowers/specs/2026-07-11-card-layout-navigation-hover-design.md`
 - `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
 - `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
+- `docs/superpowers/specs/2026-07-11-role-aware-card-workspace-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -268,7 +270,12 @@
 - `frontend/src/features/cards/.gitkeep`
 - `frontend/src/features/cards/BlockFieldControl.tsx`
 - `frontend/src/features/cards/CardAttachmentsPanel.tsx`
+- `frontend/src/features/cards/CardBlockNavigator.test.tsx`
+- `frontend/src/features/cards/CardBlockNavigator.tsx`
+- `frontend/src/features/cards/cardCompletion.test.ts`
+- `frontend/src/features/cards/cardCompletion.ts`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
+- `frontend/src/features/cards/CardPresentationShell.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/CardTagSearchBar.tsx`
 - `frontend/src/features/cards/FieldEditorControl.test.tsx`
@@ -278,8 +285,11 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/PublicLinkQuickControl.test.tsx`
+- `frontend/src/features/cards/PublicLinkQuickControl.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.tsx`
+- `frontend/src/features/cards/publicLinkSchema.ts`
 - `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`

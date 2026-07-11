@@ -4651,3 +4651,36 @@ Live Browser proof:
   was no horizontal overflow.
 - The published page had no framework error overlay and no browser console
   warnings or errors.
+
+#### Role-aware card document workspace
+
+Status: implementation complete locally; release verification and Browser proof pending.
+
+- Card blocks and fields now expose schema-driven completion states: filled,
+  required-missing, and optional empty. The calculation treats whitespace and
+  empty arrays as empty while retaining valid `false` and `0` values.
+- Authenticated and public cards share a contents navigator. It anchors every
+  rendered block, follows the visible block when supported by the browser, and
+  preserves individual repeatable-block instance values and anchors.
+- The navigator is sticky beside the card on desktop and moves above the card
+  in normal page flow at the mobile breakpoint. The document remains the
+  primary scroll container.
+- Public autosave changes a completion status only after the server confirms
+  the saved value. Public attachments remain after card fields and before the
+  submit-for-review panel.
+- The card workspace hides the former print, documents, history, public-link,
+  and attachments tabs. Attachments render as the following document block.
+  Download is a single menu with DOCX and PDF entries.
+- `Публичная ссылка` now creates the eligible schema scope in one click with a
+  7-day lifetime, unlimited attachment uploads, and review enabled. If no
+  eligible field exists, the control is disabled with an explanatory Russian
+  message and no creation POST. Existing lifecycle/review controls remain in
+  its compact disclosure.
+- No API, database, or migration change is required. `pnpm -C frontend lint`,
+  `pnpm -C frontend typecheck`, renderer (`62` tests), completion/navigation/
+  authenticated-card/public-link/lifecycle (`48` tests), public-card (`22`
+  tests), production build, and project-map checks pass. The verified bundle
+  is `index-BpmgzmRa.js` (`572.05 kB`, `163.91 kB` gzip) with
+  `index-6oRVKE6Y.css` (`68.52 kB`, `12.29 kB` gzip). The older broad
+  `App.test.tsx` expectations for the removed workspace tabs still require
+  replacement, so they are not reported as a passing suite.
