@@ -4884,8 +4884,8 @@ Production release evidence:
 
 #### Reuse technical codes of archived form fields
 
-Status: implementation complete; disposable PostgreSQL migration and
-production rollout pending.
+Status: completed on `main`, pushed, production-migrated, deployed, and
+Browser verified.
 
 - An archived form field must not reserve its technical code. Active and
   non-archived fields remain unique within the registry; archived rows retain
@@ -4896,3 +4896,18 @@ production rollout pending.
   its registry-wide friendly duplicate check.
 - Focused unit and metadata tests pass locally; the existing PostgreSQL API
   scenario now archives a field and creates a replacement with the same code.
+- The disposable `reg_engine_migration_test` database was upgraded to head and
+  ran `backend/tests/test_api_phase_1g.py` successfully (`9 passed`). It
+  confirmed the partial index predicate and the API archive-then-recreate
+  scenario against PostgreSQL.
+- Production was at `0025_three_role_access` with zero unarchived duplicate
+  `(block_id, code)` pairs. A fresh backup was written outside Git to
+  `/var/backups/reg_engine/reg_engine_before_0026_20260711_192411.dump`
+  (SHA-256 `da8c553bd13ecadd964ef90d406d4d40b1a23bb473372b3601826873f356eac3`).
+  Migration `0026_reuse_archived_field_codes` was then applied; Alembic
+  reports head, the production partial index was verified, and
+  `reg-engine.service` plus `/api/v1/health` are healthy.
+- A cache-busting Browser check at `?release=cd89a2e9` opened the template
+  layout editor without the previous duplicate-code message. The real
+  create/archive/recreate write path is covered on the disposable PostgreSQL
+  database so the active user draft was not altered during visual QA.
