@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
@@ -1921,10 +1922,11 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.getByLabelText("Подсказка")).toHaveValue("Укажите полное значение");
 
     const mandatory = screen.getByLabelText("Обязательность");
-    expect(within(mandatory).getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "Необязательное поле",
-      "Обязательное поле",
-    ]);
+    expect(
+      within(mandatory)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Необязательное поле", "Обязательное поле"]);
     expect(mandatory).toHaveValue("required_on_publish");
 
     const publicSettings = screen.getByText("Публичное редактирование").closest("details");
@@ -1987,6 +1989,93 @@ describe("CardWebLayoutCanvas", () => {
         options_source_id: "reference-statuses",
       }),
     );
+  });
+
+  test("keeps the field draft while opening and leaving inline reference creation", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CardWebLayoutCanvas
+          {...canvasProps({
+            onCommitField,
+            inlineReferenceEditorContext: {
+              token: "token",
+              registryId: "registry-1",
+              onReferenceDataChanged: vi.fn(),
+            },
+          })}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    await user.clear(screen.getByLabelText("Название поля"));
+    await user.type(screen.getByLabelText("Название поля"), "Статус заявки");
+    await user.type(screen.getByLabelText("Подсказка"), "Выберите статус");
+    await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
+    await user.click(screen.getByRole("button", { name: "Создать новый" }));
+
+    expect(
+      screen.getByRole("region", { name: "Редактор справочника для поля" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("card-layout-canvas"));
+    expect(onCommitField).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Назад" }));
+    expect(screen.getByLabelText("Название поля")).toHaveValue("Статус заявки");
+    expect(screen.getByLabelText("Подсказка")).toHaveValue("Выберите статус");
+  });
+
+  test("opens a newly created reference list for management immediately", async () => {
+    const user = userEvent.setup();
+    const createdReferenceList = {
+      id: "reference-created",
+      registry_id: "registry-1",
+      owner_organization_id: null,
+      code: "statusy",
+      name: "Статусы",
+      description: null,
+      inherit_to_descendants: false,
+      locked_for_descendants: false,
+      managed_by_system_only: false,
+      is_active: true,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "POST"
+          ? Response.json(createdReferenceList)
+          : Response.json({ items: [] }),
+      ),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CardWebLayoutCanvas
+          {...canvasProps({
+            inlineReferenceEditorContext: {
+              token: "token",
+              registryId: "registry-1",
+              onReferenceDataChanged: vi.fn(),
+            },
+          })}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    await user.selectOptions(screen.getByLabelText("Тип поля"), "select");
+    await user.click(screen.getByRole("button", { name: "Создать новый" }));
+    await user.type(screen.getByLabelText("Название справочника"), "Статусы");
+    await user.click(screen.getByRole("button", { name: "Создать справочник" }));
+
+    expect(await screen.findByDisplayValue("Статусы")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Назад" }));
+    expect(screen.getByLabelText("Справочник")).toHaveValue(createdReferenceList.id);
   });
 
   test("commits a valid field on click-away and keeps invalid fields focused", async () => {

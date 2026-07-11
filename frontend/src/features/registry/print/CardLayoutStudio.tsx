@@ -1108,6 +1108,12 @@ function CardLayoutStudioSession({
           blocks={allBlocks}
           fields={allFields}
           referenceLists={effectiveReferenceLists}
+          inlineReferenceEditorContext={{
+            token,
+            registryId,
+            onReferenceDataChanged: () =>
+              queryClient.invalidateQueries({ queryKey: ["reference-lists", token, registryId] }),
+          }}
           mode="design"
           selection={selection}
           onSelectionChange={setSelection}

@@ -4,9 +4,12 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { FormFieldRead, ReferenceListRead } from "@/api/types";
 import { FIELD_TYPE_OPTIONS } from "@/app/uiText";
 
+import { InlineReferenceEditor, type InlineReferenceEditorContext } from "./InlineReferenceEditor";
+
 export type InlineFieldEditorProps = {
   field: FormFieldRead;
   referenceLists?: ReferenceListRead[];
+  inlineReferenceEditorContext?: InlineReferenceEditorContext;
   onCommit: (field: FormFieldRead) => void;
   onCancel: () => void;
 };
@@ -14,12 +17,17 @@ export type InlineFieldEditorProps = {
 export function InlineFieldEditor({
   field,
   referenceLists = [],
+  inlineReferenceEditorContext,
   onCommit,
   onCancel,
 }: InlineFieldEditorProps) {
   const rootRef = useRef<HTMLFormElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(field);
+  const [inlineReferenceList, setInlineReferenceList] = useState<ReferenceListRead | null>(null);
+  const [editorScreen, setEditorScreen] = useState<
+    "field" | "create-reference" | "manage-reference"
+  >("field");
   const [errors, setErrors] = useState<{ label?: string }>({});
 
   const commitIfValid = useCallback(() => {
@@ -46,6 +54,9 @@ export function InlineFieldEditor({
 
   useEffect(() => {
     const handleClickAway = (event: MouseEvent) => {
+      if (editorScreen !== "field") {
+        return;
+      }
       if (rootRef.current?.contains(event.target as Node)) {
         return;
       }
@@ -56,7 +67,7 @@ export function InlineFieldEditor({
     };
     document.addEventListener("click", handleClickAway, true);
     return () => document.removeEventListener("click", handleClickAway, true);
-  }, [commitIfValid]);
+  }, [commitIfValid, editorScreen]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,10 +84,37 @@ export function InlineFieldEditor({
   }
 
   const usesReferenceList = draft.field_type === "select" || draft.field_type === "multi_select";
+  const effectiveReferenceLists = inlineReferenceList
+    ? [
+        inlineReferenceList,
+        ...referenceLists.filter((referenceList) => referenceList.id !== inlineReferenceList.id),
+      ]
+    : referenceLists;
   const staticText =
     typeof draft.options_config_json?.static_text === "string"
       ? draft.options_config_json.static_text
       : "";
+
+  if (editorScreen !== "field" && inlineReferenceEditorContext) {
+    return (
+      <InlineReferenceEditor
+        context={inlineReferenceEditorContext}
+        referenceLists={effectiveReferenceLists}
+        selectedReferenceListId={draft.options_source_id}
+        mode={editorScreen === "create-reference" ? "create" : "manage"}
+        onSelect={(referenceList) => {
+          setInlineReferenceList(referenceList);
+          setDraft({
+            ...draft,
+            options_source_type: "reference_list",
+            options_source_id: referenceList.id,
+          });
+          setEditorScreen("manage-reference");
+        }}
+        onBack={() => setEditorScreen("field")}
+      />
+    );
+  }
 
   return (
     <form
@@ -154,9 +192,7 @@ export function InlineFieldEditor({
               value={
                 draft.required_mode === "not_required" ? "not_required" : "required_on_publish"
               }
-              onChange={(event) =>
-                setDraft({ ...draft, required_mode: event.currentTarget.value })
-              }
+              onChange={(event) => setDraft({ ...draft, required_mode: event.currentTarget.value })}
             >
               <option value="not_required">Необязательное поле</option>
               <option value="required_on_publish">Обязательное поле</option>
@@ -165,28 +201,50 @@ export function InlineFieldEditor({
         </>
       ) : null}
       {usesReferenceList ? (
-        <label>
-          <span>Справочник</span>
-          <select
-            value={draft.options_source_id ?? ""}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                options_source_type: event.currentTarget.value ? "reference_list" : null,
-                options_source_id: event.currentTarget.value || null,
-              })
-            }
-          >
-            <option value="">Не выбран</option>
-            {referenceLists
-              .filter((referenceList) => referenceList.is_active)
-              .map((referenceList) => (
-                <option key={referenceList.id} value={referenceList.id}>
-                  {referenceList.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        <div className="inline-reference-field-settings">
+          <label>
+            <span>Справочник</span>
+            <select
+              value={draft.options_source_id ?? ""}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  options_source_type: event.currentTarget.value ? "reference_list" : null,
+                  options_source_id: event.currentTarget.value || null,
+                })
+              }
+            >
+              <option value="">Не выбран</option>
+              {effectiveReferenceLists
+                .filter((referenceList) => referenceList.is_active)
+                .map((referenceList) => (
+                  <option key={referenceList.id} value={referenceList.id}>
+                    {referenceList.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {inlineReferenceEditorContext ? (
+            <div className="row-actions inline-reference-field-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setEditorScreen("create-reference")}
+              >
+                Создать новый
+              </button>
+              {draft.options_source_id ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setEditorScreen("manage-reference")}
+                >
+                  Изменить выбранный
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {draft.field_type === "static_text" ? (
         <label>
@@ -211,7 +269,9 @@ export function InlineFieldEditor({
           <input
             type="checkbox"
             checked={draft.public_visible}
-            onChange={(event) => setDraft({ ...draft, public_visible: event.currentTarget.checked })}
+            onChange={(event) =>
+              setDraft({ ...draft, public_visible: event.currentTarget.checked })
+            }
           />
           <span>Видно в публичной ссылке</span>
         </label>
@@ -219,7 +279,9 @@ export function InlineFieldEditor({
           <input
             type="checkbox"
             checked={draft.public_editable}
-            onChange={(event) => setDraft({ ...draft, public_editable: event.currentTarget.checked })}
+            onChange={(event) =>
+              setDraft({ ...draft, public_editable: event.currentTarget.checked })
+            }
           />
           <span>Доступно для публичного редактирования</span>
         </label>

@@ -10,6 +10,7 @@ import { formatValue, initialEditorValue } from "@/features/cards/fieldEditorUti
 
 import type { CardLayoutRendererMode, CardLayoutSelection } from "./CardLayoutRenderer";
 import { InlineFieldEditor } from "./InlineFieldEditor";
+import type { InlineReferenceEditorContext } from "./InlineReferenceEditor";
 import { snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect, ResizeHandle } from "./layoutGeometry";
 import type {
@@ -44,6 +45,7 @@ export type CardFieldLayoutNodeProps = {
   options?: FieldEditorOption[];
   fileRefOptions?: FieldEditorFileRefOption[];
   referenceLists?: ReferenceListRead[];
+  inlineReferenceEditorContext?: InlineReferenceEditorContext;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
@@ -65,6 +67,7 @@ export function CardFieldLayoutNode({
   options = [],
   fileRefOptions = [],
   referenceLists = [],
+  inlineReferenceEditorContext,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
   renderFieldValue,
@@ -339,6 +342,7 @@ export function CardFieldLayoutNode({
         <InlineFieldEditor
           field={retryDraft ?? field}
           referenceLists={referenceLists}
+          inlineReferenceEditorContext={inlineReferenceEditorContext}
           onCommit={(draft) => {
             setRetryDraft(draft);
             onSelect(null);

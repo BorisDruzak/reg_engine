@@ -18,6 +18,7 @@ import type {
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
 import { LayoutLivePreview } from "./LayoutLivePreview";
+import type { InlineReferenceEditorContext } from "./InlineReferenceEditor";
 import { QUARTER_COLUMN_SPANS, rectsOverlap, snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect } from "./layoutGeometry";
 import { applyLayoutGeometryPreview, useLayoutGeometrySession } from "./useLayoutGeometrySession";
@@ -45,6 +46,7 @@ export type CardWebLayoutCanvasProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  inlineReferenceEditorContext?: InlineReferenceEditorContext;
   responsive?: boolean;
   compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
@@ -78,6 +80,7 @@ function CardWebLayoutCanvasSession({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  inlineReferenceEditorContext,
   responsive = true,
   compactBlockHeight = true,
   showGeometryDiagnostics = false,
@@ -194,6 +197,7 @@ function CardWebLayoutCanvasSession({
             fieldOptions={fieldOptions}
             fileRefOptions={fileRefOptions}
             referenceLists={referenceLists}
+            inlineReferenceEditorContext={inlineReferenceEditorContext}
             compactBlockHeight={compactBlockHeight}
             showGeometryDiagnostics={showGeometryDiagnostics}
             testIdPrefix={testIdPrefix}

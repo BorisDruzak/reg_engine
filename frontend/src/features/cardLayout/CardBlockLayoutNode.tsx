@@ -16,6 +16,7 @@ import type {
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
 import { InlineBlockEditor } from "./InlineBlockEditor";
+import type { InlineReferenceEditorContext } from "./InlineReferenceEditor";
 import { snapQuarterRect } from "./layoutGeometry";
 import type { LayoutRect, ResizeHandle } from "./layoutGeometry";
 import type { LayoutGeometryControls, LayoutGeometryTarget } from "./useLayoutGeometrySession";
@@ -31,6 +32,7 @@ export type CardBlockLayoutNodeProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  inlineReferenceEditorContext?: InlineReferenceEditorContext;
   compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
@@ -57,6 +59,7 @@ export function CardBlockLayoutNode({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  inlineReferenceEditorContext,
   compactBlockHeight = true,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
@@ -174,6 +177,7 @@ export function CardBlockLayoutNode({
                   options={fieldOptions?.[valueKey]}
                   fileRefOptions={fileRefOptions?.[valueKey]}
                   referenceLists={referenceLists}
+                  inlineReferenceEditorContext={inlineReferenceEditorContext}
                   showGeometryDiagnostics={showGeometryDiagnostics}
                   testIdPrefix={testIdPrefix}
                   renderFieldValue={renderFieldValue}
