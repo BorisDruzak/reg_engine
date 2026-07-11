@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import {
@@ -23,7 +23,7 @@ import type {
   PublicLinkPreviewRead,
   PublicLinkSafeStatusRead,
 } from "@/api/types";
-import { fieldTypeLabel, formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
+import { formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
 import { errorText } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import { CardPresentationShell } from "@/features/cards/CardPresentationShell";
@@ -33,7 +33,6 @@ import { buildBlockCompletions, type CompletionResult } from "@/features/cards/c
 import {
   type FieldEditorState,
   coerceEditorValue,
-  formatValue,
   initialEditorValue,
 } from "@/features/cards/fieldEditorUtils";
 
@@ -428,6 +427,7 @@ function PublicCardLayoutSurface({
       <CardLayoutRenderer
         layout={surface.layout}
         mode="public-edit"
+        fieldPresentationLayout="inline"
         responsive
         testIdPrefix={surface.key === "primary" ? "public" : `public-${surface.key}`}
         blockPresentation={({ block }) => {
@@ -466,7 +466,6 @@ function PublicCardLayoutSurface({
               fieldKey={publicFieldKey(context)}
               blockInstanceId={context.blockInstanceId}
               field={context.field}
-              instanceOrdinal={context.instanceOrdinal}
               onLifecycleDenial={onLifecycleDenial}
               onSaveConfirmed={onFieldValueConfirmed}
               onSaveStateChange={onFieldSaveStateChange}
@@ -816,7 +815,6 @@ function PublicFieldEditor({
   rawToken,
   fieldKey,
   blockInstanceId,
-  instanceOrdinal,
   field,
   onLifecycleDenial,
   onSaveStateChange,
@@ -825,7 +823,6 @@ function PublicFieldEditor({
   rawToken: string;
   fieldKey: string;
   blockInstanceId: string | null;
-  instanceOrdinal: number;
   field: PublicLinkPreviewFieldRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
@@ -912,32 +909,15 @@ function PublicFieldEditor({
   }
 
   return (
-    <div
-      className={["field-editor-row", publicFieldLayoutClassName(field)].filter(Boolean).join(" ")}
-      style={publicFieldSpanStyle(field)}
-    >
-      <div className="field-editor-meta">
-        <strong>{field.label}</strong>
-        <span>
-          {instanceLabel(instanceOrdinal)} / {fieldTypeLabel(field.field_type)}
-        </span>
-        <span>
-          {uiText.currentValue}: {formatValue(field.value)}
-        </span>
-      </div>
-      <label className="field-editor-control">
-        <span>{field.label}</span>
-        <div className="field-editor-widget">
-          <FieldEditorControl
-            fieldType={field.field_type}
-            label={field.label}
-            hint={field.description}
-            options={field.options}
-            value={rawValue}
-            onChange={updateRawValue}
-          />
-        </div>
-      </label>
+    <div className="public-inline-field-control">
+      <FieldEditorControl
+        fieldType={field.field_type}
+        label={field.label}
+        hint={field.description}
+        options={field.options}
+        value={rawValue}
+        onChange={updateRawValue}
+      />
       {saveState === "saving" && <p className="public-muted">Сохранение…</p>}
       {localError && <p className="inline-alert">{localError}</p>}
       {saveState === "saved" && <p className="inline-success">Все изменения сохранены</p>}
@@ -945,51 +925,9 @@ function PublicFieldEditor({
   );
 }
 
-function publicFieldSpanStyle(field: PublicLinkPreviewFieldRead): CSSProperties {
-  const column = publicFieldLayoutColumn(field, 1);
-  const span = Math.min(publicFieldColumnSpan(field), maxVisualColumns - column + 1);
-  return {
-    "--field-editor-column": `${column} / span ${span}`,
-  } as CSSProperties;
-}
-
-function publicFieldLayoutClassName(field: PublicLinkPreviewFieldRead) {
-  const labelPosition = displayConfigString(field, "label_position", "top");
-  const separatorStyle = displayConfigString(field, "separator_style", "none");
-  return [
-    `field-editor-control--label-${labelPosition}`,
-    separatorStyle !== "none" ? `field-editor-control--separator-${separatorStyle}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
   const value = field.options_config_json?.static_text;
   return typeof value === "string" && value.trim() ? value : uiText.empty;
-}
-
-function displayConfigString(field: PublicLinkPreviewFieldRead, key: string, fallback: string) {
-  const value = field.display_config_json?.[key];
-  return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function displayConfigNumber(field: PublicLinkPreviewFieldRead, key: string, fallback: number) {
-  const value = field.display_config_json?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-const maxVisualColumns = 5;
-
-function publicFieldLayoutColumn(field: PublicLinkPreviewFieldRead, fallback: number) {
-  return Math.min(
-    maxVisualColumns,
-    Math.max(1, displayConfigNumber(field, "layout_column", fallback)),
-  );
-}
-
-function publicFieldColumnSpan(field: PublicLinkPreviewFieldRead) {
-  return Math.min(maxVisualColumns, Math.max(1, displayConfigNumber(field, "column_span", 1)));
 }
 
 function formatBytes(value: number) {

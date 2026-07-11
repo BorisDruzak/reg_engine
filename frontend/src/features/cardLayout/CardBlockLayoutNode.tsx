@@ -17,6 +17,7 @@ import type {
   CardLayoutBlockPresentation,
   CardLayoutFieldActivationHandler,
   CardLayoutFieldActivationRenderer,
+  CardLayoutFieldPresentationLayout,
   CardLayoutFieldPresentationRenderer,
   CardLayoutRendererMode,
   CardLayoutSelection,
@@ -46,6 +47,7 @@ export type CardBlockLayoutNodeProps = {
   renderBlockActions?: CardLayoutBlockActionsRenderer;
   blockPresentation?: CardLayoutBlockPresentation;
   fieldPresentation?: CardLayoutFieldPresentationRenderer;
+  fieldPresentationLayout?: CardLayoutFieldPresentationLayout;
   canActivateField?: CardLayoutFieldActivationRenderer;
   onActivateField?: CardLayoutFieldActivationHandler;
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
@@ -83,6 +85,7 @@ export function CardBlockLayoutNode({
   renderBlockActions,
   blockPresentation,
   fieldPresentation,
+  fieldPresentationLayout,
   canActivateField,
   onActivateField,
   canActivateBlock,
@@ -266,6 +269,7 @@ export function CardBlockLayoutNode({
                   presentation={
                     field ? fieldPresentation?.({ field, item, value, mode }) : undefined
                   }
+                  fieldPresentationLayout={fieldPresentationLayout}
                   canActivateField={canActivateField}
                   onActivateField={onActivateField}
                   onSelect={onSelect}

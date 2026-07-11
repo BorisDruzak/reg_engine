@@ -150,6 +150,20 @@ describe("FilledCardLayout", () => {
     );
   });
 
+  test("renders editable fields as inline controls", async () => {
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);
+
+    const fieldNode = screen.getByTestId("filled-field-layout-first-name");
+    expect(fieldNode.querySelector(".card-layout-inline-field")).not.toBeNull();
+    expect(within(fieldNode).queryByText("Текст", { exact: true })).not.toBeInTheDocument();
+    expect(fieldNode.querySelector(".card-inline-field-read-value")).toHaveTextContent("Иван");
+
+    await user.click(fieldNode);
+
+    expect(screen.getByRole("textbox", { name: "Имя" })).toHaveValue("Иван");
+  });
+
   test("opens only the field that was clicked and never shows a block edit action", async () => {
     const user = userEvent.setup();
     render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);

@@ -185,16 +185,6 @@ export function FilledCardLayout({
                 surfaceFieldValue(surface, field, valuesByInstance),
               ]),
             );
-            const renderedValues = Object.fromEntries(
-              fields.map((field) => [
-                field.id,
-                renderReadValue(
-                  field,
-                  surfaceFieldValue(surface, field, valuesByInstance),
-                  referenceOptions[field.id] ?? [],
-                ),
-              ]),
-            );
             const editorTarget =
               blockEditor?.target &&
               surface.blockInstanceIds.get(blockEditor.target.blockId) ===
@@ -232,10 +222,10 @@ export function FilledCardLayout({
                   blocks={blocks}
                   fields={fields}
                   mode={surfaceActiveBlock ? "block-edit" : "readonly"}
+                  fieldPresentationLayout="inline"
                   selection={
                     surfaceActiveBlock ? { kind: "block", id: surfaceActiveBlock.blockId } : null
                   }
-                  renderedValues={editorTarget ? undefined : renderedValues}
                   fieldValues={fieldValues}
                   responsive
                   showGeometryDiagnostics={false}
@@ -281,12 +271,19 @@ export function FilledCardLayout({
                       value,
                       referenceOptions[field.id] ?? [],
                     );
+                    const displayReadValue =
+                      editableFieldIds.has(field.id) &&
+                      !["file_ref", "static_text"].includes(field.field_type) ? (
+                        <div className="card-inline-field-read-value">{readValue}</div>
+                      ) : (
+                        readValue
+                      );
                     if (
                       mode !== "block-edit" ||
                       !blockEditor ||
                       editorTarget?.blockId !== field.block_id
                     ) {
-                      return readValue;
+                      return displayReadValue;
                     }
                     const editable = Object.prototype.hasOwnProperty.call(
                       blockEditor.values,
@@ -300,14 +297,14 @@ export function FilledCardLayout({
                         pending={blockEditor.pending}
                         error={blockEditor.errors[field.id]}
                         options={referenceOptions[field.id]}
-                        readValue={readValue}
+                        readValue={displayReadValue}
                         fileRefControl={
                           field.field_type === "file_ref" && editableFieldIds.has(field.id)
                             ? renderFileRefControl?.({
                                 field,
                                 blockInstanceId,
                                 value,
-                                readValue,
+                                readValue: displayReadValue,
                               })
                             : undefined
                         }

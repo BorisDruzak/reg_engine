@@ -129,7 +129,6 @@ git commit -m "Add inline card field presentation"
 
 **Files:**
 - Modify: `frontend/src/features/cards/FilledCardLayout.tsx`
-- Modify: `frontend/src/features/cards/BlockFieldControl.tsx`
 - Modify: `frontend/src/features/cards/FilledCardLayout.test.tsx`
 
 **Interfaces:**
@@ -155,12 +154,11 @@ Expected: FAIL because the current layout uses the stacked header/type card.
 
 - [ ] **Step 3: Implement the authenticated surface**
 
-Pass `fieldPresentationLayout="inline"` from `FilledCardLayout`. In
-`BlockFieldControl`, wrap non-editing ordinary read values in
-`card-inline-field-read-value` so it occupies the right control surface and
-still lets the existing field-node activation open the editor. Leave
-`file_ref`, static text, validation errors, and actual `FieldEditorControl`
-behaviour unchanged.
+Pass `fieldPresentationLayout="inline"` from `FilledCardLayout`. Wrap the
+normal ordinary read values there in `card-inline-field-read-value`, so they
+occupy the right control surface while the existing field-node activation opens
+the editor. Leave `BlockFieldControl`, `file_ref`, static text, validation
+errors, and actual `FieldEditorControl` behaviour unchanged.
 
 - [ ] **Step 4: Run the filled-card tests**
 
@@ -172,7 +170,7 @@ autosave, and immediate choice autosave.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add frontend/src/features/cards/FilledCardLayout.tsx frontend/src/features/cards/BlockFieldControl.tsx frontend/src/features/cards/FilledCardLayout.test.tsx
+git add frontend/src/features/cards/FilledCardLayout.tsx frontend/src/features/cards/FilledCardLayout.test.tsx
 git commit -m "Show authenticated card fields inline"
 ```
 

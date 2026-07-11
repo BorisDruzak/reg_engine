@@ -122,6 +122,19 @@ describe("PublicLinkEditPage", () => {
     expect(within(attachmentsPanel!).getByText("Нет файлов")).toBeInTheDocument();
   });
 
+  test("renders public fields as one inline label and control row", async () => {
+    renderPage();
+
+    const fieldNode = await screen.findByTestId("public-field-item-status");
+
+    expect(within(fieldNode).getAllByText("Публичный статус", { exact: true })).toHaveLength(1);
+    expect(within(fieldNode).getByRole("textbox", { name: "Публичный статус" })).toHaveValue(
+      "drafted",
+    );
+    expect(within(fieldNode).queryByText(/Текущее значение/)).not.toBeInTheDocument();
+    expect(within(fieldNode).queryByText(/экземпляр 1/i)).not.toBeInTheDocument();
+  });
+
   test.each(["explicit block allowlist", "legacy link"])(
     "renders static instructions from a %s preview without an editor",
     async (source) => {

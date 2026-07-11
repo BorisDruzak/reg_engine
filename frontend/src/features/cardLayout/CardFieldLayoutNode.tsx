@@ -12,6 +12,7 @@ import type {
   CardLayoutFieldActivationHandler,
   CardLayoutFieldActivationRenderer,
   CardLayoutFieldPresentation,
+  CardLayoutFieldPresentationLayout,
   CardLayoutRendererMode,
   CardLayoutSelection,
 } from "./CardLayoutRenderer";
@@ -56,6 +57,7 @@ export type CardFieldLayoutNodeProps = {
   testIdPrefix?: string;
   renderFieldValue?: (context: CardLayoutFieldRenderContext) => ReactNode;
   presentation?: CardLayoutFieldPresentation;
+  fieldPresentationLayout?: CardLayoutFieldPresentationLayout;
   canActivateField?: CardLayoutFieldActivationRenderer;
   onActivateField?: CardLayoutFieldActivationHandler;
   onSelect: (selection: CardLayoutSelection) => void;
@@ -81,6 +83,7 @@ export function CardFieldLayoutNode({
   testIdPrefix = "layout",
   renderFieldValue,
   presentation,
+  fieldPresentationLayout = "stacked",
   canActivateField,
   onActivateField,
   onSelect,
@@ -331,6 +334,36 @@ export function CardFieldLayoutNode({
     );
   }
 
+  const fieldValue = !designMode
+    ? blockValueEditing
+      ? defaultFieldValue({
+          field,
+          mode,
+          value,
+          options,
+          fileRefOptions,
+          valueEditing: blockValueEditing,
+          onFieldValueChange,
+        })
+      : renderedValue !== undefined
+        ? renderedValue
+        : renderFieldValue
+          ? renderFieldValue({ field, item, value, mode })
+          : defaultFieldValue({
+              field,
+              mode,
+              value,
+              options,
+              fileRefOptions,
+              valueEditing: blockValueEditing,
+              onFieldValueChange,
+            })
+    : null;
+  const inlineFieldPresentation =
+    fieldPresentationLayout === "inline" &&
+    !designMode &&
+    !["file_ref", "static_text"].includes(field.field_type);
+
   return (
     <article
       className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}${presentation?.state ? ` is-${presentation.state}` : ""}`}
@@ -413,6 +446,13 @@ export function CardFieldLayoutNode({
             onSelect(null);
           }}
         />
+      ) : inlineFieldPresentation ? (
+        <div className="card-layout-inline-field">
+          <header className="card-layout-field-header">
+            <strong>{field.label}</strong>
+          </header>
+          <div className="card-layout-field-value">{fieldValue}</div>
+        </div>
       ) : (
         <>
           <header className="card-layout-field-header">
@@ -421,33 +461,7 @@ export function CardFieldLayoutNode({
               <small>{fieldTypeLabel(field.field_type)}</small>
             </div>
           </header>
-          {!designMode ? (
-            <div className="card-layout-field-value">
-              {blockValueEditing
-                ? defaultFieldValue({
-                    field,
-                    mode,
-                    value,
-                    options,
-                    fileRefOptions,
-                    valueEditing: blockValueEditing,
-                    onFieldValueChange,
-                  })
-                : renderedValue !== undefined
-                  ? renderedValue
-                  : renderFieldValue
-                    ? renderFieldValue({ field, item, value, mode })
-                    : defaultFieldValue({
-                        field,
-                        mode,
-                        value,
-                        options,
-                        fileRefOptions,
-                        valueEditing: blockValueEditing,
-                        onFieldValueChange,
-                      })}
-            </div>
-          ) : null}
+          {!designMode ? <div className="card-layout-field-value">{fieldValue}</div> : null}
         </>
       )}
       {showGeometryDiagnostics ? (

@@ -1881,6 +1881,47 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.card-layout-inline-field {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 38px;
+}
+
+.card-layout-inline-field .card-layout-field-header {
+  display: block;
+  color: #101828;
+}
+
+.card-layout-inline-field .card-layout-field-value {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.card-inline-field-read-value {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #cfd8e5;
+  border-radius: 6px;
+  color: #344054;
+  background: #ffffff;
+}
+
+.public-inline-field-control {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.public-inline-field-control input,
+.public-inline-field-control select,
+.public-inline-field-control textarea {
+  width: 100%;
+}
+
 .filled-card-layout {
   display: grid;
   min-width: 0;
@@ -3098,6 +3139,11 @@ tr:last-child td {
   .card-layout-responsive-grid .card-layout-responsive-field-grid > .card-layout-field-node {
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
+  }
+
+  .card-layout-inline-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
 
   .filled-card-layout .card-layout-responsive-grid {

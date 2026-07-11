@@ -33,6 +33,8 @@ export type CardLayoutFieldPresentation = {
   description?: string;
 };
 
+export type CardLayoutFieldPresentationLayout = "stacked" | "inline";
+
 export type CardLayoutBlockPresentationRenderer = (
   context: CardLayoutBlockRenderContext,
 ) => CardLayoutBlockPresentation | undefined;

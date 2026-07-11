@@ -19,6 +19,7 @@ import type {
   CardLayoutBlockPresentationRenderer,
   CardLayoutFieldActivationHandler,
   CardLayoutFieldActivationRenderer,
+  CardLayoutFieldPresentationLayout,
   CardLayoutFieldPresentationRenderer,
   CardLayoutRendererMode,
   CardLayoutSelection,
@@ -61,6 +62,7 @@ export type CardWebLayoutCanvasProps = {
   renderBlockActions?: CardLayoutBlockActionsRenderer;
   blockPresentation?: CardLayoutBlockPresentationRenderer;
   fieldPresentation?: CardLayoutFieldPresentationRenderer;
+  fieldPresentationLayout?: CardLayoutFieldPresentationLayout;
   canActivateField?: CardLayoutFieldActivationRenderer;
   onActivateField?: CardLayoutFieldActivationHandler;
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
@@ -103,6 +105,7 @@ function CardWebLayoutCanvasSession({
   renderBlockActions,
   blockPresentation,
   fieldPresentation,
+  fieldPresentationLayout = "stacked",
   canActivateField,
   onActivateField,
   canActivateBlock,
@@ -229,6 +232,7 @@ function CardWebLayoutCanvasSession({
               renderBlockActions={renderBlockActions}
               blockPresentation={block ? blockPresentation?.({ block, section, mode }) : undefined}
               fieldPresentation={fieldPresentation}
+              fieldPresentationLayout={fieldPresentationLayout}
               canActivateField={canActivateField}
               onActivateField={onActivateField}
               canActivateBlock={canActivateBlock}

@@ -4911,3 +4911,24 @@ Browser verified.
   layout editor without the previous duplicate-code message. The real
   create/archive/recreate write path is covered on the disposable PostgreSQL
   database so the active user draft was not altered during visual QA.
+
+#### Inline public and administrator field rows
+
+Status: implementation and local verification complete; release and live Browser
+verification pending.
+
+- Publicly editable fields now render as one row: the field name is on the left
+  and the active field control is on the right. The duplicated instance/type and
+  current-value metadata is removed; the field hint remains inside the control.
+- The same inline presentation is used for ordinary editable administrator card
+  fields. Before activation the current value has an input-like surface; a
+  click opens the existing inline editor in that exact position, preserving the
+  current autosave delay and backend permission checks.
+- Static text, file references, public save-queue handling, attachment rules,
+  and all existing API/database/audit contracts are unchanged. Narrow screens
+  stack the label above the control.
+- Focused tests pass: `PublicLinkEditPage.test.tsx` (23),
+  `CardLayoutRenderer.test.tsx` (64), and `FilledCardLayout.test.tsx` (8).
+  Frontend TypeScript, ESLint, and the Vite production build also pass. ESLint
+  retains the pre-existing `FilledCardLayout` hook-dependency warning; Vite
+  retains its existing bundle-size advisory.

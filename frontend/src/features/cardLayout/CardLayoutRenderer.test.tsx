@@ -300,6 +300,26 @@ describe("CardWebLayoutCanvas", () => {
     );
   });
 
+  test("renders inline field presentation without type metadata", () => {
+    render(
+      <CardLayoutRenderer
+        {...({
+          ...canvasProps({
+            mode: "readonly",
+            renderedValues: { "field-name": "Иван" },
+          }),
+          fieldPresentationLayout: "inline",
+        } as unknown as CardWebLayoutCanvasProps)}
+      />,
+    );
+
+    const node = screen.getByTestId("layout-field-field-name");
+    expect(node.querySelector(".card-layout-inline-field")).not.toBeNull();
+    expect(
+      within(node).queryByText(fieldTypeLabel("text"), { exact: true }),
+    ).not.toBeInTheDocument();
+  });
+
   test("treats an explicit null selection as controlled", async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();
