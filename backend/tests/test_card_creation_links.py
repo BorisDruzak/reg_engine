@@ -6,10 +6,12 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+from app.main import create_app
 from app.models import (
     AuditEvent,
     Card,
@@ -86,6 +88,30 @@ def db_session(migrated_test_engine: Engine) -> Iterator[Session]:
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture()
+def api_client(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    from app.api.dependencies import get_db_session
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("ALLOW_DEV_ACTOR_HEADER", "true")
+    monkeypatch.setenv(
+        "REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY",
+        Fernet.generate_key().decode("ascii"),
+    )
+    get_settings.cache_clear()
+    app = create_app()
+
+    def override_session() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        get_settings.cache_clear()
 
 
 def _creation_link_context(db_session: Session) -> tuple[User, object, object, object, object]:
@@ -219,6 +245,17 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
         organization_ids=[source_organization.id],
     )
 
+    preview = service.preview_for_public(raw_token=creation_link.raw_token)
+
+    assert preview.selected_organization_id == source_organization.id
+    assert [item.id for item in preview.organizations] == [source_organization.id]
+    assert [
+        preview_field.field_id
+        for preview_block in preview.blocks
+        for preview_instance in preview_block.instances
+        for preview_field in preview_instance.fields
+    ] == [field.id]
+
     with pytest.raises(CardCreationLinkError):
         service.create_card_from_public_link(
             raw_token=creation_link.raw_token,
@@ -265,4 +302,73 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
             value="Недоступная организация",
         )
 
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 1
+
+
+def test_public_creation_link_api_creates_only_after_first_value(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    admin, source_organization, _, registry, _ = _creation_link_context(db_session)
+    schema = RegistrySchemaService(db_session)
+    block = schema.create_block_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        code="creation-api-block",
+        title="Публичные данные",
+    )
+    field = schema.create_field_for_actor(
+        actor_user_id=admin.id,
+        block_id=block.id,
+        code="creation-api-name",
+        label="Название",
+        field_type="text",
+        public_editable=True,
+    )
+    template = db_session.scalar(
+        select(CardTemplate).where(CardTemplate.registry_id == registry.id)
+    )
+    assert template is not None
+    creation_link = CardCreationLinkService(db_session).create_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        card_template_id=template.id,
+        organization_ids=[source_organization.id],
+    )
+
+    preview = api_client.post(
+        "/api/v1/public/card-creation-links/preview",
+        json={"raw_token": creation_link.raw_token},
+    )
+
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["selected_organization_id"] == str(source_organization.id)
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 0
+
+    empty_save = api_client.post(
+        "/api/v1/public/card-creation-links/first-save",
+        json={
+            "raw_token": creation_link.raw_token,
+            "organization_id": str(source_organization.id),
+            "field_id": str(field.id),
+            "value": " ",
+        },
+    )
+
+    assert empty_save.status_code == 400, empty_save.text
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 0
+
+    first_save = api_client.post(
+        "/api/v1/public/card-creation-links/first-save",
+        json={
+            "raw_token": creation_link.raw_token,
+            "organization_id": str(source_organization.id),
+            "field_id": str(field.id),
+            "value": "Создано через API",
+        },
+    )
+
+    assert first_save.status_code == 201, first_save.text
+    assert first_save.json()["child_raw_token"]
+    assert first_save.json()["child_raw_token"] != creation_link.raw_token
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1

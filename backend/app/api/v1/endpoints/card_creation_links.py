@@ -1,20 +1,27 @@
-from typing import Annotated
+from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
+from app.api.v1.endpoints._field_values import coerce_api_field_value
 from app.schemas.card_creation_links import (
     CardCreationLinkCardListRead,
     CardCreationLinkCreate,
     CardCreationLinkCreatedCardRead,
+    CardCreationLinkFirstSaveRead,
+    CardCreationLinkFirstSaveRequest,
     CardCreationLinkListRead,
     CardCreationLinkOrganizationRead,
+    CardCreationLinkPublicPreviewRead,
+    CardCreationLinkPublicPreviewRequest,
     CardCreationLinkRead,
 )
 from app.services.card_creation_links import (
     CardCreationLinkCardValue,
+    CardCreationLinkError,
+    CardCreationLinkPublicPreviewValue,
     CardCreationLinkService,
     CardCreationLinkValue,
 )
@@ -108,6 +115,57 @@ def list_card_creation_links_for_card(
     return CardCreationLinkCardListRead(items=[_card_to_read(item) for item in items])
 
 
+@router.post(
+    "/public/card-creation-links/preview",
+    response_model=CardCreationLinkPublicPreviewRead,
+)
+def preview_card_creation_link_for_public(
+    payload: CardCreationLinkPublicPreviewRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardCreationLinkPublicPreviewRead:
+    try:
+        preview = CardCreationLinkService(session).preview_for_public(
+            raw_token=payload.raw_token,
+            organization_id=payload.organization_id,
+        )
+    except Exception as exc:
+        _raise_public_creation_link_http_error(exc)
+    return _public_preview_to_read(preview)
+
+
+@router.post(
+    "/public/card-creation-links/first-save",
+    response_model=CardCreationLinkFirstSaveRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def first_save_card_from_creation_link(
+    payload: CardCreationLinkFirstSaveRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardCreationLinkFirstSaveRead:
+    try:
+        value = coerce_api_field_value(session, payload.field_id, payload.value)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Некорректное значение поля для создания карточки.",
+        ) from exc
+    try:
+        created = CardCreationLinkService(session).create_card_from_public_link(
+            raw_token=payload.raw_token,
+            organization_id=payload.organization_id,
+            field_id=payload.field_id,
+            value=value,
+            block_instance_id=payload.block_instance_id,
+        )
+    except Exception as exc:
+        _raise_public_creation_link_http_error(exc)
+    return CardCreationLinkFirstSaveRead(
+        card_id=created.card.id,
+        display_name=created.card.display_name,
+        child_raw_token=created.child_raw_token,
+    )
+
+
 def _creation_link_to_read(value: CardCreationLinkValue) -> CardCreationLinkRead:
     return CardCreationLinkRead(
         id=value.creation_link.id,
@@ -134,3 +192,30 @@ def _card_to_read(value: CardCreationLinkCardValue) -> CardCreationLinkCreatedCa
         child_public_link_id=value.child_public_link_id,
         child_raw_token=value.child_raw_token,
     )
+
+
+def _public_preview_to_read(
+    value: CardCreationLinkPublicPreviewValue,
+) -> CardCreationLinkPublicPreviewRead:
+    return CardCreationLinkPublicPreviewRead.model_validate(
+        {
+            "card_template_id": value.card_template_id,
+            "card_template_name": value.card_template_name,
+            "selected_organization_id": value.selected_organization_id,
+            "organizations": [
+                CardCreationLinkOrganizationRead(id=item.id, name=item.name)
+                for item in value.organizations
+            ],
+            "form_layout": value.form_layout,
+            "blocks": value.blocks,
+        }
+    )
+
+
+def _raise_public_creation_link_http_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, CardCreationLinkError):
+        raise HTTPException(
+            status_code=400,
+            detail="Ссылка на создание карточки недоступна или заполнена неверно.",
+        ) from exc
+    raise_service_http_error(exc)
