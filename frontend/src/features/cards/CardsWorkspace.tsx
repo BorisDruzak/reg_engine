@@ -63,6 +63,7 @@ import { errorText, shortId } from "@/components/common/dataUtils";
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
+import { resolveCardPublicFieldAccess } from "./cardPublicAccessDefaults";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
 import {
@@ -841,8 +842,8 @@ function CardBaseBlock({
             <div className="card-base-field-access-list">
               {publicFields.map((field) => {
                 const setting = settingsByFieldId.get(field.id);
-                const visible = setting?.public_visible ?? false;
-                const editable = setting?.public_editable ?? false;
+                const { publicEditable: editable, publicVisible: visible } =
+                  resolveCardPublicFieldAccess(setting, field.field_type);
                 const fieldCanEdit = !["file_ref", "static_text"].includes(field.field_type);
                 return (
                   <div key={field.id} className="card-base-field-access-row">
