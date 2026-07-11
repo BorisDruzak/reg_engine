@@ -41,9 +41,11 @@ Public field edits remain direct, sequential autosaves.
 - Store the allowed organisations in a normalised relation, not in a client
   supplied payload. A creation-link/card relation records the exact card and
   child public link created from each first save.
-- Store only a SHA-256 token hash, following the existing public-link model.
-  Return the raw token only in the successful creation response; neither
-  administration list endpoints nor audit events expose it.
+- Store a SHA-256 token hash for lookup and encrypt the raw token at rest with
+  a dedicated runtime-only key. This is required for the authenticated
+  administrator views to show the parent URL and each child continuation URL
+  after their initial creation. The raw token is never recorded in an audit
+  event, log, or unauthorised API response.
 - A creation link is reusable: every fresh open begins a distinct unpersisted
   draft. A creation link never creates an empty card during page open, close,
   refresh, or organisation selection.
@@ -53,6 +55,9 @@ Public field edits remain direct, sequential autosaves.
 - Child public edit links are indefinitely active by default. Closing the
   parent creation link prevents only new-card creation; child links retain
   access until an administrator closes each child link separately.
+- To represent that lifecycle honestly, `card_public_links.expires_at` becomes
+  nullable. Existing ordinary links retain their seven-day default; a null
+  value means no automatic expiry and only an explicit close can disable it.
 - Closing is a soft lifecycle action, records an audit event, and makes the
   creation URL return a safe closed receipt without template/card data.
 
@@ -66,6 +71,9 @@ Public field edits remain direct, sequential autosaves.
 - The link list shows state, template, allowed organisations, creation time,
   created-card count, each created card's continuation URL, and a dangerous
   `Закрыть ссылку` action with confirmation.
+- Parent and child URLs are returned only to an administrator who can manage
+  the registry and the relevant card organisation. The frontend must not put
+  those URLs in durable browser storage.
 - The card base block shows the child continuation link as system metadata;
   it is not a hardcoded business form field and is excluded from print layout.
 - Administrators with normal card-management access can update a card's
