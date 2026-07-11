@@ -21,6 +21,14 @@ class CardPublicAccessError(CardServiceError):
     """Raised when card-specific public-access settings are invalid."""
 
 
+NON_PUBLIC_EDITABLE_FIELD_TYPES = frozenset({"file_ref", "static_text"})
+
+
+def default_public_field_access(field_type: str) -> tuple[bool, bool]:
+    """Returns the effective access for a card field without an explicit override."""
+    return True, field_type not in NON_PUBLIC_EDITABLE_FIELD_TYPES
+
+
 @dataclass(frozen=True)
 class NormalizedCardPublicAccessUpdate:
     public_view_enabled: bool
@@ -133,17 +141,13 @@ class CardPublicAccessService:
         return result
 
     def public_schema_rows_for_card(self, card: Card) -> list[tuple[FormBlock, FormField]]:
-        """Returns current card-template fields explicitly exposed to public visitors."""
+        """Returns current card-template fields exposed to public visitors."""
         active_fields = self._active_template_fields(card)
-        visible_field_ids = {
-            setting.field_id
-            for setting in self._settings_by_field_id(card.id).values()
-            if setting.public_visible
-        }
+        settings_by_field_id = self._settings_by_field_id(card.id)
         return [
             (block, field_model)
             for block, field_model in active_fields
-            if field_model.id in visible_field_ids
+            if self._field_access(settings_by_field_id.get(field_model.id), field_model)[0]
         ]
 
     def public_editable_schema_rows_for_card(
@@ -158,18 +162,13 @@ class CardPublicAccessService:
             (block, field_model)
             for block, field_model in self._active_template_fields(card)
             if (
-                (setting := settings_by_field_id.get(field_model.id)) is not None
-                and setting.public_visible
-                and setting.public_editable
-                and field_model.field_type not in {"file_ref", "static_text"}
+                self._field_access(settings_by_field_id.get(field_model.id), field_model)[0]
+                and self._field_access(settings_by_field_id.get(field_model.id), field_model)[1]
             )
         ]
 
     def is_field_publicly_editable(self, *, card: Card, field_id: UUID) -> bool:
         if not card.public_edit_enabled:
-            return False
-        setting = self._settings_by_field_id(card.id).get(field_id)
-        if setting is None or not setting.public_visible or not setting.public_editable:
             return False
         field_model = next(
             (
@@ -179,7 +178,13 @@ class CardPublicAccessService:
             ),
             None,
         )
-        return field_model is not None and field_model.field_type not in {"file_ref", "static_text"}
+        if field_model is None:
+            return False
+        public_visible, public_editable = self._field_access(
+            self._settings_by_field_id(card.id).get(field_id),
+            field_model,
+        )
+        return public_visible and public_editable
 
     def _read_for_card(
         self,
@@ -196,16 +201,12 @@ class CardPublicAccessService:
             fields=[
                 CardPublicFieldSettingRead(
                     field_id=field_model.id,
-                    public_visible=(
-                        settings_by_field_id[field_model.id].public_visible
-                        if field_model.id in settings_by_field_id
-                        else False
-                    ),
-                    public_editable=(
-                        settings_by_field_id[field_model.id].public_editable
-                        if field_model.id in settings_by_field_id
-                        else False
-                    ),
+                    public_visible=self._field_access(
+                        settings_by_field_id.get(field_model.id), field_model
+                    )[0],
+                    public_editable=self._field_access(
+                        settings_by_field_id.get(field_model.id), field_model
+                    )[1],
                 )
                 for _, field_model in fields
             ],
@@ -268,6 +269,15 @@ class CardPublicAccessService:
             ).all()
         }
 
+    @staticmethod
+    def _field_access(
+        setting: CardPublicFieldSetting | None,
+        field_model: FormField,
+    ) -> tuple[bool, bool]:
+        if setting is None:
+            return default_public_field_access(field_model.field_type)
+        return setting.public_visible, setting.public_editable
+
     def _validate_field_updates(
         self,
         field_updates: Sequence[CardPublicFieldSettingUpdate],
@@ -283,10 +293,10 @@ class CardPublicAccessService:
             field_model = fields_by_id.get(field_update.field_id)
             if field_model is None:
                 raise CardPublicAccessError("Field does not belong to this card template.")
-            if field_update.public_editable and field_model.field_type in {
-                "file_ref",
-                "static_text",
-            }:
+            if (
+                field_update.public_editable
+                and field_model.field_type in NON_PUBLIC_EDITABLE_FIELD_TYPES
+            ):
                 raise CardPublicAccessError("This field type cannot be publicly editable.")
 
     def _template_field_ids(self, template: CardTemplate) -> set[UUID]:

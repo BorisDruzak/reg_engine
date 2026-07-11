@@ -916,6 +916,69 @@ def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
     assert updated.public_edit_enabled is True
 
 
+def test_card_public_access_defaults_template_fields_to_visible_and_editable(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="public-defaults",
+        title="Public defaults",
+    )
+    text_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="public_default_text",
+        label="Public default text",
+        field_type="text",
+    )
+    static_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="public_default_static",
+        label="Public default static",
+        field_type="static_text",
+        options_config_json={"static_text": "Read only."},
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="public-defaults-template",
+        name="Public defaults template",
+        field_schema_json={"field_ids": [str(text_field.id), str(static_field.id)]},
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        card_template_id=template.id,
+        public_edit_enabled=True,
+    )
+
+    access_service = CardPublicAccessService(db_session)
+    access = access_service.read_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+    )
+
+    assert {
+        setting.field_id: (setting.public_visible, setting.public_editable)
+        for setting in access.fields
+    } == {
+        text_field.id: (True, True),
+        static_field.id: (True, False),
+    }
+    assert [field.id for _, field in access_service.public_schema_rows_for_card(card)] == [
+        text_field.id,
+        static_field.id,
+    ]
+    assert [field.id for _, field in access_service.public_editable_schema_rows_for_card(card)] == [
+        text_field.id
+    ]
+
+
 def test_card_creation_keeps_public_view_enabled_when_public_edit_is_enabled(
     db_session: Session,
 ) -> None:
@@ -927,6 +990,21 @@ def test_card_creation_keeps_public_view_enabled_when_public_edit_is_enabled(
         organization_id=context["child"].id,
         public_view_enabled=False,
         public_edit_enabled=True,
+    )
+
+    assert card.public_view_enabled is True
+    assert card.public_edit_enabled is True
+
+
+def test_card_creation_defaults_to_public_access_enabled(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
     )
 
     assert card.public_view_enabled is True

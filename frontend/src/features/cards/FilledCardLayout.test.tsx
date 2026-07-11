@@ -163,6 +163,35 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByRole("button", { name: "Отмена" })).not.toBeInTheDocument();
   });
 
+  test("closes an unchanged field when the pointer leaves its field surface", async () => {
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+    expect(screen.getByLabelText("Имя")).toHaveValue("Иван");
+
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() => expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument());
+  });
+
+  test("saves and closes a changed field when the pointer leaves its field surface", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
+      }),
+    );
+    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+  });
+
   test("automatically saves a text field after the short typing delay", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

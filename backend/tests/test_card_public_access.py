@@ -1,8 +1,9 @@
 from importlib.util import find_spec
+from uuid import UUID
 
 import app.models as models
 from app.models import Base
-from app.schemas.cards import CardPublicFieldSettingUpdate
+from app.schemas.cards import CardCreate, CardPublicFieldSettingUpdate, OrganizationCardCreate
 from app.services import card_public_access
 
 
@@ -13,6 +14,26 @@ def test_card_public_field_settings_model_is_registered() -> None:
 
 def test_card_public_access_service_module_exists() -> None:
     assert find_spec("app.services.card_public_access") is not None
+
+
+def test_new_card_field_public_access_defaults_to_visible_and_editable() -> None:
+    assert card_public_access.default_public_field_access("text") == (True, True)
+    assert card_public_access.default_public_field_access("static_text") == (True, False)
+    assert card_public_access.default_public_field_access("file_ref") == (True, False)
+
+
+def test_card_create_requests_default_to_public_access_enabled() -> None:
+    card_create = CardCreate(organization_id=UUID("12345678-1234-4234-8234-123456789abc"))
+    organization_card_create = OrganizationCardCreate()
+
+    assert (card_create.public_view_enabled, card_create.public_edit_enabled) == (True, True)
+    assert (
+        organization_card_create.public_view_enabled,
+        organization_card_create.public_edit_enabled,
+    ) == (
+        True,
+        True,
+    )
 
 
 def test_public_edit_promotes_card_and_field_visibility() -> None:

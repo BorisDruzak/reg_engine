@@ -4722,6 +4722,15 @@ production-migrated, and live Browser verified.
 - Clicking an ordinary field opens only that field. Text values save after a
   short typing pause; choices and date/boolean controls save immediately.
   Explicit save/cancel buttons and the block-level edit action are removed.
+- A pointer click outside the active field now closes its inline editor. If a
+  value changed, the close commits it immediately; otherwise it closes without
+  a write. Card creation again includes optional `Наименование карточки` and
+  uses the selected template name when it is left blank.
+- New cards default to both public-card switches enabled. A field without an
+  individual card override defaults to public visibility and editability, while
+  `file_ref` and static text remain non-editable. Explicit per-card overrides
+  continue to take precedence, so existing active public links immediately use
+  the new defaults only where no override has been saved.
 - Deleting a template field now opens a Russian confirmation. The field is
   archived: empty value rows are removed, while filled values remain retained
   behind the archived field and no longer appear in cards.

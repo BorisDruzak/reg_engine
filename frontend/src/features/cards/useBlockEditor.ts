@@ -30,6 +30,7 @@ export type BlockEditorState = {
     initial: Record<string, unknown>,
   ) => void;
   updateAndSave: (fieldId: string, value: FieldEditorState, delayMs: number) => void;
+  commitAndClose: () => void;
   cancel: () => void;
 };
 
@@ -173,6 +174,13 @@ export function useBlockEditor({
   }, [save, session?.autoSaveDelayMs, session?.dirty, session?.pending, session?.values]);
 
   const cancel = useCallback(() => setSession(null), []);
+  const commitAndClose = useCallback(() => {
+    setSession((current) => {
+      if (!current || current.pending) return current;
+      if (!current.dirty) return null;
+      return { ...current, pendingOpen: null, autoSaveDelayMs: 0 };
+    });
+  }, []);
 
   return {
     key: session?.key ?? null,
@@ -183,6 +191,7 @@ export function useBlockEditor({
     errors: session?.errors ?? emptyErrors,
     openField,
     updateAndSave,
+    commitAndClose,
     cancel,
   };
 }

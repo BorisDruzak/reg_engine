@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 
 import type {
   CardBlockInstanceRead,
@@ -153,6 +153,26 @@ export function FilledCardLayout({
       }),
     [blocks, completionBySurface, surfaces],
   );
+  const activeFieldId = useMemo(
+    () => (blockEditor ? (Object.keys(blockEditor.values)[0] ?? null) : null),
+    [blockEditor?.values],
+  );
+  const commitAndClose = blockEditor?.commitAndClose;
+
+  useEffect(() => {
+    if (!activeFieldId || !commitAndClose) return;
+
+    const closeFieldOnOutsidePointer = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      const fieldNode = event.target.closest<HTMLElement>("[data-card-field-id]");
+      if (fieldNode?.dataset.cardFieldId === activeFieldId) return;
+      commitAndClose();
+    };
+
+    document.addEventListener("pointerdown", closeFieldOnOutsidePointer, true);
+    return () => document.removeEventListener("pointerdown", closeFieldOnOutsidePointer, true);
+  }, [activeFieldId, commitAndClose]);
+
   return (
     <>
       <CardPresentationShell items={[...navigationBefore, ...navigationItems, ...navigationAfter]}>

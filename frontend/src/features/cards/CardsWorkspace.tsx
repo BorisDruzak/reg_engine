@@ -291,6 +291,7 @@ export function CardsWorkspace({
   const createCardMutation = useMutation({
     mutationFn: () =>
       createOrganizationCard(token, cardForm.organizationId, {
+        display_name: cardForm.displayName.trim() || undefined,
         card_template_id: cardForm.cardTemplateId,
         public_view_enabled: cardForm.publicViewEnabled,
         public_edit_enabled: cardForm.publicEditEnabled,
@@ -735,6 +736,7 @@ export function CardsWorkspace({
 
 type CardFormState = {
   organizationId: string;
+  displayName: string;
   cardTemplateId: string;
   publicViewEnabled: boolean;
   publicEditEnabled: boolean;
@@ -1056,6 +1058,15 @@ function CardMutationForm({
       onSubmit={onSubmit}
     >
       <label>
+        <span>{uiText.cardName}</span>
+        <input
+          aria-label={uiText.cardName}
+          value={form.displayName}
+          placeholder="Если не указать, будет использовано имя шаблона"
+          onChange={(event) => onChange({ ...form, displayName: event.currentTarget.value })}
+        />
+      </label>
+      <label>
         <span>{uiText.cardOrganization}</span>
         <select
           value={form.organizationId}
@@ -1178,9 +1189,10 @@ function RepeatableBlockControls({
 function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
   return {
     organizationId: organizations[0]?.id ?? "",
+    displayName: "",
     cardTemplateId: "",
-    publicViewEnabled: false,
-    publicEditEnabled: false,
+    publicViewEnabled: true,
+    publicEditEnabled: true,
   };
 }
 

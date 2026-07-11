@@ -5331,6 +5331,21 @@ test("adds template bool and date filters from inline search tag choices", async
   });
 });
 
+test("shows a card name and enables public access by default when creating a card", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/Электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.click(await screen.findByRole("button", { name: "Создать карточку" }));
+
+  expect(screen.getByLabelText("Наименование карточки")).toHaveValue("");
+  expect(screen.getByLabelText("Публичный просмотр карточки")).toBeChecked();
+  expect(screen.getByLabelText("Публичное редактирование карточки")).toBeChecked();
+});
+
 test("creates archives cards and manages repeatable blocks with inline saves", async () => {
   enableRepeatableDetailsSchema();
   const user = userEvent.setup();

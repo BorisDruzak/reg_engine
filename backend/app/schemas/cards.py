@@ -9,15 +9,15 @@ class CardCreate(BaseModel):
     display_name: str | None = None
     card_template_id: UUID | None = None
     org_unit_id: UUID | None = None
-    public_view_enabled: bool = False
-    public_edit_enabled: bool = False
+    public_view_enabled: bool = True
+    public_edit_enabled: bool = True
 
 
 class OrganizationCardCreate(BaseModel):
     display_name: str | None = None
     card_template_id: UUID | None = None
-    public_view_enabled: bool = False
-    public_edit_enabled: bool = False
+    public_view_enabled: bool = True
+    public_edit_enabled: bool = True
 
 
 class CardListFieldValueRead(BaseModel):

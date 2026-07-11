@@ -154,8 +154,8 @@ class CardService:
         display_name: str | None = None,
         card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
-        public_view_enabled: bool = False,
-        public_edit_enabled: bool = False,
+        public_view_enabled: bool = True,
+        public_edit_enabled: bool = True,
     ) -> Card:
         self._require_card_permission(actor_user_id, organization_id, registry_id=registry_id)
         card = self.create_card(
@@ -189,8 +189,8 @@ class CardService:
         organization_id: UUID,
         display_name: str | None = None,
         card_template_id: UUID | None = None,
-        public_view_enabled: bool = False,
-        public_edit_enabled: bool = False,
+        public_view_enabled: bool = True,
+        public_edit_enabled: bool = True,
     ) -> Card:
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             organization_id
@@ -213,8 +213,8 @@ class CardService:
         display_name: str | None = None,
         card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
-        public_view_enabled: bool = False,
-        public_edit_enabled: bool = False,
+        public_view_enabled: bool = True,
+        public_edit_enabled: bool = True,
         created_by: UUID | None = None,
         apply_template_defaults: bool = True,
     ) -> Card:
