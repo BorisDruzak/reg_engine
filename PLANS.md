@@ -4569,8 +4569,7 @@ Live Browser proof:
 
 #### Card layout interactions and hover-only navigation
 
-Status: implemented and locally verified; GitHub/server synchronization and
-live Browser proof are pending.
+Status: complete, pushed, deployed, server-checked, and live Browser verified.
 
 - The first block no longer renders an unavailable up arrow; the last block no
   longer renders an unavailable down arrow. A single block has no ordering
@@ -4592,3 +4591,30 @@ live Browser proof are pending.
   `CardPrintTemplateEditor.test.tsx`, `CardLayoutStudio.tsx`, and
   `RegistriesAndSchema.tsx`); all changed files pass their scoped Prettier
   check. No database migration or production-data change is required.
+
+Production release evidence:
+
+- Local `main`, `origin/main`, and the server checkout were synchronized at
+  `ef71f026` (`Improve card layout interactions`). `scripts/deploy.ps1` passed
+  server checkout, PostgreSQL, attachment-storage, and API health checks.
+- `scripts/deploy-frontend.ps1 -SkipBuild` uploaded the verified bundle,
+  restarted `reg-engine.service`, and passed the same-origin frontend/API
+  smoke check with `/assets/index-BTVl3j3b.js` and `/assets/index-D6qc8aJj.css`.
+
+Live Browser proof:
+
+- The published editor rendered zero `Переместить блок Положение вверх` and
+  zero `Переместить блок тест2 вниз` controls; it rendered only the available
+  first-down, middle-up/down, and last-up actions.
+- In card `213`, clicking the body of `Блок Положение` opened
+  `Редактирование блока карточки` with the existing field controls. `Отмена
+  блока Положение` returned to read mode without a value write.
+- On the registry page the collapsed navigation rail measured `74px`, its
+  labels had opacity `0`, and no `.sidebar-toggle` existed. Pointer entry
+  expanded the rail to `260px` with label opacity `1` while preserving the
+  logical `is-sidebar-collapsed` state. At `390 x 844` the mobile layout had
+  no horizontal overflow and kept the navigation labels readable.
+- Browser console logs had zero warnings/errors and no framework error overlay.
+  The Browser automation path does not emit a native pointer-leave event for
+  its synthetic cursor move; the return-to-compact handler is covered by the
+  app-level pointer-leave regression test.
