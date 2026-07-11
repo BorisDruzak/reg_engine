@@ -18,6 +18,7 @@ from app.models import (
     AccessGrant,
     AuditEvent,
     Card,
+    CardPublicFieldSetting,
     CardTemplate,
     FieldValue,
     FieldValueItem,
@@ -30,6 +31,8 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
+from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import (
     BulkFieldValueInput,
     CardService,
@@ -787,6 +790,129 @@ def test_card_template_creates_card_name_and_default_values(
     }
     assert values[text_field.id].value_text == "prefilled"
     assert values[bool_field.id].value_bool is True
+
+
+def test_card_public_access_is_individual_to_the_card_and_is_audited(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="public-access",
+        title="Public access",
+    )
+    text_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="public_text",
+        label="Public text",
+        field_type="text",
+    )
+    static_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="public_instruction",
+        label="Public instruction",
+        field_type="static_text",
+        options_config_json={"static_text": "Read this first."},
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="public-access-template",
+        name="Public access template",
+        field_schema_json={
+            "field_ids": [str(text_field.id), str(static_field.id)],
+        },
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        card_template_id=template.id,
+    )
+
+    result = CardPublicAccessService(db_session).update_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        payload=CardPublicAccessUpdate(
+            public_view_enabled=False,
+            public_edit_enabled=True,
+            fields=[
+                CardPublicFieldSettingUpdate(
+                    field_id=text_field.id,
+                    public_visible=False,
+                    public_editable=True,
+                ),
+                CardPublicFieldSettingUpdate(
+                    field_id=static_field.id,
+                    public_visible=True,
+                    public_editable=False,
+                ),
+            ],
+        ),
+    )
+
+    assert result.public_view_enabled is True
+    assert result.public_edit_enabled is True
+    assert {
+        item.field_id: (item.public_visible, item.public_editable) for item in result.fields
+    } == {
+        text_field.id: (True, True),
+        static_field.id: (True, False),
+    }
+    settings = list(
+        db_session.scalars(
+            select(CardPublicFieldSetting).where(CardPublicFieldSetting.card_id == card.id)
+        ).all()
+    )
+    saved_settings = {
+        (setting.field_id, setting.public_visible, setting.public_editable) for setting in settings
+    }
+    assert saved_settings == {
+        (text_field.id, True, True),
+        (static_field.id, True, False),
+    }
+    assert (
+        db_session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.object_type == "card_public_access",
+                AuditEvent.object_id == card.id,
+                AuditEvent.action == "update",
+            )
+        )
+        is not None
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        CardPublicAccessService(db_session).update_for_actor(
+            actor_user_id=context["registry_admin"].id,
+            card_id=card.id,
+            payload=CardPublicAccessUpdate(),
+        )
+
+
+def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+
+    updated = CardService(db_session).update_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        public_view_enabled=False,
+        public_edit_enabled=True,
+    )
+
+    assert updated.public_view_enabled is True
+    assert updated.public_edit_enabled is True
 
 
 def test_card_creation_without_explicit_template_uses_base_template(

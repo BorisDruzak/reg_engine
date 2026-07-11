@@ -16,6 +16,8 @@ from app.schemas.cards import (
     CardFieldRead,
     CardListFieldValueRead,
     CardListRead,
+    CardPublicAccessRead,
+    CardPublicAccessUpdate,
     CardRead,
     CardSummaryRead,
     CardTransferRequest,
@@ -27,6 +29,7 @@ from app.schemas.cards import (
     OrganizationCardCreate,
 )
 from app.schemas.registries import ReferenceItemListRead, ReferenceItemRead
+from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import (
     BulkFieldValueInput,
     CardFieldFilterInput,
@@ -309,6 +312,38 @@ def update_card(
     except Exception as exc:
         raise_service_http_error(exc)
     return _card_to_summary(card, card_service)
+
+
+@router.get("/cards/{card_id}/public-access", response_model=CardPublicAccessRead)
+def read_card_public_access(
+    card_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardPublicAccessRead:
+    try:
+        return CardPublicAccessService(session).read_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+
+
+@router.patch("/cards/{card_id}/public-access", response_model=CardPublicAccessRead)
+def update_card_public_access(
+    card_id: UUID,
+    payload: CardPublicAccessUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardPublicAccessRead:
+    try:
+        return CardPublicAccessService(session).update_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            payload=payload,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
 
 
 @router.delete("/cards/{card_id}", response_model=CardSummaryRead)

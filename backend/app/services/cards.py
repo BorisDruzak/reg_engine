@@ -787,6 +787,8 @@ class CardService:
             card.public_view_enabled = public_view_enabled
         if public_edit_enabled is not None:
             card.public_edit_enabled = public_edit_enabled
+        if card.public_edit_enabled:
+            card.public_view_enabled = True
         card.updated_by = actor_user_id
         self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         self.session.flush()
