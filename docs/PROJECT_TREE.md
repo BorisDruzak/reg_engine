@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-10 21:26:30 +05:00
+- Generated: 2026-07-11 12:05:02 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -212,6 +212,7 @@
 - `docs/superpowers/specs/2026-07-10-contextual-card-layout-studio-design.md`
 - `docs/superpowers/specs/2026-07-10-filled-card-workspace-design.md`
 - `docs/superpowers/specs/2026-07-10-public-link-review-lifecycle-design.md`
+- `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
