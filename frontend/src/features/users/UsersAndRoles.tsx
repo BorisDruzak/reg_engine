@@ -155,7 +155,7 @@ export function UsersAndRoles({
           <table>
             <thead>
               <tr>
-                <th>{uiText.displayName}</th>
+                <th>{uiText.login}</th>
                 <th>{uiText.role}</th>
                 <th>{uiText.scope}</th>
                 <th>{uiText.status}</th>
@@ -163,7 +163,7 @@ export function UsersAndRoles({
             </thead>
             <tbody>
               {users.map((user) => {
-                const itemLabel = userDisplayNameLabel(user.display_name);
+                const itemLabel = user.email;
                 const isSelected = user.id === selectedUserId;
                 return (
                   <UserTableRow
@@ -443,10 +443,36 @@ function OrganizationRootSelector({
   onChange: (organizationIds: string[]) => void;
   depth?: number;
 }) {
+  const selection = organizationScopeSelection(nodes, selectedIds);
+  return (
+    <OrganizationRootSelectorNodes
+      nodes={nodes}
+      selection={selection}
+      selectedIds={selectedIds}
+      onChange={onChange}
+      depth={depth}
+    />
+  );
+}
+
+function OrganizationRootSelectorNodes({
+  nodes,
+  selection,
+  selectedIds,
+  onChange,
+  depth,
+}: {
+  nodes: OrganizationTreeNodeRead[];
+  selection: OrganizationScopeSelection;
+  selectedIds: string[];
+  onChange: (organizationIds: string[]) => void;
+  depth: number;
+}) {
   return (
     <div className="organization-root-options">
       {nodes.map((node) => {
-        const checked = selectedIds.includes(node.id);
+        const inheritedFrom = selection.inheritedById.get(node.id);
+        const checked = Boolean(inheritedFrom) || selection.directIds.has(node.id);
         return (
           <div
             key={node.id}
@@ -457,19 +483,28 @@ function OrganizationRootSelector({
               <input
                 type="checkbox"
                 checked={checked}
+                disabled={Boolean(inheritedFrom)}
                 onChange={(event) =>
                   onChange(
-                    event.currentTarget.checked
-                      ? [...selectedIds, node.id]
-                      : selectedIds.filter((organizationId) => organizationId !== node.id),
+                    organizationIdsAfterToggle({
+                      node,
+                      selectedIds,
+                      checked: event.currentTarget.checked,
+                    }),
                   )
                 }
               />
               {node.name}
             </label>
+            {inheritedFrom && (
+              <small className="organization-root-option-description">
+                Входит через {inheritedFrom}
+              </small>
+            )}
             {node.children.length > 0 && (
-              <OrganizationRootSelector
+              <OrganizationRootSelectorNodes
                 nodes={node.children}
+                selection={selection}
                 selectedIds={selectedIds}
                 onChange={onChange}
                 depth={depth + 1}
@@ -480,6 +515,59 @@ function OrganizationRootSelector({
       })}
     </div>
   );
+}
+
+type OrganizationScopeSelection = {
+  directIds: ReadonlySet<string>;
+  inheritedById: ReadonlyMap<string, string>;
+};
+
+function organizationScopeSelection(
+  nodes: OrganizationTreeNodeRead[],
+  selectedIds: string[],
+): OrganizationScopeSelection {
+  const directIds = new Set(selectedIds);
+  const inheritedById = new Map<string, string>();
+
+  function visit(items: OrganizationTreeNodeRead[], inheritedFrom: string | null) {
+    items.forEach((node) => {
+      const isCoveredByAncestor = inheritedFrom !== null;
+      if (inheritedFrom) {
+        inheritedById.set(node.id, inheritedFrom);
+      }
+      visit(
+        node.children,
+        isCoveredByAncestor ? inheritedFrom : directIds.has(node.id) ? node.name : null,
+      );
+    });
+  }
+
+  visit(nodes, null);
+  return { directIds, inheritedById };
+}
+
+function organizationIdsAfterToggle({
+  node,
+  selectedIds,
+  checked,
+}: {
+  node: OrganizationTreeNodeRead;
+  selectedIds: string[];
+  checked: boolean;
+}) {
+  const nextIds = new Set(selectedIds);
+  if (!checked) {
+    nextIds.delete(node.id);
+    return [...nextIds];
+  }
+
+  organizationDescendantIds(node).forEach((descendantId) => nextIds.delete(descendantId));
+  nextIds.add(node.id);
+  return [...nextIds];
+}
+
+function organizationDescendantIds(node: OrganizationTreeNodeRead): string[] {
+  return node.children.flatMap((child) => [child.id, ...organizationDescendantIds(child)]);
 }
 
 const businessRoleOptions: { label: string; value: BusinessRoleCode }[] = [

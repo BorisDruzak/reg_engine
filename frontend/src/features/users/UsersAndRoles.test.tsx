@@ -52,11 +52,15 @@ test("opens an inline user profile with a fixed role list and hierarchical organ
     </QueryClientProvider>,
   );
 
-  await user.click(screen.getByRole("button", { name: "Администратор филиала" }));
+  await user.click(screen.getByRole("button", { name: "branch@example.test" }));
 
+  expect(screen.getByRole("columnheader", { name: "Логин" })).toBeInTheDocument();
   expect(screen.getByRole("combobox", { name: "Роль пользователя" })).toHaveValue(
     "subordinate_organization_administrator",
   );
   expect(screen.getByLabelText("Администрация района")).toBeChecked();
+  expect(screen.getByLabelText("Подведомственная организация")).toBeChecked();
+  expect(screen.getByLabelText("Подведомственная организация")).toBeDisabled();
+  expect(screen.getByText("Входит через Администрация района")).toBeInTheDocument();
   expect(screen.queryByText("Технический код")).not.toBeInTheDocument();
 });

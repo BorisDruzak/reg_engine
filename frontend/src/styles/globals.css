@@ -4711,6 +4711,13 @@ tr:last-child td {
   gap: 8px;
 }
 
+.organization-root-option-description {
+  display: block;
+  margin-left: 28px;
+  color: #64748b;
+  font-size: 0.84rem;
+}
+
 .admin-mutation-form {
   display: grid;
   gap: 14px;

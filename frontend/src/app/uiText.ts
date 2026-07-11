@@ -146,6 +146,7 @@ export const uiText = {
   organizationUpdated: "Организация обновлена",
   organizationArchived: "Организация архивирована",
   organizationTree: "Дерево организаций",
+  login: "Логин",
   displayName: "Имя",
   code: "Код",
   type: "Тип",
