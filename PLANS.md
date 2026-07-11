@@ -4654,7 +4654,8 @@ Live Browser proof:
 
 #### Role-aware card document workspace
 
-Status: implementation complete locally; release verification and Browser proof pending.
+Status: pushed and deployed; live Browser visual proof awaits refresh of the
+previously cached in-app tab.
 
 - Card blocks and fields now expose schema-driven completion states: filled,
   required-missing, and optional empty. The calculation treats whitespace and
@@ -4684,3 +4685,20 @@ Status: implementation complete locally; release verification and Browser proof 
   `index-6oRVKE6Y.css` (`68.52 kB`, `12.29 kB` gzip). The older broad
   `App.test.tsx` expectations for the removed workspace tabs still require
   replacement, so they are not reported as a passing suite.
+
+Production release evidence:
+
+- `main`, `origin/main`, and the server checkout were synchronized at
+  `5edea529` (`Record role aware card workspace checks`).
+  `scripts/deploy.ps1` fast-forwarded the server checkout and passed service,
+  PostgreSQL, attachment-storage, and API health checks. No migration or
+  production data mutation was performed.
+- `scripts/deploy-frontend.ps1 -SkipBuild` deployed the verified frontend
+  artifact, restarted `reg-engine.service`, and passed same-origin frontend
+  and API smoke checks with `/assets/index-BpmgzmRa.js` and
+  `/assets/index-6oRVKE6Y.css`.
+- The in-app Browser tab remained on the cached `?release=5e7181f7` document
+  after deployment, still showing the retired tabs and action buttons. Its
+  available controls did not navigate the tab to a new cache-busting URL, so
+  it is not used as proof of the newly deployed layout. A user/browser refresh
+  is required before recording final visual interaction proof.
