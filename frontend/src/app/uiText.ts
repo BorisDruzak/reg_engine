@@ -571,6 +571,7 @@ export function lifecycleStatusLabel(value: string) {
   const labels: Record<string, string> = {
     active: "Активно",
     archived: "Архив",
+    disabled: "Отключён",
     draft: "Черновик",
     inactive: "Неактивно",
     superseded: "Заменено",
