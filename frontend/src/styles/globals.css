@@ -187,11 +187,16 @@ button {
 }
 
 .workspace-sidebar {
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  min-height: 0;
   padding: 22px 18px;
   border-right: 1px solid #d9dee7;
   background: #ffffff;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   transition: padding 180ms ease;
 }
 
@@ -4444,9 +4449,14 @@ tr:last-child td {
   }
 
   .workspace-sidebar {
+    position: static;
+    top: auto;
+    align-self: auto;
+    height: auto;
     min-height: auto;
     border-right: 0;
     border-bottom: 1px solid #d9dee7;
+    overflow: visible;
   }
 
   .workspace-shell.is-sidebar-collapsed .workspace-sidebar {

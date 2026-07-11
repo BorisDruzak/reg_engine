@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -24,6 +26,8 @@ import type {
   CardImportCommitRead,
   CardImportPreviewRead,
 } from "@/api/types";
+
+const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -2979,6 +2983,15 @@ test("auto-collapses the navigation in registry work and expands temporarily on 
 
   expect(container.querySelector(".workspace-shell")).toHaveClass("is-sidebar-collapsed");
   expect(container.querySelector(".workspace-shell")).not.toHaveClass("is-sidebar-hover-preview");
+});
+
+test("keeps the desktop navigation visible while allowing it to scroll independently", () => {
+  expect(globalStyles).toMatch(
+    /\.workspace-sidebar\s*\{[^}]*position:\s*sticky;[^}]*top:\s*0;[^}]*align-self:\s*start;[^}]*height:\s*100vh;[^}]*overflow-y:\s*auto;/,
+  );
+  expect(globalStyles).toMatch(
+    /@media \(max-width: 900px\)[\s\S]*?\.workspace-sidebar\s*\{[^}]*position:\s*static;[^}]*height:\s*auto;[^}]*overflow:\s*visible;/,
+  );
 });
 
 test("renders refactored card workspace with focused tabs and simple metadata", async () => {

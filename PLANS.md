@@ -4618,3 +4618,16 @@ Live Browser proof:
   The Browser automation path does not emit a native pointer-leave event for
   its synthetic cursor move; the return-to-compact handler is covered by the
   app-level pointer-leave regression test.
+
+#### Sticky desktop navigation rail
+
+Status: local implementation verified; publication and live Browser proof pending.
+
+- The desktop navigation rail now stays at the top of the viewport while the
+  workspace scrolls. It has its own vertical scroll when navigation content is
+  taller than the viewport, so all navigation items remain reachable.
+- At the `900px` mobile breakpoint the rail returns to normal document flow,
+  preserving the existing readable mobile navigation layout.
+- The focused navigation-style regression test passes. ESLint, TypeScript,
+  scoped Prettier, and the production frontend build pass; no API, database,
+  migration, or production-data change is required.
