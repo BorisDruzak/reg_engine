@@ -1897,6 +1897,59 @@ describe("CardWebLayoutCanvas", () => {
     );
   });
 
+  test("renders the compact field editor and preserves hidden technical data", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    const describedField = {
+      ...fields[0],
+      description: "Укажите полное значение",
+      required_mode: "required",
+    };
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          fields: [describedField, fields[1]],
+          onCommitField,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+
+    expect(screen.queryByLabelText("Технический код")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Описание поля")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Подсказка")).toHaveValue("Укажите полное значение");
+
+    const mandatory = screen.getByLabelText("Обязательность");
+    expect(within(mandatory).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Необязательное поле",
+      "Обязательное поле",
+    ]);
+    expect(mandatory).toHaveValue("required_on_publish");
+
+    const publicSettings = screen.getByText("Публичное редактирование").closest("details");
+    expect(publicSettings).not.toBeNull();
+    expect(publicSettings).not.toHaveAttribute("open");
+    expect(
+      within(publicSettings!).getByRole("checkbox", { name: "Видно в публичной ссылке" }),
+    ).toBeInTheDocument();
+    expect(
+      within(publicSettings!).getByRole("checkbox", {
+        name: "Доступно для публичного редактирования",
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onCommitField).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: fields[0].code,
+        description: "Укажите полное значение",
+        required_mode: "required_on_publish",
+      }),
+    );
+  });
+
   test("keeps reference-list selection real for select and multi-select field types", async () => {
     const user = userEvent.setup();
     const onCommitField = vi.fn();

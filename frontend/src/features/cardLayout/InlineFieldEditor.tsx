@@ -19,28 +19,28 @@ export function InlineFieldEditor({
 }: InlineFieldEditorProps) {
   const rootRef = useRef<HTMLFormElement>(null);
   const labelRef = useRef<HTMLInputElement>(null);
-  const codeRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(field);
-  const [errors, setErrors] = useState<{ label?: string; code?: string }>({});
+  const [errors, setErrors] = useState<{ label?: string }>({});
 
   const commitIfValid = useCallback(() => {
-    const nextErrors: { label?: string; code?: string } = {};
+    const nextErrors: { label?: string } = {};
     if (!draft.label.trim()) {
       nextErrors.label = "Введите название поля";
-    }
-    if (!draft.code.trim()) {
-      nextErrors.code = "Введите технический код поля";
     }
     setErrors(nextErrors);
     if (nextErrors.label) {
       labelRef.current?.focus();
       return false;
     }
-    if (nextErrors.code) {
-      codeRef.current?.focus();
-      return false;
-    }
-    onCommit({ ...draft, label: draft.label.trim(), code: draft.code.trim() });
+    onCommit({
+      ...draft,
+      label: draft.label.trim(),
+      code: draft.code.trim(),
+      required_mode:
+        draft.field_type === "static_text" || draft.required_mode === "not_required"
+          ? "not_required"
+          : "required_on_publish",
+    });
     return true;
   }, [draft, onCommit]);
 
@@ -139,42 +139,31 @@ export function InlineFieldEditor({
           ))}
         </select>
       </label>
-      <label>
-        <span>Технический код</span>
-        <input
-          ref={codeRef}
-          aria-describedby={errors.code ? `field-${field.id}-code-error` : undefined}
-          aria-invalid={Boolean(errors.code)}
-          value={draft.code}
-          onChange={(event) => {
-            setDraft({ ...draft, code: event.currentTarget.value });
-            setErrors((current) => ({ ...current, code: undefined }));
-          }}
-        />
-      </label>
-      {errors.code ? (
-        <span id={`field-${field.id}-code-error`} className="inline-alert">
-          {errors.code}
-        </span>
+      {draft.field_type !== "static_text" ? (
+        <>
+          <label>
+            <span>Подсказка</span>
+            <input
+              value={draft.description ?? ""}
+              onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })}
+            />
+          </label>
+          <label>
+            <span>Обязательность</span>
+            <select
+              value={
+                draft.required_mode === "not_required" ? "not_required" : "required_on_publish"
+              }
+              onChange={(event) =>
+                setDraft({ ...draft, required_mode: event.currentTarget.value })
+              }
+            >
+              <option value="not_required">Необязательное поле</option>
+              <option value="required_on_publish">Обязательное поле</option>
+            </select>
+          </label>
+        </>
       ) : null}
-      <label>
-        <span>Описание поля</span>
-        <textarea
-          value={draft.description ?? ""}
-          onChange={(event) => setDraft({ ...draft, description: event.currentTarget.value })}
-        />
-      </label>
-      <label>
-        <span>Обязательность</span>
-        <select
-          value={draft.required_mode}
-          onChange={(event) => setDraft({ ...draft, required_mode: event.currentTarget.value })}
-        >
-          <option value="not_required">Необязательное поле</option>
-          <option value="required">Обязательное поле</option>
-          <option value="required_on_publish">Обязательное при публикации</option>
-        </select>
-      </label>
       {usesReferenceList ? (
         <label>
           <span>Справочник</span>
@@ -216,22 +205,25 @@ export function InlineFieldEditor({
           />
         </label>
       ) : null}
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
-          checked={draft.public_visible}
-          onChange={(event) => setDraft({ ...draft, public_visible: event.currentTarget.checked })}
-        />
-        <span>Видно в публичной ссылке</span>
-      </label>
-      <label className="checkbox-inline">
-        <input
-          type="checkbox"
-          checked={draft.public_editable}
-          onChange={(event) => setDraft({ ...draft, public_editable: event.currentTarget.checked })}
-        />
-        <span>Доступно для публичного редактирования</span>
-      </label>
+      <details aria-label="Публичное редактирование">
+        <summary>Публичное редактирование</summary>
+        <label className="checkbox-inline">
+          <input
+            type="checkbox"
+            checked={draft.public_visible}
+            onChange={(event) => setDraft({ ...draft, public_visible: event.currentTarget.checked })}
+          />
+          <span>Видно в публичной ссылке</span>
+        </label>
+        <label className="checkbox-inline">
+          <input
+            type="checkbox"
+            checked={draft.public_editable}
+            onChange={(event) => setDraft({ ...draft, public_editable: event.currentTarget.checked })}
+          />
+          <span>Доступно для публичного редактирования</span>
+        </label>
+      </details>
       <details>
         <summary>Ещё</summary>
         <label className="checkbox-inline">
