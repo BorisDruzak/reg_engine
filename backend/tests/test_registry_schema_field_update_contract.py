@@ -594,6 +594,24 @@ def test_field_create_rejects_registry_wide_duplicate_before_insert_or_audit(
     assert audit_events == []
 
 
+def test_field_code_validation_excludes_archived_fields() -> None:
+    session = Mock(spec=Session)
+    session.scalar.return_value = None
+    service = RegistrySchemaService(session)
+
+    assert (
+        service._validate_field_code(  # noqa: SLF001
+            code="reusable_code",
+            registry_id=uuid4(),
+        )
+        == "reusable_code"
+    )
+
+    statement = session.scalar.call_args.args[0]
+    rendered = str(statement)
+    assert "form_fields.archived_at IS NULL" in rendered
+
+
 def test_card_template_membership_update_requests_a_fresh_row_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

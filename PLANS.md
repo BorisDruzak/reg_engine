@@ -4881,3 +4881,18 @@ Production release evidence:
   `Школа 1` rendered `Садик 1` checked and disabled with `Входит через Школа 1`;
   the form was cancelled without creating production data. Browser console
   contained no warnings or errors.
+
+#### Reuse technical codes of archived form fields
+
+Status: implementation complete; disposable PostgreSQL migration and
+production rollout pending.
+
+- An archived form field must not reserve its technical code. Active and
+  non-archived fields remain unique within the registry; archived rows retain
+  their IDs and historical values for audit purposes.
+- Migration `0026_reuse_archived_field_codes` replaces the old unconditional
+  `(block_id, code)` unique constraint with a PostgreSQL partial unique index
+  for unarchived rows. The schema service uses the same archived-row rule for
+  its registry-wide friendly duplicate check.
+- Focused unit and metadata tests pass locally; the existing PostgreSQL API
+  scenario now archives a field and creates a replacement with the same code.

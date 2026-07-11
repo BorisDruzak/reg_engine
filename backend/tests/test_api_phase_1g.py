@@ -490,6 +490,18 @@ def test_phase_1g_rest_workflow_completion(
         actor_id=system_admin.id,
     )
     assert archived_field["is_active"] is False
+    reused_archived_field_code = _post_json(
+        api_client,
+        f"/api/v1/blocks/{main_block['id']}/fields",
+        {
+            "code": "archive-field",
+            "label": "Replacement Archive Field",
+            "field_type": "text",
+        },
+        actor_id=system_admin.id,
+    )
+    assert reused_archived_field_code["code"] == "archive-field"
+    assert reused_archived_field_code["id"] != archive_field["id"]
 
     reference_lists = _request_json(
         api_client,

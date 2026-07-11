@@ -27,7 +27,6 @@ def test_important_unique_constraints_exist() -> None:
         "org_units": {"uq_org_units_organization_id_code"},
         "registries": {"uq_registries_code"},
         "form_blocks": {"uq_form_blocks_registry_id_code"},
-        "form_fields": {"uq_form_fields_block_id_code"},
         "reference_lists": {"uq_reference_lists_registry_owner_code"},
         "reference_items": {"uq_reference_items_list_id_code"},
         "card_block_instances": {"uq_card_block_instances_card_id_block_id_ordinal"},
@@ -96,7 +95,10 @@ def test_important_indexes_exist() -> None:
             "uq_registries_default_owner_tree_active",
         },
         "form_blocks": {"ix_form_blocks_registry_id"},
-        "form_fields": {"ix_form_fields_block_id"},
+        "form_fields": {
+            "ix_form_fields_block_id",
+            "uq_form_fields_block_id_code_unarchived",
+        },
         "reference_lists": {
             "ix_reference_lists_registry_id",
             "ix_reference_lists_owner_organization_id",

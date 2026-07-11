@@ -103,7 +103,13 @@ class FormBlock(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
 class FormField(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "form_fields"
     __table_args__ = (
-        UniqueConstraint("block_id", "code", name="uq_form_fields_block_id_code"),
+        Index(
+            "uq_form_fields_block_id_code_unarchived",
+            "block_id",
+            "code",
+            unique=True,
+            postgresql_where=text("archived_at is null"),
+        ),
         CheckConstraint(f"field_type in ({quoted(FIELD_TYPES)})", name="field_type"),
         CheckConstraint(f"required_mode in ({quoted(REQUIRED_MODES)})", name="required_mode"),
         Index("ix_form_fields_block_id", "block_id"),

@@ -1507,6 +1507,7 @@ class RegistrySchemaService:
             .where(
                 FormBlock.registry_id == registry_id,
                 FormField.code == cleaned,
+                FormField.archived_at.is_(None),
             )
         )
         if field_id is not None:
