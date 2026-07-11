@@ -4783,8 +4783,8 @@ Live Browser proof:
 
 #### Three-role user access and inline user profiles
 
-Status: local implementation and release checks complete; pending commit,
-push, production migration, deployment, and live Browser verification.
+Status: complete, pushed to `main`, production-migrated, deployed, and
+live Browser verified.
 
 - Migration `0025_three_role_access` adds the independent
   `users.can_manage_access` flag and reconciles the active role catalogue to
@@ -4811,13 +4811,23 @@ push, production migration, deployment, and live Browser verification.
 - Card-template reading no longer requires a document storage configuration;
   storage is initialized only for print-view and DOCX/PDF generation. Public
   attachment uploads keep a separate quota from the field-edit usage limit.
-- Verification passed locally against the disposable PostgreSQL database:
-  migration tests, focused three-role API tests, full backend `pytest`, frontend
+- Local verification against the disposable PostgreSQL database covered the
+  migration, focused three-role API scenarios, full backend `pytest`, frontend
   Vitest, ESLint, TypeScript, scoped Prettier, and the Vite production build.
-
-Release gate:
-
-- Run the full repository check after the final diff review, commit to `main`,
-  push, create a fresh production backup and preflight report, apply `0025`,
-  deploy API and frontend, then verify the three visible roles and
-  descendant-scope behavior in the live Browser.
+- Release commits `ce23c59c` and `46821ecc` are pushed to `main`. The server
+  checkout is synchronized at `46821ecc` and both deployment checks passed.
+- Before the production migration, the live database was at
+  `0024_card_public_access`; `org_admin` had zero active grants and the new
+  column did not exist. A fresh backup was written outside Git to
+  `/var/backups/reg_engine/reg_engine_before_0025_20260711_180115.dump`
+  (`193342` bytes, SHA-256
+  `276f573ad7af2fe802aaaa569e88fb515315268c0dceeb6707098dbbf508aef6`).
+- Production now reports `0025_three_role_access (head)`, exactly the three
+  active business roles, zero active legacy roles, and
+  `users.can_manage_access` present. The canonical role permission sets match
+  the defined administrator, organization-administrator, and subordinate
+  organization-administrator policy.
+- A cache-busting Browser run at `?release=46821ecc` confirmed the removed
+  `Доступ` navigation item, one inline user profile, the three Russian role
+  choices, the separate access-delegation checkbox, and the Russian
+  `Отключён` status label. No production test user was created for this check.
