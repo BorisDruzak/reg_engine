@@ -544,7 +544,11 @@ class AttachmentService:
         now = datetime.now(UTC)
         editable_statuses = {"active", "changes_requested"}
         expirable_statuses = {*editable_statuses, "submitted"}
-        if public_link.expires_at <= now and public_link.status in expirable_statuses:
+        if (
+            public_link.expires_at is not None
+            and public_link.expires_at <= now
+            and public_link.status in expirable_statuses
+        ):
             old_status = public_link.status
             public_link.status = "expired"
             public_link.can_view = False

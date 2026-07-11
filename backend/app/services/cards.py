@@ -1032,6 +1032,57 @@ class CardService:
         )
         return new_card
 
+    def move_card_organization_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        target_organization_id: UUID,
+    ) -> Card:
+        card = self._get_editable_card(card_id)
+        target_organization = self.session.get(Organization, target_organization_id)
+        if (
+            target_organization is None
+            or target_organization.archived_at is not None
+            or not target_organization.is_active
+        ):
+            raise CardServiceError("Target organization was not found.")
+
+        permissions = PermissionService(self.session)
+        if not permissions.is_superuser(actor_user_id):
+            self._require_card_permission(
+                actor_user_id,
+                card.organization_id,
+                registry_id=card.registry_id,
+            )
+            self._require_card_permission(
+                actor_user_id,
+                target_organization.id,
+                registry_id=card.registry_id,
+            )
+
+        old_organization_id = card.organization_id
+        old_org_unit_id = card.org_unit_id
+        card.organization_id = target_organization.id
+        card.org_unit_id = None
+        card.updated_by = actor_user_id
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="update",
+            object_type="card",
+            object_id=card.id,
+            old_data_json={
+                "organization_id": str(old_organization_id),
+                "org_unit_id": str(old_org_unit_id) if old_org_unit_id is not None else None,
+            },
+            new_data_json={
+                "organization_id": str(card.organization_id),
+                "org_unit_id": None,
+            },
+        )
+        return card
+
     def create_block_instance_for_actor(
         self,
         *,

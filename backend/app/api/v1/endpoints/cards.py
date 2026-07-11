@@ -16,6 +16,7 @@ from app.schemas.cards import (
     CardFieldRead,
     CardListFieldValueRead,
     CardListRead,
+    CardOrganizationUpdate,
     CardPublicAccessRead,
     CardPublicAccessUpdate,
     CardRead,
@@ -308,6 +309,25 @@ def update_card(
             lifecycle_status=payload.lifecycle_status,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card, card_service)
+
+
+@router.patch("/cards/{card_id}/organization", response_model=CardSummaryRead)
+def move_card_organization(
+    card_id: UUID,
+    payload: CardOrganizationUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card_service = CardService(session)
+        card = card_service.move_card_organization_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            target_organization_id=payload.organization_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)

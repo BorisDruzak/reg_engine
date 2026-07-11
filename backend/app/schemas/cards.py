@@ -146,3 +146,7 @@ class CardRead(BaseModel):
 
 class CardTransferRequest(BaseModel):
     target_organization_id: UUID
+
+
+class CardOrganizationUpdate(BaseModel):
+    organization_id: UUID

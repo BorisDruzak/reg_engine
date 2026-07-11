@@ -44,6 +44,7 @@ def test_production_like_app_rejects_default_auth_secret(monkeypatch) -> None:
 def test_production_like_app_requires_attachment_allowed_types(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("AUTH_TOKEN_SECRET", "not-the-development-secret")
+    monkeypatch.setenv("REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY", "configured-for-test")
     monkeypatch.delenv("REG_ENGINE_ATTACHMENT_ALLOWED_TYPES", raising=False)
     monkeypatch.delenv("REG_ENGINE_ENV_FILE", raising=False)
     get_settings.cache_clear()

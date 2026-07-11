@@ -182,10 +182,11 @@ class PublicLinkService:
         card = self._get_active_card(card_id)
         self._require_card_permission(actor_user_id, card)
         raw_token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
         public_link = CardPublicLink(
             card_id=card.id,
             token_hash=hash_public_token(raw_token),
-            expires_at=datetime.now(UTC) + timedelta(days=expires_in_days),
+            expires_at=expires_at,
             max_attachment_uploads=max_attachment_uploads,
             review_enabled=review_enabled,
             created_by=actor_user_id,
@@ -201,7 +202,7 @@ class PublicLinkService:
             object_id=public_link.id,
             new_data_json={
                 "card_id": str(card.id),
-                "expires_at": public_link.expires_at.isoformat(),
+                "expires_at": expires_at.isoformat(),
                 "max_attachment_uploads": max_attachment_uploads,
                 "review_enabled": review_enabled,
                 "public_scope": "card_settings",
