@@ -295,7 +295,7 @@ project-map checks pass; only existing documented warnings remain.
 Record behavior, test counts, bundle hash, and limitations. Regenerate the
 project map when required.
 
-- [ ] **Step 4: Commit, push, and deploy through project scripts**
+- [x] **Step 4: Commit, push, and deploy through project scripts**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/push-git.ps1 -Message "Release compact field reference editor"
@@ -303,7 +303,7 @@ powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
 powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1
 ```
 
-- [ ] **Step 5: Live browser verification**
+- [x] **Step 5: Live browser verification**
 
 On `http://192.168.100.12:8000/`, verify the deployed bundle and exact flow:
 open a field, confirm hidden code and collapsed public section, preserve an
@@ -312,7 +312,7 @@ list/item names, create or edit only disposable test reference data, and open
 authenticated/public filling controls to confirm hint rendering. Restore or
 archive disposable changes and require zero console errors.
 
-- [ ] **Step 6: Final synchronization check**
+- [x] **Step 6: Final synchronization check**
 
 Confirm local `main`, `origin/main`, and `/opt/reg_engine` match; the server
 checkout is clean; `reg-engine.service` and healthcheck are active; the final

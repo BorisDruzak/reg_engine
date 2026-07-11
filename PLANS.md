@@ -4449,7 +4449,7 @@ Live Browser proof:
 
 #### Compact field settings and inline reference editor
 
-Status: implemented and locally verified; production release pending.
+Status: complete, pushed, deployed, server-checked, and live-verified.
 
 - The inline field editor now hides the immutable technical code, replaces the
   large description area with a compact `Подсказка` input, and exposes only
@@ -4475,3 +4475,28 @@ Status: implemented and locally verified; production release pending.
   Starlette/httpx deprecation and Vite main-chunk advisories remain unchanged.
   The verified local bundle is `index-Cd5qJEZE.js` (`571.31 kB`, `162.51 kB`
   gzip) with `index-z633G42S.css`.
+
+Production release evidence:
+
+- Local `main`, `origin/main`, and the server checkout were synchronized
+  through `31c7bf84` (`Release compact field reference editor`). No database
+  migration or production-data change was required.
+- `scripts/deploy.ps1` passed server checkout, service, PostgreSQL, and
+  attachment-storage checks. `scripts/deploy-frontend.ps1` deployed
+  `/assets/index-Cd5qJEZE.js` and `/assets/index-z633G42S.css`, restarted the
+  API service, and passed health and same-origin frontend smoke checks.
+
+Live Browser proof:
+
+- The deployed editor loaded `/assets/index-Cd5qJEZE.js`. Editing `tst` showed
+  no technical-code control, a compact `Подсказка` input, exactly two
+  mandatory choices, the selected reference list, and a closed
+  `Публичное редактирование` section.
+- `Создать новый` replaced the field form with the inline reference editor.
+  Submitting an empty name produced `Введите название справочника` without an
+  API write. `Назад` restored the temporary field hint unchanged.
+- `Изменить выбранный` displayed the existing `test_1` items and the add,
+  rename, reorder, and archive actions. No reference-list mutation was made.
+- Cancelling the field discarded the temporary hint. Final state had zero
+  active field/reference editors, no page-level horizontal overflow, the
+  original two available reference lists, and zero browser warnings/errors.
