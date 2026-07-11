@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 12:05:02 +05:00
+- Generated: 2026-07-11 12:08:11 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -206,6 +206,7 @@
 - `docs/superpowers/plans/2026-07-10-contextual-card-layout-studio.md`
 - `docs/superpowers/plans/2026-07-10-filled-card-workspace.md`
 - `docs/superpowers/plans/2026-07-10-public-link-review-lifecycle.md`
+- `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
