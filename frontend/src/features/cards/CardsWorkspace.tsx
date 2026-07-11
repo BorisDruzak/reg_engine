@@ -5,7 +5,15 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import {
   archiveCard,
@@ -17,7 +25,6 @@ import {
   generateCardTemplateLayoutPdf,
   listCardFieldReferenceItems,
   listAttachments,
-  listPublicLinks,
   readCardPresentation,
   updateCardFieldValue,
   updateCardFieldValues,
@@ -32,7 +39,6 @@ import type {
   FormBlockRead,
   FormFieldRead,
   OrganizationRead,
-  PublicLinkRead,
   RegistrySchemaRead,
   AttachmentRead,
 } from "@/api/types";
@@ -58,8 +64,7 @@ import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditor
 import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
-import { GeneratedDocumentsPanel } from "./GeneratedDocumentsPanel";
-import { PublicLinkReviewPanel } from "./PublicLinkReviewPanel";
+import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -68,17 +73,6 @@ import {
   initialEditorValue,
 } from "./fieldEditorUtils";
 import { useBlockEditor } from "./useBlockEditor";
-
-type CardWorkspaceTab = "fields" | "print" | "attachments" | "documents" | "links" | "history";
-
-const cardWorkspaceTabs: { id: CardWorkspaceTab; label: string }[] = [
-  { id: "fields", label: uiText.cardFieldsTab },
-  { id: "print", label: "Печатная форма" },
-  { id: "attachments", label: uiText.attachments },
-  { id: "documents", label: uiText.documents },
-  { id: "links", label: uiText.publicLinks },
-  { id: "history", label: uiText.cardHistory },
-];
 
 type CardShellTab = "list" | `card:${string}`;
 
@@ -128,8 +122,6 @@ export function CardsWorkspace({
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const [cardFormMode, setCardFormMode] = useState<"create" | null>(null);
-  const [activeTab, setActiveTab] = useState<CardWorkspaceTab>("fields");
-  const [publicLinkCreateOpen, setPublicLinkCreateOpen] = useState(false);
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
@@ -253,23 +245,7 @@ export function CardsWorkspace({
         : [],
     [card],
   );
-  const publicLinksQuery = useQuery({
-    queryKey: ["public-links", token, card?.id],
-    queryFn: () => {
-      if (!card) throw new Error(uiText.notFound);
-      return listPublicLinks(token, card.id);
-    },
-    enabled: Boolean(token && card?.can_manage),
-  });
   const completionLabel = cardCompletionLabel(fieldRows);
-  const publicLinksLabel = card?.can_manage
-    ? cardPublicLinksLabel(publicLinksQuery.data?.items, publicLinksQuery.error)
-    : null;
-  const availableCardWorkspaceTabs = useMemo(
-    () =>
-      card?.can_manage ? cardWorkspaceTabs : cardWorkspaceTabs.filter((tab) => tab.id !== "links"),
-    [card?.can_manage],
-  );
   const visibleOpenCardIds = useMemo(
     () => openCardIds.filter((cardId) => cards.some((item) => item.id === cardId)),
     [cards, openCardIds],
@@ -436,8 +412,6 @@ export function CardsWorkspace({
     setCardFormMode("create");
     setActiveShellTab("list");
     activeCardIdRef.current = null;
-    setActiveTab("fields");
-    setPublicLinkCreateOpen(false);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -465,8 +439,6 @@ export function CardsWorkspace({
     setOpenCardIds((current) => (current.includes(cardId) ? current : [...current, cardId]));
     setActiveShellTab(`card:${cardId}`);
     activeCardIdRef.current = cardId;
-    setActiveTab("fields");
-    setPublicLinkCreateOpen(false);
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -479,8 +451,6 @@ export function CardsWorkspace({
     const cardId = tabId.startsWith("card:") ? tabId.slice("card:".length) : null;
     setActiveShellTab(tabId);
     activeCardIdRef.current = cardId;
-    setActiveTab("fields");
-    setPublicLinkCreateOpen(false);
     setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -588,7 +558,17 @@ export function CardsWorkspace({
               isDirty={blockEditor.dirty}
               canManage={card.can_manage}
               completionLabel={completionLabel}
-              publicLinksLabel={publicLinksLabel}
+              publicLinkControl={
+                card.can_manage ? (
+                  <PublicLinkQuickControl
+                    blocks={presentationBlocks}
+                    cardId={card.id}
+                    fields={presentationFields}
+                    layout={presentationLayout}
+                    token={token}
+                  />
+                ) : null
+              }
               canDownloadPrint={Boolean(selectedCardPrintView)}
               isDownloadingPrint={
                 downloadCardPrintDocxMutation.isPending || downloadCardPrintPdfMutation.isPending
@@ -601,10 +581,6 @@ export function CardsWorkspace({
               successMessage={successMessage}
               onDownloadPrintDocx={() => downloadCardPrintDocxMutation.mutate()}
               onDownloadPrintPdf={() => downloadCardPrintPdfMutation.mutate()}
-              onSendForFilling={() => {
-                setActiveTab("links");
-                setPublicLinkCreateOpen(true);
-              }}
               onArchive={() => {
                 setArchiveTarget(selectedCard);
                 setCardFormMode(null);
@@ -661,18 +637,12 @@ export function CardsWorkspace({
                     error={createBlockInstanceMutation.error ?? archiveBlockInstanceMutation.error}
                   />
                 ) : null}
-                <WorkspaceTabs
-                  tabs={availableCardWorkspaceTabs}
-                  activeTab={activeTab}
-                  ariaLabel={uiText.cardSections}
-                  onChange={setActiveTab}
-                />
               </div>
             ) : (
               <p className="data-empty">{uiText.noData}</p>
             )}
           </Panel>
-          {card && activeTab === "fields" && (
+          {card && (
             <Panel title={uiText.cardFields}>
               {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
               <DataAlert error={cardPresentationQuery.error} />
@@ -715,42 +685,8 @@ export function CardsWorkspace({
                 !presentationLayout && <p className="data-empty">{uiText.noData}</p>}
             </Panel>
           )}
-          {card && activeTab === "print" && (
-            <CardPrintPreviewPanel
-              card={card}
-              layout={presentationLayout}
-              fields={presentationFields}
-              registryName={cardPresentationQuery.data?.registry_name ?? null}
-              organizationName={organizationsById.get(card.organization_id)?.name ?? null}
-            />
-          )}
-          {card && activeTab === "attachments" && (
+          {card && (
             <CardAttachmentsPanel cardId={card.id} token={token} canManage={card.can_manage} />
-          )}
-          {card && activeTab === "documents" && (
-            <GeneratedDocumentsPanel
-              cardId={card.id}
-              registryId={card.registry_id}
-              token={token}
-              canManage={card.can_manage}
-            />
-          )}
-          {card?.can_manage && activeTab === "links" && (
-            <PublicLinkReviewPanel
-              key={card.id}
-              blocks={presentationBlocks}
-              cardId={card.id}
-              createFormOpen={publicLinkCreateOpen}
-              fields={presentationFields}
-              layout={presentationLayout}
-              onCreateFormOpenChange={setPublicLinkCreateOpen}
-              token={token}
-            />
-          )}
-          {card && activeTab === "history" && (
-            <Panel title={uiText.cardHistory}>
-              <p className="data-empty">{uiText.noData}</p>
-            </Panel>
           )}
         </div>
       )}
@@ -769,6 +705,8 @@ export function CardsWorkspace({
   );
 }
 
+// Kept for a later print-view return; the card workspace no longer renders it directly.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CardPrintPreviewPanel({
   card,
   layout: cardTemplateLayout,
@@ -834,14 +772,13 @@ function CardActionPanel({
   isDirty,
   canManage,
   completionLabel,
-  publicLinksLabel,
+  publicLinkControl,
   canDownloadPrint,
   isDownloadingPrint,
   actionError,
   successMessage,
   onDownloadPrintDocx,
   onDownloadPrintPdf,
-  onSendForFilling,
   onArchive,
 }: {
   card: CardRead;
@@ -849,48 +786,55 @@ function CardActionPanel({
   isDirty: boolean;
   canManage: boolean;
   completionLabel: string;
-  publicLinksLabel: string | null;
+  publicLinkControl: ReactNode;
   canDownloadPrint: boolean;
   isDownloadingPrint: boolean;
   actionError?: unknown;
   successMessage?: string | null;
   onDownloadPrintDocx: () => void;
   onDownloadPrintPdf: () => void;
-  onSendForFilling: () => void;
   onArchive: () => void;
 }) {
+  const [downloadOpen, setDownloadOpen] = useState(false);
   return (
     <div className="card-action-panel" role="group" aria-label={uiText.cardActionPanel}>
       <div className="card-action-status">
         <strong>{card.display_name}</strong>
         <span>{lifecycleStatusLabel(selectedCard.lifecycle_status)}</span>
         <span>{completionLabel}</span>
-        {publicLinksLabel ? <span>{publicLinksLabel}</span> : null}
         {isDirty && <p className="inline-alert">{uiText.unsavedCardChanges}</p>}
         <MutationFeedback error={actionError} successMessage={successMessage} />
       </div>
       <div className="row-actions card-action-buttons">
         {canManage ? (
           <>
-            <button type="button" className="primary-button" onClick={onSendForFilling}>
-              Отправить на заполнение
-            </button>
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={!canDownloadPrint || isDownloadingPrint}
-              onClick={onDownloadPrintDocx}
-            >
-              Скачать DOCX
-            </button>
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={!canDownloadPrint || isDownloadingPrint}
-              onClick={onDownloadPrintPdf}
-            >
-              Скачать PDF
-            </button>
+            {publicLinkControl}
+            <div className="card-download-menu">
+              <button
+                type="button"
+                className="ghost-button"
+                aria-expanded={downloadOpen}
+                aria-haspopup="menu"
+                disabled={!canDownloadPrint || isDownloadingPrint}
+                onClick={() => setDownloadOpen((current) => !current)}
+              >
+                Скачать
+              </button>
+              {downloadOpen ? (
+                <div
+                  className="card-download-menu-items"
+                  role="menu"
+                  aria-label="Формат скачивания"
+                >
+                  <button type="button" role="menuitem" onClick={onDownloadPrintDocx}>
+                    DOCX
+                  </button>
+                  <button type="button" role="menuitem" onClick={onDownloadPrintPdf}>
+                    PDF
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               className="danger-button"
@@ -1168,17 +1112,6 @@ function isCompletedCardValue(value: unknown) {
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
   return true;
-}
-
-function cardPublicLinksLabel(items: PublicLinkRead[] | undefined, error: Error | null) {
-  if (error) return "Публичные ссылки: статус недоступен";
-  if (!items) return "Публичные ссылки: загрузка";
-  const activeCount = items.filter(
-    (item) =>
-      !item.disabled_at && item.status === "active" && new Date(item.expires_at) > new Date(),
-  ).length;
-  if (activeCount === 1) return "Публичные ссылки: 1 активна";
-  return `Публичные ссылки: ${activeCount} активны`;
 }
 
 async function invalidateCardQueries(

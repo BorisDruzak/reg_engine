@@ -161,9 +161,6 @@ function PublicEditableCard({
   );
   const [attachmentUploadState, setAttachmentUploadState] =
     useState<PublicAttachmentUploadState>("idle");
-  useEffect(() => {
-    setConfirmedFieldValues(publicConfirmedFieldValues(preview));
-  }, [preview]);
   const submitMutation = useMutation({
     mutationFn: () => submitPublicLink(rawToken),
     onSuccess: (nextStatus) => {

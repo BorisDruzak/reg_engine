@@ -30,6 +30,7 @@ import { formatDate, shortId } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import { formatValue } from "./fieldEditorUtils";
+import { eligiblePublicLinkSchema } from "./publicLinkSchema";
 
 type CreateFormState = {
   expiresInDays: string;
@@ -46,6 +47,7 @@ export function PublicLinkReviewPanel({
   layout,
   onCreateFormOpenChange,
   token,
+  hideCreateAction = false,
 }: {
   blocks: FormBlockRead[];
   cardId: string;
@@ -54,29 +56,12 @@ export function PublicLinkReviewPanel({
   layout: CardTemplateLayoutRead | null;
   onCreateFormOpenChange?: (open: boolean) => void;
   token: string;
+  hideCreateAction?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const eligibleFields = useMemo(
-    () =>
-      fields.filter(
-        (field) =>
-          field.is_active &&
-          field.public_visible &&
-          field.public_editable &&
-          !["file_ref", "static_text"].includes(field.field_type),
-      ),
-    [fields],
-  );
-  const eligibleBlocks = useMemo(() => {
-    const fieldBlockIds = new Set(eligibleFields.map((field) => field.block_id));
-    return blocks.filter(
-      (block) =>
-        block.is_active &&
-        block.public_visible &&
-        block.public_editable &&
-        fieldBlockIds.has(block.id),
-    );
-  }, [blocks, eligibleFields]);
+  const eligibleSchema = useMemo(() => eligiblePublicLinkSchema(blocks, fields), [blocks, fields]);
+  const eligibleFields = eligibleSchema.fields;
+  const eligibleBlocks = eligibleSchema.blocks;
   const defaultForm = useMemo(
     (): CreateFormState => ({
       expiresInDays: "7",
@@ -89,7 +74,7 @@ export function PublicLinkReviewPanel({
     [eligibleBlocks, eligibleFields],
   );
   const [internalCreateFormOpen, setInternalCreateFormOpen] = useState(false);
-  const isCreating = createFormOpen ?? internalCreateFormOpen;
+  const isCreating = !hideCreateAction && (createFormOpen ?? internalCreateFormOpen);
   const [createForm, setCreateForm] = useState<CreateFormState>(defaultForm);
   const [createPending, setCreatePending] = useState(false);
   const [createError, setCreateError] = useState<unknown>(null);
@@ -238,11 +223,13 @@ export function PublicLinkReviewPanel({
 
   return (
     <Panel title={uiText.publicLinks}>
-      <div className="panel-toolbar public-link-review-toolbar">
-        <button type="button" className="ghost-button" onClick={openCreateForm}>
-          Отправить на заполнение
-        </button>
-      </div>
+      {!hideCreateAction ? (
+        <div className="panel-toolbar public-link-review-toolbar">
+          <button type="button" className="ghost-button" onClick={openCreateForm}>
+            Отправить на заполнение
+          </button>
+        </div>
+      ) : null}
       <p className="public-link-direct-warning">
         Сохранённые по ссылке значения сразу изменяют карточку. Проверка не применяет отдельную
         копию данных.

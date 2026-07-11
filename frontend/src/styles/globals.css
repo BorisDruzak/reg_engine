@@ -3555,6 +3555,88 @@ tr:last-child td {
   flex: 0 0 auto;
 }
 
+.card-action-buttons > .card-public-link-quick-control,
+.card-action-buttons > .card-download-menu {
+  position: relative;
+}
+
+.card-public-link-quick-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.public-link-quick-hint {
+  max-width: 20rem;
+  margin: 0;
+  color: #8a5a12;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.card-public-link-created {
+  display: grid;
+  gap: 6px;
+  min-width: 16rem;
+  padding: 8px;
+  border: 1px solid #b9ddd1;
+  border-radius: 7px;
+  background: #f5fcf8;
+}
+
+.card-public-link-created label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #52677f;
+  font-size: 0.76rem;
+}
+
+.card-public-link-created input {
+  min-width: 0;
+  width: 100%;
+}
+
+.card-public-link-lifecycle summary {
+  cursor: pointer;
+  color: #52677f;
+  font-size: 0.78rem;
+}
+
+.card-public-link-lifecycle > .data-panel {
+  min-width: min(100%, 34rem);
+  margin-top: 8px;
+}
+
+.card-download-menu-items {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 7rem;
+  padding: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.14);
+}
+
+.card-download-menu-items button {
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 4px;
+  color: #1f334d;
+  background: transparent;
+  text-align: left;
+}
+
+.card-download-menu-items button:hover,
+.card-download-menu-items button:focus-visible {
+  background: #edf5ff;
+  outline: 0;
+}
+
 .card-metadata-panel,
 .repeatable-block-controls,
 .bulk-field-form {

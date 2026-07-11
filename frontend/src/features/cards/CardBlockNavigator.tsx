@@ -25,11 +25,6 @@ function itemStatus(item: CardBlockNavigationItem) {
   return item.totalCount === 0 ? "нет полей" : "не заполнено";
 }
 
-function statusLabel(item: CardBlockNavigationItem) {
-  const status = itemStatus(item);
-  return `${status.slice(0, 1).toUpperCase()}${status.slice(1)}`;
-}
-
 function statusTitle(item: CardBlockNavigationItem) {
   if (item.state === "attention") return "Нужно заполнить";
   if (item.state === "complete") return "Заполнено";
@@ -45,12 +40,8 @@ function statusCount(item: CardBlockNavigationItem) {
 export function CardBlockNavigator({ items }: CardBlockNavigatorProps) {
   const itemIds = useMemo(() => items.map((item) => item.anchorId), [items]);
   const [currentAnchorId, setCurrentAnchorId] = useState<string | null>(itemIds[0] ?? null);
-
-  useEffect(() => {
-    setCurrentAnchorId((current) =>
-      current && itemIds.includes(current) ? current : (itemIds[0] ?? null),
-    );
-  }, [itemIds]);
+  const activeAnchorId =
+    currentAnchorId && itemIds.includes(currentAnchorId) ? currentAnchorId : (itemIds[0] ?? null);
 
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") {
@@ -84,8 +75,8 @@ export function CardBlockNavigator({ items }: CardBlockNavigatorProps) {
           <button
             key={item.anchorId}
             type="button"
-            className={`card-block-navigator-item is-${item.state}${currentAnchorId === item.anchorId ? " is-current" : ""}`}
-            aria-current={currentAnchorId === item.anchorId ? "location" : undefined}
+            className={`card-block-navigator-item is-${item.state}${activeAnchorId === item.anchorId ? " is-current" : ""}`}
+            aria-current={activeAnchorId === item.anchorId ? "location" : undefined}
             aria-label={`${item.label}: ${itemStatus(item)}`}
             onClick={() => {
               setCurrentAnchorId(item.anchorId);

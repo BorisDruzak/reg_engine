@@ -108,6 +108,7 @@ export const uiText = {
   disablePublicLink: "Отключить публичную ссылку",
   publicLinkCreated: "Публичная ссылка создана",
   publicLinkDisabled: "Публичная ссылка отключена",
+  publicLinkSchemaRequired: "Сначала настройте публичное редактирование полей в шаблоне карточки.",
   publicLinkDisableConfirmation:
     "Публичная ссылка станет недоступна для просмотра и редактирования.",
   publicLinkToken: "Токен публичной ссылки",
@@ -726,6 +727,9 @@ export function apiErrorMessageLabel(message: string) {
 }
 
 export function runtimeErrorMessageLabel(message: string) {
+  if (message === "Выберите хотя бы один публичный блок и поле.") {
+    return uiText.publicLinkSchemaRequired;
+  }
   const localMessages = new Set<string>([
     uiText.jsonObjectRequired,
     uiText.importXlsxPreviewStale,
