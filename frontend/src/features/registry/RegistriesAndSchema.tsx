@@ -697,19 +697,6 @@ function SchemaVisualEditor({
           role="region"
           aria-label={`${uiText.cardTemplateEditor} ${selectedTemplate.name}`}
         >
-          <header className="schema-template-editor-header">
-            <div>
-              <h3>
-                {uiText.cardTemplateEditor}: {selectedTemplate.name}
-              </h3>
-              <span>{`${uiText.technicalCode}: ${selectedTemplate.code}`}</span>
-            </div>
-            <div className="row-actions">
-              <button type="button" className="ghost-button" onClick={closeTemplateEditor}>
-                {uiText.cancel}
-              </button>
-            </div>
-          </header>
           <CardLayoutStudio
             token={token}
             registryId={selectedRegistryId}

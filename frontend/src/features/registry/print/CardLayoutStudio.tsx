@@ -45,6 +45,10 @@ import {
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import type { CardLayoutSelection } from "@/features/cardLayout/CardLayoutRenderer";
 import type { CardLayoutCreatePosition } from "@/features/cardLayout/CardWebLayoutCanvas";
+import {
+  reorderBlockSections,
+  type BlockOrderDirection,
+} from "@/features/cardLayout/blockOrdering";
 import type { LayoutGeometryCommand } from "@/features/cardLayout/useLayoutGeometrySession";
 
 import { A4TemplatePropertiesPanel } from "./A4TemplatePropertiesPanel";
@@ -85,8 +89,10 @@ type InsertBlockDialogState = {
 };
 
 type GeometryHistory = {
-  undo: LayoutGeometryCommand[];
-  redo: LayoutGeometryCommand[];
+  undo: Array<{
+    before: CardTemplateFormLayoutRead;
+    after: CardTemplateFormLayoutRead;
+  }>;
 };
 
 export function CardLayoutStudio(props: CardLayoutStudioProps) {
@@ -161,7 +167,6 @@ function CardLayoutStudioSession({
   const [lastGenerated, setLastGenerated] = useState<GeneratedDocumentRead | null>(null);
   const [geometryHistory, setGeometryHistoryState] = useState<GeometryHistory>({
     undo: [],
-    redo: [],
   });
   const temporaryBlockIds = useRef(new Set<string>());
   const temporaryFieldIds = useRef(new Set<string>());
@@ -177,7 +182,7 @@ function CardLayoutStudioSession({
   const schemaWriteTail = useRef(Promise.resolve());
   const printSaveRunning = useRef(false);
   const generationRunning = useRef(false);
-  const geometryHistoryRef = useRef<GeometryHistory>({ undo: [], redo: [] });
+  const geometryHistoryRef = useRef<GeometryHistory>({ undo: [] });
   const conflictActive = useRef(false);
   const queuedFormSave = useRef<{
     formLayout: CardTemplateFormLayoutRead;
@@ -386,7 +391,7 @@ function CardLayoutStudioSession({
     setLocalError(null);
     setLocalMessage("Принята версия макета с сервера");
     setSelection(null);
-    updateGeometryHistory({ undo: [], redo: [] });
+    updateGeometryHistory({ undo: [] });
   }
 
   async function saveReviewedLocalFormLayout() {
@@ -408,37 +413,31 @@ function CardLayoutStudioSession({
   }
 
   function handleGeometryCommit(command: LayoutGeometryCommand) {
+    recordFormLayoutChange(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
+  }
+
+  function recordFormLayoutChange(after: CardTemplateFormLayoutRead) {
+    const before = draftLayoutRef.current.form_layout;
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
     updateGeometryHistory({
-      undo: [...geometryHistoryRef.current.undo, command],
-      redo: [],
+      undo: [...geometryHistoryRef.current.undo, { before, after }],
     });
-    void saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
+    void saveNextFormLayout(after);
+  }
+
+  function moveBlock(sectionId: string, direction: BlockOrderDirection) {
+    if (conflictActive.current || schemaWritesInFlight.current > 0 || formSaveRunning.current) return;
+    const next = reorderBlockSections(draftLayoutRef.current.form_layout, sectionId, direction);
+    if (next) recordFormLayoutChange(next);
   }
 
   function undoGeometryChange() {
-    const command = geometryHistoryRef.current.undo.at(-1);
-    if (!command || conflictActive.current || schemaWritesInFlight.current > 0) return;
+    const entry = geometryHistoryRef.current.undo.at(-1);
+    if (!entry || conflictActive.current || schemaWritesInFlight.current > 0) return;
     updateGeometryHistory({
       undo: geometryHistoryRef.current.undo.slice(0, -1),
-      redo: [...geometryHistoryRef.current.redo, command],
     });
-    void saveNextFormLayout(
-      applyGeometryCommand(draftLayoutRef.current.form_layout, {
-        ...command,
-        before: command.after,
-        after: command.before,
-      }),
-    );
-  }
-
-  function redoGeometryChange() {
-    const command = geometryHistoryRef.current.redo.at(-1);
-    if (!command || conflictActive.current || schemaWritesInFlight.current > 0) return;
-    updateGeometryHistory({
-      undo: [...geometryHistoryRef.current.undo, command],
-      redo: geometryHistoryRef.current.redo.slice(0, -1),
-    });
-    void saveNextFormLayout(applyGeometryCommand(draftLayoutRef.current.form_layout, command));
+    void saveNextFormLayout(entry.before);
   }
 
   function startCreateBlock(position: CardLayoutCreatePosition) {
@@ -969,15 +968,6 @@ function CardLayoutStudioSession({
           <button
             type="button"
             className="ghost-button"
-            aria-label="Повторить изменение"
-            disabled={geometryHistory.redo.length === 0 || hasFormConflict || schemaPending}
-            onClick={redoGeometryChange}
-          >
-            Повторить
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
             disabled={busy}
             onClick={() => void generate("docx")}
           >
@@ -1125,6 +1115,8 @@ function CardLayoutStudioSession({
           onCommitField={commitField}
           onCancelField={cancelField}
           onGeometryCommit={handleGeometryCommit}
+          onMoveBlock={moveBlock}
+          blockOrderingDisabled={busy || hasFormConflict}
         />
       ) : null}
 

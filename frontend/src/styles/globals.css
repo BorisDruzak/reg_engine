@@ -1775,6 +1775,18 @@ tr:last-child td {
   color: #667085;
 }
 
+.card-layout-block-order-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.card-layout-block-order-button {
+  min-width: 36px;
+  padding-inline: 10px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .card-layout-field-grid {
   gap: 6px;
   margin-top: 8px;
@@ -2814,32 +2826,6 @@ tr:last-child td {
 .schema-template-editor {
   display: grid;
   gap: 14px;
-}
-
-.schema-template-editor-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #d9dee7;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.schema-template-editor-header h3 {
-  margin: 0;
-  color: #101828;
-  font-size: 1rem;
-  line-height: 1.35;
-}
-
-.schema-template-editor-header span {
-  display: block;
-  margin-top: 3px;
-  color: #667085;
-  font-size: 0.78rem;
-  line-height: 1.35;
 }
 
 .reference-workspace {

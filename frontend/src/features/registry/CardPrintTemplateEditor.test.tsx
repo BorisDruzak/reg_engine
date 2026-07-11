@@ -103,7 +103,10 @@ test("merges a deferred block create into the newest geometry before the first l
       expected_revision: "revision-1",
       form_layout: expect.objectContaining({
         sections: expect.arrayContaining([
-          expect.objectContaining({ block_id: "block-1", row: 2 }),
+          expect.objectContaining({
+            block_id: "block-1",
+            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", row: 2 })]),
+          }),
           expect.objectContaining({ block_id: "block-created" }),
         ]),
       }),
@@ -144,7 +147,7 @@ test("creates a field inline with a real canonical type and persists the layout"
   );
 });
 
-test("merges a deferred field create into the newest geometry after membership completes", async () => {
+test("defers field membership layout save until creation completes", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock({ deferredFieldCreate: true });
   vi.stubGlobal("fetch", api.fetchMock);
@@ -156,7 +159,6 @@ test("merges a deferred field create into the newest geometry after membership c
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
   await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
 
-  await moveMainBlockRight(user);
   expect(api.formSavePayloads).toHaveLength(0);
 
   api.resolveFieldCreate();
@@ -169,8 +171,10 @@ test("merges a deferred field create into the newest geometry after membership c
         sections: expect.arrayContaining([
           expect.objectContaining({
             block_id: "block-1",
-            column: 2,
-            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-created" })]),
+            items: expect.arrayContaining([
+              expect.objectContaining({ field_id: "field-1", column: 1 }),
+              expect.objectContaining({ field_id: "field-created" }),
+            ]),
           }),
         ]),
       }),
@@ -205,7 +209,11 @@ test("waits for an in-flight layout PATCH before a block update and saves geomet
     expect.objectContaining({
       expected_revision: "revision-2",
       form_layout: expect.objectContaining({
-        sections: expect.arrayContaining([expect.objectContaining({ column: 3 })]),
+        sections: expect.arrayContaining([
+          expect.objectContaining({
+            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", column: 3 })]),
+          }),
+        ]),
       }),
     }),
   );
@@ -248,28 +256,59 @@ test("inserts an existing block through a contextual chooser and saves once", as
   );
 });
 
-test("saves geometry through the shared pointer session and preview uses the latest draft", async () => {
+test("reorders adjacent blocks atomically and restores the previous layout with one undo", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
-  move.focus();
-  await user.keyboard("{ArrowRight}");
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  await user.click(
+    await screen.findByRole("button", { name: "Вставить существующий блок в эту область" }),
+  );
+  const chooser = screen.getByRole("dialog", { name: "Вставка существующего блока" });
+  await user.selectOptions(within(chooser).getByLabelText("Блок"), "block-2");
+  await user.click(within(chooser).getByRole("button", { name: "Вставить" }));
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+
+  const moveDown = screen.getByRole("button", { name: "Переместить блок Основной блок вниз" });
+  expect(moveDown).toBeEnabled();
+  await user.click(moveDown);
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.block_id)).toEqual([
+    "block-2",
+    "block-1",
+  ]);
+  expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.row)).toEqual([1, 2]);
+
+  await user.click(screen.getByRole("button", { name: "Отменить изменение" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(3));
+  expect(api.formSavePayloads[2].form_layout.sections.map((section) => section.block_id)).toEqual([
+    "block-1",
+    "block-2",
+  ]);
+  expect(screen.queryByRole("button", { name: "Повторить изменение" })).not.toBeInTheDocument();
+});
+
+test("saves field geometry and the preview uses the latest draft", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await moveMainBlockRight(user);
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
-  expect(screen.getByRole("region", { name: "Предпросмотр веб-карточки" })).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Готово" }));
 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
   expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
-  expect(api.formSavePayloads[0].form_layout.sections[0].column).toBe(2);
+  expect(api.formSavePayloads[0].form_layout.sections[0].items[0].column).toBe(2);
 
   await user.click(screen.getByRole("tab", { name: "Предпросмотр" }));
   for (const block of screen.getAllByTestId("layout-block-block-block-1")) {
-    expect(block).toHaveStyle({ gridColumn: "2 / span 6" });
+    expect(block).toHaveStyle({ gridColumn: "1 / span 6" });
   }
   expect(screen.queryByRole("button", { name: /Переместить блок/ })).not.toBeInTheDocument();
 });
@@ -280,24 +319,21 @@ test("keeps a conflicting local draft visible and accepts the reviewed server ve
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
-  move.focus();
-  await user.keyboard("{ArrowRight}");
-  await user.click(screen.getByRole("button", { name: "Готово" }));
+  await moveMainBlockRight(user);
 
   expect(
     await screen.findByText(
       "Макет изменён другим пользователем. Обновите данные перед сохранением.",
     ),
   ).toBeInTheDocument();
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
   expect(screen.queryByRole("button", { name: "Повторить" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
 
   const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
-  expect(within(comparison).getByTestId("conflict-local-layout")).toHaveTextContent("колонка 2");
+  expect(within(comparison).getByTestId("conflict-local-layout")).toHaveTextContent("колонка 1");
   expect(within(comparison).getByTestId("conflict-server-layout")).toHaveTextContent("колонка 5");
   expect(api.formSavePayloads).toHaveLength(1);
 
@@ -328,7 +364,11 @@ test("uses a conflicting local draft only after the explicit reviewed overwrite 
     expect.objectContaining({
       expected_revision: "revision-2",
       form_layout: expect.objectContaining({
-        sections: expect.arrayContaining([expect.objectContaining({ column: 2 })]),
+        sections: expect.arrayContaining([
+          expect.objectContaining({
+            items: expect.arrayContaining([expect.objectContaining({ field_id: "field-1", column: 2 })]),
+          }),
+        ]),
       }),
     }),
   );
@@ -352,11 +392,11 @@ test("serializes rapid form saves and carries the returned revision into the new
     "revision-1",
     "revision-2",
   ]);
-  expect(api.formSavePayloads.map((payload) => payload.form_layout.sections[0].column)).toEqual([
-    2, 3,
-  ]);
+  expect(
+    api.formSavePayloads.map((payload) => payload.form_layout.sections[0].items[0].column),
+  ).toEqual([2, 3]);
   await waitFor(() =>
-    expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+    expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
       gridColumn: "3 / span 6",
     }),
   );
@@ -380,7 +420,7 @@ test("a queued 409 preserves the newest local draft and waits for an explicit ov
 
   expect(await screen.findByText(STALE_LAYOUT_MESSAGE)).toBeInTheDocument();
   expect(api.formSavePayloads).toHaveLength(1);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "3 / span 6",
   });
   await user.click(screen.getByRole("button", { name: "Сравнить с версией сервера" }));
@@ -391,7 +431,7 @@ test("a queued 409 preserves the newest local draft and waits for an explicit ov
 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
   expect(api.formSavePayloads[1].expected_revision).toBe("revision-2");
-  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(3);
+  expect(api.formSavePayloads[1].form_layout.sections[0].items[0].column).toBe(3);
 });
 
 test("retains a transiently failed layout draft and retries it explicitly", async () => {
@@ -403,7 +443,7 @@ test("retains a transiently failed layout draft and retries it explicitly", asyn
   await moveMainBlockRight(user);
 
   expect(await screen.findByText(/Не сохранено\./)).toBeInTheDocument();
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
   expect(api.formSavePayloads).toHaveLength(1);
@@ -412,53 +452,41 @@ test("retains a transiently failed layout draft and retries it explicitly", asyn
 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
   expect(api.formSavePayloads[1].expected_revision).toBe("revision-1");
-  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(api.formSavePayloads[1].form_layout.sections[0].items[0].column).toBe(2);
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
 });
 
-test("owns geometry undo and redo history without duplicating commands", async () => {
+test("owns snapshot undo history without exposing redo", async () => {
   const user = userEvent.setup();
-  const api = createEditorFetchMock({ deferredFirstFormSave: "success" });
+  const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
   const undo = await screen.findByRole("button", { name: "Отменить изменение" });
-  const redo = screen.getByRole("button", { name: "Повторить изменение" });
   expect(undo).toBeDisabled();
-  expect(redo).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Повторить изменение" })).not.toBeInTheDocument();
 
   await moveMainBlockRight(user);
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
   await moveMainBlockRight(user);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "3 / span 6",
   });
 
   await user.click(undo);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "2 / span 6",
   });
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(3));
   await user.click(undo);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
+  expect(screen.getByTestId("layout-field-field-field-1")).toHaveStyle({
     gridColumn: "1 / span 6",
   });
-  await user.click(redo);
-  expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
-    gridColumn: "2 / span 6",
-  });
-
-  api.resolveFirstFormSave();
-  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
-  expect(api.formSavePayloads.map((payload) => payload.expected_revision)).toEqual([
-    "revision-1",
-    "revision-2",
-  ]);
-  expect(api.formSavePayloads[1].form_layout.sections[0].column).toBe(2);
-
-  await moveMainBlockDown(user);
-  expect(screen.getByRole("button", { name: "Повторить изменение" })).toBeDisabled();
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(4));
+  expect(api.formSavePayloads[3].form_layout.sections[0].items[0].column).toBe(1);
 });
 
 test("A4 stage uses a print element list, keeps one linked card rectangle, and removes the inner layout button", async () => {
@@ -814,6 +842,9 @@ test("opens the contextual studio directly from the selected template", async ()
   expect(screen.getByRole("region", { name: "Редактор макета карточки" })).toBeInTheDocument();
   expect(screen.queryByRole("tab", { name: "Экспорт" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
+  expect(container.querySelector(".schema-template-editor-header")).toBeNull();
+  expect(container.querySelectorAll(".card-layout-studio-header")).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
 });
 
 type FormSavePayload = {
@@ -1122,14 +1153,14 @@ const STALE_LAYOUT_MESSAGE =
   "Макет изменён другим пользователем. Обновите данные перед сохранением.";
 
 async function moveMainBlockRight(user: ReturnType<typeof userEvent.setup>) {
-  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  const move = await screen.findByTestId("layout-field-field-field-1");
   move.focus();
   await user.keyboard("{ArrowRight}");
   await user.click(screen.getByRole("button", { name: "Готово" }));
 }
 
 async function moveMainBlockDown(user: ReturnType<typeof userEvent.setup>) {
-  const move = await screen.findByRole("button", { name: "Переместить блок Основной блок" });
+  const move = await screen.findByTestId("layout-field-field-field-1");
   move.focus();
   await user.keyboard("{ArrowDown}");
   await user.click(screen.getByRole("button", { name: "Готово" }));
