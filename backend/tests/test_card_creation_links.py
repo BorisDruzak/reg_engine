@@ -10,8 +10,21 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
-from app.models import AuditEvent, Card, CardCreationLink, CardTemplate, User
-from app.services.card_creation_links import CardCreationLinkService, CreationLinkTokenCipher
+from app.models import (
+    AuditEvent,
+    Card,
+    CardCreationLink,
+    CardCreationLinkCard,
+    CardPublicLink,
+    CardTemplate,
+    FieldValue,
+    User,
+)
+from app.services.card_creation_links import (
+    CardCreationLinkError,
+    CardCreationLinkService,
+    CreationLinkTokenCipher,
+)
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
@@ -167,4 +180,89 @@ def test_admin_moves_active_card_to_allowed_target_organization(db_session: Sess
 
     assert moved.id == card.id
     assert moved.organization_id == target_organization.id
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 1
+
+
+def test_first_public_save_creates_card_and_indefinite_child_link(
+    db_session: Session,
+) -> None:
+    admin, source_organization, target_organization, registry, _ = _creation_link_context(
+        db_session
+    )
+    schema = RegistrySchemaService(db_session)
+    block = schema.create_block_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        code="creation-link-block",
+        title="Данные по ссылке",
+    )
+    field = schema.create_field_for_actor(
+        actor_user_id=admin.id,
+        block_id=block.id,
+        code="creation-link-name",
+        label="Наименование",
+        field_type="text",
+        public_editable=True,
+    )
+    template = db_session.scalar(
+        select(CardTemplate).where(CardTemplate.registry_id == registry.id)
+    )
+    assert template is not None
+    service = CardCreationLinkService(
+        db_session,
+        token_cipher=CreationLinkTokenCipher(Fernet.generate_key().decode("ascii")),
+    )
+    creation_link = service.create_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        card_template_id=template.id,
+        organization_ids=[source_organization.id],
+    )
+
+    with pytest.raises(CardCreationLinkError):
+        service.create_card_from_public_link(
+            raw_token=creation_link.raw_token,
+            organization_id=source_organization.id,
+            field_id=field.id,
+            value="   ",
+        )
+
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 0
+
+    created = service.create_card_from_public_link(
+        raw_token=creation_link.raw_token,
+        organization_id=source_organization.id,
+        field_id=field.id,
+        value="Первая карточка",
+    )
+
+    assert created.card.organization_id == source_organization.id
+    assert created.child_raw_token
+    child_link = db_session.get(CardPublicLink, created.child_public_link.id)
+    assert child_link is not None
+    assert child_link.expires_at is None
+    assert child_link.review_enabled is False
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 1
+    relation = db_session.scalar(
+        select(CardCreationLinkCard).where(CardCreationLinkCard.card_id == created.card.id)
+    )
+    assert relation is not None
+    assert created.child_raw_token not in relation.child_token_ciphertext
+    field_value = db_session.scalar(
+        select(FieldValue).where(
+            FieldValue.card_id == created.card.id,
+            FieldValue.field_id == field.id,
+        )
+    )
+    assert field_value is not None
+    assert field_value.value_text == "Первая карточка"
+
+    with pytest.raises(CardCreationLinkError):
+        service.create_card_from_public_link(
+            raw_token=creation_link.raw_token,
+            organization_id=target_organization.id,
+            field_id=field.id,
+            value="Недоступная организация",
+        )
+
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1
