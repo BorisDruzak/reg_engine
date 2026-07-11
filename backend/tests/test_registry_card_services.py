@@ -18,6 +18,7 @@ from app.models import (
     AccessGrant,
     AuditEvent,
     Card,
+    CardBlockInstance,
     CardPublicFieldSetting,
     CardTemplate,
     FieldValue,
@@ -1891,3 +1892,79 @@ def test_archived_schema_and_cards_remain_in_database(db_session: Session) -> No
     assert db_session.get(FormBlock, block.id) is not None
     assert db_session.get(FormField, field.id) is not None
     assert db_session.get(Card, card.id) is not None
+
+
+def test_archiving_a_field_retains_filled_values_and_deletes_empty_rows(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="archive-values",
+        title="Archive values",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="archive-value",
+        label="Archive value",
+        field_type="text",
+    )
+    filled_card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Filled archive value",
+    )
+    empty_card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Empty archive value",
+    )
+    retained_value = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=filled_card.id,
+        field_id=field.id,
+        value="Keep this value",
+    )
+    empty_instance = db_session.scalar(
+        select(CardBlockInstance).where(
+            CardBlockInstance.card_id == empty_card.id,
+            CardBlockInstance.block_id == block.id,
+        )
+    )
+    assert empty_instance is not None
+    empty_value = FieldValue(
+        card_id=empty_card.id,
+        block_instance_id=empty_instance.id,
+        field_id=field.id,
+        created_by=context["org_admin"].id,
+        updated_by=context["org_admin"].id,
+    )
+    db_session.add(empty_value)
+    db_session.flush()
+
+    archived_field = schema_service.archive_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        field_id=field.id,
+    )
+
+    assert archived_field.archived_at is not None
+    assert db_session.get(FieldValue, retained_value.id) is not None
+    assert db_session.get(FieldValue, empty_value.id) is None
+    archive_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "form_field",
+            AuditEvent.object_id == field.id,
+            AuditEvent.action == "archive",
+        )
+    )
+    assert archive_event is not None
+    assert archive_event.new_data_json == {
+        "deleted_empty_value_count": 1,
+        "retained_value_count": 1,
+    }

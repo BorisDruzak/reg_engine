@@ -3,13 +3,15 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
 from app.models import (
     Card,
     CardTemplate,
+    FieldValue,
+    FieldValueItem,
     FormBlock,
     FormField,
     Organization,
@@ -940,6 +942,7 @@ class RegistrySchemaService:
         self._ensure_mutable_field(field)
         self._require_schema_permission(actor_user_id, block.registry_id)
 
+        deleted_empty_value_count, retained_value_count = self._archive_field_values(field.id)
         field.archived_at = datetime.now(UTC)
         field.is_active = False
         self.session.flush()
@@ -948,6 +951,10 @@ class RegistrySchemaService:
             action="archive",
             object_type="form_field",
             object_id=field.id,
+            new_data_json={
+                "deleted_empty_value_count": deleted_empty_value_count,
+                "retained_value_count": retained_value_count,
+            },
         )
         self.ensure_base_card_template_for_registry(
             registry_id=block.registry_id,
@@ -958,6 +965,65 @@ class RegistrySchemaService:
             actor_user_id=actor_user_id,
         )
         return field
+
+    def _archive_field_values(self, field_id: UUID) -> tuple[int, int]:
+        field_values = list(
+            self.session.scalars(select(FieldValue).where(FieldValue.field_id == field_id)).all()
+        )
+        if not field_values:
+            return 0, 0
+        value_ids = [field_value.id for field_value in field_values]
+        value_ids_with_items = set(
+            self.session.scalars(
+                select(FieldValueItem.field_value_id).where(
+                    FieldValueItem.field_value_id.in_(value_ids)
+                )
+            ).all()
+        )
+        deleted_empty_value_count = 0
+        retained_value_count = 0
+        for field_value in field_values:
+            if self._archived_field_value_has_content(
+                field_value,
+                has_multi_select_items=field_value.id in value_ids_with_items,
+            ):
+                retained_value_count += 1
+                continue
+            self.session.execute(
+                delete(FieldValueItem).where(FieldValueItem.field_value_id == field_value.id)
+            )
+            self.session.delete(field_value)
+            deleted_empty_value_count += 1
+        return deleted_empty_value_count, retained_value_count
+
+    def _archived_field_value_has_content(
+        self,
+        field_value: FieldValue,
+        *,
+        has_multi_select_items: bool,
+    ) -> bool:
+        if field_value.value_text is not None and field_value.value_text.strip():
+            return True
+        if any(
+            value is not None
+            for value in (
+                field_value.value_number,
+                field_value.value_date,
+                field_value.value_datetime,
+                field_value.value_bool,
+                field_value.value_reference_item_id,
+                field_value.value_card_id,
+                field_value.value_user_id,
+                field_value.value_organization_id,
+                field_value.value_org_unit_id,
+                field_value.value_registry_id,
+                field_value.value_attachment_id,
+            )
+        ):
+            return True
+        if field_value.value_json not in (None, {}, []):
+            return True
+        return has_multi_select_items
 
     def list_card_templates_for_actor(
         self,
