@@ -4831,3 +4831,53 @@ live Browser verified.
   `Доступ` navigation item, one inline user profile, the three Russian role
   choices, the separate access-delegation checkbox, and the Russian
   `Отключён` status label. No production test user was created for this check.
+
+#### User scope visibility and unified card-search input
+
+Status: completed on `main`, pushed to GitHub, deployed, and live Browser
+verified.
+
+- The users table exposes `Логин` as its first column and opens the inline
+  profile from the login itself. It no longer uses a duplicate display-name
+  column as the primary way to identify a user.
+- Selecting an organisation root for a subordinate administrator now marks all
+  descendants as checked and disabled, with the explicit explanation
+  `Входит через <родительская организация>`. Only the selected roots are sent
+  to the API, so the visual hierarchy does not create duplicate access grants.
+- Card filtering uses one visible search input. Without a pending tag it
+  filters the available tag menu only. Selecting `Текст карточки` or a scalar
+  field turns that same input into the value editor; Enter applies the filter
+  and renders its chip. Reference and boolean filters retain their existing
+  choice controls.
+- Focused frontend tests pass:
+  `pnpm -C frontend test:run src/features/users/UsersAndRoles.test.tsx`
+  (1 test) and
+  `pnpm -C frontend test:run src/App.test.tsx -t
+  "filters cards by search organization|adds dynamic field filters|reference
+  field filters|template bool and date filters"` (4 tests). Frontend
+  TypeScript, scoped Prettier, and the Vite production build pass.
+- `scripts/check.ps1 -SkipRemote` passes backend checks (`235 passed,
+  209 skipped`), lint/type checks, and project-map checks. Its broad frontend
+  test gate remains red only because 23 historical UI expectations still
+  reference retired workspace tabs, technical permission codes, and the
+  removed `Доступ` navigation item. Those assertions predate this change and
+  are not treated as a regression here. ESLint also retains one unrelated
+  `FilledCardLayout` hook-dependency warning; Vite retains its existing
+  chunk-size advisory.
+
+Production release evidence:
+
+- Implementation commits `12d902e1` and `f424eaa2` were pushed to `main`.
+  `scripts/deploy.ps1` fast-forwarded the server checkout to `f424eaa2` and
+  passed service, PostgreSQL, attachment-storage, and API health checks.
+  `scripts/deploy-frontend.ps1` published
+  `/assets/index-BeY0XZaH.js` and `/assets/index-B4aKiymu.css`, restarted the
+  service, and passed same-origin frontend/API smoke checks.
+- Live Browser proof at `?release=f424eaa2`: entering `Фамилия` in the main
+  input reduced the menu to that field; selecting it turned the main input
+  into `Значение фильтра Фамилия`, and Enter on `123` produced the
+  `Фамилия: 123` chip. Selecting `Текст карточки` then produced the
+  `Текст: Базовый` chip from the same input. In the create-user form, selecting
+  `Школа 1` rendered `Садик 1` checked and disabled with `Входит через Школа 1`;
+  the form was cancelled without creating production data. Browser console
+  contained no warnings or errors.
