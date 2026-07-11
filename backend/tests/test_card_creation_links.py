@@ -2,10 +2,10 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
-from cryptography.fernet import Fernet
 import pytest
 from alembic import command
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
