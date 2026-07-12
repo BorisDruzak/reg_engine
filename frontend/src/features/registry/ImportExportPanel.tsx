@@ -38,8 +38,10 @@ export function ImportExportPanel({
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<TabularCardImportPreviewRead | null>(null);
   const [commitResult, setCommitResult] = useState<TabularCardImportCommitRead | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const selectedTemplate =
     optionsQuery.data?.templates.find((template) => template.id === templateId) ?? null;
@@ -67,16 +69,31 @@ export function ImportExportPanel({
           configurationError(Boolean(selectedTemplate), selectedOrganizationIds, selectedFieldIds),
         );
       }
-      return kind === "list"
-        ? downloadTabularXlsxCards(token, selectedRegistryId, payload)
-        : downloadTabularXlsxImportTemplate(token, selectedRegistryId, payload);
+      const download =
+        kind === "list"
+          ? await downloadTabularXlsxCards(token, selectedRegistryId, payload)
+          : await downloadTabularXlsxImportTemplate(token, selectedRegistryId, payload);
+      return { kind, ...download };
     },
-    onSuccess: ({ blob, filename }) => {
+    onSuccess: ({ kind, blob, filename }) => {
       triggerBrowserDownload(blob, filename);
-      setMessage(uiText.tabularXlsxDownloaded);
-      setLocalError(null);
+      if (kind === "list") {
+        setDownloadMessage(uiText.tabularXlsxDownloaded);
+        setDownloadError(null);
+      } else {
+        setImportMessage(uiText.tabularXlsxDownloaded);
+        setImportError(null);
+      }
     },
-    onError: (error) => setLocalError(errorText(error)),
+    onError: (error, kind) => {
+      if (kind === "list") {
+        setDownloadMessage(null);
+        setDownloadError(errorText(error));
+      } else {
+        setImportMessage(null);
+        setImportError(errorText(error));
+      }
+    },
   });
   const previewMutation = useMutation({
     mutationFn: () => {
@@ -89,14 +106,17 @@ export function ImportExportPanel({
       setPreview(result);
       setPreviewFile(xlsxFile);
       setCommitResult(null);
-      setMessage(
+      setImportMessage(
         result.summary.invalid_rows === 0
           ? uiText.tabularXlsxCanCommit
           : uiText.tabularXlsxPreviewReady,
       );
-      setLocalError(null);
+      setImportError(null);
     },
-    onError: (error) => setLocalError(errorText(error)),
+    onError: (error) => {
+      setImportMessage(null);
+      setImportError(errorText(error));
+    },
   });
   const commitMutation = useMutation({
     mutationFn: () => {
@@ -110,12 +130,15 @@ export function ImportExportPanel({
     },
     onSuccess: async (result) => {
       setCommitResult(result);
-      setMessage(uiText.tabularXlsxImported);
-      setLocalError(null);
+      setImportMessage(uiText.tabularXlsxImported);
+      setImportError(null);
       await queryClient.invalidateQueries({ queryKey: ["cards", token, selectedRegistryId] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },
-    onError: (error) => setLocalError(errorText(error)),
+    onError: (error) => {
+      setImportMessage(null);
+      setImportError(errorText(error));
+    },
   });
 
   const hasValidPreview = Boolean(preview) && preview?.summary.invalid_rows === 0;
@@ -126,14 +149,21 @@ export function ImportExportPanel({
     setPreview(null);
     setPreviewFile(null);
     setCommitResult(null);
-    setMessage(null);
+    setImportMessage(null);
+    setImportError(null);
+  }
+
+  function resetConfigurationFeedback() {
+    resetPreview();
+    setDownloadMessage(null);
+    setDownloadError(null);
   }
 
   function toggleValue(value: string, current: string[], setValue: (next: string[]) => void) {
     setValue(
       current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
     );
-    resetPreview();
+    resetConfigurationFeedback();
   }
 
   return (
@@ -149,119 +179,136 @@ export function ImportExportPanel({
             optionsQuery.data.organizations.length === 0 ? (
               <p className="empty-state">{uiText.tabularXlsxNoOptions}</p>
             ) : (
-              <div className="template-form">
-                <label className="field-editor-control">
-                  <span>{uiText.cardTemplate}</span>
-                  <select
-                    value={templateId}
-                    onChange={(event) => {
-                      setTemplateId(event.currentTarget.value);
-                      setFieldIds([]);
-                      resetPreview();
-                    }}
-                  >
-                    <option value="">{uiText.tabularXlsxSelectTemplate}</option>
-                    {optionsQuery.data.templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <fieldset className="field-editor-control">
-                  <legend>{uiText.tabularXlsxOrganizations}</legend>
-                  <div className="checkbox-list">
-                    {optionsQuery.data.organizations.map((organization) => (
-                      <label key={organization.id}>
-                        <input
-                          type="checkbox"
-                          checked={selectedOrganizationIds.includes(organization.id)}
-                          onChange={() =>
-                            toggleValue(organization.id, organizationIds, setOrganizationIds)
-                          }
-                        />
-                        <span>{organization.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                {selectedTemplate && (
+              <section className="xlsx-exchange-settings" aria-labelledby="tabular-xlsx-settings">
+                <h4 id="tabular-xlsx-settings">{uiText.tabularXlsxSettingsTitle}</h4>
+                <div className="template-form">
+                  <label className="field-editor-control">
+                    <span>{uiText.cardTemplate}</span>
+                    <select
+                      value={templateId}
+                      onChange={(event) => {
+                        setTemplateId(event.currentTarget.value);
+                        setFieldIds([]);
+                        resetConfigurationFeedback();
+                      }}
+                    >
+                      <option value="">{uiText.tabularXlsxSelectTemplate}</option>
+                      {optionsQuery.data.templates.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <fieldset className="field-editor-control">
-                    <legend>{uiText.tabularXlsxFields}</legend>
+                    <legend>{uiText.tabularXlsxOrganizations}</legend>
                     <div className="checkbox-list">
-                      {supportedFields.map((field) => (
-                        <FieldSelection
-                          key={field.id}
-                          field={field}
-                          checked={selectedFieldIds.includes(field.id)}
-                          onChange={() => toggleValue(field.id, fieldIds, setFieldIds)}
-                        />
+                      {optionsQuery.data.organizations.map((organization) => (
+                        <label key={organization.id}>
+                          <input
+                            type="checkbox"
+                            checked={selectedOrganizationIds.includes(organization.id)}
+                            onChange={() =>
+                              toggleValue(organization.id, organizationIds, setOrganizationIds)
+                            }
+                          />
+                          <span>{organization.label}</span>
+                        </label>
                       ))}
                     </div>
-                    {unsupportedFields.map((field) => (
-                      <p key={field.id} className="muted-text">
-                        {field.block_title}: {field.label} — {field.unsupported_reason}
-                      </p>
-                    ))}
                   </fieldset>
-                )}
-                <div className="row-actions template-body-control">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={!payload || downloadMutation.isPending}
-                    onClick={() => downloadMutation.mutate("list")}
-                  >
-                    {uiText.downloadCardList}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    disabled={!payload || downloadMutation.isPending}
-                    onClick={() => downloadMutation.mutate("template")}
-                  >
-                    {uiText.downloadImportTemplate}
-                  </button>
+                  {selectedTemplate && (
+                    <fieldset className="field-editor-control template-body-control">
+                      <legend>{uiText.tabularXlsxFields}</legend>
+                      <div className="checkbox-list">
+                        {supportedFields.map((field) => (
+                          <FieldSelection
+                            key={field.id}
+                            field={field}
+                            checked={selectedFieldIds.includes(field.id)}
+                            onChange={() => toggleValue(field.id, fieldIds, setFieldIds)}
+                          />
+                        ))}
+                      </div>
+                      {unsupportedFields.map((field) => (
+                        <p key={field.id} className="muted-text">
+                          {field.block_title}: {field.label} — {field.unsupported_reason}
+                        </p>
+                      ))}
+                    </fieldset>
+                  )}
                 </div>
-              </div>
+              </section>
             )}
           </>
         )}
-        <div className="template-form">
-          <label className="field-editor-control">
-            <span>{uiText.importXlsxFile}</span>
-            <input
-              type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={(event) => {
-                setXlsxFile(event.currentTarget.files?.[0] ?? null);
-                resetPreview();
-              }}
-            />
-          </label>
-          <div className="row-actions template-body-control">
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!xlsxFile || previewMutation.isPending}
-              onClick={() => previewMutation.mutate()}
-            >
-              {uiText.previewTabularXlsxImport}
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!hasStablePreview || commitMutation.isPending}
-              onClick={() => commitMutation.mutate()}
-            >
-              {uiText.commitTabularXlsxImport}
-            </button>
-          </div>
+        <div className="xlsx-operation-grid">
+          <section className="xlsx-operation" aria-labelledby="tabular-xlsx-export">
+            <h4 id="tabular-xlsx-export">{uiText.tabularXlsxExportTitle}</h4>
+            <p className="muted-text">{uiText.tabularXlsxExportDescription}</p>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!payload || downloadMutation.isPending}
+                onClick={() => downloadMutation.mutate("list")}
+              >
+                {uiText.downloadCardList}
+              </button>
+            </div>
+            {downloadMessage && (
+              <p className="inline-success attachment-status">{downloadMessage}</p>
+            )}
+            {downloadError && <p className="inline-alert attachment-status">{downloadError}</p>}
+          </section>
+          <section className="xlsx-operation" aria-labelledby="tabular-xlsx-import">
+            <h4 id="tabular-xlsx-import">{uiText.tabularXlsxImportTitle}</h4>
+            <p className="muted-text">{uiText.tabularXlsxImportDescription}</p>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={!payload || downloadMutation.isPending}
+                onClick={() => downloadMutation.mutate("template")}
+              >
+                {uiText.downloadImportTemplate}
+              </button>
+            </div>
+            <label className="field-editor-control">
+              <span>{uiText.importXlsxFile}</span>
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(event) => {
+                  setXlsxFile(event.currentTarget.files?.[0] ?? null);
+                  resetPreview();
+                }}
+              />
+            </label>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!xlsxFile || previewMutation.isPending}
+                onClick={() => previewMutation.mutate()}
+              >
+                {uiText.previewTabularXlsxImport}
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={!hasStablePreview || commitMutation.isPending}
+                onClick={() => commitMutation.mutate()}
+              >
+                {uiText.commitTabularXlsxImport}
+              </button>
+            </div>
+            {importMessage && <p className="inline-success attachment-status">{importMessage}</p>}
+            {importError && <p className="inline-alert attachment-status">{importError}</p>}
+            {preview && <ImportPreview preview={preview} />}
+            {commitResult && <ImportCommitResult result={commitResult} />}
+          </section>
         </div>
-        {message && <p className="inline-success attachment-status">{message}</p>}
-        {localError && <p className="inline-alert attachment-status">{localError}</p>}
-        {preview && <ImportPreview preview={preview} />}
-        {commitResult && <ImportCommitResult result={commitResult} />}
       </section>
     </Panel>
   );

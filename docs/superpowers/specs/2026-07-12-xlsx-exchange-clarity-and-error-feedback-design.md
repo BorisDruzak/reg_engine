@@ -14,12 +14,16 @@ The field with type card_ref shown as ссылка is intentionally excluded fro
 selected XLSX columns. It is rendered only as an unsupported-field explanation
 and is not included in the workbook request payload.
 
-The visible Запрос не выполнен message is caused by the client error mapper:
-the XLSX service returns a safe Russian validation detail, but
-apiErrorMessageLabel converts every detail that lacks an exact predefined
-mapping back to the generic fallback. The detail is therefore hidden before the
-user can correct the input. The change must preserve the no-raw-internals rule:
-only known user-safe XLSX validation messages may be shown.
+The visible Запрос не выполнен message has two contributing causes. The client
+error mapper converts every safe XLSX validation detail that lacks an exact
+predefined mapping back to the generic fallback. Separately, the production
+server log proves that successful export construction failed while creating the
+HTTP response: a Cyrillic X-Document-Filename header cannot be encoded as
+Latin-1, producing HTTP 500 before the workbook is returned.
+
+The fix must preserve the no-raw-internals rule: only known user-safe XLSX
+validation messages may be shown. Download response headers use ASCII file
+names and Content-Disposition; Russian labels remain inside the workbook.
 
 ## User interface
 
@@ -55,7 +59,9 @@ exposed in the browser.
 Frontend tests prove that the two operations have separate headings and
 buttons, an unsupported reference field is informational only, and a known XLSX
 API detail is shown instead of the generic fallback. The existing service/API
-tests continue to verify selection scope and generated workbook behavior.
+tests continue to verify selection scope and generated workbook behavior. A
+backend regression test constructs the XLSX response headers through Starlette,
+proving that they are safe for HTTP header encoding.
 
 Browser QA exercises: Registry → Import and export → choose template,
 organisations, and fields → confirm separate export/import sections → trigger a

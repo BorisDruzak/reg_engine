@@ -27,6 +27,15 @@ describe("uiText", () => {
     expect(runtimeErrorMessageLabel(uiText.jsonObjectRequired)).toBe(uiText.jsonObjectRequired);
   });
 
+  test("shows safe XLSX validation details instead of the generic fallback", () => {
+    expect(apiErrorMessageLabel("Выберите хотя бы одну организацию для XLSX.")).toBe(
+      "Выберите хотя бы одну организацию для XLSX.",
+    );
+    expect(apiErrorMessageLabel("Поле «Ссылка» нельзя использовать в табличном XLSX.")).toBe(
+      "Поле «Ссылка» нельзя использовать в табличном XLSX.",
+    );
+  });
+
   test("explains known invalid reference field values in Russian", () => {
     expect(apiErrorMessageLabel("card_ref fields require a UUID string.")).toBe(
       "Ссылочное поле должно содержать выбранный объект или быть пустым.",

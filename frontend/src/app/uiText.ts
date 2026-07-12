@@ -348,14 +348,19 @@ export const uiText = {
   generatedDocuments: "Сформированные документы",
   importExport: "Импорт и экспорт",
   tabularXlsxTitle: "Табличный XLSX",
-  tabularXlsxDescription:
-    "Выберите шаблон, организации и поля. Файл создаёт новые карточки по заполненным строкам.",
+  tabularXlsxDescription: "Настройте состав таблицы, затем выберите экспорт или импорт.",
+  tabularXlsxSettingsTitle: "Параметры XLSX",
   tabularXlsxOrganizations: "Организации",
   tabularXlsxFields: "Колонки карточки",
   tabularXlsxNoOptions: "Нет доступных шаблонов, организаций или полей для табличного XLSX.",
   tabularXlsxSelectTemplate: "Выберите шаблон карточки",
   tabularXlsxSelectOrganization: "Выберите хотя бы одну организацию",
   tabularXlsxSelectField: "Выберите хотя бы одно поле",
+  tabularXlsxExportTitle: "Экспорт карточек",
+  tabularXlsxExportDescription: "Скачайте текущий список карточек по выбранным параметрам.",
+  tabularXlsxImportTitle: "Импорт карточек",
+  tabularXlsxImportDescription:
+    "Скачайте шаблон, заполните его и создайте новые карточки после проверки.",
   downloadCardList: "Скачать список",
   downloadImportTemplate: "Скачать шаблон импорта",
   tabularXlsxDownloaded: "XLSX-файл скачан",
@@ -724,7 +729,36 @@ export function apiErrorMessageLabel(message: string) {
   ) {
     return uiText.referenceFieldValueInvalid;
   }
+  if (isSafeTabularXlsxError(message)) {
+    return message;
+  }
   return labels[message] ?? uiText.requestFailed;
+}
+
+function isSafeTabularXlsxError(message: string) {
+  return (
+    [
+      "Выберите хотя бы одно поле для XLSX.",
+      "Выберите хотя бы одну организацию для XLSX.",
+      "Поля XLSX не должны повторяться.",
+      "Организации XLSX не должны повторяться.",
+      "Шаблон карточки не найден или недоступен.",
+      "Выбранное поле не входит в шаблон карточки.",
+      "Не удалось прочитать XLSX-файл.",
+      "Выберите шаблон XLSX, скачанный из Реестровой системы.",
+      "Служебная разметка XLSX не найдена.",
+      "Служебная разметка XLSX повреждена.",
+      "Заголовки XLSX не соответствуют выбранному шаблону.",
+      "Версия XLSX-шаблона не поддерживается.",
+      "XLSX-шаблон относится к другому реестру.",
+      "Поля XLSX были изменены после скачивания шаблона.",
+      "Список организаций XLSX был изменён или устарел.",
+      "XLSX import file is required.",
+      "XLSX import file is empty.",
+    ].includes(message) ||
+    /^Поле «[^»]+» нельзя использовать в табличном XLSX\.$/.test(message) ||
+    /^Превышен лимит строк XLSX: \d+\.$/.test(message)
+  );
 }
 
 export function runtimeErrorMessageLabel(message: string) {

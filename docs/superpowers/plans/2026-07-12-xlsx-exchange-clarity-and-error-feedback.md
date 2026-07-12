@@ -167,3 +167,15 @@ git push origin main
 powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1
 powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1 -SkipBuild
 ~~~
+
+## Execution update
+
+- The server log identified an additional root cause: Cyrillic values in
+  X-Document-Filename caused Starlette to raise UnicodeEncodeError while
+  building the response header.
+- The implementation adds xlsx_download_headers(filename) in the import/export
+  endpoint module. It supplies ASCII X-Document-Filename and
+  Content-Disposition values for the export and import-template responses.
+- The test suite now includes a Response construction regression test for the
+  generated headers. The XLSX service unit suite passes four tests, and the
+  focused frontend suites pass ten tests.

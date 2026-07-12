@@ -28,6 +28,13 @@ class CardImportPayload:
     content: bytes
 
 
+def xlsx_download_headers(filename: str) -> dict[str, str]:
+    return {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Document-Filename": filename,
+    }
+
+
 @router.get(
     "/registries/{registry_id}/tabular-xlsx-card-exchange/options",
     response_model=TabularCardExchangeOptionsRead,
@@ -67,7 +74,7 @@ def export_tabular_xlsx_cards(
     return Response(
         content=content,
         media_type=XLSX_MEDIA_TYPE,
-        headers={"X-Document-Filename": "список-карточек.xlsx"},
+        headers=xlsx_download_headers("registry-cards.xlsx"),
     )
 
 
@@ -91,7 +98,7 @@ def download_tabular_xlsx_import_template(
     return Response(
         content=content,
         media_type=XLSX_MEDIA_TYPE,
-        headers={"X-Document-Filename": "шаблон-импорта-карточек.xlsx"},
+        headers=xlsx_download_headers("registry-card-import-template.xlsx"),
     )
 
 

@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
 import { ImportExportPanel } from "./ImportExportPanel";
 
 const api = vi.hoisted(() => ({
+  ApiError: class ApiError extends Error {},
   commitTabularXlsxImport: vi.fn(),
   downloadTabularXlsxCards: vi.fn(),
   downloadTabularXlsxImportTemplate: vi.fn(),
@@ -96,6 +97,47 @@ test("configures the wide XLSX format without technical controls", async () => {
   expect(screen.getByRole("button", { name: "Скачать список" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Скачать шаблон импорта" })).toBeEnabled();
   expect(screen.getByText(/Вложение/)).toBeInTheDocument();
+});
+
+test("separates export and import into distinct operations", async () => {
+  renderPanel();
+
+  const exportHeading = await screen.findByRole("heading", { name: "Экспорт карточек" });
+  const importHeading = screen.getByRole("heading", { name: "Импорт карточек" });
+  const exportSection = exportHeading.closest("section");
+  const importSection = importHeading.closest("section");
+
+  expect(exportSection).not.toBeNull();
+  expect(importSection).not.toBeNull();
+  expect(exportSection).toContainElement(screen.getByRole("button", { name: "Скачать список" }));
+  expect(exportSection).not.toContainElement(screen.getByRole("button", { name: "Импортировать" }));
+  expect(importSection).toContainElement(
+    screen.getByRole("button", { name: "Скачать шаблон импорта" }),
+  );
+  expect(importSection).toContainElement(screen.getByRole("button", { name: "Проверить импорт" }));
+});
+
+test("renders a template-download error inside the import operation", async () => {
+  const user = userEvent.setup();
+  api.downloadTabularXlsxImportTemplate.mockRejectedValueOnce(
+    new Error("Выберите хотя бы одну организацию для XLSX."),
+  );
+  renderPanel();
+
+  await screen.findByRole("heading", { name: "Импорт карточек" });
+  const templateSelect = await screen.findByLabelText("Шаблон карточки");
+  await user.selectOptions(templateSelect, "template-1");
+  await user.click(screen.getByLabelText("Администрация (admin)"));
+  await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
+  await user.click(screen.getByRole("button", { name: "Скачать шаблон импорта" }));
+
+  const importSection = screen.getByRole("heading", { name: "Импорт карточек" }).closest("section");
+  expect(importSection).not.toBeNull();
+  expect(
+    await within(importSection as HTMLElement).findByText(
+      "Выберите хотя бы одну организацию для XLSX.",
+    ),
+  ).toBeInTheDocument();
 });
 
 test("previews the selected XLSX file before allowing import", async () => {

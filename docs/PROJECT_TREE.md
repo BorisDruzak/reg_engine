@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-12 14:05:13 +05:00
+- Generated: 2026-07-12 14:28:42 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -232,6 +232,7 @@
 - `docs/superpowers/plans/2026-07-12-inline-card-field-row.md`
 - `docs/superpowers/plans/2026-07-12-public-card-creation-links.md`
 - `docs/superpowers/plans/2026-07-12-wide-xlsx-card-exchange.md`
+- `docs/superpowers/plans/2026-07-12-xlsx-exchange-clarity-and-error-feedback.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -250,6 +251,7 @@
 - `docs/superpowers/specs/2026-07-12-inline-field-row-design.md`
 - `docs/superpowers/specs/2026-07-12-public-card-creation-links-design.md`
 - `docs/superpowers/specs/2026-07-12-wide-xlsx-card-exchange-design.md`
+- `docs/superpowers/specs/2026-07-12-xlsx-exchange-clarity-and-error-feedback-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`

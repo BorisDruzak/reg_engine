@@ -3,7 +3,9 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 from openpyxl import load_workbook
+from starlette.responses import Response
 
+from app.api.v1.endpoints import import_export as import_export_endpoint
 from app.services import import_export
 
 
@@ -100,3 +102,12 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
     assert validations["C2:C101"].formula1 == f"=field_{select_field.id.hex}_choices"
     assert validations["D2:D101"].formula1 == f"=field_{multi_select_field.id.hex}_choices"
     assert validations["D2:D101"].showErrorMessage is False
+
+
+def test_xlsx_download_headers_are_safe_for_http_response_encoding() -> None:
+    headers = import_export_endpoint.xlsx_download_headers("registry-cards.xlsx")
+
+    response = Response(content=b"xlsx", headers=headers)
+
+    assert response.headers["x-document-filename"] == "registry-cards.xlsx"
+    assert response.headers["content-disposition"] == 'attachment; filename="registry-cards.xlsx"'
