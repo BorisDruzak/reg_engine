@@ -23,10 +23,10 @@
 - Modify: `backend/app/api/v1/endpoints/card_creation_links.py`
 - Modify: `backend/tests/test_card_creation_links.py`
 
-- [ ] Write a failing service/API test that calls `create_draft_from_public_link(raw_token, organization_id)` and expects one draft card, one child link with `expires_at is None`, and no field values.
-- [ ] Run `pytest tests/test_card_creation_links.py -q` against disposable PostgreSQL and confirm the test fails because the method/route is missing.
-- [ ] Add the service method and `POST /public/card-creation-links/create-draft`; reuse the existing transaction, token encryption, child-link construction, relation, and audits without field coercion.
-- [ ] Re-run the focused backend test and confirm it passes, including rejection of a disallowed organisation and parent-close/child-continuity behavior.
+- [x] Write a failing service/API test that calls `create_draft_from_public_link(raw_token, organization_id)` and expects one draft card, one child link with `expires_at is None`, and no field values.
+- [x] Run `pytest tests/test_card_creation_links.py -q` against disposable PostgreSQL and confirm the test fails because the method/route is missing.
+- [x] Add the service method and `POST /public/card-creation-links/create-draft`; reuse the existing transaction, token encryption, child-link construction, relation, and audits without field coercion.
+- [x] Re-run the focused backend test and confirm it passes, including rejection of a disallowed organisation and parent-close/child-continuity behavior.
 
 ### Task 2: Public page creates only on organisation selection
 
@@ -36,10 +36,10 @@
 - Modify: `frontend/src/pages/PublicCardCreationPage.tsx`
 - Modify: `frontend/src/pages/PublicCardCreationPage.test.tsx`
 
-- [ ] Write a failing page test that selects an organisation, expects a single `create-draft` request before typing, and verifies navigation to `/public/edit/:childRawToken`.
-- [ ] Run the focused Vitest file and confirm the test fails because selection only refreshes preview.
-- [ ] Add the typed client mutation and change the selector event to perform the mutation; keep fields hidden while it is pending and render a Russian progress/error state.
-- [ ] Re-run the focused page tests and confirm no `first-save` request is made from the parent page.
+- [x] Write a failing page test that selects an organisation, expects a single `create-draft` request before typing, and verifies navigation to `/public/edit/:childRawToken`.
+- [x] Run the focused Vitest file and confirm the test fails because selection only refreshes preview.
+- [x] Add the typed client mutation and change the selector event to perform the mutation; keep fields hidden while it is pending and render a Russian progress/error state.
+- [x] Re-run the focused page tests and confirm no `first-save` request is made from the parent page.
 
 ### Task 3: Utility workflows are workspace tabs
 
@@ -48,10 +48,10 @@
 - Modify: `frontend/src/features/cards/CardsWorkspace.test.tsx` or the existing focused workspace test file
 - Modify: `frontend/src/styles/globals.css`
 
-- [ ] Write a failing workspace test that opens `Создать карточку`, `Создать ссылку`, and `Список ссылок` from the menu and expects each to appear in the card tab strip while the list panel remains free of forms.
-- [ ] Run the focused workspace test and confirm it fails because `cardFormMode` and `cardCreationLinkPanelMode` append panels below the list.
-- [ ] Extend `CardShellTab` and its persisted state with closeable utility tabs; render the matching form/panel only when that utility tab is active; closing returns to the list tab.
-- [ ] Re-run the workspace tests, TypeScript, ESLint, scoped Prettier, and production build.
+- [x] Write a failing workspace test that opens `Создать карточку`, `Создать ссылку`, and `Список ссылок` from the menu and expects each to appear in the card tab strip while the list panel remains free of forms.
+- [x] Run the focused workspace test and confirm it fails because `cardFormMode` and `cardCreationLinkPanelMode` append panels below the list.
+- [x] Extend `CardShellTab` and its persisted state with closeable utility tabs; render the matching form/panel only when that utility tab is active; closing returns to the list tab.
+- [x] Re-run the workspace tests, TypeScript, scoped Prettier, and production build. The repository-wide ESLint gate remains blocked only by the existing unrelated `FilledCardLayout.tsx` hook-dependency warning.
 
 ### Task 4: Release evidence
 

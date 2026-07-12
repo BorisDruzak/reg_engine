@@ -6,25 +6,24 @@ import type { CardTemplateRead, OrganizationRead } from "@/api/types";
 import { MutationFeedback } from "@/components/common/AdminMutation";
 import { errorText } from "@/components/common/dataUtils";
 
-type PanelMode = "create" | "list";
+export type CardCreationLinksPanelMode = "create" | "list";
 
 export function CardCreationLinksPanel({
   registryId,
   token,
   organizations,
   templates,
-  initialMode,
-  onClose,
+  mode,
+  onShowList,
 }: {
   registryId: string;
   token: string;
   organizations: OrganizationRead[];
   templates: CardTemplateRead[];
-  initialMode: PanelMode;
-  onClose: () => void;
+  mode: CardCreationLinksPanelMode;
+  onShowList: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<PanelMode>(initialMode);
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -42,7 +41,7 @@ export function CardCreationLinksPanel({
     onSuccess: async () => {
       setLocalError(null);
       setOrganizationIds([]);
-      setMode("list");
+      onShowList();
       await queryClient.invalidateQueries({ queryKey: ["card-creation-links", token, registryId] });
     },
   });
@@ -82,19 +81,8 @@ export function CardCreationLinksPanel({
         <div>
           <h3>Ссылки на создание карточек</h3>
           <p className="public-muted">
-            Каждое первое непустое сохранение создаёт новую карточку и отдельную ссылку на неё.
+            Выбор организации по ссылке создаёт новую карточку-черновик и отдельную ссылку на неё.
           </p>
-        </div>
-        <div className="row-actions">
-          <button type="button" className="ghost-button" onClick={() => setMode("create")}>
-            Создать ссылку
-          </button>
-          <button type="button" className="ghost-button" onClick={() => setMode("list")}>
-            Список ссылок
-          </button>
-          <button type="button" className="ghost-button" onClick={onClose}>
-            Закрыть
-          </button>
         </div>
       </header>
 

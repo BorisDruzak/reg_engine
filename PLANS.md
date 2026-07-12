@@ -24,12 +24,16 @@ not a hardcoded employee registry.
   data to exactly one active root-owned default registry after a fresh
   server-side backup stored outside Git.
 - Phase 8O reusable public card-creation links is deployed: one reusable
-  parent link creates no card on opening, creates an indefinite child edit link
-  after the first valid public value, and can be closed without blocking
-  already-created child links. Migration `0027_card_creation_links` passed the
-  disposable PostgreSQL upgrade/downgrade gate and is applied in production;
-  frontend/API/server checks are green. Visual Browser proof remains pending a
-  fresh in-app-browser connection after its stale tab session was replaced.
+  parent link authorizes only its configured organizations, creates indefinite
+  child edit links, and can be closed without blocking already-created child
+  links. Migration `0027_card_creation_links` passed the disposable PostgreSQL
+  upgrade/downgrade gate and is applied in production.
+- Phase 8P current implementation changes the public flow so that an explicit
+  organization selection creates the draft card and child edit link immediately,
+  and moves `Создать карточку`, `Создать ссылку`, and `Список ссылок` into the
+  closeable card-tab strip. Focused frontend checks and production build pass;
+  final backend regression, deployment, server check, and Browser proof remain
+  pending this checkpoint.
 - Phase 7A admin UI workspace refactor is implemented on `main`: cards use a
   focused list/detail workflow with tabs, registry administration uses focused
   setup tabs, and row actions use compact visible labels with full accessible

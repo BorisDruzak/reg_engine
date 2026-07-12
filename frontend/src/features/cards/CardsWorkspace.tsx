@@ -77,7 +77,14 @@ import {
 } from "./fieldEditorUtils";
 import { useBlockEditor } from "./useBlockEditor";
 
-type CardShellTab = "list" | `card:${string}`;
+type CardUtilityTab = "create-card" | "create-creation-link" | "creation-link-list";
+type CardShellTab = "list" | CardUtilityTab | `card:${string}`;
+
+const cardUtilityTabLabels: Record<CardUtilityTab, string> = {
+  "create-card": "Создать карточку",
+  "create-creation-link": "Создать ссылку",
+  "creation-link-list": "Список ссылок",
+};
 
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
 
@@ -124,12 +131,9 @@ export function CardsWorkspace({
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
-  const [cardFormMode, setCardFormMode] = useState<"create" | null>(null);
-  const [cardCreationLinkPanelMode, setCardCreationLinkPanelMode] = useState<
-    "create" | "list" | null
-  >(null);
   const [cardCreateMenuOpen, setCardCreateMenuOpen] = useState(false);
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
+  const [openUtilityTabs, setOpenUtilityTabs] = useState<CardUtilityTab[]>([]);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
@@ -269,6 +273,11 @@ export function CardsWorkspace({
   const cardShellTabs = useMemo(
     () => [
       { id: "list" as CardShellTab, label: uiText.cardListTab },
+      ...openUtilityTabs.map((tabId) => ({
+        id: tabId,
+        label: cardUtilityTabLabels[tabId],
+        closeLabel: `Закрыть вкладку ${cardUtilityTabLabels[tabId]}`,
+      })),
       ...visibleOpenCardIds.map((cardId) => {
         const item = cards.find((cardItem) => cardItem.id === cardId);
         const title = item?.display_name ?? shortId(cardId);
@@ -280,7 +289,7 @@ export function CardsWorkspace({
         };
       }),
     ],
-    [blockEditor.dirty, card?.id, cards, visibleOpenCardIds],
+    [blockEditor.dirty, card?.id, cards, openUtilityTabs, visibleOpenCardIds],
   );
   const repeatableBlocks = useMemo(
     () => presentationBlocks.filter((block) => block.is_active && block.is_repeatable),
@@ -305,7 +314,7 @@ export function CardsWorkspace({
       }),
     onSuccess: async (created) => {
       setSuccessMessage(uiText.cardCreated);
-      setCardFormMode(null);
+      setOpenUtilityTabs((current) => current.filter((tabId) => tabId !== "create-card"));
       onSelectCard(created.id);
       setOpenCardIds((current) =>
         current.includes(created.id) ? current : [...current, created.id],
@@ -441,10 +450,17 @@ export function CardsWorkspace({
       ...initialCreateCardForm(organizations),
       cardTemplateId: activeCardTemplates[0]?.id ?? "",
     });
-    setCardFormMode("create");
-    setCardCreationLinkPanelMode(null);
+    openUtilityTab("create-card");
+  }
+
+  function openCardCreationLinks(mode: "create" | "list") {
+    openUtilityTab(mode === "create" ? "create-creation-link" : "creation-link-list");
+  }
+
+  function openUtilityTab(tabId: CardUtilityTab) {
+    setOpenUtilityTabs((current) => (current.includes(tabId) ? current : [...current, tabId]));
     setCardCreateMenuOpen(false);
-    setActiveShellTab("list");
+    setActiveShellTab(tabId);
     activeCardIdRef.current = null;
     setArchiveTarget(null);
     setSuccessMessage(null);
@@ -452,19 +468,10 @@ export function CardsWorkspace({
     resetSelectedCardMutationState();
   }
 
-  function openCardCreationLinks(mode: "create" | "list") {
-    setCardFormMode(null);
-    setCardCreationLinkPanelMode(mode);
-    setCardCreateMenuOpen(false);
-    setArchiveTarget(null);
-    setSuccessMessage(null);
-    setLocalError(null);
-  }
-
   function handleCardFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
-    if (cardFormMode === "create" && !cardForm.organizationId) {
+    if (!cardForm.organizationId) {
       setLocalError(uiText.requiredFields);
       return;
     }
@@ -472,17 +479,13 @@ export function CardsWorkspace({
       setLocalError(uiText.requiredFields);
       return;
     }
-    if (cardFormMode === "create") {
-      createCardMutation.mutate();
-      return;
-    }
+    createCardMutation.mutate();
   }
 
   function openCardEditor(cardId: string) {
     setOpenCardIds((current) => (current.includes(cardId) ? current : [...current, cardId]));
     setActiveShellTab(`card:${cardId}`);
     activeCardIdRef.current = cardId;
-    setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -494,7 +497,6 @@ export function CardsWorkspace({
     const cardId = tabId.startsWith("card:") ? tabId.slice("card:".length) : null;
     setActiveShellTab(tabId);
     activeCardIdRef.current = cardId;
-    setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -505,12 +507,19 @@ export function CardsWorkspace({
   }
 
   function handleShellTabClose(tabId: CardShellTab) {
+    if (tabId === "list") {
+      return;
+    }
     if (!tabId.startsWith("card:")) {
+      setOpenUtilityTabs((current) => current.filter((openTabId) => openTabId !== tabId));
+      if (activeShellTab === tabId) {
+        setActiveShellTab("list");
+        activeCardIdRef.current = null;
+      }
       return;
     }
     const cardId = tabId.slice("card:".length);
     setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
-    setCardFormMode(null);
     setArchiveTarget(null);
     setSuccessMessage(null);
     setLocalError(null);
@@ -610,31 +619,35 @@ export function CardsWorkspace({
             onOpen={openCardEditor}
           />
           <MutationFeedback error={archiveCardMutation.error} successMessage={successMessage} />
-          {cardCreationLinkPanelMode && schema && (
-            <CardCreationLinksPanel
-              initialMode={cardCreationLinkPanelMode}
-              organizations={organizations}
-              registryId={schema.registry.id}
-              templates={activeCardTemplates}
-              token={token}
-              onClose={() => setCardCreationLinkPanelMode(null)}
-            />
-          )}
-          {cardFormMode === "create" && (
-            <div className="panel-form">
-              <CardMutationForm
-                form={cardForm}
-                organizations={organizations}
-                templates={activeCardTemplates}
-                isSubmitting={createCardMutation.isPending}
-                error={localError ? new Error(localError) : createCardMutation.error}
-                onCancel={() => setCardFormMode(null)}
-                onChange={setCardForm}
-                onSubmit={handleCardFormSubmit}
-              />
-            </div>
-          )}
         </Panel>
+      ) : activeShellTab === "create-card" ? (
+        <Panel title={cardUtilityTabLabels["create-card"]}>
+          <CardMutationForm
+            form={cardForm}
+            organizations={organizations}
+            templates={activeCardTemplates}
+            isSubmitting={createCardMutation.isPending}
+            error={localError ? new Error(localError) : createCardMutation.error}
+            onCancel={() => handleShellTabClose("create-card")}
+            onChange={setCardForm}
+            onSubmit={handleCardFormSubmit}
+          />
+        </Panel>
+      ) : activeShellTab === "create-creation-link" || activeShellTab === "creation-link-list" ? (
+        schema ? (
+          <CardCreationLinksPanel
+            mode={activeShellTab === "create-creation-link" ? "create" : "list"}
+            organizations={organizations}
+            registryId={schema.registry.id}
+            templates={activeCardTemplates}
+            token={token}
+            onShowList={() => openUtilityTab("creation-link-list")}
+          />
+        ) : (
+          <Panel title={uiText.cards}>
+            <p className="data-empty">{uiText.noData}</p>
+          </Panel>
+        )
       ) : (
         <div className="stack">
           {card && (
@@ -744,7 +757,6 @@ export function CardsWorkspace({
                           onArchive={() => {
                             if (!selectedCard) return;
                             setArchiveTarget(selectedCard);
-                            setCardFormMode(null);
                             setSuccessMessage(null);
                           }}
                         />
