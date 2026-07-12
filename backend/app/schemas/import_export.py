@@ -8,6 +8,8 @@ class TabularCardWorkbookRequest(BaseModel):
     card_template_id: UUID
     field_ids: list[UUID]
     organization_ids: list[UUID]
+    include_organization_column: bool = False
+    fixed_organization_id: UUID | None = None
 
 
 class TabularCardExchangeFieldRead(BaseModel):

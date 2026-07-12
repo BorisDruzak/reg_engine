@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -10,10 +11,11 @@ from app.services import import_export
 
 
 def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -> None:
-    assert getattr(import_export, "TABULAR_XLSX_FIXED_HEADERS", None) == (
+    assert import_export.tabular_xlsx_fixed_headers(True) == (
         "№ п/п",
         "Организация",
     )
+    assert import_export.tabular_xlsx_fixed_headers(False) == ("№ п/п",)
     assert getattr(import_export, "TABULAR_XLSX_SUPPORTED_FIELD_TYPES", None) == {
         "text",
         "number",
@@ -23,6 +25,28 @@ def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -
         "select",
         "multi_select",
     }
+
+
+def test_tabular_xlsx_orders_fields_by_block_then_field_position() -> None:
+    first_block = SimpleNamespace(id=uuid4(), position=1)
+    second_block = SimpleNamespace(id=uuid4(), position=2)
+    first_field = SimpleNamespace(id=uuid4(), position=1)
+    second_field = SimpleNamespace(id=uuid4(), position=2)
+    later_block_field = SimpleNamespace(id=uuid4(), position=0)
+
+    ordered = import_export.TabularCardExchangeService._order_selected_fields(
+        [
+            (later_block_field, second_block),
+            (second_field, first_block),
+            (first_field, first_block),
+        ]
+    )
+
+    assert [field.id for field, _block in ordered] == [
+        first_field.id,
+        second_field.id,
+        later_block_field.id,
+    ]
 
 
 def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -> None:
@@ -42,6 +66,8 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
             ),
         ),
         organizations=(SimpleNamespace(id=uuid4(), name="Администрация", code="admin"),),
+        include_organization_column=True,
+        fixed_organization_id=None,
         organization_labels={},
         reference_labels={},
     )
@@ -59,6 +85,45 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
     assert sheet["B2"].value == "Администрация (admin)"
     assert sheet["C2"].number_format == "DD.MM.YYYY"
     assert workbook["_registry_engine"].sheet_state == "hidden"
+
+
+def test_tabular_xlsx_template_hides_organization_column_and_records_import_target() -> None:
+    field = SimpleNamespace(id=uuid4(), label="Дата рождения", field_type="date")
+    organization = SimpleNamespace(id=uuid4(), name="Администрация", code="admin")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Дата рождения",
+            ),
+        ),
+        organizations=(organization,),
+        include_organization_column=False,
+        fixed_organization_id=organization.id,
+        organization_labels={},
+        reference_labels={},
+    )
+
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=None,
+    )
+
+    workbook = load_workbook(filename=__import__("io").BytesIO(content), data_only=True)
+    sheet = workbook["Карточки"]
+    metadata = json.loads(workbook["_registry_engine"]["B1"].value)
+    validations = {validation.sqref for validation in sheet.data_validations.dataValidation}
+
+    assert [cell.value for cell in sheet[1][:2]] == ["№ п/п", "Дата рождения"]
+    assert sheet["A2"].value == 1
+    assert sheet["B2"].value is None
+    assert "B2:B101" not in validations
+    assert metadata["include_organization_column"] is False
+    assert metadata["fixed_organization_id"] == str(organization.id)
 
 
 def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_selects() -> None:
@@ -80,6 +145,8 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
             ),
         ),
         organizations=(SimpleNamespace(id=uuid4(), name="Администрация", code="admin"),),
+        include_organization_column=True,
+        fixed_organization_id=None,
         organization_labels={},
         reference_labels={
             select_field.id: {"Новый": uuid4(), "Готово": uuid4()},

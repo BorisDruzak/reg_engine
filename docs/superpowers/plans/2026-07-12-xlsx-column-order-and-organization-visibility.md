@@ -166,11 +166,13 @@ const [fixedOrganizationId, setFixedOrganizationId] = useState("");
 const needsFixedOrganization = hideOrganizationColumn && selectedOrganizationIds.length > 1;
 ```
 
-Render the checked-by-default Russian switch. When hiding and one organization
-is selected, put that id into the payload automatically. When hiding and
-multiple are selected, render a select limited to the checked organizations;
-disable both downloads until it has a value. When showing the column, omit the
-fixed id and retain all existing organization controls.
+Render the checked-by-default Russian switch. The list export stays available
+with any selected organizations. When hiding and one organization is selected,
+put that id into the import-template payload automatically. When hiding and
+multiple are selected, render a select in the import section limited to the
+checked organizations and disable only the import-template download until it
+has a value. When showing the column, omit the fixed id and retain all existing
+organization controls.
 
 - [ ] **Step 4: Run UI tests and typecheck**
 

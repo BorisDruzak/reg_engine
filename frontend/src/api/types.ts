@@ -397,6 +397,8 @@ export type TabularCardWorkbookPayload = {
   card_template_id: string;
   field_ids: string[];
   organization_ids: string[];
+  include_organization_column: boolean;
+  fixed_organization_id?: string;
 };
 
 export type TabularCardExchangeFieldRead = {

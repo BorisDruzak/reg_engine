@@ -355,7 +355,12 @@ export const uiText = {
   tabularXlsxNoOptions: "Нет доступных шаблонов, организаций или полей для табличного XLSX.",
   tabularXlsxSelectTemplate: "Выберите шаблон карточки",
   tabularXlsxSelectOrganization: "Выберите хотя бы одну организацию",
+  tabularXlsxSelectImportOrganization: "Выберите организацию для импорта",
   tabularXlsxSelectField: "Выберите хотя бы одно поле",
+  tabularXlsxHideOrganizationColumn: "Скрывать колонку «Организация»",
+  tabularXlsxImportOrganization: "Организация для импорта",
+  tabularXlsxHiddenOrganizationHint:
+    "Все строки этого файла будут импортированы в выбранную организацию.",
   tabularXlsxExportTitle: "Экспорт карточек",
   tabularXlsxExportDescription: "Скачайте текущий список карточек по выбранным параметрам.",
   tabularXlsxImportTitle: "Импорт карточек",
@@ -740,6 +745,8 @@ function isSafeTabularXlsxError(message: string) {
     [
       "Выберите хотя бы одно поле для XLSX.",
       "Выберите хотя бы одну организацию для XLSX.",
+      "Выберите организацию для импорта при скрытой колонке XLSX.",
+      "Организация импорта задаётся только при скрытой колонке XLSX.",
       "Поля XLSX не должны повторяться.",
       "Организации XLSX не должны повторяться.",
       "Шаблон карточки не найден или недоступен.",

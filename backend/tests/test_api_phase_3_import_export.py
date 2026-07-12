@@ -194,11 +194,12 @@ def _context(session: Session) -> dict[str, object]:
     }
 
 
-def _selection(context: dict[str, object]) -> dict[str, list[str] | str]:
+def _selection(context: dict[str, object]) -> dict[str, object]:
     return {
         "card_template_id": str(context["template"].id),
         "field_ids": [str(context["status"].id)],
         "organization_ids": [str(context["child"].id)],
+        "include_organization_column": True,
     }
 
 

@@ -68,6 +68,8 @@ def export_tabular_xlsx_cards(
             card_template_id=payload.card_template_id,
             field_ids=payload.field_ids,
             organization_ids=payload.organization_ids,
+            include_organization_column=payload.include_organization_column,
+            fixed_organization_id=payload.fixed_organization_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -92,6 +94,8 @@ def download_tabular_xlsx_import_template(
             card_template_id=payload.card_template_id,
             field_ids=payload.field_ids,
             organization_ids=payload.organization_ids,
+            include_organization_column=payload.include_organization_column,
+            fixed_organization_id=payload.fixed_organization_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)

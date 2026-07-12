@@ -33,6 +33,8 @@ export function ImportExportPanel({
   });
   const [templateId, setTemplateId] = useState("");
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
+  const [hideOrganizationColumn, setHideOrganizationColumn] = useState(true);
+  const [fixedOrganizationId, setFixedOrganizationId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
@@ -53,26 +55,52 @@ export function ImportExportPanel({
   const selectedFieldIds = fieldIds.filter((fieldId) =>
     supportedFields.some((field) => field.id === fieldId),
   );
-  const payload: TabularCardWorkbookPayload | null =
+  const needsImportOrganizationChoice =
+    hideOrganizationColumn && selectedOrganizationIds.length > 1;
+  const effectiveFixedOrganizationId = hideOrganizationColumn
+    ? selectedOrganizationIds.length === 1
+      ? selectedOrganizationIds[0]
+      : selectedOrganizationIds.includes(fixedOrganizationId)
+        ? fixedOrganizationId
+        : ""
+    : "";
+  const exportPayload: TabularCardWorkbookPayload | null =
     selectedTemplate && selectedFieldIds.length && selectedOrganizationIds.length
       ? {
           card_template_id: selectedTemplate.id,
           field_ids: selectedFieldIds,
           organization_ids: selectedOrganizationIds,
+          include_organization_column: !hideOrganizationColumn,
+        }
+      : null;
+  const importPayload: TabularCardWorkbookPayload | null =
+    exportPayload && (!hideOrganizationColumn || effectiveFixedOrganizationId)
+      ? {
+          ...exportPayload,
+          ...(hideOrganizationColumn
+            ? { fixed_organization_id: effectiveFixedOrganizationId }
+            : {}),
         }
       : null;
 
   const downloadMutation = useMutation({
     mutationFn: async (kind: "list" | "template") => {
-      if (!payload) {
+      const workbookPayload = kind === "list" ? exportPayload : importPayload;
+      if (!workbookPayload) {
         throw new Error(
-          configurationError(Boolean(selectedTemplate), selectedOrganizationIds, selectedFieldIds),
+          configurationError(
+            Boolean(selectedTemplate),
+            selectedOrganizationIds,
+            selectedFieldIds,
+            kind === "template" && hideOrganizationColumn,
+            effectiveFixedOrganizationId,
+          ),
         );
       }
       const download =
         kind === "list"
-          ? await downloadTabularXlsxCards(token, selectedRegistryId, payload)
-          : await downloadTabularXlsxImportTemplate(token, selectedRegistryId, payload);
+          ? await downloadTabularXlsxCards(token, selectedRegistryId, workbookPayload)
+          : await downloadTabularXlsxImportTemplate(token, selectedRegistryId, workbookPayload);
       return { kind, ...download };
     },
     onSuccess: ({ kind, blob, filename }) => {
@@ -217,6 +245,17 @@ export function ImportExportPanel({
                       ))}
                     </div>
                   </fieldset>
+                  <label className="field-editor-control">
+                    <input
+                      type="checkbox"
+                      checked={hideOrganizationColumn}
+                      onChange={(event) => {
+                        setHideOrganizationColumn(event.currentTarget.checked);
+                        resetConfigurationFeedback();
+                      }}
+                    />
+                    <span>{uiText.tabularXlsxHideOrganizationColumn}</span>
+                  </label>
                   {selectedTemplate && (
                     <fieldset className="field-editor-control template-body-control">
                       <legend>{uiText.tabularXlsxFields}</legend>
@@ -250,7 +289,7 @@ export function ImportExportPanel({
               <button
                 type="button"
                 className="primary-button"
-                disabled={!payload || downloadMutation.isPending}
+                disabled={!exportPayload || downloadMutation.isPending}
                 onClick={() => downloadMutation.mutate("list")}
               >
                 {uiText.downloadCardList}
@@ -264,11 +303,34 @@ export function ImportExportPanel({
           <section className="xlsx-operation" aria-labelledby="tabular-xlsx-import">
             <h4 id="tabular-xlsx-import">{uiText.tabularXlsxImportTitle}</h4>
             <p className="muted-text">{uiText.tabularXlsxImportDescription}</p>
+            {needsImportOrganizationChoice && (
+              <label className="field-editor-control">
+                <span>{uiText.tabularXlsxImportOrganization}</span>
+                <select
+                  aria-label={uiText.tabularXlsxImportOrganization}
+                  value={effectiveFixedOrganizationId}
+                  onChange={(event) => {
+                    setFixedOrganizationId(event.currentTarget.value);
+                    resetConfigurationFeedback();
+                  }}
+                >
+                  <option value="">{uiText.tabularXlsxSelectImportOrganization}</option>
+                  {(optionsQuery.data?.organizations ?? [])
+                    .filter((organization) => selectedOrganizationIds.includes(organization.id))
+                    .map((organization) => (
+                      <option key={organization.id} value={organization.id}>
+                        {organization.label}
+                      </option>
+                    ))}
+                </select>
+                <small className="muted-text">{uiText.tabularXlsxHiddenOrganizationHint}</small>
+              </label>
+            )}
             <div className="row-actions">
               <button
                 type="button"
                 className="ghost-button"
-                disabled={!payload || downloadMutation.isPending}
+                disabled={!importPayload || downloadMutation.isPending}
                 onClick={() => downloadMutation.mutate("template")}
               >
                 {uiText.downloadImportTemplate}
@@ -364,10 +426,19 @@ function ImportCommitResult({ result }: { result: TabularCardImportCommitRead })
   );
 }
 
-function configurationError(hasTemplate: boolean, organizationIds: string[], fieldIds: string[]) {
+function configurationError(
+  hasTemplate: boolean,
+  organizationIds: string[],
+  fieldIds: string[],
+  hideOrganizationColumn: boolean,
+  fixedOrganizationId: string,
+) {
   if (!hasTemplate) return uiText.tabularXlsxSelectTemplate;
   if (!organizationIds.length) return uiText.tabularXlsxSelectOrganization;
-  return fieldIds.length ? uiText.tabularXlsxSelectTemplate : uiText.tabularXlsxSelectField;
+  if (!fieldIds.length) return uiText.tabularXlsxSelectField;
+  return hideOrganizationColumn && !fixedOrganizationId
+    ? uiText.tabularXlsxSelectImportOrganization
+    : uiText.tabularXlsxSelectTemplate;
 }
 
 function formatImportSummary(preview: TabularCardImportPreviewRead) {
