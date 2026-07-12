@@ -35,6 +35,20 @@ not a hardcoded employee registry.
   after choosing a template, organization, and field, and reported no console
   errors. No production cards were created for QA. The public OpenAPI lists
   only the five tabular XLSX routes and no legacy card-exchange routes.
+- Phase 8R XLSX order and organization-visibility follow-up is deployed at
+  commit `90e54aa2`. The server now orders every selected field by block
+  position and then field position, regardless of selection-click order. The
+  `Организация` column is hidden by default. With several selected
+  organizations, ordinary list export remains available; the import-template
+  flow requires an explicit `Организация для импорта`, recorded in validated
+  workbook metadata. Showing the column restores the per-row Excel list. No
+  migration is required. Focused XLSX backend tests pass (6; 4 PostgreSQL API
+  tests skipped without `TEST_DATABASE_URL`), focused frontend tests pass (11),
+  Ruff, mypy, TypeScript, production build, project-map check, server checks,
+  and frontend smoke check pass. In the authenticated live UI, a deliberately
+  reverse field selection left export enabled, required an import target only
+  for the template, toggled back to visible organization mode correctly, and
+  downloaded a fresh template without browser-console errors.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
