@@ -27,6 +27,10 @@ export function CardCreationLinksPanel({
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    message: string;
+    isError: boolean;
+  } | null>(null);
   const listQuery = useQuery({
     queryKey: ["card-creation-links", token, registryId],
     queryFn: () => listCardCreationLinks(token, registryId),
@@ -60,6 +64,15 @@ export function CardCreationLinksPanel({
           : [...current, organizationId]
         : current.filter((item) => item !== organizationId),
     );
+  }
+
+  async function copyUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyFeedback({ message: "Ссылка скопирована", isError: false });
+    } catch {
+      setCopyFeedback({ message: "Не удалось скопировать ссылку", isError: true });
+    }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -149,7 +162,22 @@ export function CardCreationLinksPanel({
                   </div>
                   <label className="public-link-url-control">
                     <span>Ссылка на создание</span>
-                    <input readOnly value={url} />
+                    <input
+                      className="copyable-link-input"
+                      readOnly
+                      title="Нажмите, чтобы скопировать"
+                      value={url}
+                      onClick={(event) => {
+                        event.currentTarget.select();
+                        void copyUrl(url);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.currentTarget.select();
+                        void copyUrl(url);
+                      }}
+                    />
                   </label>
                   {!link.closed_at && (
                     <button
@@ -178,8 +206,20 @@ export function CardCreationLinksPanel({
                             <label className="public-link-url-control">
                               <span>Ссылка на карточку</span>
                               <input
+                                className="copyable-link-input"
                                 readOnly
+                                title="Нажмите, чтобы скопировать"
                                 value={`${window.location.origin}/public/edit/${card.child_raw_token}`}
+                                onClick={(event) => {
+                                  event.currentTarget.select();
+                                  void copyUrl(event.currentTarget.value);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key !== "Enter" && event.key !== " ") return;
+                                  event.preventDefault();
+                                  event.currentTarget.select();
+                                  void copyUrl(event.currentTarget.value);
+                                }}
                               />
                             </label>
                           </li>
@@ -191,6 +231,11 @@ export function CardCreationLinksPanel({
               );
             })}
           </ul>
+          {copyFeedback && (
+            <p className={copyFeedback.isError ? "data-alert" : "inline-success"} role="status">
+              {copyFeedback.message}
+            </p>
+          )}
           <MutationFeedback error={closeMutation.error} />
         </div>
       )}

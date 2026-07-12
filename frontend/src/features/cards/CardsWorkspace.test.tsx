@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { OrganizationRead, RegistrySchemaRead } from "@/api/types";
@@ -51,35 +51,35 @@ beforeEach(() => {
 });
 
 describe("CardsWorkspace", () => {
-  test("opens card creation in the shared card tab strip instead of below the list", () => {
+  test("renders fixed creation actions in the shared card tab strip without a dropdown", () => {
     renderWorkspace();
 
-    fireEvent.click(screen.getByRole("button", { name: "Создать карточку" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Создать карточку" }));
-
-    expect(screen.getByRole("tab", { name: "Создать карточку" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Закрыть вкладку Создать карточку" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
+    const tabList = screen.getByRole("tablist", { name: "Вкладки карточек" });
+    expect(within(tabList).getByRole("tab", { name: "Создать карточку" })).toBeInTheDocument();
+    expect(within(tabList).getByRole("tab", { name: "Создать ссылку" })).toBeInTheDocument();
+    expect(within(tabList).getByRole("tab", { name: "Список ссылок" })).toBeInTheDocument();
+    expect(screen.queryByRole("menu", { name: "Создание карточек" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать карточку" })).not.toBeInTheDocument();
   });
 
-  test("opens creation-link actions as their own closeable tabs", () => {
+  test("switches fixed utility tabs without rendering the card list beneath them", () => {
     renderWorkspace();
 
-    fireEvent.click(screen.getByRole("button", { name: "Создать карточку" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Создать ссылку на создание карточки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+    expect(screen.getByRole("form", { name: "Создать карточку" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("tab", { name: "Создать ссылку" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Закрыть вкладку Создать ссылку" }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Создать карточку" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Список ссылок" }));
-
-    expect(screen.getByRole("tab", { name: "Список ссылок" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Создать ссылку" }));
+    expect(screen.getByRole("region", { name: "Ссылки на создание карточек" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Закрыть вкладку Список ссылок" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Закрыть вкладку Создать ссылку" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Список ссылок" }));
+    expect(screen.getByRole("tab", { name: "Список ссылок" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });
 

@@ -39,6 +39,10 @@ export function PublicLinkEditPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
   const queryClient = useQueryClient();
   const [lifecycleRefreshing, setLifecycleRefreshing] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    message: string;
+    isError: boolean;
+  } | null>(null);
   const statusQuery = useQuery({
     queryKey: ["public-link-status", rawToken],
     queryFn: () => getPublicLinkStatus(rawToken),
@@ -89,6 +93,15 @@ export function PublicLinkEditPage() {
     return true;
   }
 
+  async function copyPublicLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopyFeedback({ message: "Ссылка скопирована", isError: false });
+    } catch {
+      setCopyFeedback({ message: "Не удалось скопировать ссылку", isError: true });
+    }
+  }
+
   return (
     <main className="public-shell">
       <header className="public-header">
@@ -117,11 +130,28 @@ export function PublicLinkEditPage() {
                 <h2>Публичное заполнение карточки</h2>
                 <h3>{previewQuery.data.display_name}</h3>
               </div>
-              <span>
-                {previewQuery.data.expires_at
-                  ? `${uiText.expires} ${formatUiDateTime(previewQuery.data.expires_at)}`
-                  : "Бессрочная ссылка"}
-              </span>
+              <div className="public-title-actions">
+                <span>
+                  {previewQuery.data.expires_at
+                    ? `${uiText.expires} ${formatUiDateTime(previewQuery.data.expires_at)}`
+                    : "Бессрочная ссылка"}
+                </span>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void copyPublicLink()}
+                >
+                  Копировать ссылку
+                </button>
+                {copyFeedback && (
+                  <span
+                    className={`public-title-copy-status${copyFeedback.isError ? " is-error" : ""}`}
+                    role="status"
+                  >
+                    {copyFeedback.message}
+                  </span>
+                )}
+              </div>
             </header>
 
             <PublicEditableCard

@@ -23,6 +23,7 @@ let deferredEditResponses: Array<(response: Response) => void>;
 let statusResponseMode: "success" | "deferred" | "error";
 let deferredStatusResponses: Array<(response: Response) => void>;
 let lifecycleDenialPath: string | null;
+let clipboardWrite: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   status = safeStatus("active");
@@ -39,6 +40,11 @@ beforeEach(() => {
   statusResponseMode = "success";
   deferredStatusResponses = [];
   lifecycleDenialPath = null;
+  clipboardWrite = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: clipboardWrite },
+  });
   vi.stubGlobal("fetch", vi.fn(handleFetch));
 });
 
@@ -47,6 +53,15 @@ afterEach(() => {
 });
 
 describe("PublicLinkEditPage", () => {
+  test("copies the current public URL from the page title", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Копировать ссылку" }));
+
+    expect(clipboardWrite).toHaveBeenCalledWith(window.location.href);
+    expect(await screen.findByRole("status")).toHaveTextContent("Ссылка скопирована");
+  });
+
   test("shows public completion navigation and updates it after a confirmed field save", async () => {
     editResponseMode = "deferred";
     preview.blocks[0].instances[0].fields[0] = {

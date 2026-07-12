@@ -35,6 +35,11 @@ not a hardcoded employee registry.
   TypeScript, scoped ESLint, production build, 18 disposable-PostgreSQL backend
   tests, server checks, and the live `create-draft` OpenAPI route pass. No
   migration was required.
+- Phase 8Q replaces the overlapping card-creation dropdown with the fixed
+  `Создать карточку`, `Создать ссылку`, and `Список ссылок` tabs immediately
+  after `Список карточек`. The links in the creation-link list copy by click,
+  and the public card title has a visible `Копировать ссылку` action with
+  Russian success/error feedback. No backend or database changes are required.
 - Separate older test-fixture drift remains in
   `test_public_link_review_lifecycle.py`: four assertions assume absent
   card-field settings are private, but commit `e8018ade` intentionally changed

@@ -85,6 +85,11 @@ const cardUtilityTabLabels: Record<CardUtilityTab, string> = {
   "create-creation-link": "Создать ссылку",
   "creation-link-list": "Список ссылок",
 };
+const fixedCardUtilityTabs: CardUtilityTab[] = [
+  "create-card",
+  "create-creation-link",
+  "creation-link-list",
+];
 
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
 
@@ -131,9 +136,7 @@ export function CardsWorkspace({
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
-  const [cardCreateMenuOpen, setCardCreateMenuOpen] = useState(false);
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
-  const [openUtilityTabs, setOpenUtilityTabs] = useState<CardUtilityTab[]>([]);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
@@ -273,10 +276,9 @@ export function CardsWorkspace({
   const cardShellTabs = useMemo(
     () => [
       { id: "list" as CardShellTab, label: uiText.cardListTab },
-      ...openUtilityTabs.map((tabId) => ({
+      ...fixedCardUtilityTabs.map((tabId) => ({
         id: tabId,
         label: cardUtilityTabLabels[tabId],
-        closeLabel: `Закрыть вкладку ${cardUtilityTabLabels[tabId]}`,
       })),
       ...visibleOpenCardIds.map((cardId) => {
         const item = cards.find((cardItem) => cardItem.id === cardId);
@@ -289,7 +291,7 @@ export function CardsWorkspace({
         };
       }),
     ],
-    [blockEditor.dirty, card?.id, cards, openUtilityTabs, visibleOpenCardIds],
+    [blockEditor.dirty, card?.id, cards, visibleOpenCardIds],
   );
   const repeatableBlocks = useMemo(
     () => presentationBlocks.filter((block) => block.is_active && block.is_repeatable),
@@ -314,7 +316,6 @@ export function CardsWorkspace({
       }),
     onSuccess: async (created) => {
       setSuccessMessage(uiText.cardCreated);
-      setOpenUtilityTabs((current) => current.filter((tabId) => tabId !== "create-card"));
       onSelectCard(created.id);
       setOpenCardIds((current) =>
         current.includes(created.id) ? current : [...current, created.id],
@@ -445,21 +446,13 @@ export function CardsWorkspace({
     });
   }, [activeShellTab, visibleOpenCardIds]);
 
-  function openCreateForm() {
-    setCardForm({
-      ...initialCreateCardForm(organizations),
-      cardTemplateId: activeCardTemplates[0]?.id ?? "",
-    });
-    openUtilityTab("create-card");
-  }
-
-  function openCardCreationLinks(mode: "create" | "list") {
-    openUtilityTab(mode === "create" ? "create-creation-link" : "creation-link-list");
-  }
-
   function openUtilityTab(tabId: CardUtilityTab) {
-    setOpenUtilityTabs((current) => (current.includes(tabId) ? current : [...current, tabId]));
-    setCardCreateMenuOpen(false);
+    if (tabId === "create-card") {
+      setCardForm({
+        ...initialCreateCardForm(organizations),
+        cardTemplateId: activeCardTemplates[0]?.id ?? "",
+      });
+    }
     setActiveShellTab(tabId);
     activeCardIdRef.current = null;
     setArchiveTarget(null);
@@ -494,6 +487,10 @@ export function CardsWorkspace({
   }
 
   function handleShellTabChange(tabId: CardShellTab) {
+    if (fixedCardUtilityTabs.includes(tabId as CardUtilityTab)) {
+      openUtilityTab(tabId as CardUtilityTab);
+      return;
+    }
     const cardId = tabId.startsWith("card:") ? tabId.slice("card:".length) : null;
     setActiveShellTab(tabId);
     activeCardIdRef.current = cardId;
@@ -507,15 +504,7 @@ export function CardsWorkspace({
   }
 
   function handleShellTabClose(tabId: CardShellTab) {
-    if (tabId === "list") {
-      return;
-    }
     if (!tabId.startsWith("card:")) {
-      setOpenUtilityTabs((current) => current.filter((openTabId) => openTabId !== tabId));
-      if (activeShellTab === tabId) {
-        setActiveShellTab("list");
-        activeCardIdRef.current = null;
-      }
       return;
     }
     const cardId = tabId.slice("card:".length);
@@ -552,44 +541,6 @@ export function CardsWorkspace({
       />
       {activeShellTab === "list" ? (
         <Panel title={uiText.cards}>
-          <div className="panel-toolbar">
-            <div className="card-create-menu">
-              <button
-                type="button"
-                className="primary-button"
-                aria-expanded={cardCreateMenuOpen}
-                aria-haspopup="menu"
-                onClick={() => setCardCreateMenuOpen((current) => !current)}
-              >
-                {uiText.createCard}
-              </button>
-              {cardCreateMenuOpen && (
-                <div
-                  className="card-download-menu-items"
-                  role="menu"
-                  aria-label="Создание карточек"
-                >
-                  <button type="button" role="menuitem" onClick={openCreateForm}>
-                    Создать карточку
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => openCardCreationLinks("create")}
-                  >
-                    Создать ссылку на создание карточки
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => openCardCreationLinks("list")}
-                  >
-                    Список ссылок
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
           <CardListFilters
             cardSearch={cardSearch}
             organizationIds={cardOrganizationIds}
@@ -628,7 +579,7 @@ export function CardsWorkspace({
             templates={activeCardTemplates}
             isSubmitting={createCardMutation.isPending}
             error={localError ? new Error(localError) : createCardMutation.error}
-            onCancel={() => handleShellTabClose("create-card")}
+            onCancel={() => handleShellTabChange("list")}
             onChange={setCardForm}
             onSubmit={handleCardFormSubmit}
           />

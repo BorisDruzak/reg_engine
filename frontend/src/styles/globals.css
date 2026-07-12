@@ -350,6 +350,24 @@ button {
   line-height: 1.4;
 }
 
+.public-title-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.public-title-actions .ghost-button {
+  white-space: nowrap;
+}
+
+.public-title-actions .public-title-copy-status {
+  color: #067647;
+}
+
+.public-title-actions .public-title-copy-status.is-error {
+  color: #b42318;
+}
+
 .workspace-topbar {
   display: flex;
   align-items: center;
@@ -3829,16 +3847,6 @@ tr:last-child td {
   outline: 0;
 }
 
-.card-create-menu {
-  position: relative;
-}
-
-.card-create-menu .card-download-menu-items {
-  min-width: 19rem;
-  left: 0;
-  right: auto;
-}
-
 .card-creation-links-panel,
 .card-creation-link-organizations,
 .card-created-public-link,
@@ -4426,6 +4434,10 @@ tr:last-child td {
 .public-link-url-control input {
   width: min(640px, 100%);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.public-link-url-control input.copyable-link-input {
+  cursor: copy;
 }
 
 .public-link-list {
@@ -5055,6 +5067,10 @@ tr:last-child td {
   .public-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .public-title-actions {
+    justify-items: start;
   }
 
   .account-strip div {

@@ -4,7 +4,7 @@
 
 **Goal:** Replace the overlapping card-creation dropdown with persistent utility tabs and make public URLs copyable by one click.
 
-**Architecture:** `CardsWorkspace` keeps `list` and card-detail tabs plus three fixed utility tabs. A small shared frontend helper copies a URL and returns a Russian success message; it is used by the creation-link list and public edit title.
+**Architecture:** `CardsWorkspace` keeps `list` and card-detail tabs plus three fixed utility tabs. The two existing link surfaces use the browser clipboard directly and return a Russian success message.
 
 **Tech Stack:** React, TypeScript, TanStack Query, Vitest, Testing Library, CSS.
 
@@ -20,10 +20,10 @@
 - Modify: `frontend/src/features/cards/CardsWorkspace.tsx`
 - Modify: `frontend/src/features/cards/CardsWorkspace.test.tsx`
 
-- [ ] Write a failing test that expects `Создать карточку`, `Создать ссылку`, and `Список ссылок` in the tablist before any action and no `Создать карточку` menu trigger in the card-list panel.
-- [ ] Run `npx vitest run src/features/cards/CardsWorkspace.test.tsx --reporter=dot` and confirm failure because the tabs are opened only from the dropdown.
-- [ ] Remove `cardCreateMenuOpen`; append the three utility tab definitions directly after the list tab; make clicking a utility tab select its surface without rendering a close control.
-- [ ] Re-run the workspace test and confirm it passes.
+- [x] Write a failing test that expects `Создать карточку`, `Создать ссылку`, and `Список ссылок` in the tablist before any action and no `Создать карточку` menu trigger in the card-list panel.
+- [x] Run `npx vitest run src/features/cards/CardsWorkspace.test.tsx --reporter=dot` and confirm failure because the tabs are opened only from the dropdown.
+- [x] Remove `cardCreateMenuOpen`; append the three utility tab definitions directly after the list tab; make clicking a utility tab select its surface without rendering a close control.
+- [x] Re-run the workspace test and confirm it passes.
 
 ### Task 2: Copy creation and public-edit URLs
 
@@ -34,10 +34,10 @@
 - Modify: `frontend/src/pages/PublicLinkEditPage.test.tsx`
 - Modify: `frontend/src/styles/globals.css`
 
-- [ ] Write failing tests: clicking the labelled creation URL calls `navigator.clipboard.writeText` and shows `Ссылка скопирована`; the public title renders `Копировать ссылку` and copies `window.location.href`.
-- [ ] Run the two focused Vitest files and confirm each fails because the URL is read-only text and the public title has no copy action.
-- [ ] Implement click-to-copy with selection, Russian success/error feedback, and a public-title copy button.
-- [ ] Re-run focused tests, TypeScript, scoped ESLint, Prettier, and production build.
+- [x] Write failing tests: clicking the labelled creation URL calls `navigator.clipboard.writeText` and shows `Ссылка скопирована`; the public title renders `Копировать ссылку` and copies `window.location.href`.
+- [x] Run the two focused Vitest files and confirm each fails because the URL is read-only text and the public title has no copy action.
+- [x] Implement click-to-copy with selection, Russian success/error feedback, and a public-title copy button.
+- [x] Re-run focused tests, TypeScript, scoped ESLint, Prettier, and production build.
 
 ### Task 3: Release proof
 
