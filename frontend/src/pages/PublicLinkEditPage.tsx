@@ -23,6 +23,7 @@ import type {
   PublicLinkSafeStatusRead,
 } from "@/api/types";
 import { formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
+import { copyTextToClipboard } from "@/components/common/clipboard";
 import { errorText } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import { CardPresentationShell } from "@/features/cards/CardPresentationShell";
@@ -95,7 +96,7 @@ export function PublicLinkEditPage() {
 
   async function copyPublicLink() {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await copyTextToClipboard(window.location.href);
       setCopyFeedback({ message: "Ссылка скопирована", isError: false });
     } catch {
       setCopyFeedback({ message: "Не удалось скопировать ссылку", isError: true });

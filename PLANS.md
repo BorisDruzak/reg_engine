@@ -39,7 +39,9 @@ not a hardcoded employee registry.
   `Создать карточку`, `Создать ссылку`, and `Список ссылок` tabs immediately
   after `Список карточек`. The links in the creation-link list copy by click,
   and the public card title has a visible `Копировать ссылку` action with
-  Russian success/error feedback. No backend or database changes are required.
+  Russian success/error feedback. The shared copy helper falls back to a
+  temporary selected control when the native Clipboard API is unavailable over
+  HTTP. No backend or database changes are required.
 - Separate older test-fixture drift remains in
   `test_public_link_review_lifecycle.py`: four assertions assume absent
   card-field settings are private, but commit `e8018ade` intentionally changed

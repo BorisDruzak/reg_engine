@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { closeCardCreationLink, createCardCreationLink, listCardCreationLinks } from "@/api/client";
 import type { CardTemplateRead, OrganizationRead } from "@/api/types";
 import { MutationFeedback } from "@/components/common/AdminMutation";
+import { copyTextToClipboard } from "@/components/common/clipboard";
 import { errorText } from "@/components/common/dataUtils";
 
 export type CardCreationLinksPanelMode = "create" | "list";
@@ -68,7 +69,7 @@ export function CardCreationLinksPanel({
 
   async function copyUrl(url: string) {
     try {
-      await navigator.clipboard.writeText(url);
+      await copyTextToClipboard(url);
       setCopyFeedback({ message: "Ссылка скопирована", isError: false });
     } catch {
       setCopyFeedback({ message: "Не удалось скопировать ссылку", isError: true });

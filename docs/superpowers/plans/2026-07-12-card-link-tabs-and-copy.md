@@ -4,7 +4,7 @@
 
 **Goal:** Replace the overlapping card-creation dropdown with persistent utility tabs and make public URLs copyable by one click.
 
-**Architecture:** `CardsWorkspace` keeps `list` and card-detail tabs plus three fixed utility tabs. The two existing link surfaces use the browser clipboard directly and return a Russian success message.
+**Architecture:** `CardsWorkspace` keeps `list` and card-detail tabs plus three fixed utility tabs. A shared clipboard helper uses the native browser API when available and a temporary selected control on HTTP/restricted pages, then returns a Russian success message.
 
 **Tech Stack:** React, TypeScript, TanStack Query, Vitest, Testing Library, CSS.
 
@@ -38,6 +38,7 @@
 - [x] Run the two focused Vitest files and confirm each fails because the URL is read-only text and the public title has no copy action.
 - [x] Implement click-to-copy with selection, Russian success/error feedback, and a public-title copy button.
 - [x] Re-run focused tests, TypeScript, scoped ESLint, Prettier, and production build.
+- [x] Verify the HTTP browser flow: the native Clipboard API is unavailable there, so add and test the shared temporary-control fallback.
 
 ### Task 3: Release proof
 
