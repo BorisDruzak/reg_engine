@@ -1,6 +1,7 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic import command
@@ -347,7 +348,13 @@ def test_public_creation_link_api_creates_draft_after_organization_choice(
     assert created.json()["child_raw_token"]
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1
     assert db_session.scalar(select(func.count()).select_from(FieldValue)) == 0
-    child_link = db_session.get(CardPublicLink, created.json()["child_public_link_id"])
+    relation = db_session.scalar(
+        select(CardCreationLinkCard).where(
+            CardCreationLinkCard.card_id == UUID(created.json()["card_id"])
+        )
+    )
+    assert relation is not None
+    child_link = db_session.get(CardPublicLink, relation.child_public_link_id)
     assert child_link is not None
     assert child_link.expires_at is None
 

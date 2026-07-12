@@ -10,6 +10,7 @@ from app.schemas.card_creation_links import (
     CardCreationLinkCardListRead,
     CardCreationLinkCreate,
     CardCreationLinkCreatedCardRead,
+    CardCreationLinkDraftCreateRequest,
     CardCreationLinkFirstSaveRead,
     CardCreationLinkFirstSaveRequest,
     CardCreationLinkListRead,
@@ -138,6 +139,29 @@ def preview_card_creation_link_for_public(
     except Exception as exc:
         _raise_public_creation_link_http_error(exc)
     return _public_preview_to_read(preview)
+
+
+@router.post(
+    "/public/card-creation-links/create-draft",
+    response_model=CardCreationLinkFirstSaveRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_card_draft_from_creation_link(
+    payload: CardCreationLinkDraftCreateRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+) -> CardCreationLinkFirstSaveRead:
+    try:
+        created = CardCreationLinkService(session).create_draft_from_public_link(
+            raw_token=payload.raw_token,
+            organization_id=payload.organization_id,
+        )
+    except Exception as exc:
+        _raise_public_creation_link_http_error(exc)
+    return CardCreationLinkFirstSaveRead(
+        card_id=created.card.id,
+        display_name=created.card.display_name,
+        child_raw_token=created.child_raw_token,
+    )
 
 
 @router.post(

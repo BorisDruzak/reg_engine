@@ -69,6 +69,11 @@ class CardCreationLinkFirstSaveRequest(BaseModel):
     block_instance_id: UUID | None = None
 
 
+class CardCreationLinkDraftCreateRequest(BaseModel):
+    raw_token: str = Field(min_length=1)
+    organization_id: UUID
+
+
 class CardCreationLinkFirstSaveRead(BaseModel):
     card_id: UUID
     display_name: str

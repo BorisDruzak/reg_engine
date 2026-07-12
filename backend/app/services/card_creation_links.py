@@ -369,6 +369,48 @@ class CardCreationLinkService:
                 "At least one non-empty public field is required to create a card."
             )
 
+        return self._create_public_card(
+            creation_link=creation_link,
+            template=template,
+            organization=organization,
+            initial_field=(field_model, value, block_instance_id),
+        )
+
+    def create_draft_from_public_link(
+        self,
+        *,
+        raw_token: str,
+        organization_id: UUID,
+    ) -> CardCreationLinkPublicCardValue:
+        creation_link = self._public_link_for_token(raw_token, lock_for_update=True)
+        self._require_public_link_open(creation_link)
+        template = self._active_template(
+            creation_link.card_template_id,
+            registry_id=creation_link.registry_id,
+        )
+        organization = self._selected_public_organization(
+            organizations=self._organizations_for_link(creation_link.id),
+            organization_id=organization_id,
+            require_selection=True,
+        )
+        assert organization is not None
+        return self._create_public_card(
+            creation_link=creation_link,
+            template=template,
+            organization=organization,
+            initial_field=None,
+        )
+
+    def _create_public_card(
+        self,
+        *,
+        creation_link: CardCreationLink,
+        template: CardTemplate,
+        organization: Organization,
+        initial_field: tuple[FormField, object, UUID | None] | None,
+    ) -> CardCreationLinkPublicCardValue:
+        card_service = CardService(self.session)
+
         with self.session.begin_nested():
             card = card_service.create_card(
                 registry_id=creation_link.registry_id,
@@ -390,13 +432,16 @@ class CardCreationLinkService:
             )
             self.session.add(child_public_link)
             self.session.flush()
-            field_value = card_service.set_field_value_from_public_link(
-                actor_public_link_id=child_public_link.id,
-                card_id=card.id,
-                field_id=field_model.id,
-                value=value,
-                block_instance_id=block_instance_id,
-            )
+            field_value = None
+            if initial_field is not None:
+                field_model, value, block_instance_id = initial_field
+                field_value = card_service.set_field_value_from_public_link(
+                    actor_public_link_id=child_public_link.id,
+                    card_id=card.id,
+                    field_id=field_model.id,
+                    value=value,
+                    block_instance_id=block_instance_id,
+                )
             self.session.add(
                 CardCreationLinkCard(
                     creation_link_id=creation_link.id,
@@ -427,13 +472,17 @@ class CardCreationLinkService:
                     "expires_at": None,
                 },
             )
-            audit_service.record_public_link_event(
-                actor_public_link_id=child_public_link.id,
-                action="public_link.update",
-                object_type="field_value",
-                object_id=field_value.id,
-                new_data_json={"card_id": str(card.id), "field_id": str(field_model.id)},
-            )
+            if field_value is not None and initial_field is not None:
+                audit_service.record_public_link_event(
+                    actor_public_link_id=child_public_link.id,
+                    action="public_link.update",
+                    object_type="field_value",
+                    object_id=field_value.id,
+                    new_data_json={
+                        "card_id": str(card.id),
+                        "field_id": str(initial_field[0].id),
+                    },
+                )
 
         return CardCreationLinkPublicCardValue(
             card=card,
