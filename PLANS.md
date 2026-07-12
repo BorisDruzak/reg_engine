@@ -14,21 +14,27 @@ not a hardcoded employee registry.
   one wide, Russian-first XLSX workflow. It selects a template, accessible
   organizations, and supported schema fields; exports a readable list or blank
   import template; and previews then atomically creates cards. The old public
-  REST routes are removed. No migration is required. Local verification passes
-  focused XLSX service tests (3), focused frontend tests (2), Ruff, mypy,
+  REST routes are removed. Export and import are now separate, plainly labelled
+  operations below their shared XLSX parameters; feedback appears beside the
+  operation that produced it. A production `500` during download was traced to
+  a Cyrillic value in `X-Document-Filename`: Starlette only permits Latin-1 HTTP
+  header values. Both downloaded filenames now use ASCII-safe headers, and
+  supported user-facing XLSX validation messages are shown rather than the
+  generic request failure. No migration is required. Local verification passes
+  focused XLSX service tests (4), focused frontend tests (10), Ruff, mypy,
   TypeScript, scoped Prettier, and the production frontend build. The workbook
   uses Excel named ranges for organization and reference-value lists, including
   multi-select guidance with semicolon separators. Four
   PostgreSQL API scenarios are skipped until a disposable `TEST_DATABASE_URL`
   is configured. The broad backend suite has one unrelated stale metadata
   expectation for the existing card-creation-link tables; the global frontend
-  Prettier check has three unrelated older files. Commit 459a7a47 is pushed to
+  Prettier check has three unrelated older files. Commit 2ee1c24e is pushed to
   main and deployed without a migration: server and same-origin frontend/API
-  smoke checks pass. The browser loaded the fresh published bundle and reported
-  no console errors at the sign-in screen. Authenticated visual interaction
-  awaits a user session, so no production cards were created for QA. The public
-  OpenAPI lists only the five tabular XLSX routes and no legacy card-exchange
-  routes.
+  smoke checks pass. The browser loaded the fresh published bundle in an
+  authenticated session, confirmed the separate enabled export/import actions
+  after choosing a template, organization, and field, and reported no console
+  errors. No production cards were created for QA. The public OpenAPI lists
+  only the five tabular XLSX routes and no legacy card-exchange routes.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
