@@ -323,6 +323,35 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1
 
 
+def test_public_creation_link_api_creates_draft_after_organization_choice(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    admin, source_organization, _, registry, template = _creation_link_context(db_session)
+    creation_link = CardCreationLinkService(db_session).create_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        card_template_id=template.id,
+        organization_ids=[source_organization.id],
+    )
+
+    created = api_client.post(
+        "/api/v1/public/card-creation-links/create-draft",
+        json={
+            "raw_token": creation_link.raw_token,
+            "organization_id": str(source_organization.id),
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["child_raw_token"]
+    assert db_session.scalar(select(func.count()).select_from(Card)) == 1
+    assert db_session.scalar(select(func.count()).select_from(FieldValue)) == 0
+    child_link = db_session.get(CardPublicLink, created.json()["child_public_link_id"])
+    assert child_link is not None
+    assert child_link.expires_at is None
+
+
 def test_public_creation_link_api_creates_only_after_first_value(
     api_client: TestClient,
     db_session: Session,
