@@ -22,8 +22,13 @@ not a hardcoded employee registry.
   PostgreSQL API scenarios are skipped until a disposable `TEST_DATABASE_URL`
   is configured. The broad backend suite has one unrelated stale metadata
   expectation for the existing card-creation-link tables; the global frontend
-  Prettier check has three unrelated older files. Push, deployment, and live
-  browser proof are not recorded yet.
+  Prettier check has three unrelated older files. Commit 459a7a47 is pushed to
+  main and deployed without a migration: server and same-origin frontend/API
+  smoke checks pass. The browser loaded the fresh published bundle and reported
+  no console errors at the sign-in screen. Authenticated visual interaction
+  awaits a user session, so no production cards were created for QA. The public
+  OpenAPI lists only the five tabular XLSX routes and no legacy card-exchange
+  routes.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
