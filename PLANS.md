@@ -10,6 +10,20 @@ not a hardcoded employee registry.
 - Completed baseline: backend, frontend, attachments, generated documents,
   import/export, reports, MCP phases through Phase 5R, live verification, and
   production follow-up fixes are implemented on `main`.
+- Phase 8R replaces the technical JSON/CSV/row-oriented XLSX card exchange with
+  one wide, Russian-first XLSX workflow. It selects a template, accessible
+  organizations, and supported schema fields; exports a readable list or blank
+  import template; and previews then atomically creates cards. The old public
+  REST routes are removed. No migration is required. Local verification passes
+  focused XLSX service tests (3), focused frontend tests (2), Ruff, mypy,
+  TypeScript, scoped Prettier, and the production frontend build. The workbook
+  uses Excel named ranges for organization and reference-value lists, including
+  multi-select guidance with semicolon separators. Four
+  PostgreSQL API scenarios are skipped until a disposable `TEST_DATABASE_URL`
+  is configured. The broad backend suite has one unrelated stale metadata
+  expectation for the existing card-creation-link tables; the global frontend
+  Prettier check has three unrelated older files. Push, deployment, and live
+  browser proof are not recorded yet.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.

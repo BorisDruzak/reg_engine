@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-11 18:49:32 +05:00
+- Generated: 2026-07-12 14:05:13 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -37,6 +37,7 @@
 - `backend/app/api/v1/endpoints/attachments.py`
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
+- `backend/app/api/v1/endpoints/card_creation_links.py`
 - `backend/app/api/v1/endpoints/card_template_layouts.py`
 - `backend/app/api/v1/endpoints/cards.py`
 - `backend/app/api/v1/endpoints/documents.py`
@@ -67,6 +68,7 @@
 - `backend/app/models/audit.py`
 - `backend/app/models/base.py`
 - `backend/app/models/card.py`
+- `backend/app/models/card_creation_link.py`
 - `backend/app/models/document.py`
 - `backend/app/models/identity.py`
 - `backend/app/models/organization.py`
@@ -80,6 +82,7 @@
 - `backend/app/schemas/attachments.py`
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
+- `backend/app/schemas/card_creation_links.py`
 - `backend/app/schemas/card_template_layouts.py`
 - `backend/app/schemas/cards.py`
 - `backend/app/schemas/documents.py`
@@ -93,6 +96,7 @@
 - `backend/app/services/audit.py`
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
+- `backend/app/services/card_creation_links.py`
 - `backend/app/services/card_print.py`
 - `backend/app/services/card_public_access.py`
 - `backend/app/services/card_template_layout.py`
@@ -133,6 +137,9 @@
 - `backend/migrations/versions/0022_card_print_layout_templates.py`
 - `backend/migrations/versions/0023_public_link_review_lifecycle.py`
 - `backend/migrations/versions/0024_card_public_field_settings.py`
+- `backend/migrations/versions/0025_three_role_user_access.py`
+- `backend/migrations/versions/0026_reuse_archived_form_field_codes.py`
+- `backend/migrations/versions/0027_card_creation_links.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -149,6 +156,7 @@
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
+- `backend/tests/test_card_creation_links.py`
 - `backend/tests/test_card_print_layout_services.py`
 - `backend/tests/test_card_public_access.py`
 - `backend/tests/test_card_template_layout_services.py`
@@ -173,6 +181,8 @@
 - `backend/tests/test_registry_schema_field_update_contract.py`
 - `backend/tests/test_required_field_payloads.py`
 - `backend/tests/test_schema_constraints.py`
+- `backend/tests/test_tabular_xlsx_exchange.py`
+- `backend/tests/test_three_role_access_migration.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ADR/0002-browser-session-storage.md`
 - `docs/ADR/0003-repository-visibility.md`
@@ -215,6 +225,13 @@
 - `docs/superpowers/plans/2026-07-11-inline-field-reference-editor.md`
 - `docs/superpowers/plans/2026-07-11-registry-advanced-navigation-block-order.md`
 - `docs/superpowers/plans/2026-07-11-role-aware-card-workspace.md`
+- `docs/superpowers/plans/2026-07-11-three-role-user-access.md`
+- `docs/superpowers/plans/2026-07-11-user-scope-and-card-search-input.md`
+- `docs/superpowers/plans/2026-07-12-card-creation-tabs-and-organization-draft.md`
+- `docs/superpowers/plans/2026-07-12-card-link-tabs-and-copy.md`
+- `docs/superpowers/plans/2026-07-12-inline-card-field-row.md`
+- `docs/superpowers/plans/2026-07-12-public-card-creation-links.md`
+- `docs/superpowers/plans/2026-07-12-wide-xlsx-card-exchange.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -226,6 +243,13 @@
 - `docs/superpowers/specs/2026-07-11-inline-field-reference-editor-design.md`
 - `docs/superpowers/specs/2026-07-11-registry-advanced-navigation-block-order-design.md`
 - `docs/superpowers/specs/2026-07-11-role-aware-card-workspace-design.md`
+- `docs/superpowers/specs/2026-07-11-three-role-user-access-design.md`
+- `docs/superpowers/specs/2026-07-11-user-scope-and-card-search-input-design.md`
+- `docs/superpowers/specs/2026-07-12-card-creation-tabs-and-organization-draft-design.md`
+- `docs/superpowers/specs/2026-07-12-card-link-tabs-and-copy-design.md`
+- `docs/superpowers/specs/2026-07-12-inline-field-row-design.md`
+- `docs/superpowers/specs/2026-07-12-public-card-creation-links-design.md`
+- `docs/superpowers/specs/2026-07-12-wide-xlsx-card-exchange-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -248,6 +272,8 @@
 - `frontend/src/components/common/AdminMutation.test.tsx`
 - `frontend/src/components/common/AdminMutation.tsx`
 - `frontend/src/components/common/AdminMutationUtils.ts`
+- `frontend/src/components/common/clipboard.test.ts`
+- `frontend/src/components/common/clipboard.ts`
 - `frontend/src/components/common/DataSurfaces.tsx`
 - `frontend/src/components/common/dataUtils.ts`
 - `frontend/src/components/layout/.gitkeep`
@@ -279,8 +305,13 @@
 - `frontend/src/features/cards/CardBlockNavigator.tsx`
 - `frontend/src/features/cards/cardCompletion.test.ts`
 - `frontend/src/features/cards/cardCompletion.ts`
+- `frontend/src/features/cards/CardCreationLinksPanel.test.tsx`
+- `frontend/src/features/cards/CardCreationLinksPanel.tsx`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
 - `frontend/src/features/cards/CardPresentationShell.tsx`
+- `frontend/src/features/cards/cardPublicAccessDefaults.test.ts`
+- `frontend/src/features/cards/cardPublicAccessDefaults.ts`
+- `frontend/src/features/cards/CardsWorkspace.test.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/CardTagSearchBar.tsx`
 - `frontend/src/features/cards/FieldEditorControl.test.tsx`
@@ -302,6 +333,7 @@
 - `frontend/src/features/registry/.gitkeep`
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
 - `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
+- `frontend/src/features/registry/ImportExportPanel.test.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
 - `frontend/src/features/registry/print/a4DragPayload.ts`
 - `frontend/src/features/registry/print/A4LayoutCanvas.tsx`
@@ -327,9 +359,12 @@
 - `frontend/src/features/registry/print/printSampleValues.ts`
 - `frontend/src/features/registry/RegistriesAndSchema.tsx`
 - `frontend/src/features/registry/ReportsPanel.tsx`
+- `frontend/src/features/users/UsersAndRoles.test.tsx`
 - `frontend/src/features/users/UsersAndRoles.tsx`
 - `frontend/src/main.tsx`
 - `frontend/src/pages/HomePage.tsx`
+- `frontend/src/pages/PublicCardCreationPage.test.tsx`
+- `frontend/src/pages/PublicCardCreationPage.tsx`
 - `frontend/src/pages/PublicLinkEditPage.test.tsx`
 - `frontend/src/pages/PublicLinkEditPage.tsx`
 - `frontend/src/styles/globals.css`

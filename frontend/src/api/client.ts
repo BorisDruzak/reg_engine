@@ -27,10 +27,6 @@ import type {
   CardTemplateUpdatePayload,
   CardCreatePayload,
   CardFieldFilterPayload,
-  CardImportCommitPayload,
-  CardImportCommitRead,
-  CardImportPreviewPayload,
-  CardImportPreviewRead,
   CardListRead,
   CardPrintPreviewPayload,
   CardPrintPreviewRead,
@@ -104,6 +100,10 @@ import type {
   UserListRead,
   UserRead,
   UserUpdatePayload,
+  TabularCardExchangeOptionsRead,
+  TabularCardImportCommitRead,
+  TabularCardImportPreviewRead,
+  TabularCardWorkbookPayload,
 } from "./types";
 import { uiText } from "../app/uiText";
 
@@ -501,52 +501,44 @@ export async function transferCard(token: string, cardId: string, payload: CardT
   });
 }
 
-export async function downloadCardExport(
-  token: string,
-  registryId: string,
-  exportFormat: "json" | "csv" | "xlsx",
-) {
-  const response = await fetch(
-    `${apiBaseUrl.replace(/\/$/, "")}/api/v1/registries/${registryId}/exports/cards?format=${exportFormat}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-
-  if (!response.ok) {
-    const message = await errorMessage(response);
-    throw new ApiError(message, response.status);
-  }
-
-  return {
-    blob: await response.blob(),
-    filename: `registry-cards-export.${exportFormat}`,
-  };
-}
-
-export async function previewCardImport(
-  token: string,
-  registryId: string,
-  payload: CardImportPreviewPayload,
-) {
-  return apiRequest<CardImportPreviewRead>(
-    `/api/v1/registries/${registryId}/imports/cards/preview`,
-    {
-      method: "POST",
-      token,
-      body: payload,
-    },
+export async function getTabularXlsxCardExchangeOptions(token: string, registryId: string) {
+  return apiRequest<TabularCardExchangeOptionsRead>(
+    `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/options`,
+    { token },
   );
 }
 
-export async function previewCardImportFile(token: string, registryId: string, file: File) {
+export async function downloadTabularXlsxCards(
+  token: string,
+  registryId: string,
+  payload: TabularCardWorkbookPayload,
+) {
+  return downloadJsonFile(
+    `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/export`,
+    token,
+    "X-Document-Filename",
+    payload,
+  );
+}
+
+export async function downloadTabularXlsxImportTemplate(
+  token: string,
+  registryId: string,
+  payload: TabularCardWorkbookPayload,
+) {
+  return downloadJsonFile(
+    `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/import-template`,
+    token,
+    "X-Document-Filename",
+    payload,
+  );
+}
+
+export async function previewTabularXlsxImport(token: string, registryId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiRequest<CardImportPreviewRead>(
-    `/api/v1/registries/${registryId}/imports/cards/preview`,
+  return apiRequest<TabularCardImportPreviewRead>(
+    `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/import/preview`,
     {
       method: "POST",
       token,
@@ -555,26 +547,17 @@ export async function previewCardImportFile(token: string, registryId: string, f
   );
 }
 
-export async function commitCardImport(
-  token: string,
-  registryId: string,
-  payload: CardImportCommitPayload,
-) {
-  return apiRequest<CardImportCommitRead>(`/api/v1/registries/${registryId}/imports/cards/commit`, {
-    method: "POST",
-    token,
-    body: payload,
-  });
-}
-
-export async function commitCardImportFile(token: string, registryId: string, file: File) {
+export async function commitTabularXlsxImport(token: string, registryId: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiRequest<CardImportCommitRead>(`/api/v1/registries/${registryId}/imports/cards/commit`, {
-    method: "POST",
-    token,
-    body: formData,
-  });
+  return apiRequest<TabularCardImportCommitRead>(
+    `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/import/commit`,
+    {
+      method: "POST",
+      token,
+      body: formData,
+    },
+  );
 }
 
 export async function updateCardFieldValue(

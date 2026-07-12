@@ -1,14 +1,19 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import {
-  commitCardImport,
-  commitCardImportFile,
-  downloadCardExport,
-  previewCardImport,
-  previewCardImportFile,
+  commitTabularXlsxImport,
+  downloadTabularXlsxCards,
+  downloadTabularXlsxImportTemplate,
+  getTabularXlsxCardExchangeOptions,
+  previewTabularXlsxImport,
 } from "@/api/client";
-import type { CardImportCommitRead, CardImportPreviewRead } from "@/api/types";
+import type {
+  TabularCardExchangeFieldRead,
+  TabularCardImportCommitRead,
+  TabularCardImportPreviewRead,
+  TabularCardWorkbookPayload,
+} from "@/api/types";
 import { uiText } from "@/app/uiText";
 import { Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
@@ -21,62 +26,73 @@ export function ImportExportPanel({
   token: string;
 }) {
   const queryClient = useQueryClient();
-  const [csvContent, setCsvContent] = useState("");
-  const [previewCsvContent, setPreviewCsvContent] = useState("");
+  const optionsQuery = useQuery({
+    queryKey: ["tabular-xlsx-card-exchange-options", token, selectedRegistryId],
+    queryFn: () => getTabularXlsxCardExchangeOptions(token, selectedRegistryId),
+    enabled: Boolean(token && selectedRegistryId),
+  });
+  const [templateId, setTemplateId] = useState("");
+  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
+  const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
-  const [previewXlsxFile, setPreviewXlsxFile] = useState<File | null>(null);
-  const [previewSource, setPreviewSource] = useState<"csv" | "xlsx" | null>(null);
-  const [preview, setPreview] = useState<CardImportPreviewRead | null>(null);
-  const [commitResult, setCommitResult] = useState<CardImportCommitRead | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<TabularCardImportPreviewRead | null>(null);
+  const [commitResult, setCommitResult] = useState<TabularCardImportCommitRead | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  const selectedTemplate =
+    optionsQuery.data?.templates.find((template) => template.id === templateId) ?? null;
+  const supportedFields = selectedTemplate?.fields.filter((field) => field.supported) ?? [];
+  const unsupportedFields = selectedTemplate?.fields.filter((field) => !field.supported) ?? [];
+  const selectedOrganizationIds = organizationIds.filter((organizationId) =>
+    optionsQuery.data?.organizations.some((organization) => organization.id === organizationId),
+  );
+  const selectedFieldIds = fieldIds.filter((fieldId) =>
+    supportedFields.some((field) => field.id === fieldId),
+  );
+  const payload: TabularCardWorkbookPayload | null =
+    selectedTemplate && selectedFieldIds.length && selectedOrganizationIds.length
+      ? {
+          card_template_id: selectedTemplate.id,
+          field_ids: selectedFieldIds,
+          organization_ids: selectedOrganizationIds,
+        }
+      : null;
+
   const downloadMutation = useMutation({
-    mutationFn: (exportFormat: "json" | "csv" | "xlsx") =>
-      downloadCardExport(token, selectedRegistryId, exportFormat),
+    mutationFn: async (kind: "list" | "template") => {
+      if (!payload) {
+        throw new Error(
+          configurationError(Boolean(selectedTemplate), selectedOrganizationIds, selectedFieldIds),
+        );
+      }
+      return kind === "list"
+        ? downloadTabularXlsxCards(token, selectedRegistryId, payload)
+        : downloadTabularXlsxImportTemplate(token, selectedRegistryId, payload);
+    },
     onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
-      setMessage(uiText.exportDownloaded);
+      setMessage(uiText.tabularXlsxDownloaded);
       setLocalError(null);
     },
     onError: (error) => setLocalError(errorText(error)),
   });
-  const previewCsvMutation = useMutation({
-    mutationFn: () => {
-      const content = csvContent.trim();
-      if (!content) {
-        throw new Error(uiText.importCsvRequired);
-      }
-      return previewCardImport(token, selectedRegistryId, { csv_content: csvContent });
-    },
-    onSuccess: (result) => {
-      setPreview(result);
-      setPreviewSource("csv");
-      setPreviewCsvContent(csvContent);
-      setPreviewXlsxFile(null);
-      setCommitResult(null);
-      setMessage(
-        result.summary.invalid_rows === 0 ? uiText.importCanApply : uiText.importPreviewReady,
-      );
-      setLocalError(null);
-    },
-    onError: (error) => setLocalError(errorText(error)),
-  });
-  const previewXlsxMutation = useMutation({
+  const previewMutation = useMutation({
     mutationFn: () => {
       if (!xlsxFile) {
         throw new Error(uiText.importXlsxRequired);
       }
-      return previewCardImportFile(token, selectedRegistryId, xlsxFile);
+      return previewTabularXlsxImport(token, selectedRegistryId, xlsxFile);
     },
     onSuccess: (result) => {
       setPreview(result);
-      setPreviewSource("xlsx");
-      setPreviewCsvContent("");
-      setPreviewXlsxFile(xlsxFile);
+      setPreviewFile(xlsxFile);
       setCommitResult(null);
       setMessage(
-        result.summary.invalid_rows === 0 ? uiText.importCanApply : uiText.importPreviewReady,
+        result.summary.invalid_rows === 0
+          ? uiText.tabularXlsxCanCommit
+          : uiText.tabularXlsxPreviewReady,
       );
       setLocalError(null);
     },
@@ -84,29 +100,17 @@ export function ImportExportPanel({
   });
   const commitMutation = useMutation({
     mutationFn: () => {
-      if (!preview) {
-        throw new Error(uiText.importPreviewRequired);
+      if (!preview || !previewFile) {
+        throw new Error(uiText.tabularXlsxPreviewRequired);
       }
-      if (previewSource === "csv") {
-        if (previewCsvContent !== csvContent) {
-          throw new Error(uiText.importPreviewStale);
-        }
-        return commitCardImport(token, selectedRegistryId, { csv_content: csvContent });
+      if (previewFile !== xlsxFile) {
+        throw new Error(uiText.importXlsxPreviewStale);
       }
-      if (previewSource === "xlsx") {
-        if (!xlsxFile || previewXlsxFile !== xlsxFile) {
-          throw new Error(uiText.importXlsxPreviewStale);
-        }
-        return commitCardImportFile(token, selectedRegistryId, xlsxFile);
-      }
-      if (previewCsvContent !== csvContent) {
-        throw new Error(uiText.importPreviewStale);
-      }
-      return commitCardImport(token, selectedRegistryId, { csv_content: csvContent });
+      return commitTabularXlsxImport(token, selectedRegistryId, previewFile);
     },
     onSuccess: async (result) => {
       setCommitResult(result);
-      setMessage(uiText.importApplied);
+      setMessage(uiText.tabularXlsxImported);
       setLocalError(null);
       await queryClient.invalidateQueries({ queryKey: ["cards", token, selectedRegistryId] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
@@ -115,101 +119,142 @@ export function ImportExportPanel({
   });
 
   const hasValidPreview = Boolean(preview) && preview?.summary.invalid_rows === 0;
-  const hasStableValidCsvPreview =
-    hasValidPreview && previewSource === "csv" && previewCsvContent === csvContent;
-  const hasStableValidXlsxPreview =
-    hasValidPreview && previewSource === "xlsx" && previewXlsxFile === xlsxFile;
+  const hasStablePreview = hasValidPreview && previewFile === xlsxFile;
+  const optionsError = optionsQuery.error ? errorText(optionsQuery.error) : null;
 
-  function handlePreviewSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    previewCsvMutation.mutate();
+  function resetPreview() {
+    setPreview(null);
+    setPreviewFile(null);
+    setCommitResult(null);
+    setMessage(null);
+  }
+
+  function toggleValue(value: string, current: string[], setValue: (next: string[]) => void) {
+    setValue(
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+    resetPreview();
   }
 
   return (
     <Panel title={uiText.importExport}>
-      <section className="template-manager" aria-labelledby="card-export-heading">
-        <h3 id="card-export-heading">{uiText.exportCards}</h3>
-        <div className="row-actions">
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={!selectedRegistryId || downloadMutation.isPending}
-            onClick={() => downloadMutation.mutate("json")}
-          >
-            {uiText.downloadJson}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={!selectedRegistryId || downloadMutation.isPending}
-            onClick={() => downloadMutation.mutate("csv")}
-          >
-            {uiText.downloadCsv}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={!selectedRegistryId || downloadMutation.isPending}
-            onClick={() => downloadMutation.mutate("xlsx")}
-          >
-            {uiText.downloadXlsx}
-          </button>
-        </div>
-      </section>
-
-      <section className="template-manager" aria-labelledby="card-import-heading">
-        <h3 id="card-import-heading">{uiText.importCards}</h3>
-        <form className="template-form" onSubmit={handlePreviewSubmit}>
-          <label className="field-editor-control template-body-control">
-            <span>{uiText.importCsvContent}</span>
-            <textarea
-              value={csvContent}
-              onChange={(event) => setCsvContent(event.currentTarget.value)}
-            />
-          </label>
-          <div className="row-actions template-body-control">
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={!selectedRegistryId || previewCsvMutation.isPending}
-            >
-              {uiText.previewImport}
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              disabled={!hasStableValidCsvPreview || commitMutation.isPending}
-              onClick={() => commitMutation.mutate()}
-            >
-              {uiText.applyImport}
-            </button>
-          </div>
-        </form>
+      <section className="template-manager" aria-labelledby="tabular-xlsx-heading">
+        <h3 id="tabular-xlsx-heading">{uiText.tabularXlsxTitle}</h3>
+        <p className="muted-text">{uiText.tabularXlsxDescription}</p>
+        {optionsQuery.isLoading && <p className="muted-text">{uiText.loadingCard}</p>}
+        {optionsError && <p className="inline-alert attachment-status">{optionsError}</p>}
+        {!optionsQuery.isLoading && !optionsError && optionsQuery.data && (
+          <>
+            {optionsQuery.data.templates.length === 0 ||
+            optionsQuery.data.organizations.length === 0 ? (
+              <p className="empty-state">{uiText.tabularXlsxNoOptions}</p>
+            ) : (
+              <div className="template-form">
+                <label className="field-editor-control">
+                  <span>{uiText.cardTemplate}</span>
+                  <select
+                    value={templateId}
+                    onChange={(event) => {
+                      setTemplateId(event.currentTarget.value);
+                      setFieldIds([]);
+                      resetPreview();
+                    }}
+                  >
+                    <option value="">{uiText.tabularXlsxSelectTemplate}</option>
+                    {optionsQuery.data.templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="field-editor-control">
+                  <legend>{uiText.tabularXlsxOrganizations}</legend>
+                  <div className="checkbox-list">
+                    {optionsQuery.data.organizations.map((organization) => (
+                      <label key={organization.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedOrganizationIds.includes(organization.id)}
+                          onChange={() =>
+                            toggleValue(organization.id, organizationIds, setOrganizationIds)
+                          }
+                        />
+                        <span>{organization.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                {selectedTemplate && (
+                  <fieldset className="field-editor-control">
+                    <legend>{uiText.tabularXlsxFields}</legend>
+                    <div className="checkbox-list">
+                      {supportedFields.map((field) => (
+                        <FieldSelection
+                          key={field.id}
+                          field={field}
+                          checked={selectedFieldIds.includes(field.id)}
+                          onChange={() => toggleValue(field.id, fieldIds, setFieldIds)}
+                        />
+                      ))}
+                    </div>
+                    {unsupportedFields.map((field) => (
+                      <p key={field.id} className="muted-text">
+                        {field.block_title}: {field.label} — {field.unsupported_reason}
+                      </p>
+                    ))}
+                  </fieldset>
+                )}
+                <div className="row-actions template-body-control">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!payload || downloadMutation.isPending}
+                    onClick={() => downloadMutation.mutate("list")}
+                  >
+                    {uiText.downloadCardList}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    disabled={!payload || downloadMutation.isPending}
+                    onClick={() => downloadMutation.mutate("template")}
+                  >
+                    {uiText.downloadImportTemplate}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         <div className="template-form">
           <label className="field-editor-control">
             <span>{uiText.importXlsxFile}</span>
             <input
               type="file"
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={(event) => setXlsxFile(event.currentTarget.files?.[0] ?? null)}
+              onChange={(event) => {
+                setXlsxFile(event.currentTarget.files?.[0] ?? null);
+                resetPreview();
+              }}
             />
           </label>
           <div className="row-actions template-body-control">
             <button
               type="button"
               className="primary-button"
-              disabled={!selectedRegistryId || previewXlsxMutation.isPending}
-              onClick={() => previewXlsxMutation.mutate()}
+              disabled={!xlsxFile || previewMutation.isPending}
+              onClick={() => previewMutation.mutate()}
             >
-              {uiText.previewXlsxImport}
+              {uiText.previewTabularXlsxImport}
             </button>
             <button
               type="button"
               className="primary-button"
-              disabled={!hasStableValidXlsxPreview || commitMutation.isPending}
+              disabled={!hasStablePreview || commitMutation.isPending}
               onClick={() => commitMutation.mutate()}
             >
-              {uiText.applyXlsxImport}
+              {uiText.commitTabularXlsxImport}
             </button>
           </div>
         </div>
@@ -222,22 +267,37 @@ export function ImportExportPanel({
   );
 }
 
-function ImportPreview({ preview }: { preview: CardImportPreviewRead }) {
+function FieldSelection({
+  field,
+  checked,
+  onChange,
+}: {
+  field: TabularCardExchangeFieldRead;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      <span>{`${field.block_title}: ${field.label}`}</span>
+    </label>
+  );
+}
+
+function ImportPreview({ preview }: { preview: TabularCardImportPreviewRead }) {
   return (
     <div className="import-export-result">
       <strong>{formatImportSummary(preview)}</strong>
       <ul className="file-action-list">
         {preview.rows.map((row) => (
-          <li key={`${row.row_number}-${row.field_path}`}>
+          <li key={row.row_number}>
             <div>
               <strong>
-                {`Строка ${row.row_number} / ${row.field_path} / ${
+                {`Строка ${row.row_number} / ${
                   row.status === "valid" ? uiText.importRowValid : uiText.importRowInvalid
                 }`}
               </strong>
-              <span>{`${
-                row.action === "create" ? uiText.importActionCreate : uiText.importActionUpdate
-              } / ${row.raw_value}`}</span>
+              {row.organization_label && <span>{row.organization_label}</span>}
               {row.errors.map((error) => (
                 <span key={error}>{error}</span>
               ))}
@@ -249,7 +309,7 @@ function ImportPreview({ preview }: { preview: CardImportPreviewRead }) {
   );
 }
 
-function ImportCommitResult({ result }: { result: CardImportCommitRead }) {
+function ImportCommitResult({ result }: { result: TabularCardImportCommitRead }) {
   return (
     <div className="import-export-result">
       <strong>{formatCommitSummary(result)}</strong>
@@ -257,35 +317,32 @@ function ImportCommitResult({ result }: { result: CardImportCommitRead }) {
   );
 }
 
-function formatImportSummary(preview: CardImportPreviewRead) {
-  return uiText.importSummary
+function configurationError(hasTemplate: boolean, organizationIds: string[], fieldIds: string[]) {
+  if (!hasTemplate) return uiText.tabularXlsxSelectTemplate;
+  if (!organizationIds.length) return uiText.tabularXlsxSelectOrganization;
+  return fieldIds.length ? uiText.tabularXlsxSelectTemplate : uiText.tabularXlsxSelectField;
+}
+
+function formatImportSummary(preview: TabularCardImportPreviewRead) {
+  return uiText.tabularXlsxSummary
     .replace("{total}", String(preview.summary.total_rows))
     .replace("{valid}", String(preview.summary.valid_rows))
     .replace("{invalid}", String(preview.summary.invalid_rows));
 }
 
-function formatCommitSummary(result: CardImportCommitRead) {
-  return uiText.importCommitSummary
-    .replace("{committed}", String(result.summary.committed_rows))
+function formatCommitSummary(result: TabularCardImportCommitRead) {
+  return uiText.tabularXlsxCommitSummary
     .replace("{created}", String(result.summary.created_cards))
-    .replace("{updated}", String(result.summary.updated_cards));
+    .replace("{values}", String(result.summary.field_values_written));
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {
-  if (typeof document === "undefined" || typeof window.URL.createObjectURL !== "function") {
-    return;
-  }
-  const href = window.URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = href;
+  link.href = url;
   link.download = filename;
-  try {
-    link.click();
-  } catch {
-    // Test and embedded browser environments can block programmatic downloads.
-  } finally {
-    if (typeof window.URL.revokeObjectURL === "function") {
-      window.URL.revokeObjectURL(href);
-    }
-  }
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

@@ -42,8 +42,8 @@ Target system:
 - Server: runtime checkout configured outside Git through environment variables or `scripts/local.reg_engine.psd1`.
 - Database foundation: SQLAlchemy Base, database engine/session helpers, and Alembic setup.
 - Core Schema v1: SQLAlchemy models and Alembic migration for the final table set.
-- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, card templates, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs with safe upload-limit metadata, authenticated card export API foundation, bounded CSV/XLSX import preview/commit API foundation, authenticated JSON/CSV/XLSX/PDF report template/run API foundation with backend report parameter/schema validation and rollback-safe report output cleanup, read-only MCP-over-API gateway foundation, MCP stdio/config hardening, MCP mutation client foundation for future explicitly approved write tools, MCP registry, schema-builder, card lifecycle, card field-value, card block-instance, card transfer, report-template, report-run, document-template, and generated-document write tools, MCP document metadata read tools, plus MCP report/generated-document content read tools with confirmation, size limits, and normalized errors.
-- Current frontend scope has a bearer-authenticated admin shell with section-scoped data loading, organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive with visual drag/drop field ordering, card-template create/edit/archive for template-driven card creation, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive with unified tag search for free-text, organization, template, archive, and typed schema-field filters, same-organization card org-unit correction, repeatable block-instance add/archive, read-first exact-geometry card rendering with one inline block editor at a time and attachment-aware separate `file_ref` editing, authenticated public-link list/create/disable controls with attachment-upload limits and browser-openable public URL display, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, authenticated JSON/CSV/XLSX card export and CSV/XLSX import preview/commit controls, authenticated report template create/update/archive and JSON/CSV/XLSX/PDF report generate/download/archive controls with template parameter schema/default JSON editing, basic visual run-parameter controls generated from flat schema properties including scalar enum select controls, `oneOf` option titles, date-format string inputs, schema description hints, schema default values, required-parameter validation, scalar `minLength`/`maxLength`/`minimum`/`maximum` validation, `pattern`/`multipleOf` validation, and `exclusiveMinimum`/`exclusiveMaximum` validation, default run-parameter payload fallback when manual JSON is empty, visible run format, filename, parameters, and summary metadata plus archived report template/run visibility, audit reads, public-link card editing, public-link attachment list/upload/download with exhausted-upload state, and full Russian UI browser validation for the core admin setup path.
+- Current backend scope has healthcheck, database infrastructure, Core Schema v1 models/migrations, service-layer behavior, hardened REST API workflows for organizations, org units, registries, dynamic cards, card templates, public links, transfer, references, audit reads, bootstrap seed tooling, bearer-token authentication, user/access management API, card-level attachment backend/API foundation, authenticated generated `.docx` document APIs, public-link attachment list/upload/download APIs with safe upload-limit metadata, and a tabular XLSX-only card exchange API. The XLSX API returns accessible template/organization/field options, produces readable card lists and blank creation templates, validates uploads before commit, and atomically creates cards. It replaces the previous JSON, CSV, and row-oriented technical card exchange routes. Authenticated JSON/CSV/XLSX/PDF report template/run APIs, MCP, document, and report foundations remain unchanged.
+- Current frontend scope has a bearer-authenticated admin shell with section-scoped data loading, organization create/edit/archive management, user create/edit/password-reset/archive management, access-grant issue/revoke management, roles/permissions reads, registry create/update/archive, schema block/field create/update/archive with visual drag/drop field ordering, card-template create/edit/archive for template-driven card creation, reference-list/item create/update/archive, select/multi_select reference-list wiring, card list/read/create/metadata-edit/archive with unified tag search for free-text, organization, template, archive, and typed schema-field filters, same-organization card org-unit correction, repeatable block-instance add/archive, read-first exact-geometry card rendering with one inline block editor at a time and attachment-aware separate `file_ref` editing, authenticated public-link list/create/disable controls with attachment-upload limits and browser-openable public URL display, shared admin mutation API/client UI foundations, card-level attachment upload/download/archive, generated-document generation/download/archive, document-template create/archive, and one Russian-first tabular XLSX card exchange surface. The surface selects a template, accessible organizations, and supported fields; downloads a list or blank template; then previews and imports the same XLSX file. Report, audit, and public-link workflows remain unchanged.
 - Current card-template layout scope uses one Russian-first contextual
   `CardLayoutStudio` with the stages `Макет карточки`, `Печатная форма A4`, and
   `Предпросмотр`. Web/card geometry is stored in the unified
@@ -55,9 +55,12 @@ Target system:
   structure/layout. It does not broaden registry schema or template-layout
   permissions.
 - Phase 2 documents/attachments scope started with card-level attachments. Phase 2B adds attachment metadata models, local-filesystem storage abstraction, authenticated attachment endpoints, and tests. Phase 2C adds generated `.docx` document metadata and service rendering from schema-driven card data. Phase 2D adds authenticated Russian-first card workspace UI for attachments and generated documents. Phase 2G adds authenticated Russian-first document-template management UI. Phase 2H adds public-link attachment list/upload/download for active public edit links. Phase 2I separates public field-edit usage from attachment-upload usage and hardens rollback cleanup. Public-link attachment quota API hardening makes upload limits configurable at public-link creation time and protects quota consumption with row-level locking. Phase 2J.0 accepts the `file_ref` dynamic field type ADR. Phase 2J.1 adds the database/model foundation and schema type registration for `file_ref`; Phase 2J.2 adds authenticated backend service set/read/clear support and keeps public-link `file_ref` editing blocked. Phase 2J.3 adds transfer behavior for active and archived `file_ref` values. Phase 2J.4 exposes authenticated REST card value set/clear/read metadata for `file_ref`. Phase 2J.5 adds the Russian-first authenticated `file_ref` card editor using existing card attachments. Phase 2J.6 renders `file_ref` in `docx_text_v1` as safe attachment title/original filename text. Phase 2J.7 validates the full file-ref flow on disposable PostgreSQL and temporary storage. Phase 2M adds binary `.docx` template upload and template versioning through authenticated API. Phase 2N adds authenticated PDF generation for `docx_text_v1` templates.
-- XLSX card import/export is available as a row-oriented technical exchange
-  format. XLSX and PDF report outputs are available for existing report types.
-  Additional report polish and broader MCP write tools are later phases.
+- Card exchange is available only as a user-facing wide XLSX table: `№ п/п`,
+  `Организация`, then selected schema fields. A template can prefill one
+  organisation or validate one of several permitted organisations; supported
+  reference fields provide lists, and commit creates cards atomically. XLSX and
+  PDF report outputs are available for existing report types. Additional report
+  polish and broader MCP write tools are later phases.
 
 ## Contextual Card Layout Contract
 
@@ -578,42 +581,32 @@ still accepted and normalized before validation/rendering. DOCX generation uses
 editable Word tables for normalized sections, and PDF generation uses the same
 normalized layout model.
 
-## Phase 3A Card Export API
+## Wide XLSX Card Exchange API
 
-Authenticated card export API:
-
-```powershell
-GET /api/v1/registries/{registry_id}/exports/cards?format=json
-GET /api/v1/registries/{registry_id}/exports/cards?format=csv
-GET /api/v1/registries/{registry_id}/exports/cards?format=xlsx
-```
-
-The export endpoint uses the same backend card visibility rules as card list/read. JSON export preserves schema-driven `blocks -> instances -> fields` structure. CSV and XLSX export are field-row based with explicit `block_code`, `block_instance_ordinal`, and `field_code` columns so duplicate field codes in different blocks remain unambiguous. XLSX export uses the same technical row contract as CSV in one worksheet.
-
-Attachment and generated-document exports include metadata only. Storage keys, checksums, stored file ids, filesystem paths, and binary bytes are not exported. Each export writes an `audit_events` row with `action=export` and `object_type=registry`.
-
-The authenticated registry workspace includes Russian-first controls for
-downloading JSON/CSV/XLSX card exports through the existing export API. Binary
-attachment/document export remains deferred to later explicit phases.
-
-## Phase 3B CSV Import Preview API
-
-Authenticated card import preview API:
+Card exchange has one user-facing, permission-checked XLSX contract:
 
 ```powershell
-POST /api/v1/registries/{registry_id}/imports/cards/preview
+GET  /api/v1/registries/{registry_id}/tabular-xlsx-card-exchange/options
+POST /api/v1/registries/{registry_id}/tabular-xlsx-card-exchange/export
+POST /api/v1/registries/{registry_id}/tabular-xlsx-card-exchange/import-template
+POST /api/v1/registries/{registry_id}/tabular-xlsx-card-exchange/import/preview
+POST /api/v1/registries/{registry_id}/tabular-xlsx-card-exchange/import/commit
 ```
 
-Request body:
+Before downloading a workbook, the actor selects a card template, one or more
+organizations where they have `cards.manage`, and supported template fields.
+The visible XLSX sheet is a readable wide table: `? ?/?`, `???????????`, then
+the selected fields. The server checks the selected organizations again for
+each download, preview, and commit. A one-organization template pre-fills the
+organization cells; a multiple-organization template provides an Excel list.
+Reference fields offer Excel lists; multiple selection accepts values separated
+by `;`.
 
-```json
-{
-  "csv_content": "card_id,organization_id,display_name,block_code,field_code,value\n..."
-}
-```
-
-XLSX preview uses multipart form data with a `file` field. The workbook must
-use the same row-oriented columns as CSV; the first worksheet is read.
+Import preview and commit accept only a downloaded XLSX template in multipart
+field `file`. Preview has no side effects. A valid commit creates new cards
+atomically using the template name and the selected template; it never updates
+or archives existing cards. The visible workbook contains no card IDs, field
+codes, organization IDs, or internal mapping values.
 
 Import runtime limits:
 
@@ -622,59 +615,11 @@ $env:REG_ENGINE_MAX_IMPORT_BYTES = "5242880"
 $env:REG_ENGINE_MAX_IMPORT_ROWS = "10000"
 ```
 
-`REG_ENGINE_MAX_IMPORT_BYTES` bounds CSV payload text and uploaded XLSX bytes
-before preview/commit processing. `REG_ENGINE_MAX_IMPORT_ROWS` bounds parsed
-CSV/XLSX data rows for preview and commit. Oversized imports return stable 4xx
-errors and do not mutate cards or field values.
-
-Required CSV columns:
-
-- `card_id`
-- `organization_id`
-- `display_name`
-- `block_code`
-- `field_code`
-- `value`
-
-Rows with `card_id` are previewed as updates. Rows without `card_id` are previewed as new-card rows and require `organization_id` and `display_name`. Field mapping uses `block_code.field_code`, matching the schema-driven export format. Preview validates card/organization scope and dynamic field values through backend card service rules, then returns per-row `valid` or `invalid` status and errors.
-
-Preview does not create cards, update field values, upload files, attach documents, or write audit events. CSV/XLSX import commit is exposed separately. The authenticated registry workspace can paste CSV content or choose an XLSX file, run preview, inspect valid/invalid row summaries, and keep commit disabled while preview has errors or stale input content. Binary attachment/document import/export remains deferred.
-
-## Phase 3C CSV Import Commit API
-
-Authenticated card import commit API:
-
-```powershell
-POST /api/v1/registries/{registry_id}/imports/cards/commit
-```
-
-Request body:
-
-```json
-{
-  "csv_content": "import_key,card_id,organization_id,display_name,block_code,field_code,value\n..."
-}
-```
-
-XLSX commit uses multipart form data with a `file` field and reuses the same
-row-oriented contract as XLSX preview.
-
-The commit endpoint reuses the same CSV/XLSX shape and validation rules as preview.
-`import_key` is optional. Rows with `card_id` update an existing editable card.
-Rows without `card_id` create a new card; multiple create rows with the same
-`import_key` are committed into one new card and must use the same
-`organization_id` and `display_name`.
-
-The whole batch must preview as valid before any mutation starts. Invalid
-batches return the preview payload in `detail` with row-level errors and do not
-create cards, update field values, or write import audit events. Valid batches
-commit atomically, write schema-driven field values through `CardService`, and
-record an `audit_events` row with `action=import_commit`.
-
-The authenticated registry workspace can apply a CSV import commit after a
-valid preview, or an XLSX import commit after a valid XLSX preview, and then
-refresh card/audit data. Binary attachment/document import/export and reference
-label enrichment remain deferred.
+The byte and row limits apply before preview or commit consumes unbounded
+memory. Attachment and generated-document binary transfer remains outside the
+card-exchange scope. Each export records a registry `export` audit event and
+each successful import records a registry `import_commit` event, in addition to
+the normal card and field-value history.
 
 ## Phase 4A Report Foundation API
 
@@ -1237,8 +1182,8 @@ Phase 5R completes the current user-scenario hardening slice:
 - the card list UI exposes search, organization filter, archive/superseded
   visibility, and lifecycle status display through the existing list API and
   backend RBAC;
-- CSV/XLSX import preview and commit enforce `REG_ENGINE_MAX_IMPORT_BYTES` and
-  `REG_ENGINE_MAX_IMPORT_ROWS`;
+- tabular XLSX import preview and commit enforce `REG_ENGINE_MAX_IMPORT_BYTES`
+  and `REG_ENGINE_MAX_IMPORT_ROWS`;
 - public-link attachment list responses expose safe upload-limit metadata, and
   the public UI shows `Лимит загрузок исчерпан` before submit without blocking
   attachment list/download;

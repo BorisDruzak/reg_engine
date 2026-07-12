@@ -1,61 +1,69 @@
-from typing import Any, Literal
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 
 
-class CardImportPreviewRequest(BaseModel):
-    csv_content: str
+class TabularCardWorkbookRequest(BaseModel):
+    card_template_id: UUID
+    field_ids: list[UUID]
+    organization_ids: list[UUID]
 
 
-class CardImportPreviewSummaryRead(BaseModel):
+class TabularCardExchangeFieldRead(BaseModel):
+    id: str
+    label: str
+    block_title: str
+    field_type: str
+    supported: bool
+    unsupported_reason: str | None = None
+
+
+class TabularCardExchangeTemplateRead(BaseModel):
+    id: str
+    name: str
+    fields: list[TabularCardExchangeFieldRead]
+
+
+class TabularCardExchangeOrganizationRead(BaseModel):
+    id: str
+    name: str
+    label: str
+
+
+class TabularCardExchangeOptionsRead(BaseModel):
+    registry_id: str
+    organizations: list[TabularCardExchangeOrganizationRead]
+    templates: list[TabularCardExchangeTemplateRead]
+
+
+class TabularCardImportPreviewSummaryRead(BaseModel):
     total_rows: int
     valid_rows: int
     invalid_rows: int
-    would_create_rows: int
-    would_update_rows: int
+    would_create_cards: int
 
 
-class CardImportPreviewRowRead(BaseModel):
+class TabularCardImportPreviewRowRead(BaseModel):
     row_number: int
     status: Literal["valid", "invalid"]
-    action: Literal["create", "update"]
-    card_id: str | None
-    organization_id: str | None
-    display_name: str | None
-    field_path: str
-    field_type: str | None
-    raw_value: str
-    parsed_value: Any
+    organization_label: str | None
     errors: list[str]
 
 
-class CardImportPreviewRead(BaseModel):
+class TabularCardImportPreviewRead(BaseModel):
     format_version: str
     registry_id: str
-    summary: CardImportPreviewSummaryRead
-    rows: list[CardImportPreviewRowRead]
+    summary: TabularCardImportPreviewSummaryRead
+    rows: list[TabularCardImportPreviewRowRead]
 
 
-class CardImportCommitRequest(BaseModel):
-    csv_content: str
-
-
-class CardImportCommitSummaryRead(BaseModel):
-    total_rows: int
-    committed_rows: int
+class TabularCardImportCommitSummaryRead(BaseModel):
     created_cards: int
-    updated_cards: int
     field_values_written: int
 
 
-class CardImportCommitCardRead(BaseModel):
-    card_id: str
-    action: Literal["create", "update"]
-    import_key: str | None
-
-
-class CardImportCommitRead(BaseModel):
+class TabularCardImportCommitRead(BaseModel):
     format_version: str
     registry_id: str
-    summary: CardImportCommitSummaryRead
-    cards: list[CardImportCommitCardRead]
+    summary: TabularCardImportCommitSummaryRead

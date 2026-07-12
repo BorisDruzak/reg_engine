@@ -393,62 +393,67 @@ export type CardTransferPayload = {
   target_organization_id: string;
 };
 
-export type CardImportPreviewPayload = {
-  csv_content: string;
+export type TabularCardWorkbookPayload = {
+  card_template_id: string;
+  field_ids: string[];
+  organization_ids: string[];
 };
 
-export type CardImportPreviewSummaryRead = {
+export type TabularCardExchangeFieldRead = {
+  id: string;
+  label: string;
+  block_title: string;
+  field_type: string;
+  supported: boolean;
+  unsupported_reason: string | null;
+};
+
+export type TabularCardExchangeTemplateRead = {
+  id: string;
+  name: string;
+  fields: TabularCardExchangeFieldRead[];
+};
+
+export type TabularCardExchangeOrganizationRead = {
+  id: string;
+  name: string;
+  label: string;
+};
+
+export type TabularCardExchangeOptionsRead = {
+  registry_id: string;
+  organizations: TabularCardExchangeOrganizationRead[];
+  templates: TabularCardExchangeTemplateRead[];
+};
+
+export type TabularCardImportPreviewSummaryRead = {
   total_rows: number;
   valid_rows: number;
   invalid_rows: number;
-  would_create_rows: number;
-  would_update_rows: number;
+  would_create_cards: number;
 };
 
-export type CardImportPreviewRowRead = {
+export type TabularCardImportPreviewRowRead = {
   row_number: number;
   status: "valid" | "invalid";
-  action: "create" | "update";
-  card_id: string | null;
-  organization_id: string | null;
-  display_name: string | null;
-  field_path: string;
-  field_type: string | null;
-  raw_value: string;
-  parsed_value: unknown;
+  organization_label: string | null;
   errors: string[];
 };
 
-export type CardImportPreviewRead = {
+export type TabularCardImportPreviewRead = {
   format_version: string;
   registry_id: string;
-  summary: CardImportPreviewSummaryRead;
-  rows: CardImportPreviewRowRead[];
+  summary: TabularCardImportPreviewSummaryRead;
+  rows: TabularCardImportPreviewRowRead[];
 };
 
-export type CardImportCommitPayload = {
-  csv_content: string;
-};
-
-export type CardImportCommitSummaryRead = {
-  total_rows: number;
-  committed_rows: number;
-  created_cards: number;
-  updated_cards: number;
-  field_values_written: number;
-};
-
-export type CardImportCommitCardRead = {
-  card_id: string;
-  action: "create" | "update";
-  import_key: string | null;
-};
-
-export type CardImportCommitRead = {
+export type TabularCardImportCommitRead = {
   format_version: string;
   registry_id: string;
-  summary: CardImportCommitSummaryRead;
-  cards: CardImportCommitCardRead[];
+  summary: {
+    created_cards: number;
+    field_values_written: number;
+  };
 };
 
 export type CardFieldRead = {
