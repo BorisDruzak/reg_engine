@@ -734,6 +734,16 @@ export async function firstSaveCardFromCreationLink(
   );
 }
 
+export async function createCardDraftFromCreationLink(rawToken: string, organizationId: string) {
+  return apiRequest<CardCreationLinkFirstSaveRead>(
+    "/api/v1/public/card-creation-links/create-draft",
+    {
+      method: "POST",
+      body: { raw_token: rawToken, organization_id: organizationId },
+    },
+  );
+}
+
 export async function submitPublicLink(rawToken: string) {
   return apiRequest<PublicLinkSafeStatusRead>("/api/v1/public-links/submit", {
     method: "POST",

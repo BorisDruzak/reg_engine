@@ -1,41 +1,35 @@
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { firstSaveCardFromCreationLink, readPublicCardCreationLinkPreview } from "@/api/client";
+import { createCardDraftFromCreationLink, readPublicCardCreationLinkPreview } from "@/api/client";
 import { uiText } from "@/app/uiText";
 import { errorText } from "@/components/common/dataUtils";
-
-import { PublicCardLayout, type PublicFieldValueSaver } from "./PublicLinkEditPage";
 
 export function PublicCardCreationPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
   const navigate = useNavigate();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const previewQuery = useQuery({
-    queryKey: ["public-card-creation-preview", rawToken, organizationId],
-    queryFn: () => readPublicCardCreationLinkPreview(rawToken, organizationId),
+    queryKey: ["public-card-creation-preview", rawToken],
+    queryFn: () => readPublicCardCreationLinkPreview(rawToken),
     enabled: Boolean(rawToken),
   });
   const preview = previewQuery.data;
-  const selectedOrganizationId = organizationId ?? preview?.selected_organization_id ?? null;
-
-  const saveFieldValue = useCallback<PublicFieldValueSaver>(
-    async ({ fieldId, value, blockInstanceId }) => {
-      if (!selectedOrganizationId) {
-        throw new Error("Сначала выберите организацию карточки.");
-      }
-      const created = await firstSaveCardFromCreationLink(rawToken, {
-        organization_id: selectedOrganizationId,
-        field_id: fieldId,
-        value,
-        block_instance_id: blockInstanceId,
-      });
+  const createDraftMutation = useMutation({
+    mutationFn: (selectedOrganizationId: string) =>
+      createCardDraftFromCreationLink(rawToken, selectedOrganizationId),
+    onSuccess: (created) => {
       navigate(`/public/edit/${created.child_raw_token}`, { replace: true });
-      return { value };
     },
-    [navigate, rawToken, selectedOrganizationId],
-  );
+  });
+
+  function selectOrganization(selectedOrganizationId: string) {
+    setOrganizationId(selectedOrganizationId || null);
+    if (selectedOrganizationId) {
+      createDraftMutation.mutate(selectedOrganizationId);
+    }
+  }
 
   return (
     <main className="public-shell">
@@ -58,68 +52,40 @@ export function PublicCardCreationPage() {
             <header className="public-title">
               <div>
                 <p className="section-kicker">Создание карточки</p>
-                <h2>Заполните первое поле новой карточки</h2>
+                <h2>Выберите организацию новой карточки</h2>
                 <h3>{preview.card_template_name}</h3>
               </div>
-              <span>Карточка появится после первого непустого сохранения.</span>
+              <span>После выбора откроется новая карточка для заполнения.</span>
             </header>
 
-            {preview.organizations.length > 1 && (
-              <label className="field-editor-control public-card-creation-organization">
-                <span>{uiText.cardOrganization}</span>
-                <select
-                  aria-label={uiText.cardOrganization}
-                  value={selectedOrganizationId ?? ""}
-                  onChange={(event) => setOrganizationId(event.currentTarget.value || null)}
-                >
-                  <option value="">Выберите организацию</option>
-                  {preview.organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <label className="field-editor-control public-card-creation-organization">
+              <span>{uiText.cardOrganization}</span>
+              <select
+                aria-label={uiText.cardOrganization}
+                disabled={createDraftMutation.isPending}
+                value={organizationId ?? ""}
+                onChange={(event) => selectOrganization(event.currentTarget.value)}
+              >
+                <option value="">Выберите организацию</option>
+                {preview.organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {createDraftMutation.isPending && <p className="public-muted">Создаём карточку…</p>}
+            {createDraftMutation.error && (
+              <p className="data-alert">{errorText(createDraftMutation.error)}</p>
             )}
-
-            {!selectedOrganizationId ? (
-              <p className="data-alert">Выберите организацию, чтобы перейти к заполнению.</p>
-            ) : preview.blocks.length === 0 ? (
-              <p className="data-alert">В шаблоне нет доступных для заполнения полей.</p>
-            ) : (
-              <PublicCardLayout
-                confirmedFieldValues={publicConfirmedFieldValues(preview)}
-                onFieldSaveStateChange={() => undefined}
-                onFieldValueConfirmed={() => undefined}
-                onLifecycleDenial={async () => false}
-                preview={preview}
-                saveFieldValue={saveFieldValue}
-              />
+            {!createDraftMutation.isPending && !createDraftMutation.error && (
+              <p className="public-muted">
+                Выберите организацию из списка, чтобы начать заполнение.
+              </p>
             )}
           </div>
         )}
       </section>
     </main>
   );
-}
-
-function publicConfirmedFieldValues(preview: {
-  blocks: Array<{
-    instances: Array<{
-      block_instance_id: string | null;
-      ordinal: number;
-      fields: Array<{ field_id: string; value: unknown }>;
-    }>;
-  }>;
-}) {
-  return Object.fromEntries(
-    preview.blocks.flatMap((block) =>
-      block.instances.flatMap((instance) =>
-        instance.fields.map((field) => [
-          `${instance.block_instance_id ?? instance.ordinal}:${field.field_id}`,
-          field.value,
-        ]),
-      ),
-    ),
-  ) as Record<string, unknown>;
 }

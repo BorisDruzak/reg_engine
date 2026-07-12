@@ -20,28 +20,29 @@ afterEach(() => {
 });
 
 describe("PublicCardCreationPage", () => {
-  test("creates a card only after the first field value and continues with a child link", async () => {
+  test("creates a draft and continues with a child link immediately after organization selection", async () => {
     renderCreationPage();
 
-    const nameInput = await screen.findByRole("textbox", { name: "Имя" });
+    const organizationSelect = await screen.findByRole("combobox");
     expect(fetchCalls.map((call) => call.path)).toEqual([
       "/api/v1/public/card-creation-links/preview",
     ]);
 
-    fireEvent.change(nameInput, { target: { value: "Первая карточка" } });
+    fireEvent.change(organizationSelect, { target: { value: "organization-1" } });
 
     await waitFor(() =>
       expect(fetchCalls.map((call) => call.path)).toContain(
-        "/api/v1/public/card-creation-links/first-save",
+        "/api/v1/public/card-creation-links/create-draft",
       ),
     );
     expect(await screen.findByText("Открыта дочерняя ссылка")).toBeInTheDocument();
     expect(fetchCalls.at(-1)?.body).toMatchObject({
       raw_token: rawToken,
       organization_id: "organization-1",
-      field_id: "field-name",
-      value: "Первая карточка",
     });
+    expect(fetchCalls.map((call) => call.path)).not.toContain(
+      "/api/v1/public/card-creation-links/first-save",
+    );
   });
 });
 
@@ -69,7 +70,7 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
     return jsonResponse({
       card_template_id: "template-1",
       card_template_name: "Шаблон для создания",
-      selected_organization_id: "organization-1",
+      selected_organization_id: null,
       organizations: [{ id: "organization-1", name: "Организация" }],
       form_layout: {
         columns: 12,
@@ -130,7 +131,7 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
       ],
     });
   }
-  if (path === "/api/v1/public/card-creation-links/first-save") {
+  if (path === "/api/v1/public/card-creation-links/create-draft") {
     return jsonResponse(
       {
         card_id: "card-1",
