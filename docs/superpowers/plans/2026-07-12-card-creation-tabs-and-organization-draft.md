@@ -55,5 +55,21 @@
 
 ### Task 4: Release evidence
 
-- [ ] Update `PLANS.md` with the final behavior and fresh verification output.
-- [ ] Run the disposable PostgreSQL backend suite, then `scripts/deploy.ps1`, `scripts/deploy-frontend.ps1`, `scripts/server-check.ps1`, and focused Browser proof.
+- [x] Update `PLANS.md` with the final behavior and fresh verification output.
+- [x] Run the disposable PostgreSQL backend suite, then `scripts/deploy.ps1`, `scripts/deploy-frontend.ps1`, `scripts/server-check.ps1`, and focused Browser proof.
+
+## Verification record
+
+- Local frontend: focused Vitest files pass (3 tests); TypeScript, scoped ESLint,
+  Prettier, and production build pass.
+- Server disposable PostgreSQL: `tests/test_card_creation_links.py`,
+  `tests/test_migrations.py`, and `tests/test_card_public_access.py` pass (18
+  tests).
+- Deployment: `scripts/deploy.ps1`, `scripts/deploy-frontend.ps1`, and
+  `scripts/server-check.ps1` pass. The live OpenAPI contract contains the new
+  `POST /api/v1/public/card-creation-links/create-draft` route.
+- Browser: the three utility views open as individual closeable tabs in
+  `Вкладки карточек`; no form or link panel is rendered below tag search.
+- A broader historical review-link suite has four stale fixture expectations
+  after intentional public-access defaults from `e8018ade`; no review-link code
+  changed in this plan.

@@ -28,12 +28,19 @@ not a hardcoded employee registry.
   child edit links, and can be closed without blocking already-created child
   links. Migration `0027_card_creation_links` passed the disposable PostgreSQL
   upgrade/downgrade gate and is applied in production.
-- Phase 8P current implementation changes the public flow so that an explicit
-  organization selection creates the draft card and child edit link immediately,
-  and moves `Создать карточку`, `Создать ссылку`, and `Список ссылок` into the
-  closeable card-tab strip. Focused frontend checks and production build pass;
-  final backend regression, deployment, server check, and Browser proof remain
-  pending this checkpoint.
+- Phase 8P changes the public flow so that an explicit organization selection
+  creates the draft card and child edit link immediately, and moves `Создать
+  карточку`, `Создать ссылку`, and `Список ссылок` into the closeable card-tab
+  strip. It is deployed and browser-verified: focused frontend tests (3),
+  TypeScript, scoped ESLint, production build, 18 disposable-PostgreSQL backend
+  tests, server checks, and the live `create-draft` OpenAPI route pass. No
+  migration was required.
+- Separate older test-fixture drift remains in
+  `test_public_link_review_lifecycle.py`: four assertions assume absent
+  card-field settings are private, but commit `e8018ade` intentionally changed
+  absent settings to public by default. The current card-creation and
+  card-public-access suites pass; this checkpoint does not alter review-link
+  behavior.
 - Phase 7A admin UI workspace refactor is implemented on `main`: cards use a
   focused list/detail workflow with tabs, registry administration uses focused
   setup tabs, and row actions use compact visible labels with full accessible
