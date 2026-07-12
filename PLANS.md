@@ -41,7 +41,10 @@ not a hardcoded employee registry.
   and the public card title has a visible `Копировать ссылку` action with
   Russian success/error feedback. The shared copy helper falls back to a
   temporary selected control when the native Clipboard API is unavailable over
-  HTTP. No backend or database changes are required.
+  HTTP. It is deployed at `0752a33b` and browser-verified: 25 focused frontend
+  tests, TypeScript, scoped ESLint, Prettier, production build, frontend smoke,
+  and server checks pass; the live HTTP page copies the URL and displays
+  `Ссылка скопирована`. No backend or database changes are required.
 - Separate older test-fixture drift remains in
   `test_public_link_review_lifecycle.py`: four assertions assume absent
   card-field settings are private, but commit `e8018ade` intentionally changed

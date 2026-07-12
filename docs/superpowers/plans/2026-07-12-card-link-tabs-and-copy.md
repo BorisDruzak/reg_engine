@@ -42,5 +42,12 @@
 
 ### Task 3: Release proof
 
-- [ ] Update `PLANS.md` with the final behavior and verification output.
-- [ ] Commit, push `main`, deploy the frontend, run server checks, and verify in the Browser that fixed tabs do not overlap search and links copy with visible feedback.
+- [x] Update `PLANS.md` with the final behavior and verification output.
+- [x] Commit, push `main`, deploy the frontend, run server checks, and verify in the Browser that fixed tabs do not overlap search and links copy with visible feedback.
+
+## Verification record
+
+- `npx vitest run src/components/common/clipboard.test.ts src/features/cards/CardsWorkspace.test.tsx src/features/cards/CardCreationLinksPanel.test.tsx src/pages/PublicLinkEditPage.test.tsx --reporter=dot` — 25 passed.
+- `npm run typecheck`, scoped ESLint, Prettier, and `npm run build` — passed.
+- `scripts/deploy.ps1`, `scripts/deploy-frontend.ps1`, and `scripts/server-check.ps1` — passed against `main` at `0752a33b`.
+- Browser — the three fixed tabs are each rendered once, no `Создать карточку` menu button remains, no console errors appeared, and the HTTP public page copied its current URL with visible `Ссылка скопирована` feedback.
