@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-13 15:12:44 +05:00
+- Generated: 2026-07-13 16:12:59 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -236,6 +236,7 @@
 - `docs/superpowers/plans/2026-07-12-xlsx-column-order-and-organization-visibility.md`
 - `docs/superpowers/plans/2026-07-12-xlsx-exchange-clarity-and-error-feedback.md`
 - `docs/superpowers/plans/2026-07-13-card-template-lifecycle-and-creation-links.md`
+- `docs/superpowers/plans/2026-07-13-organization-cards-and-unit-picker.md`
 - `docs/superpowers/plans/2026-07-13-organization-unit-hierarchy.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
@@ -258,6 +259,7 @@
 - `docs/superpowers/specs/2026-07-12-xlsx-column-order-and-organization-visibility-design.md`
 - `docs/superpowers/specs/2026-07-12-xlsx-exchange-clarity-and-error-feedback-design.md`
 - `docs/superpowers/specs/2026-07-13-card-template-lifecycle-and-creation-links-design.md`
+- `docs/superpowers/specs/2026-07-13-organization-cards-and-unit-picker-design.md`
 - `docs/superpowers/specs/2026-07-13-organization-unit-hierarchy-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
@@ -330,6 +332,7 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/OrganizationUnitPicker.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.test.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`

@@ -5046,3 +5046,16 @@ deployment, and live Browser acceptance remain the release gate.
 - Focused frontend checks, TypeScript, Ruff, mypy, and the project-map passed
   locally. PostgreSQL-dependent tests need the configured disposable database
   before production migration.
+
+#### Inline organization cards and searchable unit picker
+
+Status: implementation complete locally; deployment and Browser acceptance pending.
+
+- Organization rows no longer show technical codes or action buttons. A row
+  expands its inline card; the name enters Save/Cancel inline edit, with
+  archive available only there.
+- The card owns adding a department, management, or child organization.
+  Managements expand their departments and offer contextual department add.
+- `Подразделение организации` is a keyboard-safe searchable hierarchy picker
+  in administrator and public cards. It uses only card-scoped safe options and
+  keeps archived history disabled.
