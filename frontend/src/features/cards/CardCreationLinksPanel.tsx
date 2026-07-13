@@ -15,6 +15,7 @@ export function CardCreationLinksPanel({
   organizations,
   templates,
   mode,
+  onOpenCard,
   onShowList,
 }: {
   registryId: string;
@@ -22,6 +23,7 @@ export function CardCreationLinksPanel({
   organizations: OrganizationRead[];
   templates: CardTemplateRead[];
   mode: CardCreationLinksPanelMode;
+  onOpenCard: (cardId: string) => void;
   onShowList: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -56,6 +58,13 @@ export function CardCreationLinksPanel({
       await queryClient.invalidateQueries({ queryKey: ["card-creation-links", token, registryId] });
     },
   });
+  const createdCards =
+    listQuery.data?.items.flatMap((link) =>
+      link.created_cards.map((card) => ({
+        ...card,
+        cardTemplateName: link.card_template_name,
+      })),
+    ) ?? [];
 
   function toggleOrganization(organizationId: string, checked: boolean) {
     setOrganizationIds((current) =>
@@ -194,44 +203,36 @@ export function CardCreationLinksPanel({
                       Закрыть ссылку
                     </button>
                   )}
-                  {link.created_cards.length > 0 && (
-                    <details>
-                      <summary>Созданные карточки: {link.created_cards.length}</summary>
-                      <ul className="public-link-list">
-                        {link.created_cards.map((card) => (
-                          <li key={card.card_id}>
-                            <div>
-                              <strong>{card.display_name}</strong>
-                              <span>{card.organization_name}</span>
-                            </div>
-                            <label className="public-link-url-control">
-                              <span>Ссылка на карточку</span>
-                              <input
-                                className="copyable-link-input"
-                                readOnly
-                                title="Нажмите, чтобы скопировать"
-                                value={`${window.location.origin}/public/edit/${card.child_raw_token}`}
-                                onClick={(event) => {
-                                  event.currentTarget.select();
-                                  void copyUrl(event.currentTarget.value);
-                                }}
-                                onKeyDown={(event) => {
-                                  if (event.key !== "Enter" && event.key !== " ") return;
-                                  event.preventDefault();
-                                  event.currentTarget.select();
-                                  void copyUrl(event.currentTarget.value);
-                                }}
-                              />
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
                 </li>
               );
             })}
           </ul>
+          <section className="created-cards-section" aria-label="Созданные карточки">
+            <h4>Созданные карточки</h4>
+            {createdCards.length === 0 ? (
+              <p className="data-empty">Нет созданных карточек.</p>
+            ) : (
+              <ul className="created-card-list">
+                {createdCards.map((card) => (
+                  <li
+                    key={card.card_id}
+                    role="button"
+                    tabIndex={0}
+                    onDoubleClick={() => onOpenCard(card.card_id)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onOpenCard(card.card_id);
+                    }}
+                  >
+                    <strong>{card.display_name}</strong>
+                    <span>{card.organization_name}</span>
+                    <span>{card.cardTemplateName}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           {copyFeedback && (
             <p className={copyFeedback.isError ? "data-alert" : "inline-success"} role="status">
               {copyFeedback.message}

@@ -4490,6 +4490,66 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.created-cards-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  border-top: 1px solid #dfe5ec;
+  padding-top: 16px;
+}
+
+.created-cards-section h4 {
+  margin: 0;
+  color: #101828;
+  font-size: 0.96rem;
+}
+
+.created-card-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.created-card-list > li {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr);
+  gap: 8px 14px;
+  align-items: center;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #344054;
+  cursor: pointer;
+}
+
+.created-card-list > li:hover {
+  border-color: #98a2b3;
+  background: #f8fafc;
+}
+
+.created-card-list > li:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.28);
+  outline-offset: 2px;
+}
+
+.created-card-list strong,
+.created-card-list span {
+  overflow-wrap: anywhere;
+}
+
+.created-card-list span {
+  font-size: 0.84rem;
+}
+
+@media (max-width: 720px) {
+  .created-card-list > li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .public-link-review-toolbar {
   justify-content: flex-end;
 }

@@ -20,7 +20,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(
       async () =>
-        new Response(JSON.stringify({ items: [creationLink] }), {
+        new Response(JSON.stringify({ items: creationLinks }), {
           headers: { "Content-Type": "application/json" },
         }),
     ),
@@ -33,7 +33,7 @@ describe("CardCreationLinksPanel", () => {
   test("copies a creation URL when its text is clicked", async () => {
     renderPanel();
 
-    const urlInput = await screen.findByLabelText("Ссылка на создание");
+    const [urlInput] = await screen.findAllByLabelText("Ссылка на создание");
     await act(async () => {
       fireEvent.click(urlInput);
     });
@@ -43,9 +43,27 @@ describe("CardCreationLinksPanel", () => {
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Ссылка скопирована");
   });
+
+  test("shows created cards separately and opens a selected card internally on double click", async () => {
+    const onOpenCard = vi.fn();
+    const { container } = renderPanel({ onOpenCard });
+
+    await screen.findByText("Карточка садика");
+    const createdCards = screen.getByRole("region", { name: "Созданные карточки" });
+    expect(createdCards).toHaveTextContent("Карточка садика");
+    expect(createdCards).toHaveTextContent("Карточка школы");
+    expect(createdCards).toHaveTextContent("Базовый шаблон");
+    expect(createdCards).toHaveTextContent("Дополнительный шаблон");
+    expect(screen.queryByDisplayValue(/\/public\/edit\//)).not.toBeInTheDocument();
+    expect(container.querySelector("details")).not.toBeInTheDocument();
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка школы/ }));
+
+    expect(onOpenCard).toHaveBeenCalledWith("card-2");
+  });
 });
 
-function renderPanel() {
+function renderPanel({ onOpenCard = vi.fn() }: { onOpenCard?: (cardId: string) => void } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -55,6 +73,7 @@ function renderPanel() {
         registryId="registry-1"
         templates={[template]}
         token="admin-token"
+        onOpenCard={onOpenCard}
         onShowList={vi.fn()}
       />
     </QueryClientProvider>,
@@ -74,7 +93,7 @@ const template: CardTemplateRead = {
   id: "template-1",
   registry_id: "registry-1",
   code: "template",
-  name: "Шаблон",
+  name: "Базовый шаблон",
   description: null,
   position: 1,
   field_schema_json: {},
@@ -91,5 +110,34 @@ const creationLink = {
   created_at: "2026-07-12T12:00:00Z",
   closed_at: null,
   organizations: [{ id: organization.id, name: organization.name }],
-  created_cards: [],
+  created_cards: [
+    {
+      card_id: "card-1",
+      display_name: "Карточка садика",
+      organization_id: organization.id,
+      organization_name: organization.name,
+      child_public_link_id: "child-link-1",
+      child_raw_token: "child-token-1",
+    },
+  ],
 };
+
+const secondCreationLink = {
+  ...creationLink,
+  id: "creation-link-2",
+  card_template_id: "template-2",
+  card_template_name: "Дополнительный шаблон",
+  raw_token: "creation-token-2",
+  created_cards: [
+    {
+      card_id: "card-2",
+      display_name: "Карточка школы",
+      organization_id: organization.id,
+      organization_name: organization.name,
+      child_public_link_id: "child-link-2",
+      child_raw_token: "child-token-2",
+    },
+  ],
+};
+
+const creationLinks = [creationLink, secondCreationLink];

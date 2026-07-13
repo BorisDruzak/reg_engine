@@ -486,6 +486,11 @@ export function CardsWorkspace({
     onSelectCard(cardId);
   }
 
+  async function openCreatedCardEditor(cardId: string) {
+    await queryClient.invalidateQueries({ queryKey: ["organization-cards", token] });
+    openCardEditor(cardId);
+  }
+
   function handleShellTabChange(tabId: CardShellTab) {
     if (fixedCardUtilityTabs.includes(tabId as CardUtilityTab)) {
       openUtilityTab(tabId as CardUtilityTab);
@@ -592,6 +597,9 @@ export function CardsWorkspace({
             registryId={schema.registry.id}
             templates={activeCardTemplates}
             token={token}
+            onOpenCard={(cardId) => {
+              void openCreatedCardEditor(cardId);
+            }}
             onShowList={() => openUtilityTab("creation-link-list")}
           />
         ) : (
