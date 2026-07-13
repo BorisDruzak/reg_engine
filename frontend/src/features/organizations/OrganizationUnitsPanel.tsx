@@ -318,31 +318,43 @@ function OrganizationUnitTreeNode({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isManagement = unit.type === "management";
+  const canToggleChildren = isManagement && children.length > 0;
 
   function toggleChildren() {
-    if (isManagement) {
+    if (canToggleChildren) {
       setIsExpanded((expanded) => !expanded);
     }
   }
 
   function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!isManagement || (event.key !== "Enter" && event.key !== " ")) {
+    if (
+      !canToggleChildren ||
+      event.target !== event.currentTarget ||
+      (event.key !== "Enter" && event.key !== " ")
+    ) {
       return;
     }
     event.preventDefault();
     toggleChildren();
   }
 
+  function stopControlKeyboardPropagation(event: KeyboardEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+  }
+
   return (
     <li>
       <div
-        className={["organization-unit-row", isManagement ? "organization-unit-row-expandable" : ""]
+        className={[
+          "organization-unit-row",
+          canToggleChildren ? "organization-unit-row-expandable" : "",
+        ]
           .filter(Boolean)
           .join(" ")}
         role="treeitem"
         aria-level={level}
-        aria-expanded={isManagement ? isExpanded : undefined}
-        tabIndex={isManagement ? 0 : undefined}
+        aria-expanded={canToggleChildren ? isExpanded : undefined}
+        tabIndex={canToggleChildren ? 0 : undefined}
         onClick={toggleChildren}
         onKeyDown={handleRowKeyDown}
       >
@@ -358,6 +370,7 @@ function OrganizationUnitTreeNode({
             type="button"
             className="ghost-button"
             aria-label={`${uiText.editOrganizationUnit} ${unit.name}`}
+            onKeyDown={stopControlKeyboardPropagation}
             onClick={(event) => {
               event.stopPropagation();
               onEdit(unit);
@@ -369,6 +382,7 @@ function OrganizationUnitTreeNode({
             type="button"
             className="ghost-button"
             aria-label={`${uiText.archiveOrganizationUnit} ${unit.name}`}
+            onKeyDown={stopControlKeyboardPropagation}
             onClick={(event) => {
               event.stopPropagation();
               onArchive(unit);

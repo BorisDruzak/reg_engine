@@ -236,6 +236,15 @@ test("toggles management children from the row while controls leave the tree sta
     [administration.id]: [
       ...administrationUnits,
       {
+        id: "unit-empty",
+        organization_id: administration.id,
+        parent_id: null,
+        code: "empty",
+        name: "Управление без отделов",
+        type: "management",
+        is_active: true,
+      },
+      {
         id: "unit-foreign",
         organization_id: school.id,
         parent_id: null,
@@ -259,7 +268,10 @@ test("toggles management children from the row while controls leave the tree sta
   expect(screen.queryByText("Чужое управление")).not.toBeInTheDocument();
 
   const management = screen.getByRole("treeitem", { name: /Управление образования/ });
+  const emptyManagement = screen.getByRole("treeitem", { name: /Управление без отделов/ });
   expect(screen.queryByRole("button", { name: /Развернуть управление/ })).not.toBeInTheDocument();
+  expect(emptyManagement).not.toHaveAttribute("aria-expanded");
+  expect(emptyManagement).not.toHaveAttribute("tabindex");
   await user.click(
     screen.getByRole("button", { name: "Редактировать подразделение Управление образования" }),
   );
@@ -274,6 +286,48 @@ test("toggles management children from the row while controls leave the tree sta
     screen.getByRole("button", { name: "Архивировать подразделение Управление образования" }),
   );
   expect(management).toHaveAttribute("aria-expanded", "true");
+});
+
+test.each([
+  ["Enter", "{Enter}"],
+  ["Space", " "],
+])("does not expand a management when %s activates its edit control", async (_, key) => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  const management = await screen.findByRole("treeitem", { name: /Управление образования/ });
+  const editButton = screen.getByRole("button", {
+    name: "Редактировать подразделение Управление образования",
+  });
+
+  editButton.focus();
+  await user.keyboard(key);
+
+  expect(management).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByLabelText("Название подразделения")).toBeVisible();
+});
+
+test.each([
+  ["Enter", "{Enter}"],
+  ["Space", " "],
+])("does not expand a management when %s activates its archive control", async (_, key) => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  const management = await screen.findByRole("treeitem", { name: /Управление образования/ });
+  const archiveButton = screen.getByRole("button", {
+    name: "Архивировать подразделение Управление образования",
+  });
+
+  archiveButton.focus();
+  await user.keyboard(key);
+
+  expect(management).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("dialog", { name: "Архивировать подразделение" })).toBeVisible();
 });
 
 test("creates a management as a root unit", async () => {
