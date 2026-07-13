@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { archiveOrgUnit, createOrgUnit, listOrgUnits, updateOrgUnit } from "@/api/client";
 import type { OrganizationRead, OrgUnitRead, OrgUnitType } from "@/api/types";
@@ -155,6 +155,13 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
         >
           {uiText.addManagement}
         </button>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => openCreateForm("department")}
+        >
+          {uiText.addDepartment}
+        </button>
       </div>
       <div className="panel-feedback">
         <MutationFeedback
@@ -243,7 +250,6 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
               units={activeUnits}
               onEdit={openEditForm}
               onArchive={setArchiveTarget}
-              onCreateDepartment={(management) => openCreateForm("department", management.id)}
             />
           )}
         </>
@@ -256,12 +262,10 @@ function OrganizationUnitTree({
   units,
   onEdit,
   onArchive,
-  onCreateDepartment,
 }: {
   units: OrgUnitRead[];
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
-  onCreateDepartment: (management: OrgUnitRead) => void;
 }) {
   const managements = units.filter((unit) => unit.type === "management");
   const rootDepartments = units.filter(
@@ -283,7 +287,6 @@ function OrganizationUnitTree({
           )}
           onEdit={onEdit}
           onArchive={onArchive}
-          onCreateDepartment={onCreateDepartment}
         />
       ))}
       {rootDepartments.map((department) => (
@@ -294,7 +297,6 @@ function OrganizationUnitTree({
           children={[]}
           onEdit={onEdit}
           onArchive={onArchive}
-          onCreateDepartment={onCreateDepartment}
         />
       ))}
     </ul>
@@ -307,57 +309,59 @@ function OrganizationUnitTreeNode({
   children,
   onEdit,
   onArchive,
-  onCreateDepartment,
 }: {
   unit: OrgUnitRead;
   level: number;
   children: OrgUnitRead[];
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
-  onCreateDepartment: (management: OrgUnitRead) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isManagement = unit.type === "management";
 
+  function toggleChildren() {
+    if (isManagement) {
+      setIsExpanded((expanded) => !expanded);
+    }
+  }
+
+  function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!isManagement || (event.key !== "Enter" && event.key !== " ")) {
+      return;
+    }
+    event.preventDefault();
+    toggleChildren();
+  }
+
   return (
     <li>
       <div
-        className="organization-unit-row"
+        className={["organization-unit-row", isManagement ? "organization-unit-row-expandable" : ""]
+          .filter(Boolean)
+          .join(" ")}
         role="treeitem"
         aria-level={level}
         aria-expanded={isManagement ? isExpanded : undefined}
+        tabIndex={isManagement ? 0 : undefined}
+        onClick={toggleChildren}
+        onKeyDown={handleRowKeyDown}
       >
         <div className="organization-unit-main">
           <strong>{unit.name}</strong>
           <span className="organization-unit-kind">
             {unit.type === "management" ? uiText.management : uiText.department}
           </span>
-          <span>
-            {uiText.technicalCode}: {unit.code}
-          </span>
         </div>
         <span className="organization-unit-status">{activityLabel(unit.is_active)}</span>
         <div className="row-actions">
-          {isManagement && (
-            <button
-              type="button"
-              className="ghost-button"
-              aria-label={`${isExpanded ? "Свернуть" : "Развернуть"} управление ${unit.name}`}
-              onClick={() => setIsExpanded((expanded) => !expanded)}
-            >
-              {isExpanded ? "Свернуть" : "Развернуть"}
-            </button>
-          )}
-          {isManagement && isExpanded && (
-            <button type="button" className="ghost-button" onClick={() => onCreateDepartment(unit)}>
-              {uiText.addDepartment}
-            </button>
-          )}
           <button
             type="button"
             className="ghost-button"
             aria-label={`${uiText.editOrganizationUnit} ${unit.name}`}
-            onClick={() => onEdit(unit)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit(unit);
+            }}
           >
             {uiText.edit}
           </button>
@@ -365,7 +369,10 @@ function OrganizationUnitTreeNode({
             type="button"
             className="ghost-button"
             aria-label={`${uiText.archiveOrganizationUnit} ${unit.name}`}
-            onClick={() => onArchive(unit)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onArchive(unit);
+            }}
           >
             {uiText.moveToArchive}
           </button>
@@ -381,7 +388,6 @@ function OrganizationUnitTreeNode({
               children={[]}
               onEdit={onEdit}
               onArchive={onArchive}
-              onCreateDepartment={onCreateDepartment}
             />
           ))}
         </ul>
