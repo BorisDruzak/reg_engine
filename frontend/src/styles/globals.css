@@ -2540,6 +2540,120 @@ tr:last-child td {
   text-decoration: line-through;
 }
 
+.searchable-choice-picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.searchable-choice-picker-trigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #101828;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.searchable-choice-picker-trigger:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.16);
+  border-color: #0f766e;
+}
+
+.searchable-choice-picker-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.searchable-choice-picker-placeholder {
+  color: #667085;
+}
+
+.searchable-choice-picker-popup {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.searchable-choice-picker-search {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  color: #101828;
+  font: inherit;
+}
+
+.searchable-choice-picker-options {
+  display: grid;
+  max-height: 260px;
+  gap: 4px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.searchable-choice-picker-option {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f172a;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+button.searchable-choice-picker-option:hover:not(:disabled),
+.searchable-choice-picker-option:hover:has(input:not(:disabled)) {
+  border-color: #99d6cf;
+  background: #f0fdfa;
+}
+
+.searchable-choice-picker-option.is-department {
+  padding-left: 28px;
+}
+
+.searchable-choice-picker-option.is-selected {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  box-shadow: inset 3px 0 0 #0f766e;
+}
+
+.searchable-choice-picker-option.is-archived,
+.searchable-choice-picker-option:has(input:disabled) {
+  color: #667085;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.searchable-choice-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.searchable-choice-picker-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e6f4f1;
+  color: #0f5c54;
+  font-size: 0.82rem;
+}
+
 .card-layout-geometry-session {
   display: grid;
   gap: 10px;

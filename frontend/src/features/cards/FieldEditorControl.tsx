@@ -4,7 +4,7 @@ import { uiText } from "@/app/uiText";
 
 import type { FieldEditorOption, FieldEditorState } from "./fieldEditorUtils";
 import { inputTypeForField } from "./fieldEditorUtils";
-import { OrganizationUnitPicker } from "./OrganizationUnitPicker";
+import { SearchableChoicePicker } from "./SearchableChoicePicker";
 
 export function FieldEditorControl({
   fieldType,
@@ -54,53 +54,45 @@ export function FieldEditorControl({
   if (fieldType === "multi_select") {
     return (
       <ControlWithHint hint={hint}>
-        <select
-          aria-label={label}
-          disabled={disabled}
-          multiple
-          onChange={(event) =>
-            onChange(Array.from(event.currentTarget.selectedOptions).map((option) => option.value))
-          }
+        <SearchableChoicePicker
+          label={label}
+          hint={hint}
+          options={options}
+          mode="multiple"
           value={Array.isArray(value) ? value : []}
-        >
-          {options.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+          disabled={disabled}
+          onChange={(nextValue) => onChange(Array.isArray(nextValue) ? nextValue : [])}
+        />
       </ControlWithHint>
     );
   }
 
   if (fieldType === "org_unit_ref") {
     return (
-      <OrganizationUnitPicker
+      <SearchableChoicePicker
         label={label}
         hint={hint}
         options={options}
-        value={value}
+        value={typeof value === "string" ? value : ""}
+        mode="single"
+        hierarchy
         disabled={disabled}
-        onChange={onChange}
+        onChange={(nextValue) => onChange(typeof nextValue === "string" ? nextValue : "")}
       />
     );
   }
 
   if (fieldType === "select") {
     return (
-      <select
-        aria-label={label}
-        disabled={disabled}
-        onChange={(event) => onChange(event.currentTarget.value)}
+      <SearchableChoicePicker
+        label={label}
+        hint={hint}
+        options={options}
+        mode="single"
         value={typeof value === "string" ? value : ""}
-      >
-        <option value="">{hint || uiText.empty}</option>
-        {options.map((item) => (
-          <option key={item.id} value={item.id} disabled={item.archived}>
-            {item.archived ? `${item.label} / ${uiText.archived}` : item.label}
-          </option>
-        ))}
-      </select>
+        disabled={disabled}
+        onChange={(nextValue) => onChange(typeof nextValue === "string" ? nextValue : "")}
+      />
     );
   }
 

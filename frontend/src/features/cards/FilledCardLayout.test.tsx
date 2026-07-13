@@ -250,7 +250,8 @@ describe("FilledCardLayout", () => {
     render(<EditableFilledCard saveValues={saveValues} />);
 
     await user.click(screen.getByTestId("filled-field-layout-status"));
-    fireEvent.change(screen.getByLabelText("Статус"), { target: { value: "draft" } });
+    await user.click(screen.getByRole("combobox", { name: "Статус" }));
+    await user.click(screen.getByRole("option", { name: "Черновик" }));
 
     await waitFor(() =>
       expect(saveValues).toHaveBeenCalledWith({

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
@@ -30,14 +30,87 @@ describe("FieldEditorControl hints", () => {
 
   test("uses the hint as the empty select prompt", () => {
     renderControl("select", "Выберите вариант");
-    expect(screen.getByRole("option", { name: "Выберите вариант" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Поле select" })).toHaveTextContent(
+      "Выберите вариант",
+    );
+  });
+
+  test("filters server-supplied single choices and never exposes a free-text value", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="select"
+        label="Статус"
+        hint="Выберите статус"
+        options={options}
+        value=""
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Статус" }));
+    await user.type(screen.getByRole("searchbox", { name: "Поиск варианта" }), "Второй");
+
+    expect(screen.getByRole("option", { name: "Второй" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Первый" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Статус" })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Поиск варианта" }));
+    await user.type(screen.getByRole("searchbox", { name: "Поиск варианта" }), "Нет такого");
+    expect(screen.getByText("Ничего не найдено")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("selects one controlled choice and closes the popup", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="select"
+        label="Статус"
+        options={options}
+        value=""
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Статус" }));
+    await user.click(screen.getByRole("option", { name: "Второй" }));
+
+    expect(onChange).toHaveBeenCalledWith("two");
+    expect(screen.queryByRole("listbox", { name: "Статус" })).not.toBeInTheDocument();
+  });
+
+  test("toggles multiple controlled choices and renders selected chips", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="multi_select"
+        label="Категории"
+        options={options}
+        value={["one"]}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Категории" }));
+    expect(screen.getByRole("checkbox", { name: "Первый" })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Второй" }));
+
+    expect(onChange).toHaveBeenCalledWith(["one", "two"]);
+    expect(screen.getByRole("listbox", { name: "Категории" })).toBeInTheDocument();
+    expect(screen.getByTestId("searchable-choice-chips")).toHaveTextContent("Первый");
   });
 
   test.each(["multi_select", "date", "bool"])(
     "shows a compact fallback hint for %s",
     (fieldType) => {
       renderControl(fieldType);
-      expect(screen.getByText("Заполните значение")).toHaveClass("field-editor-hint");
+      expect(screen.getByText("Заполните значение", { selector: "small" })).toHaveClass(
+        "field-editor-hint",
+      );
     },
   );
 
@@ -64,21 +137,22 @@ describe("FieldEditorControl hints", () => {
       />,
     );
 
-    const search = screen.getByRole("searchbox", { name: "Поиск подразделения" });
-    const management = screen.getByRole("button", { name: "Управление образования" });
+    const picker = screen.getByRole("group", { name: "Подразделение организации" });
+    await user.click(within(picker).getByRole("combobox", { name: "Подразделение организации" }));
+    const search = screen.getByRole("searchbox", { name: "Поиск варианта" });
+    const management = screen.getByRole("option", { name: "Управление образования" });
     expect(management).toBeEnabled();
-    const department = screen.getByRole("button", {
+    const department = screen.getByRole("option", {
       name: "Управление образования → Отдел кадров",
     });
     expect(department).toBeEnabled();
     expect(department).toHaveAttribute("data-hierarchy-level", "2");
     expect(
-      screen.getByRole("button", {
+      screen.getByRole("option", {
         name: "Управление образования → Архивный отдел / Архивировано",
       }),
     ).toBeDisabled();
 
-    await user.tab();
     expect(search).toHaveFocus();
     await user.tab();
     await user.tab();
@@ -86,12 +160,13 @@ describe("FieldEditorControl hints", () => {
     await user.keyboard("{Enter}");
     expect(onChange).toHaveBeenLastCalledWith("management");
 
-    await user.click(search);
-    await user.type(search, "кадров");
+    await user.click(within(picker).getByRole("combobox", { name: "Подразделение организации" }));
+    const reopenedSearch = screen.getByRole("searchbox", { name: "Поиск варианта" });
+    await user.type(reopenedSearch, "кадров");
     expect(
-      screen.queryByRole("button", { name: "Управление образования" }),
+      screen.queryByRole("option", { name: "Управление образования" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Управление образования → Отдел кадров" }));
+    await user.click(screen.getByRole("option", { name: "Управление образования → Отдел кадров" }));
     expect(onChange).toHaveBeenLastCalledWith("department");
   });
 });

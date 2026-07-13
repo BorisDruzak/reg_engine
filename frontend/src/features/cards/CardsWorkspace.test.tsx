@@ -178,12 +178,13 @@ describe("CardsWorkspace", () => {
     fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
 
     const control = await screen.findByRole("group", { name: "Подразделение организации" });
+    fireEvent.click(within(control).getByRole("combobox", { name: "Подразделение организации" }));
     expect(
-      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(within(control).getByRole("button", { name: "Управление образования" })).toBeEnabled();
+      within(control).getByRole("option", { name: "Отдел кадров / Архивировано" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(within(control).getByRole("option", { name: "Управление образования" })).toBeEnabled();
     expect(
-      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
+      within(control).getByRole("option", { name: "Отдел кадров / Архивировано" }),
     ).toBeDisabled();
   });
 });
