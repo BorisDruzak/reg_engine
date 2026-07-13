@@ -604,6 +604,13 @@ tr:last-child td {
   cursor: pointer;
 }
 
+.organization-tree-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid #84adff;
+  outline-offset: -3px;
+}
+
 .organization-tree-name {
   width: fit-content;
   max-width: 100%;
@@ -638,6 +645,11 @@ tr:last-child td {
   color: #475467;
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+.organization-inline-name-form .inline-alert {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .organization-inline-name-actions,

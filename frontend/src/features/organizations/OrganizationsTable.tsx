@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 
 import { archiveOrganization, createOrganization, updateOrganization } from "@/api/client";
 import type { OrganizationRead, OrganizationTreeNodeRead } from "@/api/types";
@@ -79,6 +79,7 @@ export function OrganizationsTable({
   const mutationError = localError
     ? new Error(localError)
     : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
+  const inlineEditError = localError ? new Error(localError) : updateMutation.error;
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
   const rootOrganizationExists = organizations.some(
     (organization) => organization.is_active && organization.parent_id === null,
@@ -240,6 +241,8 @@ export function OrganizationsTable({
         <OrganizationTree
           nodes={organizationTree}
           formState={formState?.mode === "edit" ? formState : null}
+          inlineEditError={inlineEditError}
+          isInlineEditSubmitting={updateMutation.isPending}
           selectedOrganizationId={selectedOrganizationId}
           token={token}
           onEditOrganization={openEditForm}
@@ -262,6 +265,8 @@ export function OrganizationsTable({
 function OrganizationTree({
   nodes,
   formState,
+  inlineEditError,
+  isInlineEditSubmitting,
   selectedOrganizationId,
   token,
   onEditOrganization,
@@ -274,6 +279,8 @@ function OrganizationTree({
 }: {
   nodes: OrganizationTreeNodeRead[];
   formState: OrganizationFormState | null;
+  inlineEditError: unknown;
+  isInlineEditSubmitting: boolean;
   selectedOrganizationId: string | null;
   token: string;
   onEditOrganization: (organization: OrganizationRead) => void;
@@ -292,6 +299,8 @@ function OrganizationTree({
           node={node}
           level={1}
           formState={formState}
+          inlineEditError={inlineEditError}
+          isInlineEditSubmitting={isInlineEditSubmitting}
           selectedOrganizationId={selectedOrganizationId}
           token={token}
           onEditOrganization={onEditOrganization}
@@ -311,6 +320,8 @@ function OrganizationTreeNode({
   node,
   level,
   formState,
+  inlineEditError,
+  isInlineEditSubmitting,
   selectedOrganizationId,
   token,
   onEditOrganization,
@@ -324,6 +335,8 @@ function OrganizationTreeNode({
   node: OrganizationTreeNodeRead;
   level: number;
   formState: OrganizationFormState | null;
+  inlineEditError: unknown;
+  isInlineEditSubmitting: boolean;
   selectedOrganizationId: string | null;
   token: string;
   onEditOrganization: (organization: OrganizationRead) => void;
@@ -337,6 +350,14 @@ function OrganizationTreeNode({
   const isEditing = formState?.organizationId === node.id;
   const isSelected = selectedOrganizationId === node.id;
 
+  function handleRowKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
+    onToggleOrganizationCard(node);
+  }
+
   return (
     <li className="organization-tree-node">
       <div
@@ -345,13 +366,16 @@ function OrganizationTreeNode({
         aria-label={node.name}
         aria-level={level}
         aria-expanded={isSelected}
+        tabIndex={0}
         onClick={() => onToggleOrganizationCard(node)}
+        onKeyDown={handleRowKeyDown}
         style={{ "--tree-level": String(level - 1) } as CSSProperties}
       >
         {isEditing ? (
           <form
             className="organization-inline-name-form"
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
             onSubmit={onSubmitEdit}
           >
             <label>
@@ -363,8 +387,8 @@ function OrganizationTreeNode({
               />
             </label>
             <div className="organization-inline-name-actions">
-              <button type="submit" className="primary-button">
-                {uiText.save}
+              <button type="submit" className="primary-button" disabled={isInlineEditSubmitting}>
+                {isInlineEditSubmitting ? uiText.saving : uiText.save}
               </button>
               <button type="button" className="ghost-button" onClick={onCancelEdit}>
                 {uiText.cancel}
@@ -377,6 +401,7 @@ function OrganizationTreeNode({
                 {uiText.moveToArchive}
               </button>
             </div>
+            <MutationFeedback error={inlineEditError} successMessage={null} />
           </form>
         ) : (
           <button
@@ -421,6 +446,8 @@ function OrganizationTreeNode({
               node={child}
               level={level + 1}
               formState={formState}
+              inlineEditError={inlineEditError}
+              isInlineEditSubmitting={isInlineEditSubmitting}
               selectedOrganizationId={selectedOrganizationId}
               token={token}
               onEditOrganization={onEditOrganization}

@@ -115,6 +115,26 @@ test("opens only the clicked organization card, including for child organization
   ).not.toBeInTheDocument();
 });
 
+test("toggles an organization card from the focused row with Enter and Space", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  const row = screen.getByRole("treeitem", { name: administration.name });
+  row.focus();
+  expect(row).toHaveFocus();
+
+  await user.keyboard("{Enter}");
+  expect(
+    await screen.findByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).toBeVisible();
+
+  await user.keyboard(" ");
+  expect(
+    screen.queryByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).not.toBeInTheDocument();
+});
+
 test("edits an organization name without technical details or row actions", async () => {
   const user = userEvent.setup();
   renderOrganizations();
@@ -129,10 +149,49 @@ test("edits an organization name without technical details or row actions", asyn
 
   await user.click(screen.getByRole("button", { name: administration.name }));
 
+  expect(
+    screen.queryByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).not.toBeInTheDocument();
   expect(screen.getByLabelText("Название")).toHaveValue(administration.name);
   expect(screen.getByRole("button", { name: "Сохранить" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Отмена" })).toBeVisible();
   expect(screen.getByRole("button", { name: "В архив" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "Отмена" }));
+  expect(screen.getByRole("button", { name: administration.name })).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).not.toBeInTheDocument();
+});
+
+test("shows an inline error and disables Save while a name update is pending", async () => {
+  const user = userEvent.setup();
+  let resolveUpdate: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(input).endsWith(`/organizations/${administration.id}`) &&
+        init?.method === "PATCH"
+      ) {
+        return new Promise<Response>((resolve) => {
+          resolveUpdate = resolve;
+        });
+      }
+      return Promise.resolve(Response.json({ detail: "Not Found" }, { status: 404 }));
+    }),
+  );
+  renderOrganizations();
+
+  await user.click(screen.getByRole("button", { name: administration.name }));
+  const saveButton = screen.getByRole("button", { name: "Сохранить" });
+  await user.click(saveButton);
+
+  await waitFor(() => expect(resolveUpdate).toBeDefined());
+  expect(saveButton).toBeDisabled();
+
+  resolveUpdate?.(Response.json({ detail: "Not Found" }, { status: 404 }));
+  expect(await screen.findByRole("alert")).toBeVisible();
 });
 
 test("creates a child organization from its inline card with the current parent", async () => {
