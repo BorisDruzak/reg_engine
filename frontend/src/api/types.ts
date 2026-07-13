@@ -60,7 +60,7 @@ export type OrgUnitRead = {
   parent_id: string | null;
   code: string;
   name: string;
-  type: string;
+  type: OrgUnitType;
   is_active: boolean;
 };
 

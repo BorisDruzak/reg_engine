@@ -71,13 +71,39 @@ const administrationUnits: OrgUnitRead[] = [
   },
 ];
 
+const unsupportedOrgUnitType: OrgUnitRead = {
+  id: "unit-unsupported",
+  organization_id: administration.id,
+  parent_id: null,
+  code: "unsupported",
+  name: "Неизвестное подразделение",
+  // @ts-expect-error OrgUnitRead only permits management and department values.
+  type: "unsupported",
+  is_active: true,
+};
+
+void unsupportedOrgUnitType;
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 test("manages a separate management and department tree for one organization", async () => {
   const user = userEvent.setup();
-  stubOrgUnitApi();
+  stubOrgUnitApi({
+    [administration.id]: [
+      ...administrationUnits,
+      {
+        id: "unit-foreign",
+        organization_id: school.id,
+        parent_id: null,
+        code: "foreign",
+        name: "Чужое управление",
+        type: "management",
+        is_active: true,
+      },
+    ],
+  });
   renderOrganizations();
 
   await user.click(screen.getByRole("button", { name: "Подразделения Администрация" }));
@@ -88,6 +114,7 @@ test("manages a separate management and department tree for one organization", a
   expect(screen.getByText("Управление образования")).toBeVisible();
   expect(screen.getByText("Отдел дошкольного образования")).toBeVisible();
   expect(screen.getByText("Отдел бухгалтерии")).toBeVisible();
+  expect(screen.queryByText("Чужое управление")).not.toBeInTheDocument();
   expect(screen.queryByText("Школа 1")).not.toBeInTheDocument();
 });
 

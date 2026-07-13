@@ -94,7 +94,7 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
     setFormState({
       mode: "edit",
       unit,
-      unitType: unit.type === "management" ? "management" : "department",
+      unitType: unit.type,
       name: unit.name,
       parentId: unit.parent_id ?? "",
     });

@@ -82,7 +82,7 @@ const apiPayloads = {
         parent_id: null,
         code: "accounting",
         name: "Отдел учета",
-        type: "department",
+        type: "department" as const,
         is_active: true,
       },
     ],
