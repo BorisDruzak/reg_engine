@@ -217,7 +217,7 @@ test("creates a child organization from its inline card with the current parent"
   });
 });
 
-test("manages a separate management and department tree for one organization", async () => {
+test("keeps management departments collapsed while root departments stay visible", async () => {
   const user = userEvent.setup();
   stubOrgUnitApi({
     [administration.id]: [
@@ -241,9 +241,19 @@ test("manages a separate management and department tree for one organization", a
     await screen.findByRole("heading", { name: "Подразделения: Администрация" }),
   ).toBeVisible();
   expect(screen.getByText("Управление образования")).toBeVisible();
-  expect(screen.getByText("Отдел дошкольного образования")).toBeVisible();
   expect(screen.getByText("Отдел бухгалтерии")).toBeVisible();
+  expect(screen.queryByText("Отдел дошкольного образования")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Добавить отдел" })).not.toBeInTheDocument();
   expect(screen.queryByText("Чужое управление")).not.toBeInTheDocument();
+
+  const management = screen.getByRole("treeitem", { name: /Управление образования/ });
+  await user.click(
+    screen.getByRole("button", { name: "Развернуть управление Управление образования" }),
+  );
+
+  expect(management).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText("Отдел дошкольного образования")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Добавить отдел" })).toBeVisible();
 });
 
 test("creates a management as a root unit", async () => {
@@ -268,31 +278,29 @@ test("creates a management as a root unit", async () => {
   });
 });
 
-test("offers active managements of the selected organization as department parents", async () => {
+test("creates a department under the expanded management", async () => {
   const user = userEvent.setup();
-  stubOrgUnitApi({
-    [school.id]: [
-      {
-        id: "unit-school-management",
-        organization_id: school.id,
-        parent_id: null,
-        code: "school_management",
-        name: "Управление школы",
-        type: "management",
-        is_active: true,
-      },
-    ],
-  });
+  const fetchMock = stubOrgUnitApi();
   renderOrganizations();
 
   await user.click(screen.getByRole("treeitem", { name: administration.name }));
   await screen.findByRole("heading", { name: "Подразделения: Администрация" });
+  await user.click(
+    screen.getByRole("button", { name: "Развернуть управление Управление образования" }),
+  );
   await user.click(screen.getByRole("button", { name: "Добавить отдел" }));
+  await user.type(screen.getByLabelText("Название подразделения"), "Отдел молодежных программ");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
 
-  const parentSelect = screen.getByLabelText("Родительское управление");
-  expect(screen.getByRole("option", { name: "Управление образования" })).toBeEnabled();
-  expect(screen.queryByRole("option", { name: "Управление школы" })).not.toBeInTheDocument();
-  expect(parentSelect).toHaveValue("");
+  await waitFor(() => {
+    const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(createCall).toBeTruthy();
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      name: "Отдел молодежных программ",
+      parent_id: "unit-education",
+      unit_type: "department",
+    });
+  });
 });
 
 test("names active child departments before archiving a management", async () => {

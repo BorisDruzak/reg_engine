@@ -40,7 +40,6 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
     (unit) => unit.organization_id === organization.id,
   );
   const activeUnits = units.filter((unit) => unit.is_active);
-  const managements = activeUnits.filter((unit) => unit.type === "management");
   const createMutation = useMutation({
     mutationFn: (payload: {
       code: string;
@@ -76,7 +75,7 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
     : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
 
-  function openCreateForm(unitType: OrgUnitType) {
+  function openCreateForm(unitType: OrgUnitType, parentId = "") {
     setLocalError(null);
     setSuccessMessage(null);
     setFormState({
@@ -84,7 +83,7 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
       unit: null,
       unitType,
       name: "",
-      parentId: "",
+      parentId,
     });
   }
 
@@ -156,9 +155,6 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
         >
           {uiText.addManagement}
         </button>
-        <button type="button" className="ghost-button" onClick={() => openCreateForm("department")}>
-          {uiText.addDepartment}
-        </button>
       </div>
       <div className="panel-feedback">
         <MutationFeedback
@@ -193,22 +189,10 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
               />
             </label>
             {formState.mode === "create" && formState.unitType === "department" && (
-              <label>
-                {uiText.parentManagement}
-                <select
-                  value={formState.parentId}
-                  onChange={(event) =>
-                    setFormState({ ...formState, parentId: event.currentTarget.value })
-                  }
-                >
-                  <option value="">{uiText.noParentManagement}</option>
-                  {managements.map((management) => (
-                    <option key={management.id} value={management.id}>
-                      {management.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <p>
+                {uiText.parentManagement}:{" "}
+                {activeUnits.find((unit) => unit.id === formState.parentId)?.name ?? uiText.noData}
+              </p>
             )}
           </AdminMutationForm>
         </div>
@@ -259,6 +243,7 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
               units={activeUnits}
               onEdit={openEditForm}
               onArchive={setArchiveTarget}
+              onCreateDepartment={(management) => openCreateForm("department", management.id)}
             />
           )}
         </>
@@ -271,10 +256,12 @@ function OrganizationUnitTree({
   units,
   onEdit,
   onArchive,
+  onCreateDepartment,
 }: {
   units: OrgUnitRead[];
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
+  onCreateDepartment: (management: OrgUnitRead) => void;
 }) {
   const managements = units.filter((unit) => unit.type === "management");
   const rootDepartments = units.filter(
@@ -296,6 +283,7 @@ function OrganizationUnitTree({
           )}
           onEdit={onEdit}
           onArchive={onArchive}
+          onCreateDepartment={onCreateDepartment}
         />
       ))}
       {rootDepartments.map((department) => (
@@ -306,6 +294,7 @@ function OrganizationUnitTree({
           children={[]}
           onEdit={onEdit}
           onArchive={onArchive}
+          onCreateDepartment={onCreateDepartment}
         />
       ))}
     </ul>
@@ -318,16 +307,26 @@ function OrganizationUnitTreeNode({
   children,
   onEdit,
   onArchive,
+  onCreateDepartment,
 }: {
   unit: OrgUnitRead;
   level: number;
   children: OrgUnitRead[];
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
+  onCreateDepartment: (management: OrgUnitRead) => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isManagement = unit.type === "management";
+
   return (
     <li>
-      <div className="organization-unit-row" role="treeitem" aria-level={level}>
+      <div
+        className="organization-unit-row"
+        role="treeitem"
+        aria-level={level}
+        aria-expanded={isManagement ? isExpanded : undefined}
+      >
         <div className="organization-unit-main">
           <strong>{unit.name}</strong>
           <span className="organization-unit-kind">
@@ -339,6 +338,21 @@ function OrganizationUnitTreeNode({
         </div>
         <span className="organization-unit-status">{activityLabel(unit.is_active)}</span>
         <div className="row-actions">
+          {isManagement && (
+            <button
+              type="button"
+              className="ghost-button"
+              aria-label={`${isExpanded ? "Свернуть" : "Развернуть"} управление ${unit.name}`}
+              onClick={() => setIsExpanded((expanded) => !expanded)}
+            >
+              {isExpanded ? "Свернуть" : "Развернуть"}
+            </button>
+          )}
+          {isManagement && isExpanded && (
+            <button type="button" className="ghost-button" onClick={() => onCreateDepartment(unit)}>
+              {uiText.addDepartment}
+            </button>
+          )}
           <button
             type="button"
             className="ghost-button"
@@ -357,7 +371,7 @@ function OrganizationUnitTreeNode({
           </button>
         </div>
       </div>
-      {children.length > 0 && (
+      {isManagement && isExpanded && children.length > 0 && (
         <ul role="group">
           {children.map((child) => (
             <OrganizationUnitTreeNode
@@ -367,6 +381,7 @@ function OrganizationUnitTreeNode({
               children={[]}
               onEdit={onEdit}
               onArchive={onArchive}
+              onCreateDepartment={onCreateDepartment}
             />
           ))}
         </ul>
