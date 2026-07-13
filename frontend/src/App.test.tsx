@@ -749,6 +749,39 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/organizations/22222222-2222-4222-8222-222222222222/org-units")) {
         return jsonResponse({ items: orgUnitItems });
       }
+      if (
+        url.endsWith("/api/v1/registries/77777777-7777-4777-8777-777777777777/card-creation-links")
+      ) {
+        return jsonResponse({
+          items: [
+            {
+              id: "creation-link-1",
+              registry_id: "77777777-7777-4777-8777-777777777777",
+              card_template_id: "71717171-7171-4171-8171-717171717171",
+              card_template_name: "Муниципальная карточка",
+              raw_token: "creation-token",
+              created_at: "2026-07-13T12:00:00Z",
+              closed_at: null,
+              organizations: [
+                {
+                  id: "22222222-2222-4222-8222-222222222222",
+                  name: "Главная организация",
+                },
+              ],
+              created_cards: [
+                {
+                  card_id: "bbbb2222-2222-4222-8222-222222222222",
+                  display_name: "Созданная карточка",
+                  organization_id: "22222222-2222-4222-8222-222222222222",
+                  organization_name: "Главная организация",
+                  child_public_link_id: "child-link-1",
+                  child_raw_token: "child-token-1",
+                },
+              ],
+            },
+          ],
+        });
+      }
       const organizationCardMatch = pathname.match(/\/api\/v1\/organizations\/([^/]+)\/cards$/);
       if (organizationCardMatch) {
         if (init?.method === "POST") {
@@ -2859,6 +2892,95 @@ test("opens the empty card workspace when a stored card was removed", async () =
         .mocked(fetch)
         .mock.calls.some(([input]) => String(input).endsWith("/api/v1/cards/deleted-card-id")),
     ).toBe(false);
+  });
+});
+
+test("resets persisted card filters before opening a created card from the link list", async () => {
+  addSecondCardFixture();
+  cardItems = cardItems.map((item) =>
+    item.id === "bbbb2222-2222-4222-8222-222222222222"
+      ? { ...item, display_name: "Созданная карточка" }
+      : item,
+  );
+  cardValueStateById["bbbb2222-2222-4222-8222-222222222222"] = {
+    status: "created",
+    approved: false,
+    repeatableNotes: [],
+    fileRef: null,
+  };
+  localStorage.setItem(
+    "reg_engine.admin_workspace_state.v1",
+    JSON.stringify({
+      activeSection: "cards",
+      isSidebarCollapsed: false,
+      selectedRegistryId: null,
+      selectedCardId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      cardSearch: "актива",
+      cardOrganizationIds: ["22222222-2222-4222-8222-222222222222"],
+      cardIncludeDescendantOrganizations: false,
+      cardTemplateIds: ["71717171-7171-4171-8171-717171717171"],
+      cardFieldFilters: [
+        {
+          field_id: "99999999-9999-4999-8999-999999999999",
+          field_type: "text",
+          operator: "contains",
+          value: "drafted",
+        },
+      ],
+      includeArchivedCards: true,
+    }),
+  );
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+
+  expect(await screen.findByRole("button", { name: /Карточка актива/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("tab", { name: "Список ссылок" }));
+  await user.dblClick(await screen.findByRole("button", { name: /Созданная карточка/ }));
+
+  await waitFor(() => {
+    const broadRequest = vi
+      .mocked(fetch)
+      .mock.calls.map(([input, init]) => ({
+        url: new URL(input instanceof Request ? input.url : String(input), "http://localhost"),
+        init,
+      }))
+      .find(
+        ({ url, init }) =>
+          url.pathname === "/api/v1/organizations/22222222-2222-4222-8222-222222222222/cards" &&
+          url.searchParams.get("include_descendant_organizations") === "true" &&
+          !url.searchParams.has("organization_ids") &&
+          !url.searchParams.has("card_template_ids") &&
+          !url.searchParams.has("filters") &&
+          !url.searchParams.has("q") &&
+          !url.searchParams.has("include_archive") &&
+          init?.method === "GET",
+      );
+    expect(broadRequest).toBeDefined();
+  });
+
+  await waitFor(() => {
+    expect(screen.getByRole("tab", { name: "Созданная карточка" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+  await waitFor(() => {
+    const savedState = JSON.parse(
+      localStorage.getItem("reg_engine.admin_workspace_state.v1") ?? "{}",
+    ) as Record<string, unknown>;
+    expect(savedState).toMatchObject({
+      selectedCardId: "bbbb2222-2222-4222-8222-222222222222",
+      cardSearch: "",
+      cardOrganizationIds: [],
+      cardIncludeDescendantOrganizations: true,
+      cardTemplateIds: [],
+      cardFieldFilters: [],
+      includeArchivedCards: false,
+    });
   });
 });
 
