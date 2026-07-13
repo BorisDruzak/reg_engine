@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-12 15:17:54 +05:00
+- Generated: 2026-07-13 15:12:44 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -140,6 +140,7 @@
 - `backend/migrations/versions/0025_three_role_user_access.py`
 - `backend/migrations/versions/0026_reuse_archived_form_field_codes.py`
 - `backend/migrations/versions/0027_card_creation_links.py`
+- `backend/migrations/versions/0028_org_unit_hierarchy.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -234,6 +235,8 @@
 - `docs/superpowers/plans/2026-07-12-wide-xlsx-card-exchange.md`
 - `docs/superpowers/plans/2026-07-12-xlsx-column-order-and-organization-visibility.md`
 - `docs/superpowers/plans/2026-07-12-xlsx-exchange-clarity-and-error-feedback.md`
+- `docs/superpowers/plans/2026-07-13-card-template-lifecycle-and-creation-links.md`
+- `docs/superpowers/plans/2026-07-13-organization-unit-hierarchy.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -254,6 +257,8 @@
 - `docs/superpowers/specs/2026-07-12-wide-xlsx-card-exchange-design.md`
 - `docs/superpowers/specs/2026-07-12-xlsx-column-order-and-organization-visibility-design.md`
 - `docs/superpowers/specs/2026-07-12-xlsx-exchange-clarity-and-error-feedback-design.md`
+- `docs/superpowers/specs/2026-07-13-card-template-lifecycle-and-creation-links-design.md`
+- `docs/superpowers/specs/2026-07-13-organization-unit-hierarchy-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -332,7 +337,9 @@
 - `frontend/src/features/cards/publicLinkSchema.ts`
 - `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/organizations/.gitkeep`
+- `frontend/src/features/organizations/OrganizationsTable.test.tsx`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
+- `frontend/src/features/organizations/OrganizationUnitsPanel.tsx`
 - `frontend/src/features/overview/Overview.tsx`
 - `frontend/src/features/registry/.gitkeep`
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`

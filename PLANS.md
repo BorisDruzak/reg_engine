@@ -5027,3 +5027,22 @@ Status: complete, pushed to `main`, deployed, and live Browser verified.
   the value surface showed no type metadata; clicking `Имя` opened the real
   input with its existing value (`123`) in the same inline field. No value was
   changed during the check.
+
+#### Organization-local management and department hierarchy
+
+Status: implementation complete locally; disposable PostgreSQL migration,
+deployment, and live Browser acceptance remain the release gate.
+
+- `org_units` are a separate two-level tree within each organization:
+  root-only `management` units and root or management-child `department`
+  units. They never become organization/RBAC hierarchy nodes.
+- Archiving a management soft-archives its active direct departments, keeps
+  card and field-value references, and writes an audit event per unit.
+- `org_unit_ref` values/options are scoped to the card organization; historical
+  archived choices remain readable but disabled, while new archived/foreign
+  writes are rejected in the backend.
+- Administrators use a separate Russian-first unit panel; card and public
+  editors render scoped selects under `Подразделение организации`.
+- Focused frontend checks, TypeScript, Ruff, mypy, and the project-map passed
+  locally. PostgreSQL-dependent tests need the configured disposable database
+  before production migration.
