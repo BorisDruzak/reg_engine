@@ -69,6 +69,7 @@ class PublicPreviewOption:
     id: UUID
     code: str
     label: str
+    archived: bool = False
 
 
 @dataclass(frozen=True)
@@ -543,8 +544,7 @@ class PublicLinkService:
                             else None
                         ),
                         item_ids_by_value_id=item_ids_by_value_id,
-                        registry_id=card.registry_id,
-                        organization_id=card.organization_id,
+                        card=card,
                     )
                     for field_model in block_fields
                 ]
@@ -1241,8 +1241,7 @@ class PublicLinkService:
         field_model: FormField,
         field_value: FieldValue | None,
         item_ids_by_value_id: dict[UUID, list[UUID]],
-        registry_id: UUID,
-        organization_id: UUID,
+        card: Card,
     ) -> PublicPreviewField:
         return PublicPreviewField(
             field_id=field_model.id,
@@ -1258,8 +1257,7 @@ class PublicLinkService:
             display_config_json=field_model.display_config_json,
             options=self._reference_options(
                 field_model,
-                registry_id=registry_id,
-                organization_id=organization_id,
+                card=card,
             ),
         )
 
@@ -1267,9 +1265,21 @@ class PublicLinkService:
         self,
         field_model: FormField,
         *,
-        registry_id: UUID,
-        organization_id: UUID,
+        card: Card,
     ) -> list[PublicPreviewOption]:
+        if field_model.field_type == "org_unit_ref":
+            return [
+                PublicPreviewOption(
+                    id=option.id,
+                    code="",
+                    label=option.label,
+                    archived=option.archived,
+                )
+                for option in CardService(self.session)._org_unit_options_for_card_field(
+                    card=card,
+                    field_model=field_model,
+                )
+            ]
         if (
             field_model.field_type not in {"select", "multi_select"}
             or field_model.options_source_type != "reference_list"
@@ -1280,8 +1290,8 @@ class PublicLinkService:
         try:
             items = ReferenceListService(self.session).list_effective_items_for_field(
                 field_model=field_model,
-                registry_id=registry_id,
-                organization_id=organization_id,
+                registry_id=card.registry_id,
+                organization_id=card.organization_id,
             )
         except ReferenceListError as exc:
             raise PublicLinkError(str(exc)) from exc

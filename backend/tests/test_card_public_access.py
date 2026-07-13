@@ -5,6 +5,7 @@ import app.models as models
 from app.models import Base
 from app.schemas.cards import CardCreate, CardPublicFieldSettingUpdate, OrganizationCardCreate
 from app.services import card_public_access
+from app.services.public_links import PublicPreviewOption
 
 
 def test_card_public_field_settings_model_is_registered() -> None:
@@ -58,3 +59,14 @@ def test_public_edit_promotes_card_and_field_visibility() -> None:
     assert result.public_edit_enabled is True
     assert result.field_updates[0].public_visible is True
     assert result.field_updates[0].public_editable is True
+
+
+def test_public_preview_option_preserves_archived_state() -> None:
+    option = PublicPreviewOption(
+        id=UUID("12345678-1234-4234-8234-123456789abc"),
+        code="archived-unit",
+        label="Historical management",
+        archived=True,
+    )
+
+    assert option.archived is True

@@ -83,6 +83,7 @@ class PublicLinkPreviewOptionRead(BaseModel):
     id: UUID
     code: str
     label: str
+    archived: bool = False
 
 
 class PublicLinkPreviewFieldRead(BaseModel):

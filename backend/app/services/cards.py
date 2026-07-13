@@ -59,6 +59,13 @@ class CardListFieldRead:
 
 
 @dataclass(frozen=True)
+class CardFieldOptionRead:
+    id: UUID
+    label: str
+    archived: bool = False
+
+
+@dataclass(frozen=True)
 class FileRefValueRead:
     attachment_id: UUID
     title: str
@@ -942,6 +949,29 @@ class CardService:
         except ReferenceListError as exc:
             raise InvalidFieldValueError(str(exc)) from exc
 
+    def list_org_unit_options_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        field_id: UUID,
+    ) -> list[CardFieldOptionRead]:
+        card = self._get_readable_card(card_id, include_archive=False)
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read this card.")
+
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Field does not belong to the card registry.")
+        if field_model.field_type != "org_unit_ref":
+            raise CardServiceError("Опции подразделений доступны только для поля org_unit_ref.")
+        return self._org_unit_options_for_card_field(card=card, field_model=field_model)
+
     def archive_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> Card:
         card = self._get_editable_card(card_id)
         self._require_card_permission(
@@ -1760,7 +1790,10 @@ class CardService:
                 value,
                 "Org unit reference fields require an org unit id.",
             )
-            self._ensure_active_org_unit_reference(org_unit_id)
+            self._ensure_active_org_unit_reference(
+                org_unit_id,
+                expected_organization_id=organization_id,
+            )
             return _FieldAssignment(value_org_unit_id=org_unit_id)
 
         if field_model.field_type == "user_ref":
@@ -1875,10 +1908,106 @@ class CardService:
         ):
             raise InvalidFieldValueError("Organization reference target was not found.")
 
-    def _ensure_active_org_unit_reference(self, org_unit_id: UUID) -> None:
+    def _ensure_active_org_unit_reference(
+        self,
+        org_unit_id: UUID,
+        *,
+        expected_organization_id: UUID | None,
+    ) -> None:
+        if expected_organization_id is None:
+            raise InvalidFieldValueError(
+                "Для ссылки на подразделение требуется организация карточки."
+            )
         org_unit = self.session.get(OrgUnit, org_unit_id)
-        if org_unit is None or org_unit.archived_at is not None or not org_unit.is_active:
-            raise InvalidFieldValueError("Org unit reference target was not found.")
+        if (
+            org_unit is None
+            or org_unit.archived_at is not None
+            or not org_unit.is_active
+            or org_unit.organization_id != expected_organization_id
+        ):
+            raise InvalidFieldValueError("Подразделение не найдено в организации карточки.")
+
+    def _org_unit_options_for_card_field(
+        self,
+        *,
+        card: Card,
+        field_model: FormField,
+    ) -> list[CardFieldOptionRead]:
+        org_units = list(
+            self.session.scalars(
+                select(OrgUnit).where(OrgUnit.organization_id == card.organization_id)
+            ).all()
+        )
+        org_units_by_id = {org_unit.id: org_unit for org_unit in org_units}
+        saved_org_unit_ids = set(
+            self.session.scalars(
+                select(FieldValue.value_org_unit_id).where(
+                    FieldValue.card_id == card.id,
+                    FieldValue.field_id == field_model.id,
+                    FieldValue.value_org_unit_id.is_not(None),
+                )
+            ).all()
+        )
+
+        active_units = [
+            org_unit
+            for org_unit in org_units
+            if org_unit.archived_at is None and org_unit.is_active
+        ]
+        active_children_by_parent: dict[UUID, list[OrgUnit]] = {}
+        for org_unit in active_units:
+            if org_unit.parent_id is not None:
+                active_children_by_parent.setdefault(org_unit.parent_id, []).append(org_unit)
+
+        options: list[CardFieldOptionRead] = []
+        ordered_active_managements = sorted(
+            (org_unit for org_unit in active_units if org_unit.type == "management"),
+            key=lambda org_unit: (
+                org_unit.name.casefold(),
+                org_unit.code.casefold(),
+                str(org_unit.id),
+            ),
+        )
+        for management in ordered_active_managements:
+            options.append(CardFieldOptionRead(id=management.id, label=management.name))
+            for department in sorted(
+                active_children_by_parent.get(management.id, []),
+                key=lambda org_unit: (
+                    org_unit.name.casefold(),
+                    org_unit.code.casefold(),
+                    str(org_unit.id),
+                ),
+            ):
+                options.append(
+                    CardFieldOptionRead(
+                        id=department.id,
+                        label=f"{management.name} → {department.name}",
+                    )
+                )
+
+        included_active_ids = {option.id for option in options}
+        for org_unit in sorted(
+            (unit for unit in active_units if unit.id not in included_active_ids),
+            key=lambda unit: (unit.name.casefold(), unit.code.casefold(), str(unit.id)),
+        ):
+            options.append(CardFieldOptionRead(id=org_unit.id, label=org_unit.name))
+
+        archived_saved_units = sorted(
+            (
+                org_unit
+                for org_unit in org_units
+                if org_unit.id in saved_org_unit_ids
+                and (org_unit.archived_at is not None or not org_unit.is_active)
+            ),
+            key=lambda unit: (unit.name.casefold(), unit.code.casefold(), str(unit.id)),
+        )
+        for org_unit in archived_saved_units:
+            parent = (
+                org_units_by_id.get(org_unit.parent_id) if org_unit.parent_id is not None else None
+            )
+            label = f"{parent.name} → {org_unit.name}" if parent is not None else org_unit.name
+            options.append(CardFieldOptionRead(id=org_unit.id, label=label, archived=True))
+        return options
 
     def _validate_org_unit_for_organization(
         self,

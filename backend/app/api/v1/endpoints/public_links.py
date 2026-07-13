@@ -459,6 +459,7 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
                                         id=option.id,
                                         code=option.code,
                                         label=option.label,
+                                        archived=option.archived,
                                     )
                                     for option in field.options
                                 ],

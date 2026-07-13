@@ -106,6 +106,16 @@ class FieldValueListRead(BaseModel):
     items: list[FieldValueRead]
 
 
+class CardFieldOptionRead(BaseModel):
+    id: UUID
+    label: str
+    archived: bool = False
+
+
+class CardFieldOptionListRead(BaseModel):
+    items: list[CardFieldOptionRead]
+
+
 class CardFieldRead(BaseModel):
     field_id: UUID
     code: str

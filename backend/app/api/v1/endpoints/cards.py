@@ -13,6 +13,8 @@ from app.schemas.cards import (
     CardBlockInstanceSummaryRead,
     CardBlockRead,
     CardCreate,
+    CardFieldOptionListRead,
+    CardFieldOptionRead,
     CardFieldRead,
     CardListFieldValueRead,
     CardListRead,
@@ -200,6 +202,32 @@ def list_card_field_reference_items(
     except Exception as exc:
         raise_service_http_error(exc)
     return ReferenceItemListRead(items=[ReferenceItemRead.model_validate(item) for item in items])
+
+
+@router.get(
+    "/cards/{card_id}/fields/{field_id}/org-unit-options",
+    response_model=CardFieldOptionListRead,
+)
+def list_card_field_org_unit_options(
+    card_id: UUID,
+    field_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardFieldOptionListRead:
+    try:
+        options = CardService(session).list_org_unit_options_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            field_id=field_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardFieldOptionListRead(
+        items=[
+            CardFieldOptionRead(id=option.id, label=option.label, archived=option.archived)
+            for option in options
+        ]
+    )
 
 
 def _parse_card_field_filters(raw_filters: str | None) -> list[CardFieldFilterInput]:

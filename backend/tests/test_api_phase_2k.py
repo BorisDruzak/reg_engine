@@ -248,6 +248,7 @@ def test_phase_2k_org_unit_routes_are_registered_without_database() -> None:
 
     assert "/api/v1/organizations/{organization_id}/org-units" in paths
     assert "/api/v1/org-units/{org_unit_id}" in paths
+    assert "/api/v1/cards/{card_id}/fields/{field_id}/org-unit-options" in paths
 
 
 def test_phase_2k_registry_update_archive_routes_are_registered_without_database() -> None:

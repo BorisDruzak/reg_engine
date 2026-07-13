@@ -1901,6 +1901,101 @@ def test_fixed_reference_list_ignores_local_override(db_session: Session) -> Non
         )
 
 
+def test_org_unit_field_values_are_scoped_to_card_organization_and_keep_saved_archived_option(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    organization_service = OrganizationService(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="organization_units",
+        title="Organization units",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="responsible_unit",
+        label="Responsible unit",
+        field_type="org_unit_ref",
+    )
+    active_management = organization_service.create_org_unit(
+        organization_id=context["child"].id,
+        code="management",
+        name="Management",
+        unit_type="management",
+        created_by=context["system_admin"].id,
+    )
+    active_department = organization_service.create_org_unit(
+        organization_id=context["child"].id,
+        parent_id=active_management.id,
+        code="department",
+        name="Department",
+        unit_type="department",
+        created_by=context["system_admin"].id,
+    )
+    historical_management = organization_service.create_org_unit(
+        organization_id=context["child"].id,
+        code="historical-management",
+        name="Historical management",
+        unit_type="management",
+        created_by=context["system_admin"].id,
+    )
+    foreign_unit = organization_service.create_org_unit(
+        organization_id=context["sibling"].id,
+        code="foreign-management",
+        name="Foreign management",
+        unit_type="management",
+        created_by=context["system_admin"].id,
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Scoped organization unit card",
+    )
+
+    card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value=historical_management.id,
+    )
+    organization_service.archive_org_unit_for_actor(
+        actor_user_id=context["system_admin"].id,
+        org_unit_id=historical_management.id,
+    )
+
+    with pytest.raises(InvalidFieldValueError):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value=foreign_unit.id,
+        )
+    with pytest.raises(InvalidFieldValueError):
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value=historical_management.id,
+        )
+
+    options = card_service.list_org_unit_options_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+    )
+
+    assert [(option.id, option.label, option.archived) for option in options] == [
+        (active_management.id, "Management", False),
+        (active_department.id, "Management → Department", False),
+        (historical_management.id, "Historical management", True),
+    ]
+
+
 def test_old_cards_show_new_fields_as_null_without_mass_value_rows(
     db_session: Session,
 ) -> None:
