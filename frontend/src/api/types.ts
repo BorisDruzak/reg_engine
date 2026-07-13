@@ -290,6 +290,16 @@ export type ReferenceItemListRead = {
   items: ReferenceItemRead[];
 };
 
+export type CardFieldOptionRead = {
+  id: string;
+  label: string;
+  archived: boolean;
+};
+
+export type CardFieldOptionListRead = {
+  items: CardFieldOptionRead[];
+};
+
 export type ReferenceItemCreatePayload = {
   code: string;
   label: string;
@@ -611,6 +621,7 @@ export type PublicLinkPreviewOptionRead = {
   id: string;
   code: string;
   label: string;
+  archived?: boolean;
 };
 
 export type PublicLinkPreviewFieldRead = {

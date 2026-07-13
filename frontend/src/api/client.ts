@@ -27,6 +27,7 @@ import type {
   CardTemplateUpdatePayload,
   CardCreatePayload,
   CardFieldFilterPayload,
+  CardFieldOptionListRead,
   CardListRead,
   CardPrintPreviewPayload,
   CardPrintPreviewRead,
@@ -592,6 +593,13 @@ export async function updateCardFieldValues(
 export async function listCardFieldReferenceItems(token: string, cardId: string, fieldId: string) {
   return apiRequest<ReferenceItemListRead>(
     `/api/v1/cards/${cardId}/fields/${fieldId}/reference-items`,
+    { token },
+  );
+}
+
+export async function listCardFieldOrgUnitOptions(token: string, cardId: string, fieldId: string) {
+  return apiRequest<CardFieldOptionListRead>(
+    `/api/v1/cards/${cardId}/fields/${fieldId}/org-unit-options`,
     { token },
   );
 }

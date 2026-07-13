@@ -568,7 +568,7 @@ const fieldTypeLabels: Record<FieldType, string> = {
   multi_select: "Множественный выбор",
   number: "Число",
   organization_ref: "Ссылка на организацию",
-  org_unit_ref: "Ссылка на подразделение",
+  org_unit_ref: "Подразделение организации",
   registry_ref: "Ссылка на реестр",
   select: "Выбор",
   text: "Текст",

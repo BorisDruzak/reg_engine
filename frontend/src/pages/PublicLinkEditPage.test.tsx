@@ -144,6 +144,35 @@ describe("PublicLinkEditPage", () => {
     expect(within(fieldNode).queryByText(/экземпляр 1/i)).not.toBeInTheDocument();
   });
 
+  test("uses only previewed organization units and disables an archived selected value", async () => {
+    preview.form_layout.sections[0].items.push(
+      layoutItem("item-org-unit", "field-org-unit", 3, 1, 1, 6),
+    );
+    preview.blocks[0].instances[0].fields.push(
+      previewField(
+        "field-org-unit",
+        "org_unit",
+        "Подразделение организации",
+        "org_unit_ref",
+        "archived-local",
+        {
+          options: [
+            { id: "management-local", code: "", label: "Управление образования", archived: false },
+            { id: "archived-local", code: "", label: "Отдел кадров", archived: true },
+          ],
+        },
+      ),
+    );
+
+    renderPage();
+
+    const control = await screen.findByRole("combobox", { name: "Подразделение организации" });
+    expect(control).toHaveValue("archived-local");
+    expect(screen.getByRole("option", { name: "Управление образования" })).toBeEnabled();
+    expect(screen.getByRole("option", { name: "Отдел кадров / Архивировано" })).toBeDisabled();
+    expect(screen.queryByRole("option", { name: /другое подразделение/i })).not.toBeInTheDocument();
+  });
+
   test.each(["explicit block allowlist", "legacy link"])(
     "renders static instructions from a %s preview without an editor",
     async (source) => {

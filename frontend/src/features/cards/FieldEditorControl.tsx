@@ -18,7 +18,7 @@ export function FieldEditorControl({
   fieldType: string;
   label: string;
   hint?: string | null;
-  options: FieldEditorOption[];
+  options: Array<FieldEditorOption & { archived?: boolean }>;
   fileRefOptions?: FieldEditorFileRefOption[];
   value: FieldEditorState;
   disabled?: boolean;
@@ -72,7 +72,7 @@ export function FieldEditorControl({
     );
   }
 
-  if (fieldType === "select") {
+  if (fieldType === "select" || fieldType === "org_unit_ref") {
     return (
       <select
         aria-label={label}
@@ -82,8 +82,8 @@ export function FieldEditorControl({
       >
         <option value="">{hint || uiText.empty}</option>
         {options.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.label}
+          <option key={item.id} value={item.id} disabled={item.archived}>
+            {item.archived ? `${item.label} / ${uiText.archived}` : item.label}
           </option>
         ))}
       </select>

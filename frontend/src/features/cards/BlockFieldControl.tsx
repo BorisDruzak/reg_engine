@@ -11,7 +11,7 @@ export type BlockFieldControlProps = {
   editable: boolean;
   pending: boolean;
   error?: string;
-  options?: ReadonlyArray<{ id: string; label: string }>;
+  options?: ReadonlyArray<{ id: string; label: string; archived?: boolean }>;
   readValue: ReactNode;
   fileRefControl?: ReactNode;
   autoFocus?: boolean;
@@ -63,7 +63,11 @@ export function BlockFieldControl({
         fieldType={field.field_type}
         label={field.label}
         hint={field.description}
-        options={options.map((option) => ({ id: option.id, label: option.label }))}
+        options={options.map((option) => ({
+          id: option.id,
+          label: option.label,
+          archived: option.archived,
+        }))}
         value={value}
         disabled={pending}
         onChange={onChange}

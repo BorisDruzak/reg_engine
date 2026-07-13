@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { OrganizationRead, RegistrySchemaRead } from "@/api/types";
+import type { CardRead, CardSummaryRead, OrganizationRead, RegistrySchemaRead } from "@/api/types";
 
 import { CardsWorkspace } from "./CardsWorkspace";
 
@@ -52,6 +52,28 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/presentation")) return Response.json(organizationUnitPresentation());
+      if (url.includes("/public-access")) {
+        return Response.json({
+          card_id: "card-org-unit",
+          public_view_enabled: true,
+          public_edit_enabled: true,
+          fields: [],
+        });
+      }
+      if (url.includes("/org-unit-options")) {
+        return Response.json({
+          items: [
+            { id: "management-local", label: "Управление образования", archived: false },
+            {
+              id: "department-local",
+              label: "Управление образования → Отдел дошкольного образования",
+              archived: false,
+            },
+            { id: "archived-local", label: "Отдел кадров", archived: true },
+          ],
+        });
+      }
       if (url.includes("/card-creation-links")) {
         return Response.json({
           items: [
@@ -141,14 +163,39 @@ describe("CardsWorkspace", () => {
       expect(onSelectCard).toHaveBeenCalledWith("created-card-1");
     });
   });
+
+  test("shows card-local organization units and retains an archived selected value", async () => {
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+    renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: organizationUnitCard,
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+
+    const control = await screen.findByRole("combobox", { name: "Подразделение организации" });
+    expect(control).toHaveValue("archived-local");
+    expect(screen.getByRole("option", { name: "Управление образования" })).toBeEnabled();
+    expect(screen.getByRole("option", { name: "Отдел кадров / Архивировано" })).toBeDisabled();
+  });
 });
 
 function renderWorkspace({
   onOpenCreatedCard = vi.fn().mockResolvedValue(undefined),
   onSelectCard = vi.fn(),
+  cards = [],
+  card = null,
+  selectedCardId = "",
 }: {
   onOpenCreatedCard?: (cardId: string) => Promise<void>;
   onSelectCard?: (cardId: string) => void;
+  cards?: CardSummaryRead[];
+  card?: CardRead | null;
+  selectedCardId?: string;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -156,12 +203,12 @@ function renderWorkspace({
   return render(
     <QueryClientProvider client={queryClient}>
       <CardsWorkspace
-        cards={[]}
-        card={null}
+        cards={cards}
+        card={card}
         schema={schema}
         token="test-token"
         organizations={[organization]}
-        selectedCardId=""
+        selectedCardId={selectedCardId}
         cardSearch=""
         cardOrganizationIds={[]}
         cardIncludeDescendantOrganizations
@@ -179,4 +226,125 @@ function renderWorkspace({
       />
     </QueryClientProvider>,
   );
+}
+
+const organizationUnitCard: CardRead = {
+  id: "card-org-unit",
+  registry_id: "registry-1",
+  card_template_id: "template-1",
+  organization_id: organization.id,
+  display_name: "Карточка подразделения",
+  can_manage: true,
+  fields: {},
+  blocks: {
+    "block-org-unit": {
+      block_id: "block-org-unit",
+      code: "main",
+      instances: [
+        {
+          block_instance_id: null,
+          ordinal: 0,
+          fields: {
+            "field-org-unit": {
+              field_id: "field-org-unit",
+              code: "org_unit",
+              field_type: "org_unit_ref",
+              value: "archived-local",
+            },
+          },
+        },
+      ],
+    },
+  },
+};
+
+const organizationUnitCardSummary: CardSummaryRead = {
+  id: organizationUnitCard.id,
+  registry_id: organizationUnitCard.registry_id,
+  card_template_id: organizationUnitCard.card_template_id,
+  card_template_name: "Шаблон",
+  organization_id: organization.id,
+  org_unit_id: null,
+  display_name: organizationUnitCard.display_name,
+  lifecycle_status: "active",
+  public_view_enabled: true,
+  public_edit_enabled: true,
+  list_fields: [],
+};
+
+function organizationUnitPresentation() {
+  const block = {
+    id: "block-org-unit",
+    registry_id: "registry-1",
+    code: "main",
+    title: "Основные сведения",
+    description: null,
+    position: 0,
+    is_repeatable: false,
+    is_active: true,
+    public_visible: true,
+    public_editable: true,
+    layout_columns: 12,
+    display_config_json: null,
+  };
+  const field = {
+    id: "field-org-unit",
+    block_id: block.id,
+    code: "org_unit",
+    label: "Подразделение организации",
+    description: null,
+    field_type: "org_unit_ref",
+    position: 0,
+    required_mode: "not_required",
+    options_source_type: null,
+    options_source_id: null,
+    options_config_json: null,
+    display_config_json: null,
+    is_active: true,
+    is_list_display: false,
+    public_visible: true,
+    public_editable: true,
+  };
+  return {
+    card_id: organizationUnitCard.id,
+    registry_id: "registry-1",
+    registry_name: "Реестр",
+    card_template_id: "template-1",
+    card_template_name: "Шаблон",
+    layout: {
+      version: "card_template_layout_v1",
+      revision: "org-unit-test",
+      card_template_id: "template-1",
+      registry_id: "registry-1",
+      structure: { blocks: [block], fields: [field] },
+      form_layout: {
+        columns: 12,
+        sections: [
+          {
+            id: "section-org-unit",
+            block_id: block.id,
+            row: 1,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
+            items: [
+              {
+                id: "item-org-unit",
+                kind: "field",
+                field_id: field.id,
+                row: 1,
+                column: 1,
+                row_span: 1,
+                column_span: 12,
+                text: null,
+              },
+            ],
+          },
+        ],
+      },
+      print_views: [],
+      export_settings: { formats: [] },
+      sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+    },
+  };
 }
