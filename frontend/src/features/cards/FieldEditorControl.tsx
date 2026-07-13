@@ -4,6 +4,7 @@ import { uiText } from "@/app/uiText";
 
 import type { FieldEditorOption, FieldEditorState } from "./fieldEditorUtils";
 import { inputTypeForField } from "./fieldEditorUtils";
+import { OrganizationUnitPicker } from "./OrganizationUnitPicker";
 
 export function FieldEditorControl({
   fieldType,
@@ -72,7 +73,20 @@ export function FieldEditorControl({
     );
   }
 
-  if (fieldType === "select" || fieldType === "org_unit_ref") {
+  if (fieldType === "org_unit_ref") {
+    return (
+      <OrganizationUnitPicker
+        label={label}
+        hint={hint}
+        options={options}
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (fieldType === "select") {
     return (
       <select
         aria-label={label}

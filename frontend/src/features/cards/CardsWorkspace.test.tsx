@@ -177,10 +177,14 @@ describe("CardsWorkspace", () => {
 
     fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
 
-    const control = await screen.findByRole("combobox", { name: "Подразделение организации" });
-    expect(control).toHaveValue("archived-local");
-    expect(screen.getByRole("option", { name: "Управление образования" })).toBeEnabled();
-    expect(screen.getByRole("option", { name: "Отдел кадров / Архивировано" })).toBeDisabled();
+    const control = await screen.findByRole("group", { name: "Подразделение организации" });
+    expect(
+      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(within(control).getByRole("button", { name: "Управление образования" })).toBeEnabled();
+    expect(
+      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
+    ).toBeDisabled();
   });
 });
 

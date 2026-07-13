@@ -166,11 +166,17 @@ describe("PublicLinkEditPage", () => {
 
     renderPage();
 
-    const control = await screen.findByRole("combobox", { name: "Подразделение организации" });
-    expect(control).toHaveValue("archived-local");
-    expect(screen.getByRole("option", { name: "Управление образования" })).toBeEnabled();
-    expect(screen.getByRole("option", { name: "Отдел кадров / Архивировано" })).toBeDisabled();
-    expect(screen.queryByRole("option", { name: /другое подразделение/i })).not.toBeInTheDocument();
+    const control = await screen.findByRole("group", { name: "Подразделение организации" });
+    expect(
+      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(within(control).getByRole("button", { name: "Управление образования" })).toBeEnabled();
+    expect(
+      within(control).getByRole("button", { name: "Отдел кадров / Архивировано" }),
+    ).toBeDisabled();
+    expect(
+      within(control).queryByRole("button", { name: /другое подразделение/i }),
+    ).not.toBeInTheDocument();
   });
 
   test.each(["explicit block allowlist", "legacy link"])(
