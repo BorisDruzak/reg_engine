@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
@@ -1038,7 +1038,14 @@ class RegistrySchemaService:
             include_archive=False,
         )
         criteria = [CardTemplate.registry_id == registry_id]
-        if not include_archive:
+        if include_archive:
+            criteria.append(
+                or_(
+                    CardTemplate.is_active.is_(True),
+                    CardTemplate.archived_at.is_not(None),
+                )
+            )
+        else:
             criteria.extend(
                 [
                     CardTemplate.archived_at.is_(None),
@@ -1210,9 +1217,10 @@ class RegistrySchemaService:
         self._require_schema_permission(actor_user_id, template.registry_id)
         if template.code == BASE_CARD_TEMPLATE_CODE:
             raise RegistrySchemaError("Base card template cannot be archived.")
-        template.archived_at = datetime.now(UTC)
-        template.archived_by = actor_user_id
         template.is_active = False
+        template.archived_at = None
+        template.archived_by = None
+        template.archive_reason = None
         template.updated_by = actor_user_id
         self.session.flush()
         AuditService(self.session).record_user_event(

@@ -1134,6 +1134,30 @@ def test_base_card_template_cannot_be_archived(db_session: Session) -> None:
         )
 
 
+def test_card_creation_rejects_an_inactive_template() -> None:
+    registry_id = uuid4()
+    template = SimpleNamespace(
+        id=uuid4(),
+        registry_id=registry_id,
+        archived_at=None,
+        is_active=False,
+    )
+
+    class TemplateSession:
+        def get(self, model: object, _model_id: object) -> object:
+            assert model is CardTemplate
+            return template
+
+    service = CardService(cast(Session, TemplateSession()))
+
+    with pytest.raises(CardServiceError, match="Card template was not found"):
+        service._get_active_card_template_for_registry(  # noqa: SLF001
+            template.id,
+            registry_id=registry_id,
+            actor_user_id=uuid4(),
+        )
+
+
 def test_card_template_filter_is_backend_enforced(db_session: Session) -> None:
     context = _phase_1d_context(db_session)
     schema_service = RegistrySchemaService(db_session)

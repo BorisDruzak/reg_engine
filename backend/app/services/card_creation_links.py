@@ -497,7 +497,7 @@ class CardCreationLinkService:
         actor_user_id: UUID,
         organizations: list[Organization],
     ) -> CardCreationLinkValue:
-        template = self._active_template(
+        template = self._nonarchived_template(
             creation_link.card_template_id,
             registry_id=creation_link.registry_id,
         )
@@ -745,12 +745,17 @@ class CardCreationLinkService:
         return registry
 
     def _active_template(self, template_id: UUID, *, registry_id: UUID) -> CardTemplate:
+        template = self._nonarchived_template(template_id, registry_id=registry_id)
+        if not template.is_active:
+            raise CardCreationLinkError("Card template was not found.")
+        return template
+
+    def _nonarchived_template(self, template_id: UUID, *, registry_id: UUID) -> CardTemplate:
         template = self.session.get(CardTemplate, template_id)
         if (
             template is None
             or template.registry_id != registry_id
             or template.archived_at is not None
-            or not template.is_active
         ):
             raise CardCreationLinkError("Card template was not found.")
         return template

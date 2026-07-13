@@ -1,7 +1,7 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -43,6 +43,85 @@ def test_creation_link_token_cipher_keeps_raw_token_out_of_stored_value() -> Non
     assert ciphertext != raw_token
     assert raw_token not in ciphertext
     assert cipher.decrypt(ciphertext) == raw_token
+
+
+def test_creation_link_history_allows_a_nonarchived_inactive_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cipher = CreationLinkTokenCipher(Fernet.generate_key().decode("ascii"))
+    registry_id = uuid4()
+    template = type(
+        "Template",
+        (),
+        {
+            "id": uuid4(),
+            "registry_id": registry_id,
+            "name": "Inactive template",
+            "archived_at": None,
+            "is_active": False,
+        },
+    )()
+    creation_link = type(
+        "CreationLink",
+        (),
+        {
+            "id": uuid4(),
+            "registry_id": registry_id,
+            "card_template_id": template.id,
+            "token_ciphertext": cipher.encrypt("history-token"),
+        },
+    )()
+
+    class ScalarResult:
+        def all(self) -> list[object]:
+            return []
+
+    class HistorySession:
+        def get(self, model: object, _model_id: object) -> object:
+            assert model is CardTemplate
+            return template
+
+        def scalars(self, _statement: object) -> ScalarResult:
+            return ScalarResult()
+
+    service = CardCreationLinkService(HistorySession(), token_cipher=cipher)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        "app.services.card_creation_links.CardCreationLinkValue",
+        lambda **payload: payload,
+    )
+
+    result = service._link_value(
+        creation_link,
+        actor_user_id=uuid4(),
+        organizations=[],
+    )
+
+    assert result["card_template_name"] == "Inactive template"
+    assert result["raw_token"] == "history-token"
+
+
+def test_creation_link_creation_rejects_an_inactive_template() -> None:
+    registry_id = uuid4()
+    template = type(
+        "Template",
+        (),
+        {
+            "id": uuid4(),
+            "registry_id": registry_id,
+            "archived_at": None,
+            "is_active": False,
+        },
+    )()
+
+    class TemplateSession:
+        def get(self, model: object, _model_id: object) -> object:
+            assert model is CardTemplate
+            return template
+
+    service = CardCreationLinkService(TemplateSession())  # type: ignore[arg-type]
+
+    with pytest.raises(CardCreationLinkError, match="Card template was not found"):
+        service._active_template(template.id, registry_id=registry_id)  # noqa: SLF001
 
 
 def _require_test_database_url() -> str:

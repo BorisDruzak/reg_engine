@@ -45,6 +45,71 @@ def _field(*, block_id):
     )
 
 
+def test_removing_custom_card_template_deactivates_without_archiving(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    template = Mock(
+        id=uuid4(),
+        registry_id=uuid4(),
+        code="custom-template",
+        is_active=True,
+        archived_at=None,
+        archived_by=None,
+        archive_reason=None,
+        updated_by=None,
+    )
+    service = RegistrySchemaService(Mock(spec=Session))
+    monkeypatch.setattr(service, "_get_card_template", lambda *_args, **_kwargs: template)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **_payload: None,
+    )
+
+    removed = service.archive_card_template_for_actor(
+        actor_user_id=actor_user_id,
+        template_id=template.id,
+    )
+
+    assert removed is template
+    assert template.is_active is False
+    assert template.archived_at is None
+    assert template.archived_by is None
+    assert template.archive_reason is None
+
+
+def test_card_template_archive_listing_excludes_inactive_template_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    statements: list[object] = []
+
+    class ScalarResult:
+        def all(self) -> list[object]:
+            return []
+
+    class RecordingSession:
+        def scalars(self, statement: object) -> ScalarResult:
+            statements.append(statement)
+            return ScalarResult()
+
+    service = RegistrySchemaService(RecordingSession())  # type: ignore[arg-type]
+    monkeypatch.setattr(service, "read_registry_for_actor", lambda **_payload: Mock())
+
+    assert (
+        service.list_card_templates_for_actor(
+            actor_user_id=uuid4(),
+            registry_id=registry_id,
+            include_archive=True,
+        )
+        == []
+    )
+
+    compiled = str(statements[0].compile(dialect=postgresql.dialect()))  # type: ignore[attr-defined]
+    assert "card_templates.is_active IS true OR card_templates.archived_at IS NOT NULL" in compiled
+
+
 def test_field_update_endpoint_forwards_every_editable_schema_property(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -151,7 +151,7 @@ class CardTemplateLayoutService:
             actor_user_id=actor_user_id,
             card_id=card_id,
         )
-        template = self._get_active_card_template(card.card_template_id)
+        template = self._get_nonarchived_card_template(card.card_template_id)
         if template.registry_id != card.registry_id:
             raise CardTemplateLayoutError("Card template does not belong to the card registry.")
         registry = self.session.get(Registry, card.registry_id)
@@ -394,6 +394,8 @@ class CardTemplateLayoutService:
         template: CardTemplate,
     ) -> tuple[list[FormBlock], list[FormField]]:
         field_ids = self._template_field_ids(template)
+        if not field_ids:
+            return [], []
         block_statement = (
             select(FormBlock)
             .where(FormBlock.registry_id == template.registry_id)
@@ -406,8 +408,7 @@ class CardTemplateLayoutService:
             .where(FormBlock.registry_id == template.registry_id)
             .order_by(FormBlock.position, FormField.position, FormField.label, FormField.id)
         )
-        if field_ids:
-            field_statement = field_statement.where(FormField.id.in_(field_ids))
+        field_statement = field_statement.where(FormField.id.in_(field_ids))
         fields = list(self.session.scalars(field_statement).all())
         block_ids_with_fields = {field.block_id for field in fields}
         blocks = [block for block in blocks if block.id in block_ids_with_fields]
@@ -669,6 +670,12 @@ class CardTemplateLayoutService:
         else:
             template = self.session.get(CardTemplate, card_template_id)
         if template is None or template.archived_at is not None or not template.is_active:
+            raise RegistrySchemaError("Card template was not found.")
+        return template
+
+    def _get_nonarchived_card_template(self, card_template_id: UUID) -> CardTemplate:
+        template = self.session.get(CardTemplate, card_template_id)
+        if template is None or template.archived_at is not None:
             raise RegistrySchemaError("Card template was not found.")
         return template
 

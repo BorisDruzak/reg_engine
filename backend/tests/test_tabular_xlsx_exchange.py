@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import pytest
 from openpyxl import load_workbook
 from starlette.responses import Response
 
@@ -25,6 +26,58 @@ def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -
         "select",
         "multi_select",
     }
+
+
+def test_xlsx_configuration_rejects_an_inactive_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    expected_registry_id = registry_id
+    template = SimpleNamespace(
+        id=uuid4(),
+        registry_id=registry_id,
+        archived_at=None,
+        is_active=False,
+    )
+
+    class AllowCardsManage:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def has_permission(
+            self,
+            user_id: object,
+            permission_code: object,
+            *,
+            registry_id: object,
+        ) -> bool:
+            assert (user_id, permission_code, registry_id) == (
+                actor_user_id,
+                "cards.manage",
+                expected_registry_id,
+            )
+            return True
+
+    class TemplateSession:
+        def get(self, model: object, _model_id: object) -> object:
+            assert model is import_export.CardTemplate
+            return template
+
+    monkeypatch.setattr(import_export, "PermissionService", AllowCardsManage)
+    service = import_export.TabularCardExchangeService(TemplateSession())  # type: ignore[arg-type]
+
+    with pytest.raises(import_export.ImportExportServiceError, match="Шаблон карточки"):
+        service._configuration_for_actor(  # noqa: SLF001
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            card_template_id=template.id,
+            field_ids=[uuid4()],
+            organization_ids=[uuid4()],
+            include_organization_column=True,
+            fixed_organization_id=None,
+            require_fixed_organization=False,
+        )
 
 
 def test_tabular_xlsx_orders_fields_by_block_then_field_position() -> None:

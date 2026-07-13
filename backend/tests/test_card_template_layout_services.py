@@ -386,6 +386,71 @@ def test_get_active_card_template_uses_row_lock_for_update() -> None:
     assert statement.get_execution_options()["populate_existing"] is True  # type: ignore[attr-defined]
 
 
+def test_card_presentation_allows_a_nonarchived_inactive_template(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    card_id = uuid4()
+    registry_id = uuid4()
+    template = SimpleNamespace(
+        id=uuid4(),
+        registry_id=registry_id,
+        name="Inactive template",
+        archived_at=None,
+        is_active=False,
+    )
+    card = SimpleNamespace(
+        card_id=card_id,
+        card_template_id=template.id,
+        registry_id=registry_id,
+    )
+    registry = SimpleNamespace(id=registry_id, name="Registry", archived_at=None)
+
+    class SessionForPresentation:
+        def get(self, model: object, _model_id: object) -> object:
+            if model is layout_service.CardTemplate:
+                return template
+            if model is layout_service.Registry:
+                return registry
+            raise AssertionError(f"Unexpected model lookup: {model}")
+
+    class CardReader:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, **payload: object) -> object:
+            assert payload == {"actor_user_id": actor_user_id, "card_id": card_id}
+            return card
+
+    service = layout_service.CardTemplateLayoutService(cast(Session, SessionForPresentation()))
+    monkeypatch.setattr(layout_service, "CardService", CardReader)
+    monkeypatch.setattr(service, "_layout_read", lambda _template: "layout")
+    monkeypatch.setattr(layout_service, "CardPresentationRead", lambda **payload: payload)
+
+    result = service.read_card_presentation_for_actor(
+        actor_user_id=actor_user_id,
+        card_id=card_id,
+    )
+
+    assert result["card_template_id"] == template.id
+    assert result["layout"] == "layout"
+
+
+def test_empty_custom_template_structure_does_not_expand_to_registry_fields() -> None:
+    template = SimpleNamespace(registry_id=uuid4(), field_schema_json={"field_ids": []})
+
+    class FailingSession:
+        def scalars(self, _statement: object) -> object:
+            pytest.fail("Empty template must not load registry blocks or fields.")
+
+    service = layout_service.CardTemplateLayoutService(cast(Session, FailingSession()))
+
+    blocks, fields = service._template_structure(template)
+
+    assert blocks == []
+    assert fields == []
+
+
 def test_update_form_layout_saves_with_audit_after_lock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
