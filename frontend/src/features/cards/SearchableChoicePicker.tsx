@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 
 import { uiText } from "@/app/uiText";
 
@@ -30,6 +30,8 @@ export function SearchableChoicePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const listboxId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const usesListbox = mode === "single";
   const selectedIds = useMemo(
     () => new Set(Array.isArray(value) ? value : value ? [value] : []),
     [value],
@@ -45,10 +47,15 @@ export function SearchableChoicePicker({
   }, [options, search]);
   const triggerLabel = selectedOptions.length > 0 ? null : hint || uiText.empty;
 
-  function chooseSingle(nextValue: string) {
-    onChange(nextValue);
+  function closePopup(restoreFocus = false) {
     setIsOpen(false);
     setSearch("");
+    if (restoreFocus) triggerRef.current?.focus();
+  }
+
+  function chooseSingle(nextValue: string) {
+    onChange(nextValue);
+    closePopup();
   }
 
   function toggleMultiple(optionId: string) {
@@ -64,17 +71,18 @@ export function SearchableChoicePicker({
   return (
     <div className="searchable-choice-picker" role="group" aria-label={label}>
       <button
+        ref={triggerRef}
         type="button"
         className="searchable-choice-picker-trigger"
-        role="combobox"
+        role={usesListbox ? "combobox" : undefined}
         aria-controls={listboxId}
         aria-expanded={isOpen}
-        aria-haspopup="listbox"
+        aria-haspopup={usesListbox ? "listbox" : undefined}
         aria-label={label}
         disabled={disabled}
         onClick={() => setIsOpen((current) => !current)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setIsOpen(false);
+          if (event.key === "Escape") closePopup();
         }}
       >
         {triggerLabel ? (
@@ -91,6 +99,12 @@ export function SearchableChoicePicker({
             className="searchable-choice-picker-search"
             disabled={disabled}
             onChange={(event) => setSearch(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closePopup(true);
+              }
+            }}
             placeholder={uiText.searchChoicePlaceholder}
             type="search"
             value={search}
@@ -98,7 +112,8 @@ export function SearchableChoicePicker({
           <div
             id={listboxId}
             className="searchable-choice-picker-options"
-            role="listbox"
+            data-testid="searchable-choice-options"
+            role={usesListbox ? "listbox" : "group"}
             aria-label={label}
           >
             {mode === "single" ? (
@@ -122,8 +137,6 @@ export function SearchableChoicePicker({
                 return (
                   <label
                     key={option.id}
-                    role="option"
-                    aria-selected={selectedIds.has(option.id)}
                     className={optionClassName(
                       isDepartment,
                       option.archived,

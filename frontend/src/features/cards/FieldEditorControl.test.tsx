@@ -82,7 +82,29 @@ describe("FieldEditorControl hints", () => {
     expect(screen.queryByRole("listbox", { name: "Статус" })).not.toBeInTheDocument();
   });
 
-  test("toggles multiple controlled choices and renders selected chips", async () => {
+  test("closes the choice popup when Escape is pressed in its search field", async () => {
+    const user = userEvent.setup();
+    render(
+      <FieldEditorControl
+        fieldType="select"
+        label="Статус"
+        options={options}
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByRole("combobox", { name: "Статус" });
+    await user.click(trigger);
+    expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("searchbox", { name: "Поиск варианта" })).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("toggles multiple controlled choices by keyboard and renders selected chips", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -90,18 +112,19 @@ describe("FieldEditorControl hints", () => {
         fieldType="multi_select"
         label="Категории"
         options={options}
-        value={["one"]}
+        value={[]}
         onChange={onChange}
       />,
     );
 
-    await user.click(screen.getByRole("combobox", { name: "Категории" }));
-    expect(screen.getByRole("checkbox", { name: "Первый" })).toBeChecked();
-    await user.click(screen.getByRole("checkbox", { name: "Второй" }));
+    await user.click(screen.getByRole("button", { name: "Категории" }));
+    expect(screen.getByTestId("searchable-choice-options")).toHaveAttribute("role", "group");
+    await user.tab();
+    expect(screen.getByRole("checkbox", { name: "Первый" })).toHaveFocus();
+    await user.keyboard(" ");
 
-    expect(onChange).toHaveBeenCalledWith(["one", "two"]);
-    expect(screen.getByRole("listbox", { name: "Категории" })).toBeInTheDocument();
-    expect(screen.getByTestId("searchable-choice-chips")).toHaveTextContent("Первый");
+    expect(onChange).toHaveBeenCalledWith(["one"]);
+    expect(screen.getByTestId("searchable-choice-options")).toBeInTheDocument();
   });
 
   test.each(["multi_select", "date", "bool"])(

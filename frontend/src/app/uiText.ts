@@ -151,8 +151,6 @@ export const uiText = {
   organizationUnit: "Подразделение",
   organizationUnitTree: "Дерево подразделений",
   organizationUnitName: "Название подразделения",
-  searchOrganizationUnit: "Поиск подразделения",
-  searchOrganizationUnitPlaceholder: "Поиск по управлению или отделу",
   searchChoice: "Поиск варианта",
   searchChoicePlaceholder: "Введите часть названия",
   nothingFound: "Ничего не найдено",

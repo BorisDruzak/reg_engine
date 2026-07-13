@@ -2490,56 +2490,6 @@ tr:last-child td {
   overflow-wrap: anywhere;
 }
 
-.organization-unit-picker {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.organization-unit-picker-options {
-  display: grid;
-  max-height: 260px;
-  gap: 4px;
-  overflow: auto;
-  padding: 4px;
-  border: 1px solid #d6dde8;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.organization-unit-picker-option {
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: #0f172a;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.organization-unit-picker-option:hover:not(:disabled) {
-  border-color: #99d6cf;
-  background: #f0fdfa;
-}
-
-.organization-unit-picker-option.is-department {
-  padding-left: 28px;
-}
-
-.organization-unit-picker-option.is-selected {
-  border-color: #0f766e;
-  background: #ecfdf5;
-  box-shadow: inset 3px 0 0 #0f766e;
-}
-
-.organization-unit-picker-option:disabled {
-  color: #667085;
-  cursor: not-allowed;
-  text-decoration: line-through;
-}
-
 .searchable-choice-picker {
   display: grid;
   gap: 8px;
