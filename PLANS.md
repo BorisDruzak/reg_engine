@@ -5059,3 +5059,13 @@ Status: implementation complete locally; deployment and Browser acceptance pendi
 - `Подразделение организации` is a keyboard-safe searchable hierarchy picker
   in administrator and public cards. It uses only card-scoped safe options and
   keeps archived history disabled.
+
+#### Searchable controlled fields and simplified unit actions
+
+Status: implementation complete locally; release verification in progress.
+
+- All controlled card choices use a searchable popup; single selects close on
+  selection and multi-select choices remain checkable with chips. Free text
+  is never stored as a controlled value.
+- Organization unit cards expose standalone department creation; management
+  rows expand directly, and unit technical codes remain hidden.

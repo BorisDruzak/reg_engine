@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-13 16:12:59 +05:00
+- Generated: 2026-07-13 21:56:58 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -238,6 +238,7 @@
 - `docs/superpowers/plans/2026-07-13-card-template-lifecycle-and-creation-links.md`
 - `docs/superpowers/plans/2026-07-13-organization-cards-and-unit-picker.md`
 - `docs/superpowers/plans/2026-07-13-organization-unit-hierarchy.md`
+- `docs/superpowers/plans/2026-07-13-searchable-choice-fields-and-unit-tree.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -261,6 +262,7 @@
 - `docs/superpowers/specs/2026-07-13-card-template-lifecycle-and-creation-links-design.md`
 - `docs/superpowers/specs/2026-07-13-organization-cards-and-unit-picker-design.md`
 - `docs/superpowers/specs/2026-07-13-organization-unit-hierarchy-design.md`
+- `docs/superpowers/specs/2026-07-13-searchable-choice-fields-and-unit-tree-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -332,12 +334,12 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
-- `frontend/src/features/cards/OrganizationUnitPicker.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.test.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.tsx`
 - `frontend/src/features/cards/publicLinkSchema.ts`
+- `frontend/src/features/cards/SearchableChoicePicker.tsx`
 - `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.test.tsx`
