@@ -13,6 +13,8 @@ import {
 } from "@/components/common/AdminMutation";
 import { Panel } from "@/components/common/DataSurfaces";
 
+import { OrganizationUnitsPanel } from "./OrganizationUnitsPanel";
+
 type OrganizationFormState = {
   mode: "create" | "edit";
   organizationId: string | null;
@@ -35,6 +37,7 @@ export function OrganizationsTable({
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<OrganizationFormState | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<OrganizationRead | null>(null);
+  const [selectedOrganization, setSelectedOrganization] = useState<OrganizationRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createMutation = useMutation({
@@ -229,9 +232,17 @@ export function OrganizationsTable({
           nodes={organizationTree}
           onEditOrganization={openEditForm}
           onArchiveOrganization={handleArchive}
+          onManageOrganizationUnits={setSelectedOrganization}
         />
       ) : (
         <p className="data-empty">{uiText.noData}</p>
+      )}
+      {selectedOrganization && (
+        <OrganizationUnitsPanel
+          organization={selectedOrganization}
+          token={token}
+          onClose={() => setSelectedOrganization(null)}
+        />
       )}
     </Panel>
   );
@@ -241,10 +252,12 @@ function OrganizationTree({
   nodes,
   onEditOrganization,
   onArchiveOrganization,
+  onManageOrganizationUnits,
 }: {
   nodes: OrganizationTreeNodeRead[];
   onEditOrganization: (organization: OrganizationRead) => void;
   onArchiveOrganization: (organization: OrganizationRead) => void;
+  onManageOrganizationUnits: (organization: OrganizationRead) => void;
 }) {
   return (
     <ul className="organization-tree" role="tree" aria-label={uiText.organizationTree}>
@@ -255,6 +268,7 @@ function OrganizationTree({
           level={1}
           onEditOrganization={onEditOrganization}
           onArchiveOrganization={onArchiveOrganization}
+          onManageOrganizationUnits={onManageOrganizationUnits}
         />
       ))}
     </ul>
@@ -266,11 +280,13 @@ function OrganizationTreeNode({
   level,
   onEditOrganization,
   onArchiveOrganization,
+  onManageOrganizationUnits,
 }: {
   node: OrganizationTreeNodeRead;
   level: number;
   onEditOrganization: (organization: OrganizationRead) => void;
   onArchiveOrganization: (organization: OrganizationRead) => void;
+  onManageOrganizationUnits: (organization: OrganizationRead) => void;
 }) {
   return (
     <li className="organization-tree-node">
@@ -289,6 +305,14 @@ function OrganizationTreeNode({
         </div>
         <span className="organization-tree-status">{activityLabel(node.is_active)}</span>
         <div className="row-actions">
+          <button
+            type="button"
+            className="ghost-button"
+            aria-label={`${uiText.organizationUnits} ${node.name}`}
+            onClick={() => onManageOrganizationUnits(node)}
+          >
+            {uiText.organizationUnits}
+          </button>
           <button
             type="button"
             className="ghost-button"
@@ -316,6 +340,7 @@ function OrganizationTreeNode({
               level={level + 1}
               onEditOrganization={onEditOrganization}
               onArchiveOrganization={onArchiveOrganization}
+              onManageOrganizationUnits={onManageOrganizationUnits}
             />
           ))}
         </ul>

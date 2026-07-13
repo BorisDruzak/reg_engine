@@ -147,6 +147,24 @@ export const uiText = {
   organizationUpdated: "Организация обновлена",
   organizationArchived: "Организация архивирована",
   organizationTree: "Дерево организаций",
+  organizationUnits: "Подразделения",
+  organizationUnit: "Подразделение",
+  organizationUnitTree: "Дерево подразделений",
+  organizationUnitName: "Название подразделения",
+  addManagement: "Добавить управление",
+  addDepartment: "Добавить отдел",
+  management: "Управление",
+  department: "Отдел",
+  parentManagement: "Родительское управление",
+  noParentManagement: "Без родительского управления",
+  editOrganizationUnit: "Редактировать подразделение",
+  archiveOrganizationUnit: "Архивировать подразделение",
+  organizationUnitCreated: "Подразделение создано",
+  organizationUnitUpdated: "Подразделение обновлено",
+  organizationUnitArchived: "Подразделение архивировано",
+  archiveManagementChildren: "Вместе с управлением будут архивированы активные отделы:",
+  archiveOrganizationUnitConfirmation: "Подразделение будет перенесено в архив.",
+  close: "Закрыть",
   login: "Логин",
   displayName: "Имя",
   code: "Код",
@@ -319,6 +337,7 @@ export const uiText = {
   referenceFieldValueInvalid: "Ссылочное поле должно содержать выбранный объект или быть пустым.",
   requiredFields: "Заполните обязательные поля",
   noData: "Нет данных",
+  loading: "Загрузка...",
   invalidEmailOrPassword: "Неверный логин или пароль.",
   bearerTokenRequired: "Нужен действующий сеанс. Войдите снова.",
   bearerTokenExpired: "Срок действия сеанса истек. Войдите снова.",
@@ -457,6 +476,10 @@ export const uiText = {
   scannerDeferred: "Проверка отложена",
   noDocumentTemplates: "Нет доступных шаблонов",
 } as const;
+
+export function organizationUnitsTitle(organizationName: string) {
+  return `${uiText.organizationUnits}: ${organizationName}`;
+}
 
 const sectionLabels = {
   overview: uiText.overview,

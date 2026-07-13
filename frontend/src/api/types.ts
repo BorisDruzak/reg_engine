@@ -52,13 +52,15 @@ export type OrganizationUpdatePayload = {
   organization_type?: string | null;
 };
 
+export type OrgUnitType = "management" | "department";
+
 export type OrgUnitRead = {
   id: string;
   organization_id: string;
   parent_id: string | null;
   code: string;
   name: string;
-  type: string | null;
+  type: string;
   is_active: boolean;
 };
 
@@ -70,12 +72,11 @@ export type OrgUnitCreatePayload = {
   code: string;
   name: string;
   parent_id?: string | null;
-  unit_type?: string | null;
+  unit_type: OrgUnitType;
 };
 
 export type OrgUnitUpdatePayload = {
   name?: string | null;
-  unit_type?: string | null;
 };
 
 export type RegistryRead = {

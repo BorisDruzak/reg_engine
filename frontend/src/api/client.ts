@@ -171,7 +171,10 @@ export async function archiveOrganization(token: string, organizationId: string)
   });
 }
 
-export async function listOrgUnits(token: string, organizationId: string) {
+export async function listOrgUnits(
+  token: string,
+  organizationId: string,
+): Promise<OrgUnitListRead> {
   return apiRequest<OrgUnitListRead>(`/api/v1/organizations/${organizationId}/org-units`, {
     token,
   });
@@ -181,7 +184,7 @@ export async function createOrgUnit(
   token: string,
   organizationId: string,
   payload: OrgUnitCreatePayload,
-) {
+): Promise<OrgUnitRead> {
   return apiRequest<OrgUnitRead>(`/api/v1/organizations/${organizationId}/org-units`, {
     method: "POST",
     token,
@@ -189,7 +192,7 @@ export async function createOrgUnit(
   });
 }
 
-export async function readOrgUnit(token: string, orgUnitId: string) {
+export async function readOrgUnit(token: string, orgUnitId: string): Promise<OrgUnitRead> {
   return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, { token });
 }
 
@@ -197,7 +200,7 @@ export async function updateOrgUnit(
   token: string,
   orgUnitId: string,
   payload: OrgUnitUpdatePayload,
-) {
+): Promise<OrgUnitRead> {
   return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, {
     method: "PATCH",
     token,
@@ -205,7 +208,7 @@ export async function updateOrgUnit(
   });
 }
 
-export async function archiveOrgUnit(token: string, orgUnitId: string) {
+export async function archiveOrgUnit(token: string, orgUnitId: string): Promise<OrgUnitRead> {
   return apiRequest<OrgUnitRead>(`/api/v1/org-units/${orgUnitId}`, {
     method: "DELETE",
     token,
