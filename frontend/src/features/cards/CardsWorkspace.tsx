@@ -113,6 +113,7 @@ export function CardsWorkspace({
   onCardTemplateIdsChange,
   onCardFieldFiltersChange,
   onIncludeArchivedCardsChange,
+  onOpenCreatedCard,
 }: {
   cards: CardSummaryRead[];
   card: CardRead | null;
@@ -133,6 +134,7 @@ export function CardsWorkspace({
   onCardTemplateIdsChange: (value: string[]) => void;
   onCardFieldFiltersChange: (value: CardFieldFilterPayload[]) => void;
   onIncludeArchivedCardsChange: (value: boolean) => void;
+  onOpenCreatedCard: (cardId: string) => Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
@@ -487,7 +489,7 @@ export function CardsWorkspace({
   }
 
   async function openCreatedCardEditor(cardId: string) {
-    await queryClient.invalidateQueries({ queryKey: ["organization-cards", token] });
+    await onOpenCreatedCard(cardId);
     openCardEditor(cardId);
   }
 

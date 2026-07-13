@@ -278,6 +278,57 @@ export function HomePage() {
     setSelectedCardId(null);
   }
 
+  async function handleOpenCreatedCard(cardId: string) {
+    const broadOrganizationId =
+      organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
+      organizationsQuery.data?.items[0]?.id ??
+      "";
+    const includeDescendantOrganizations = true;
+
+    setWorkspaceUiState((current) => ({
+      ...current,
+      selectedCardId: cardId,
+      cardSearch: "",
+      cardOrganizationIds: [],
+      cardIncludeDescendantOrganizations: includeDescendantOrganizations,
+      cardTemplateIds: [],
+      cardFieldFilters: [],
+      includeArchivedCards: false,
+    }));
+
+    if (!token || !broadOrganizationId) {
+      return;
+    }
+
+    const broadCardQueryKey = [
+      "organization-cards",
+      token,
+      broadOrganizationId,
+      "",
+      includeDescendantOrganizations,
+      false,
+      "",
+      "",
+      "[]",
+    ];
+    await queryClient.invalidateQueries({
+      queryKey: broadCardQueryKey,
+      exact: true,
+      refetchType: "none",
+    });
+    await queryClient.fetchQuery({
+      queryKey: broadCardQueryKey,
+      queryFn: () =>
+        listOrganizationCards(token, broadOrganizationId, {
+          organizationIds: [],
+          includeDescendantOrganizations,
+          includeArchive: false,
+          cardTemplateIds: [],
+          fieldFilters: [],
+        }),
+    });
+  }
+
   if (!session) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -412,6 +463,7 @@ export function HomePage() {
             onCardTemplateIdsChange={handleCardTemplateIdsChange}
             onCardFieldFiltersChange={handleCardFieldFiltersChange}
             onIncludeArchivedCardsChange={handleIncludeArchivedCardsChange}
+            onOpenCreatedCard={handleOpenCreatedCard}
           />
         )}
         {activeSection === "users" && (
