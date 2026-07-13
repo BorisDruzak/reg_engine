@@ -2007,7 +2007,38 @@ class CardService:
             )
             label = f"{parent.name} → {org_unit.name}" if parent is not None else org_unit.name
             options.append(CardFieldOptionRead(id=org_unit.id, label=label, archived=True))
-        return options
+        return self._disambiguate_org_unit_option_labels(
+            options=options,
+            org_units_by_id=org_units_by_id,
+        )
+
+    def _disambiguate_org_unit_option_labels(
+        self,
+        *,
+        options: Sequence[CardFieldOptionRead],
+        org_units_by_id: dict[UUID, OrgUnit],
+    ) -> list[CardFieldOptionRead]:
+        label_counts: dict[str, int] = {}
+        for option in options:
+            label_counts[option.label] = label_counts.get(option.label, 0) + 1
+
+        result: list[CardFieldOptionRead] = []
+        for option in options:
+            if label_counts[option.label] == 1:
+                result.append(option)
+                continue
+            org_unit = org_units_by_id.get(option.id)
+            type_marker = (
+                "Управление" if org_unit is None or org_unit.type == "management" else "Отдел"
+            )
+            result.append(
+                CardFieldOptionRead(
+                    id=option.id,
+                    label=f"{option.label} ({type_marker})",
+                    archived=option.archived,
+                )
+            )
+        return result
 
     def _validate_org_unit_for_organization(
         self,

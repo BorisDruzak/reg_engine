@@ -1,8 +1,9 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 from app.api.v1.endpoints._field_values import coerce_api_field_value
 from app.models import FormField
-from app.services.cards import CardService
+from app.services.cards import CardFieldOptionRead, CardService
 
 
 class _FieldSession:
@@ -89,3 +90,30 @@ def test_org_unit_reference_coercion_receives_card_organization(
         "target_org_unit_id": org_unit_id,
         "expected_organization_id": card_organization_id,
     }
+
+
+def test_org_unit_option_labels_add_type_markers_only_when_labels_collide() -> None:
+    service = CardService(session=None)  # type: ignore[arg-type]
+    management_id = uuid4()
+    department_id = uuid4()
+    standalone_id = uuid4()
+    options = [
+        CardFieldOptionRead(id=management_id, label="Management → Department"),
+        CardFieldOptionRead(id=department_id, label="Management → Department"),
+        CardFieldOptionRead(id=standalone_id, label="Standalone management"),
+    ]
+
+    result = service._disambiguate_org_unit_option_labels(
+        options=options,
+        org_units_by_id={
+            management_id: SimpleNamespace(type="management"),
+            department_id: SimpleNamespace(type="department"),
+            standalone_id: SimpleNamespace(type="management"),
+        },
+    )
+
+    assert [option.label for option in result] == [
+        "Management → Department (Управление)",
+        "Management → Department (Отдел)",
+        "Standalone management",
+    ]

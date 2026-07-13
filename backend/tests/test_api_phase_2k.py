@@ -274,6 +274,240 @@ def test_phase_2k_bulk_card_values_route_is_registered_without_database() -> Non
     assert "patch" in paths["/api/v1/cards/{card_id}/values"]
 
 
+def _create_org_unit_reference_api_setup(
+    api_client: TestClient,
+    db_session: Session,
+) -> dict[str, Any]:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-org-unit-field-system@example.test",
+        is_superuser=True,
+    )
+    denied_actor = _create_user(db_session, "phase2k-org-unit-field-denied@example.test")
+    root = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-org-unit-field-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    card_organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {
+            "parent_id": root["id"],
+            "code": "phase2k-org-unit-field-card-org",
+            "name": "Card organization",
+        },
+        actor_id=system_admin.id,
+    )
+    foreign_organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {
+            "parent_id": root["id"],
+            "code": "phase2k-org-unit-field-foreign-org",
+            "name": "Foreign organization",
+        },
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-org-unit-field-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    org_unit_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "org_unit", "label": "Organization unit", "field_type": "org_unit_ref"},
+        actor_id=system_admin.id,
+    )
+    text_field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {"code": "note", "label": "Note", "field_type": "text"},
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": card_organization["id"], "display_name": "Organization unit card"},
+        actor_id=system_admin.id,
+    )
+    active_management = _post_json(
+        api_client,
+        f"/api/v1/organizations/{card_organization['id']}/org-units",
+        {"code": "management", "name": "Management", "unit_type": "management"},
+        actor_id=system_admin.id,
+    )
+    active_department = _post_json(
+        api_client,
+        f"/api/v1/organizations/{card_organization['id']}/org-units",
+        {
+            "parent_id": active_management["id"],
+            "code": "department",
+            "name": "Department",
+            "unit_type": "department",
+        },
+        actor_id=system_admin.id,
+    )
+    archived_management = _post_json(
+        api_client,
+        f"/api/v1/organizations/{card_organization['id']}/org-units",
+        {
+            "code": "archived-management",
+            "name": "Archived management",
+            "unit_type": "management",
+        },
+        actor_id=system_admin.id,
+    )
+    foreign_management = _post_json(
+        api_client,
+        f"/api/v1/organizations/{foreign_organization['id']}/org-units",
+        {
+            "code": "foreign-management",
+            "name": "Foreign management",
+            "unit_type": "management",
+        },
+        actor_id=system_admin.id,
+    )
+    _request_json(
+        api_client,
+        "PATCH",
+        f"/api/v1/cards/{card['id']}/fields/{org_unit_field['id']}",
+        actor_id=system_admin.id,
+        payload={"value": archived_management["id"]},
+    )
+    _request_json(
+        api_client,
+        "DELETE",
+        f"/api/v1/org-units/{archived_management['id']}",
+        actor_id=system_admin.id,
+    )
+    public_link = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/public-links",
+        {},
+        actor_id=system_admin.id,
+    )
+    return {
+        "system_admin": system_admin,
+        "denied_actor": denied_actor,
+        "card": card,
+        "org_unit_field": org_unit_field,
+        "text_field": text_field,
+        "active_management": active_management,
+        "active_department": active_department,
+        "archived_management": archived_management,
+        "foreign_management": foreign_management,
+        "public_link": public_link,
+    }
+
+
+def test_card_org_unit_options_api_scopes_payload_and_enforces_access(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    setup = _create_org_unit_reference_api_setup(api_client, db_session)
+
+    response = api_client.get(
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['org_unit_field']['id']}/org-unit-options",
+        headers=_actor_headers(setup["system_admin"].id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "items": [
+            {"id": setup["active_management"]["id"], "label": "Management", "archived": False},
+            {
+                "id": setup["active_department"]["id"],
+                "label": "Management → Department",
+                "archived": False,
+            },
+            {
+                "id": setup["archived_management"]["id"],
+                "label": "Archived management",
+                "archived": True,
+            },
+        ]
+    }
+    denied_response = api_client.get(
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['org_unit_field']['id']}/org-unit-options",
+        headers=_actor_headers(setup["denied_actor"].id),
+    )
+    assert denied_response.status_code == 403, denied_response.text
+    unsupported_response = api_client.get(
+        f"/api/v1/cards/{setup['card']['id']}/fields/{setup['text_field']['id']}/org-unit-options",
+        headers=_actor_headers(setup["system_admin"].id),
+    )
+    assert unsupported_response.status_code == 400, unsupported_response.text
+
+
+def test_public_org_unit_preview_and_edit_are_scoped_to_card_organization(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    setup = _create_org_unit_reference_api_setup(api_client, db_session)
+
+    preview_response = api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": setup["public_link"]["raw_token"]},
+    )
+
+    assert preview_response.status_code == 200, preview_response.text
+    preview_field = next(
+        field
+        for block in preview_response.json()["blocks"]
+        for instance in block["instances"]
+        for field in instance["fields"]
+        if field["field_id"] == setup["org_unit_field"]["id"]
+    )
+    assert preview_field["options"] == [
+        {
+            "id": setup["active_management"]["id"],
+            "code": "",
+            "label": "Management",
+            "archived": False,
+        },
+        {
+            "id": setup["active_department"]["id"],
+            "code": "",
+            "label": "Management → Department",
+            "archived": False,
+        },
+        {
+            "id": setup["archived_management"]["id"],
+            "code": "",
+            "label": "Archived management",
+            "archived": True,
+        },
+    ]
+    foreign_edit = api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": setup["public_link"]["raw_token"],
+            "field_id": setup["org_unit_field"]["id"],
+            "value": setup["foreign_management"]["id"],
+        },
+    )
+    assert foreign_edit.status_code == 400, foreign_edit.text
+    archived_edit = api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": setup["public_link"]["raw_token"],
+            "field_id": setup["org_unit_field"]["id"],
+            "value": setup["archived_management"]["id"],
+        },
+    )
+    assert archived_edit.status_code == 400, archived_edit.text
+
+
 def test_system_admin_can_manage_org_units(
     api_client: TestClient,
     db_session: Session,

@@ -1995,6 +1995,23 @@ def test_org_unit_field_values_are_scoped_to_card_organization_and_keep_saved_ar
         (historical_management.id, "Historical management", True),
     ]
 
+    colliding_management = organization_service.create_org_unit(
+        organization_id=context["child"].id,
+        code="management-department-label",
+        name="Management → Department",
+        unit_type="management",
+        created_by=context["system_admin"].id,
+    )
+    collision_options = card_service.list_org_unit_options_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+    )
+    collision_labels_by_id = {option.id: option.label for option in collision_options}
+
+    assert collision_labels_by_id[colliding_management.id] == "Management → Department (Управление)"
+    assert collision_labels_by_id[active_department.id] == "Management → Department (Отдел)"
+
 
 def test_old_cards_show_new_fields_as_null_without_mass_value_rows(
     db_session: Session,
