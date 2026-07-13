@@ -28,7 +28,12 @@ const school: OrganizationRead = {
 const organizationTree: OrganizationTreeNodeRead[] = [
   {
     ...administration,
-    children: [],
+    children: [
+      {
+        ...school,
+        children: [],
+      },
+    ],
   },
 ];
 
@@ -88,6 +93,71 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("opens only the clicked organization card, including for child organizations", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  expect(
+    await screen.findByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: `Подразделения: ${school.name}` }),
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("treeitem", { name: school.name }));
+  expect(
+    await screen.findByRole("heading", { name: `Подразделения: ${school.name}` }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: `Подразделения: ${administration.name}` }),
+  ).not.toBeInTheDocument();
+});
+
+test("edits an organization name without technical details or row actions", async () => {
+  const user = userEvent.setup();
+  renderOrganizations();
+
+  expect(screen.queryByText(/Технический код/)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: `Подразделения ${administration.name}` }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: `Редактировать ${administration.name}` }),
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: administration.name }));
+
+  expect(screen.getByLabelText("Название")).toHaveValue(administration.name);
+  expect(screen.getByRole("button", { name: "Сохранить" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Отмена" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "В архив" })).toBeVisible();
+});
+
+test("creates a child organization from its inline card with the current parent", async () => {
+  const user = userEvent.setup();
+  const fetchMock = stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  await screen.findByRole("heading", { name: `Подразделения: ${administration.name}` });
+  await user.click(screen.getByRole("button", { name: "Добавить подведомственную организацию" }));
+  await user.type(screen.getByLabelText("Название"), "Школа 2");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  await waitFor(() => {
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) => String(input).endsWith("/api/v1/organizations") && init?.method === "POST",
+    );
+    expect(createCall).toBeTruthy();
+    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({
+      name: "Школа 2",
+      parent_id: administration.id,
+    });
+  });
+});
+
 test("manages a separate management and department tree for one organization", async () => {
   const user = userEvent.setup();
   stubOrgUnitApi({
@@ -106,7 +176,7 @@ test("manages a separate management and department tree for one organization", a
   });
   renderOrganizations();
 
-  await user.click(screen.getByRole("button", { name: "Подразделения Администрация" }));
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
 
   expect(
     await screen.findByRole("heading", { name: "Подразделения: Администрация" }),
@@ -115,7 +185,6 @@ test("manages a separate management and department tree for one organization", a
   expect(screen.getByText("Отдел дошкольного образования")).toBeVisible();
   expect(screen.getByText("Отдел бухгалтерии")).toBeVisible();
   expect(screen.queryByText("Чужое управление")).not.toBeInTheDocument();
-  expect(screen.queryByText("Школа 1")).not.toBeInTheDocument();
 });
 
 test("creates a management as a root unit", async () => {
@@ -123,7 +192,7 @@ test("creates a management as a root unit", async () => {
   const fetchMock = stubOrgUnitApi();
   renderOrganizations();
 
-  await user.click(screen.getByRole("button", { name: "Подразделения Администрация" }));
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
   await screen.findByRole("heading", { name: "Подразделения: Администрация" });
   await user.click(screen.getByRole("button", { name: "Добавить управление" }));
   await user.type(screen.getByLabelText("Название подразделения"), "Управление культуры");
@@ -157,7 +226,7 @@ test("offers active managements of the selected organization as department paren
   });
   renderOrganizations();
 
-  await user.click(screen.getByRole("button", { name: "Подразделения Администрация" }));
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
   await screen.findByRole("heading", { name: "Подразделения: Администрация" });
   await user.click(screen.getByRole("button", { name: "Добавить отдел" }));
 
@@ -172,7 +241,7 @@ test("names active child departments before archiving a management", async () =>
   stubOrgUnitApi();
   renderOrganizations();
 
-  await user.click(screen.getByRole("button", { name: "Подразделения Администрация" }));
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
   await screen.findByRole("heading", { name: "Подразделения: Администрация" });
   await user.click(
     screen.getByRole("button", { name: "Архивировать подразделение Управление образования" }),
@@ -217,6 +286,13 @@ function stubOrgUnitApi(unitOverrides: Record<string, OrgUnitRead[]> = {}) {
         organization_id: organizationMatch[1],
         is_active: true,
         ...payload,
+      });
+    }
+    if (url.endsWith("/organizations") && init?.method === "POST") {
+      return Response.json({
+        id: "organization-created",
+        is_active: true,
+        ...JSON.parse(String(init.body)),
       });
     }
     return Response.json({ detail: "Not Found" }, { status: 404 });

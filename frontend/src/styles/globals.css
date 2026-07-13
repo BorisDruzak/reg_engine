@@ -594,41 +594,78 @@ tr:last-child td {
 
 .organization-tree-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
   padding-left: calc(14px + (var(--tree-level, 0) * 24px));
   border-bottom: 1px solid #edf0f4;
   background: #ffffff;
+  cursor: pointer;
 }
 
-.organization-tree-main {
+.organization-tree-name {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  color: #101828;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.organization-tree-name:hover,
+.organization-tree-name:focus-visible {
+  color: #175cd3;
+  text-decoration: underline;
+}
+
+.organization-inline-name-form {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 8px 12px;
   min-width: 0;
 }
 
-.organization-tree-main strong {
-  color: #101828;
-  font-size: 0.9rem;
-  line-height: 1.35;
-  overflow-wrap: break-word;
-  word-break: normal;
+.organization-inline-name-form label {
+  display: grid;
+  gap: 4px;
+  color: #475467;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
-.organization-tree-main span,
-.organization-tree-status {
-  color: #667085;
-  font-size: 0.8rem;
-  line-height: 1.35;
-  overflow-wrap: break-word;
-  word-break: normal;
+.organization-inline-name-actions,
+.organization-inline-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .organization-tree-status {
   justify-self: start;
   white-space: nowrap;
+}
+
+.organization-inline-card {
+  margin: 0;
+  padding: 12px 14px 14px calc(14px + (var(--tree-level, 0) * 24px));
+  border-bottom: 1px solid #edf0f4;
+  background: #f8fbff;
+}
+
+.organization-inline-card-actions {
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.organization-inline-card .organization-units-panel {
+  margin-top: 0;
 }
 
 .organization-units-panel {
@@ -5330,6 +5367,15 @@ tr:last-child td {
   .organization-tree-row {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
+  }
+
+  .organization-inline-name-form {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .organization-inline-card-actions {
+    justify-content: flex-start;
   }
 
   .organization-unit-row {

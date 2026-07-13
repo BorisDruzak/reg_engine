@@ -21,6 +21,7 @@ type OrganizationFormState = {
   code: string;
   name: string;
   parentId: string;
+  parentLocked: boolean;
 };
 
 const defaultOrganizationType = "organization";
@@ -37,7 +38,7 @@ export function OrganizationsTable({
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<OrganizationFormState | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<OrganizationRead | null>(null);
-  const [selectedOrganization, setSelectedOrganization] = useState<OrganizationRead | null>(null);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createMutation = useMutation({
@@ -69,6 +70,8 @@ export function OrganizationsTable({
     mutationFn: (organizationId: string) => archiveOrganization(token, organizationId),
     onSuccess: async () => {
       setArchiveTarget(null);
+      setFormState(null);
+      setSelectedOrganizationId(null);
       setSuccessMessage(uiText.organizationArchived);
       await invalidateOrganizationData(queryClient, token);
     },
@@ -85,7 +88,7 @@ export function OrganizationsTable({
     (organization) => organization.is_active && organization.id !== formState?.organizationId,
   );
 
-  function openCreateForm() {
+  function openCreateForm(parentId?: string) {
     setLocalError(null);
     setSuccessMessage(null);
     setFormState({
@@ -93,7 +96,8 @@ export function OrganizationsTable({
       organizationId: null,
       code: "",
       name: "",
-      parentId: defaultCreateParentId(organizations, rootOrganizationExists),
+      parentId: parentId ?? defaultCreateParentId(organizations, rootOrganizationExists),
+      parentLocked: parentId !== undefined,
     });
   }
 
@@ -106,6 +110,7 @@ export function OrganizationsTable({
       code: organization.code,
       name: organization.name,
       parentId: organization.parent_id ?? "",
+      parentLocked: false,
     });
   }
 
@@ -159,10 +164,16 @@ export function OrganizationsTable({
     setArchiveTarget(organization);
   }
 
+  function toggleOrganizationCard(organization: OrganizationRead) {
+    setSelectedOrganizationId((currentId) =>
+      currentId === organization.id ? null : organization.id,
+    );
+  }
+
   return (
     <Panel title={uiText.organizations}>
       <div className="panel-toolbar">
-        <button type="button" className="primary-button" onClick={openCreateForm}>
+        <button type="button" className="primary-button" onClick={() => openCreateForm()}>
           {uiText.createOrganization}
         </button>
       </div>
@@ -172,13 +183,11 @@ export function OrganizationsTable({
           successMessage={successMessage}
         />
       </div>
-      {formState && (
+      {formState?.mode === "create" && (
         <div className="panel-form">
           <AdminMutationForm
-            title={
-              formState.mode === "create" ? uiText.createOrganization : uiText.editOrganization
-            }
-            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
+            title={uiText.createOrganization}
+            submitLabel={uiText.create}
             isSubmitting={isFormSubmitting}
             error={mutationError}
             successMessage={null}
@@ -186,7 +195,7 @@ export function OrganizationsTable({
             onSubmit={handleFormSubmit}
           >
             <label>
-              {uiText.organizationName} организации
+              {uiText.organizationName}
               <input
                 value={formState.name}
                 onChange={(event) =>
@@ -198,12 +207,12 @@ export function OrganizationsTable({
               {uiText.parentOrganization}
               <select
                 value={formState.parentId}
-                disabled={formState.mode === "edit"}
+                disabled={formState.parentLocked}
                 onChange={(event) =>
                   setFormState({ ...formState, parentId: event.currentTarget.value })
                 }
               >
-                {(formState.mode === "edit" || canCreateRootOrganization) && (
+                {canCreateRootOrganization && (
                   <option value="">{uiText.noParentOrganization}</option>
                 )}
                 {parentOptions.map((organization) => (
@@ -230,19 +239,21 @@ export function OrganizationsTable({
       {organizationTree.length > 0 ? (
         <OrganizationTree
           nodes={organizationTree}
+          formState={formState?.mode === "edit" ? formState : null}
+          selectedOrganizationId={selectedOrganizationId}
+          token={token}
           onEditOrganization={openEditForm}
           onArchiveOrganization={handleArchive}
-          onManageOrganizationUnits={setSelectedOrganization}
+          onCancelEdit={closeForm}
+          onChangeEditName={(name) =>
+            setFormState((current) => (current ? { ...current, name } : current))
+          }
+          onCreateChildOrganization={(organization) => openCreateForm(organization.id)}
+          onSubmitEdit={handleFormSubmit}
+          onToggleOrganizationCard={toggleOrganizationCard}
         />
       ) : (
         <p className="data-empty">{uiText.noData}</p>
-      )}
-      {selectedOrganization && (
-        <OrganizationUnitsPanel
-          organization={selectedOrganization}
-          token={token}
-          onClose={() => setSelectedOrganization(null)}
-        />
       )}
     </Panel>
   );
@@ -250,14 +261,28 @@ export function OrganizationsTable({
 
 function OrganizationTree({
   nodes,
+  formState,
+  selectedOrganizationId,
+  token,
   onEditOrganization,
   onArchiveOrganization,
-  onManageOrganizationUnits,
+  onCancelEdit,
+  onChangeEditName,
+  onCreateChildOrganization,
+  onSubmitEdit,
+  onToggleOrganizationCard,
 }: {
   nodes: OrganizationTreeNodeRead[];
+  formState: OrganizationFormState | null;
+  selectedOrganizationId: string | null;
+  token: string;
   onEditOrganization: (organization: OrganizationRead) => void;
   onArchiveOrganization: (organization: OrganizationRead) => void;
-  onManageOrganizationUnits: (organization: OrganizationRead) => void;
+  onCancelEdit: () => void;
+  onChangeEditName: (name: string) => void;
+  onCreateChildOrganization: (organization: OrganizationRead) => void;
+  onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
+  onToggleOrganizationCard: (organization: OrganizationRead) => void;
 }) {
   return (
     <ul className="organization-tree" role="tree" aria-label={uiText.organizationTree}>
@@ -266,9 +291,16 @@ function OrganizationTree({
           key={node.id}
           node={node}
           level={1}
+          formState={formState}
+          selectedOrganizationId={selectedOrganizationId}
+          token={token}
           onEditOrganization={onEditOrganization}
           onArchiveOrganization={onArchiveOrganization}
-          onManageOrganizationUnits={onManageOrganizationUnits}
+          onCancelEdit={onCancelEdit}
+          onChangeEditName={onChangeEditName}
+          onCreateChildOrganization={onCreateChildOrganization}
+          onSubmitEdit={onSubmitEdit}
+          onToggleOrganizationCard={onToggleOrganizationCard}
         />
       ))}
     </ul>
@@ -278,16 +310,33 @@ function OrganizationTree({
 function OrganizationTreeNode({
   node,
   level,
+  formState,
+  selectedOrganizationId,
+  token,
   onEditOrganization,
   onArchiveOrganization,
-  onManageOrganizationUnits,
+  onCancelEdit,
+  onChangeEditName,
+  onCreateChildOrganization,
+  onSubmitEdit,
+  onToggleOrganizationCard,
 }: {
   node: OrganizationTreeNodeRead;
   level: number;
+  formState: OrganizationFormState | null;
+  selectedOrganizationId: string | null;
+  token: string;
   onEditOrganization: (organization: OrganizationRead) => void;
   onArchiveOrganization: (organization: OrganizationRead) => void;
-  onManageOrganizationUnits: (organization: OrganizationRead) => void;
+  onCancelEdit: () => void;
+  onChangeEditName: (name: string) => void;
+  onCreateChildOrganization: (organization: OrganizationRead) => void;
+  onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
+  onToggleOrganizationCard: (organization: OrganizationRead) => void;
 }) {
+  const isEditing = formState?.organizationId === node.id;
+  const isSelected = selectedOrganizationId === node.id;
+
   return (
     <li className="organization-tree-node">
       <div
@@ -295,42 +344,75 @@ function OrganizationTreeNode({
         role="treeitem"
         aria-label={node.name}
         aria-level={level}
+        aria-expanded={isSelected}
+        onClick={() => onToggleOrganizationCard(node)}
         style={{ "--tree-level": String(level - 1) } as CSSProperties}
       >
-        <div className="organization-tree-main">
-          <strong>{node.name}</strong>
-          <span>
-            {uiText.technicalCode}: {node.code}
-          </span>
-        </div>
+        {isEditing ? (
+          <form
+            className="organization-inline-name-form"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={onSubmitEdit}
+          >
+            <label>
+              {uiText.organizationName}
+              <input
+                autoFocus
+                value={formState?.name ?? ""}
+                onChange={(event) => onChangeEditName(event.currentTarget.value)}
+              />
+            </label>
+            <div className="organization-inline-name-actions">
+              <button type="submit" className="primary-button">
+                {uiText.save}
+              </button>
+              <button type="button" className="ghost-button" onClick={onCancelEdit}>
+                {uiText.cancel}
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => onArchiveOrganization(node)}
+              >
+                {uiText.moveToArchive}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="organization-tree-name"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditOrganization(node);
+            }}
+          >
+            {node.name}
+          </button>
+        )}
         <span className="organization-tree-status">{activityLabel(node.is_active)}</span>
-        <div className="row-actions">
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.organizationUnits} ${node.name}`}
-            onClick={() => onManageOrganizationUnits(node)}
-          >
-            {uiText.organizationUnits}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.editOrganization} ${node.name}`}
-            onClick={() => onEditOrganization(node)}
-          >
-            {uiText.edit}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.archiveOrganization} ${node.name}`}
-            onClick={() => onArchiveOrganization(node)}
-          >
-            {uiText.moveToArchive}
-          </button>
-        </div>
       </div>
+      {isSelected && (
+        <section
+          className="organization-inline-card"
+          style={{ "--tree-level": String(level - 1) } as CSSProperties}
+        >
+          <div className="organization-inline-card-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => onCreateChildOrganization(node)}
+            >
+              Добавить подведомственную организацию
+            </button>
+          </div>
+          <OrganizationUnitsPanel
+            organization={node}
+            token={token}
+            onClose={() => onToggleOrganizationCard(node)}
+          />
+        </section>
+      )}
       {node.children.length > 0 && (
         <ul role="group">
           {node.children.map((child) => (
@@ -338,9 +420,16 @@ function OrganizationTreeNode({
               key={child.id}
               node={child}
               level={level + 1}
+              formState={formState}
+              selectedOrganizationId={selectedOrganizationId}
+              token={token}
               onEditOrganization={onEditOrganization}
               onArchiveOrganization={onArchiveOrganization}
-              onManageOrganizationUnits={onManageOrganizationUnits}
+              onCancelEdit={onCancelEdit}
+              onChangeEditName={onChangeEditName}
+              onCreateChildOrganization={onCreateChildOrganization}
+              onSubmitEdit={onSubmitEdit}
+              onToggleOrganizationCard={onToggleOrganizationCard}
             />
           ))}
         </ul>
