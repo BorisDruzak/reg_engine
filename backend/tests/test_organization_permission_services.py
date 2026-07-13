@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     AccessGrant,
+    AuditEvent,
     OrganizationClosure,
     OrgUnit,
     Permission,
@@ -20,7 +21,7 @@ from app.models import (
     role_permissions,
 )
 from app.services.bootstrap import BootstrapService
-from app.services.organizations import OrganizationService
+from app.services.organizations import OrganizationService, OrganizationTopologyError
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 
@@ -322,6 +323,7 @@ def test_org_units_are_filters_not_rbac_boundaries(db_session: Session) -> None:
         organization_id=sibling.id,
         code="finance",
         name="Finance",
+        unit_type="management",
         created_by=system_admin.id,
     )
     _grant_access(
@@ -340,6 +342,146 @@ def test_org_units_are_filters_not_rbac_boundaries(db_session: Session) -> None:
     assert permissions.get_organization_scope_ids(org_admin.id) == {root.id}
     assert permissions.can_see_organization(org_admin.id, root.id)
     assert not permissions.can_see_organization(org_admin.id, sibling.id)
+
+
+def test_department_can_be_root_or_child_of_management_and_management_cannot_be_child(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(db_session, "unit-hierarchy@example.test", is_superuser=True)
+    organization_service = OrganizationService(db_session)
+    organization = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="unit-hierarchy-root",
+        name="Unit hierarchy root",
+    )
+    management = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="education",
+        name="Education management",
+        unit_type="management",
+    )
+    department = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="preschool",
+        name="Preschool department",
+        parent_id=management.id,
+        unit_type="department",
+    )
+    root_department = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="finance",
+        name="Finance department",
+        unit_type="department",
+    )
+
+    assert department.parent_id == management.id
+    assert root_department.parent_id is None
+
+    with pytest.raises(OrganizationTopologyError):
+        organization_service.create_org_unit_for_actor(
+            actor_user_id=system_admin.id,
+            organization_id=organization.id,
+            code="nested-management",
+            name="Nested management",
+            parent_id=management.id,
+            unit_type="management",
+        )
+    with pytest.raises(OrganizationTopologyError):
+        organization_service.create_org_unit_for_actor(
+            actor_user_id=system_admin.id,
+            organization_id=organization.id,
+            code="nested-department",
+            name="Nested department",
+            parent_id=department.id,
+            unit_type="department",
+        )
+
+
+def test_org_unit_department_parent_must_belong_to_the_same_organization(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(db_session, "unit-parent@example.test", is_superuser=True)
+    organization_service = OrganizationService(db_session)
+    organization = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="unit-parent-root",
+        name="Unit parent root",
+    )
+    other_organization = organization_service.create_child(
+        parent_id=organization.id,
+        code="unit-parent-child",
+        name="Unit parent child",
+        created_by=system_admin.id,
+    )
+    management = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="foreign-management",
+        name="Foreign management",
+        unit_type="management",
+    )
+
+    with pytest.raises(OrganizationTopologyError):
+        organization_service.create_org_unit_for_actor(
+            actor_user_id=system_admin.id,
+            organization_id=other_organization.id,
+            code="foreign-department",
+            name="Foreign department",
+            parent_id=management.id,
+            unit_type="department",
+        )
+
+
+def test_archiving_management_archives_active_direct_departments_and_audits_each_unit(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(db_session, "unit-archive@example.test", is_superuser=True)
+    organization_service = OrganizationService(db_session)
+    organization = organization_service.create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="unit-archive-root",
+        name="Unit archive root",
+    )
+    management = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="archive-management",
+        name="Archive management",
+        unit_type="management",
+    )
+    department = organization_service.create_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        code="archive-department",
+        name="Archive department",
+        parent_id=management.id,
+        unit_type="department",
+    )
+
+    archived_management = organization_service.archive_org_unit_for_actor(
+        actor_user_id=system_admin.id,
+        org_unit_id=management.id,
+    )
+    db_session.flush()
+
+    assert archived_management.id == management.id
+    for org_unit_id in (management.id, department.id):
+        archived_unit = db_session.get(OrgUnit, org_unit_id)
+        assert archived_unit is not None
+        assert archived_unit.is_active is False
+        assert archived_unit.archived_at is not None
+    archived_event_ids = set(
+        db_session.scalars(
+            select(AuditEvent.object_id).where(
+                AuditEvent.action == "archive",
+                AuditEvent.object_type == "org_unit",
+            )
+        ).all()
+    )
+    assert {management.id, department.id} <= archived_event_ids
 
 
 def test_canonical_roles_apply_hierarchical_scope_and_separate_access_flag(

@@ -63,6 +63,11 @@ class OrgUnit(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "org_units"
     __table_args__ = (
         UniqueConstraint("organization_id", "code", name="uq_org_units_organization_id_code"),
+        CheckConstraint("type in ('management', 'department')", name="type"),
+        CheckConstraint(
+            "type <> 'management' or parent_id is null",
+            name="management_is_root",
+        ),
         Index("ix_org_units_organization_id", "organization_id"),
         Index("ix_org_units_parent_id", "parent_id"),
         Index("ix_org_units_is_active", "is_active"),
@@ -76,7 +81,7 @@ class OrgUnit(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     )
     code: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    type: Mapped[str | None] = mapped_column(String, nullable=True)
+    type: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
 

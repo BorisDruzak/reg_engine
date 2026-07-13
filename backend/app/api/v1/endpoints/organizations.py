@@ -201,7 +201,6 @@ def update_org_unit(
             actor_user_id=actor_user_id,
             org_unit_id=org_unit_id,
             name=payload.name,
-            unit_type=payload.unit_type,
         )
     except Exception as exc:
         raise_service_http_error(exc)

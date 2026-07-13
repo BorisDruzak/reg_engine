@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,7 +43,7 @@ class OrgUnitCreate(BaseModel):
     code: str
     name: str
     parent_id: UUID | None = None
-    unit_type: str | None = None
+    unit_type: Literal["management", "department"]
 
 
 class OrgUnitRead(BaseModel):
@@ -53,13 +54,12 @@ class OrgUnitRead(BaseModel):
     parent_id: UUID | None
     code: str
     name: str
-    type: str | None
+    type: Literal["management", "department"]
     is_active: bool
 
 
 class OrgUnitUpdate(BaseModel):
     name: str | None = None
-    unit_type: str | None = None
 
 
 class OrgUnitListRead(BaseModel):

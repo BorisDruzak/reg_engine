@@ -292,14 +292,14 @@ def test_system_admin_can_manage_org_units(
     org_unit = _post_json(
         api_client,
         f"/api/v1/organizations/{organization['id']}/org-units",
-        {"code": "finance", "name": "Finance", "unit_type": "department"},
+        {"code": "finance", "name": "Finance", "unit_type": "management"},
         actor_id=system_admin.id,
     )
     assert org_unit["organization_id"] == organization["id"]
     assert org_unit["parent_id"] is None
     assert org_unit["code"] == "finance"
     assert org_unit["name"] == "Finance"
-    assert org_unit["type"] == "department"
+    assert org_unit["type"] == "management"
     assert org_unit["is_active"] is True
 
     child_unit = _post_json(
@@ -309,6 +309,7 @@ def test_system_admin_can_manage_org_units(
             "parent_id": org_unit["id"],
             "code": "finance-payroll",
             "name": "Payroll",
+            "unit_type": "department",
         },
         actor_id=system_admin.id,
     )
@@ -335,10 +336,10 @@ def test_system_admin_can_manage_org_units(
         "PATCH",
         f"/api/v1/org-units/{org_unit['id']}",
         actor_id=system_admin.id,
-        payload={"name": "Finance Department", "unit_type": "division"},
+        payload={"name": "Finance Management"},
     )
-    assert updated_unit["name"] == "Finance Department"
-    assert updated_unit["type"] == "division"
+    assert updated_unit["name"] == "Finance Management"
+    assert updated_unit["type"] == "management"
 
     archived_unit = _request_json(
         api_client,
@@ -411,7 +412,7 @@ def test_org_admin_can_manage_units_in_descendant_scope_but_not_siblings(
     scoped_unit = _post_json(
         api_client,
         f"/api/v1/organizations/{branch['id']}/org-units",
-        {"code": "branch-unit", "name": "Branch Unit"},
+        {"code": "branch-unit", "name": "Branch Unit", "unit_type": "management"},
         actor_id=org_admin.id,
     )
 
@@ -425,7 +426,7 @@ def test_org_admin_can_manage_units_in_descendant_scope_but_not_siblings(
 
     sibling_response = api_client.post(
         f"/api/v1/organizations/{sibling['id']}/org-units",
-        json={"code": "blocked", "name": "Blocked"},
+        json={"code": "blocked", "name": "Blocked", "unit_type": "management"},
         headers=_actor_headers(org_admin.id),
     )
     assert sibling_response.status_code == 403, sibling_response.text

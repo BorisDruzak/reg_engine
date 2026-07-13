@@ -274,6 +274,7 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             organization_id=organization_id,
             code="hq",
             name="Headquarters",
+            type="management",
             created_by=user_id,
         )
 

@@ -160,6 +160,26 @@ def test_card_creation_link_migration_creates_normalized_tables_and_indefinite_l
     assert "ALTER COLUMN expires_at DROP NOT NULL" in sql
 
 
+def test_org_unit_hierarchy_migration_adds_type_and_management_root_constraints() -> None:
+    sql = _render_upgrade_sql("0028_org_unit_hierarchy")
+
+    assert "0028_org_unit_hierarchy" in sql
+    assert "ALTER COLUMN type SET NOT NULL" in sql
+    assert "ADD CONSTRAINT ck_org_units_type CHECK" in sql
+    assert "ADD CONSTRAINT ck_org_units_management_is_root CHECK" in sql
+
+
+def test_org_unit_hierarchy_migration_downgrade_restores_nullable_type() -> None:
+    sql = _render_downgrade_sql(
+        "0028_org_unit_hierarchy",
+        "0027_card_creation_links",
+    )
+
+    assert "DROP CONSTRAINT ck_org_units_management_is_root" in sql
+    assert "DROP CONSTRAINT ck_org_units_type" in sql
+    assert "ALTER COLUMN type DROP NOT NULL" in sql
+
+
 def test_alembic_revision_ids_fit_version_table_limit() -> None:
     versions_dir = Path(__file__).resolve().parents[1] / "migrations" / "versions"
 

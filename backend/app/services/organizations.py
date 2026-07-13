@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -20,6 +21,9 @@ class OrganizationTopologyError(ValueError):
 
 class OrgUnitNotFoundError(OrganizationNotFoundError):
     """Raised when an org unit operation references a missing or archived org unit."""
+
+
+ORG_UNIT_TYPES = frozenset({"management", "department"})
 
 
 class OrganizationService:
@@ -294,14 +298,15 @@ class OrganizationService:
         code: str,
         name: str,
         parent_id: UUID | None = None,
-        unit_type: str | None = None,
+        unit_type: Literal["management", "department"] = "department",
         created_by: UUID | None = None,
     ) -> OrgUnit:
         self._get_active_organization(organization_id)
-        if parent_id is not None:
-            parent_unit = self._get_active_org_unit(parent_id)
-            if parent_unit.organization_id != organization_id:
-                raise OrganizationNotFoundError("Parent org unit was not found in organization.")
+        self._validate_org_unit_parent(
+            organization_id=organization_id,
+            parent_id=parent_id,
+            unit_type=unit_type,
+        )
 
         org_unit = OrgUnit(
             organization_id=organization_id,
@@ -350,7 +355,7 @@ class OrganizationService:
         code: str,
         name: str,
         parent_id: UUID | None = None,
-        unit_type: str | None = None,
+        unit_type: Literal["management", "department"] = "department",
     ) -> OrgUnit:
         self._require_org_unit_manage_permission(
             actor_user_id=actor_user_id,
@@ -396,18 +401,15 @@ class OrganizationService:
         actor_user_id: UUID,
         org_unit_id: UUID,
         name: str | None = None,
-        unit_type: str | None = None,
     ) -> OrgUnit:
         org_unit = self._get_active_org_unit(org_unit_id)
         self._require_org_unit_manage_permission(
             actor_user_id=actor_user_id,
             organization_id=org_unit.organization_id,
         )
-        old_data = {"name": org_unit.name, "type": org_unit.type}
+        old_data = {"name": org_unit.name}
         if name is not None:
             org_unit.name = name
-        if unit_type is not None:
-            org_unit.type = unit_type
         self.session.flush()
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
@@ -415,7 +417,7 @@ class OrganizationService:
             object_type="org_unit",
             object_id=org_unit.id,
             old_data_json=old_data,
-            new_data_json={"name": org_unit.name, "type": org_unit.type},
+            new_data_json={"name": org_unit.name},
         )
         return org_unit
 
@@ -430,15 +432,30 @@ class OrganizationService:
             actor_user_id=actor_user_id,
             organization_id=org_unit.organization_id,
         )
-        org_unit.archived_at = datetime.now(UTC)
-        org_unit.is_active = False
+        org_units_to_archive = [org_unit]
+        if org_unit.type == "management":
+            org_units_to_archive.extend(
+                self.session.scalars(
+                    select(OrgUnit).where(
+                        OrgUnit.parent_id == org_unit.id,
+                        OrgUnit.archived_at.is_(None),
+                        OrgUnit.is_active.is_(True),
+                    )
+                ).all()
+            )
+        archived_at = datetime.now(UTC)
+        for archived_unit in org_units_to_archive:
+            archived_unit.archived_at = archived_at
+            archived_unit.is_active = False
         self.session.flush()
-        AuditService(self.session).record_user_event(
-            actor_user_id=actor_user_id,
-            action="archive",
-            object_type="org_unit",
-            object_id=org_unit.id,
-        )
+        audit_service = AuditService(self.session)
+        for archived_unit in org_units_to_archive:
+            audit_service.record_user_event(
+                actor_user_id=actor_user_id,
+                action="archive",
+                object_type="org_unit",
+                object_id=archived_unit.id,
+            )
         return org_unit
 
     def _get_active_organization(self, organization_id: UUID) -> Organization:
@@ -471,6 +488,29 @@ class OrganizationService:
         if org_unit is None or org_unit.archived_at is not None or not org_unit.is_active:
             raise OrgUnitNotFoundError("Org unit was not found.")
         return org_unit
+
+    def _validate_org_unit_parent(
+        self,
+        *,
+        organization_id: UUID,
+        parent_id: UUID | None,
+        unit_type: str,
+    ) -> None:
+        if unit_type not in ORG_UNIT_TYPES:
+            raise OrganizationTopologyError("Organization unit type is not supported.")
+        if unit_type == "management" and parent_id is not None:
+            raise OrganizationTopologyError("Management must be a root organization unit.")
+        if parent_id is None:
+            return
+        parent_unit = self._get_active_org_unit(parent_id)
+        if (
+            parent_unit.organization_id != organization_id
+            or parent_unit.type != "management"
+            or unit_type != "department"
+        ):
+            raise OrganizationTopologyError(
+                "Department parent must be an active management in the same organization."
+            )
 
     def _require_org_unit_read_permission(
         self,

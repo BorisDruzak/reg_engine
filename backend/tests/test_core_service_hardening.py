@@ -199,6 +199,7 @@ def _hardening_context(db_session: Session) -> dict[str, Any]:
         organization_id=child.id,
         code="hardening-unit",
         name="Hardening Unit",
+        unit_type="management",
         created_by=system_admin.id,
     )
     schema_service = RegistrySchemaService(db_session)

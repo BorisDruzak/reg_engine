@@ -46,6 +46,7 @@ def test_important_unique_constraints_exist() -> None:
 def test_important_check_constraints_exist() -> None:
     expected_constraints = {
         "users": {"ck_users_status"},
+        "org_units": {"ck_org_units_type", "ck_org_units_management_is_root"},
         "registries": {
             "ck_registries_status",
             "ck_registries_default_owner_requires_owner",
