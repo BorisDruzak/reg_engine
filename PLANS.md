@@ -84,6 +84,24 @@ not a hardcoded employee registry.
   tests, TypeScript, scoped ESLint, Prettier, production build, frontend smoke,
   and server checks pass; the live HTTP page copies the URL and displays
   `Ссылка скопирована`. No backend or database changes are required.
+- Card-template lifecycle and created-card navigation follow-up is implemented
+  locally: removing a non-base template now deactivates it rather than
+  archiving it, so it is unavailable for new cards, public creation links, and
+  XLSX exchange while existing cards and creation-link history stay readable.
+  Newly created templates with an empty field selection now stay empty. The
+  administrator creation-link screen lists created cards in a separate Russian
+  section below the links; it no longer exposes child public URLs/tokens, and a
+  double-click opens the card in an internal tab. The opening flow clears stale
+  card-list filters, fetches the broad authorized list, and then selects the
+  created card. Focused backend tests (69 passed, 42 skipped), focused frontend
+  tests, TypeScript, scoped lint/format checks, and independent code reviews
+  pass. The broad backend suite still has the unrelated stale exact-table test
+  in `tests/test_models_smoke.py`, which omits the existing
+  `card_creation_links` tables. The broad frontend suite also has the unrelated
+  stale navigation expectation in `src/app/uiTextUnicode.test.ts` (it expects
+  the removed `Доступ` section); the global Prettier and project-map checks
+  report pre-existing unrelated drift. Deployment and live browser proof remain
+  pending.
 - Separate older test-fixture drift remains in
   `test_public_link_review_lifecycle.py`: four assertions assume absent
   card-field settings are private, but commit `e8018ade` intentionally changed
