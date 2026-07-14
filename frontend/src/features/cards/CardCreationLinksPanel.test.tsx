@@ -68,13 +68,12 @@ function renderPanel({ onOpenCard = vi.fn() }: { onOpenCard?: (cardId: string) =
   return render(
     <QueryClientProvider client={queryClient}>
       <CardCreationLinksPanel
-        mode="list"
+        mode="manage"
         organizations={[organization]}
         registryId="registry-1"
         templates={[template]}
         token="admin-token"
         onOpenCard={onOpenCard}
-        onShowList={vi.fn()}
       />
     </QueryClientProvider>,
   );

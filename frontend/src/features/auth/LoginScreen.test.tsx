@@ -12,6 +12,6 @@ test("shows a plain login field instead of an email field", () => {
     </QueryClientProvider>,
   );
 
-  expect(screen.getByLabelText("Логин")).toHaveAttribute("type", "text");
+  expect(screen.getByRole("textbox", { name: /логин/i })).toHaveAttribute("type", "text");
   expect(screen.queryByText("Логин или электронная почта")).not.toBeInTheDocument();
 });

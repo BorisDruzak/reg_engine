@@ -7,7 +7,7 @@ import { MutationFeedback } from "@/components/common/AdminMutation";
 import { copyTextToClipboard } from "@/components/common/clipboard";
 import { errorText } from "@/components/common/dataUtils";
 
-export type CardCreationLinksPanelMode = "create" | "list";
+export type CardCreationLinksPanelMode = "manage";
 
 export function CardCreationLinksPanel({
   registryId,
@@ -16,7 +16,6 @@ export function CardCreationLinksPanel({
   templates,
   mode,
   onOpenCard,
-  onShowList,
 }: {
   registryId: string;
   token: string;
@@ -24,7 +23,6 @@ export function CardCreationLinksPanel({
   templates: CardTemplateRead[];
   mode: CardCreationLinksPanelMode;
   onOpenCard: (cardId: string) => void;
-  onShowList: () => void;
 }) {
   const queryClient = useQueryClient();
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -48,7 +46,6 @@ export function CardCreationLinksPanel({
     onSuccess: async () => {
       setLocalError(null);
       setOrganizationIds([]);
-      onShowList();
       await queryClient.invalidateQueries({ queryKey: ["card-creation-links", token, registryId] });
     },
   });
@@ -109,7 +106,7 @@ export function CardCreationLinksPanel({
         </div>
       </header>
 
-      {mode === "create" && (
+      {mode === "manage" && (
         <form className="panel-form" onSubmit={submit}>
           <label className="field-editor-control">
             <span>Шаблон карточки</span>
@@ -153,7 +150,7 @@ export function CardCreationLinksPanel({
         </form>
       )}
 
-      {mode === "list" && (
+      {mode === "manage" && (
         <div className="stack">
           {listQuery.isLoading && <p className="public-muted">Загрузка ссылок…</p>}
           {listQuery.error && <p className="data-alert">{errorText(listQuery.error)}</p>}

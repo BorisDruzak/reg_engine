@@ -78,18 +78,16 @@ import {
 } from "./fieldEditorUtils";
 import { useBlockEditor } from "./useBlockEditor";
 
-type CardUtilityTab = "create-card" | "create-creation-link" | "creation-link-list";
+type CardUtilityTab = "create-card" | "creation-links";
 type CardShellTab = "list" | CardUtilityTab | `card:${string}`;
 
 const cardUtilityTabLabels: Record<CardUtilityTab, string> = {
   "create-card": "Создать карточку",
-  "create-creation-link": "Создать ссылку",
-  "creation-link-list": "Список ссылок",
+  "creation-links": "Ссылки на заполнение",
 };
 const fixedCardUtilityTabs: CardUtilityTab[] = [
   "create-card",
-  "create-creation-link",
-  "creation-link-list",
+  "creation-links",
 ];
 
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
@@ -648,10 +646,10 @@ export function CardsWorkspace({
             onSubmit={handleCardFormSubmit}
           />
         </Panel>
-      ) : activeShellTab === "create-creation-link" || activeShellTab === "creation-link-list" ? (
+      ) : activeShellTab === "creation-links" ? (
         schema ? (
           <CardCreationLinksPanel
-            mode={activeShellTab === "create-creation-link" ? "create" : "list"}
+            mode="manage"
             organizations={organizations}
             registryId={schema.registry.id}
             templates={activeCardTemplates}
@@ -659,7 +657,6 @@ export function CardsWorkspace({
             onOpenCard={(cardId) => {
               void openCreatedCardEditor(cardId);
             }}
-            onShowList={() => openUtilityTab("creation-link-list")}
           />
         ) : (
           <Panel title={uiText.cards}>

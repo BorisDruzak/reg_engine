@@ -17,6 +17,7 @@ import type {
 import { uiText } from "@/app/uiText";
 import { Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
+import { SearchableChoicePicker } from "@/features/cards/SearchableChoicePicker";
 
 export function ImportExportPanel({
   selectedRegistryId,
@@ -33,7 +34,6 @@ export function ImportExportPanel({
   });
   const [templateId, setTemplateId] = useState("");
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
-  const [hideOrganizationColumn, setHideOrganizationColumn] = useState(true);
   const [fixedOrganizationId, setFixedOrganizationId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
@@ -56,30 +56,27 @@ export function ImportExportPanel({
     supportedFields.some((field) => field.id === fieldId),
   );
   const needsImportOrganizationChoice =
-    hideOrganizationColumn && selectedOrganizationIds.length > 1;
-  const effectiveFixedOrganizationId = hideOrganizationColumn
-    ? selectedOrganizationIds.length === 1
+    selectedOrganizationIds.length > 1;
+  const effectiveFixedOrganizationId =
+    selectedOrganizationIds.length === 1
       ? selectedOrganizationIds[0]
       : selectedOrganizationIds.includes(fixedOrganizationId)
         ? fixedOrganizationId
-        : ""
-    : "";
+        : "";
   const exportPayload: TabularCardWorkbookPayload | null =
     selectedTemplate && selectedFieldIds.length && selectedOrganizationIds.length
       ? {
           card_template_id: selectedTemplate.id,
           field_ids: selectedFieldIds,
           organization_ids: selectedOrganizationIds,
-          include_organization_column: !hideOrganizationColumn,
+          include_organization_column: false,
         }
       : null;
   const importPayload: TabularCardWorkbookPayload | null =
-    exportPayload && (!hideOrganizationColumn || effectiveFixedOrganizationId)
+    exportPayload && effectiveFixedOrganizationId
       ? {
           ...exportPayload,
-          ...(hideOrganizationColumn
-            ? { fixed_organization_id: effectiveFixedOrganizationId }
-            : {}),
+          fixed_organization_id: effectiveFixedOrganizationId,
         }
       : null;
 
@@ -92,7 +89,7 @@ export function ImportExportPanel({
             Boolean(selectedTemplate),
             selectedOrganizationIds,
             selectedFieldIds,
-            kind === "template" && hideOrganizationColumn,
+            kind === "template",
             effectiveFixedOrganizationId,
           ),
         );
@@ -228,34 +225,23 @@ export function ImportExportPanel({
                       ))}
                     </select>
                   </label>
-                  <fieldset className="field-editor-control">
-                    <legend>{uiText.tabularXlsxOrganizations}</legend>
-                    <div className="checkbox-list">
-                      {optionsQuery.data.organizations.map((organization) => (
-                        <label key={organization.id}>
-                          <input
-                            type="checkbox"
-                            checked={selectedOrganizationIds.includes(organization.id)}
-                            onChange={() =>
-                              toggleValue(organization.id, organizationIds, setOrganizationIds)
-                            }
-                          />
-                          <span>{organization.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <label className="field-editor-control">
-                    <input
-                      type="checkbox"
-                      checked={hideOrganizationColumn}
-                      onChange={(event) => {
-                        setHideOrganizationColumn(event.currentTarget.checked);
+                  <div className="field-editor-control">
+                    <span>{uiText.tabularXlsxOrganizations}</span>
+                    <SearchableChoicePicker
+                      label={uiText.tabularXlsxOrganizations}
+                      hint={uiText.tabularXlsxSelectOrganization}
+                      mode="multiple"
+                      options={optionsQuery.data.organizations.map((organization) => ({
+                        id: organization.id,
+                        label: organization.label,
+                      }))}
+                      value={selectedOrganizationIds}
+                      onChange={(value) => {
+                        setOrganizationIds(Array.isArray(value) ? value : []);
                         resetConfigurationFeedback();
                       }}
                     />
-                    <span>{uiText.tabularXlsxHideOrganizationColumn}</span>
-                  </label>
+                  </div>
                   {selectedTemplate && (
                     <fieldset className="field-editor-control template-body-control">
                       <legend>{uiText.tabularXlsxFields}</legend>
@@ -430,13 +416,13 @@ function configurationError(
   hasTemplate: boolean,
   organizationIds: string[],
   fieldIds: string[],
-  hideOrganizationColumn: boolean,
+  requiresFixedOrganization: boolean,
   fixedOrganizationId: string,
 ) {
   if (!hasTemplate) return uiText.tabularXlsxSelectTemplate;
   if (!organizationIds.length) return uiText.tabularXlsxSelectOrganization;
   if (!fieldIds.length) return uiText.tabularXlsxSelectField;
-  return hideOrganizationColumn && !fixedOrganizationId
+  return requiresFixedOrganization && !fixedOrganizationId
     ? uiText.tabularXlsxSelectImportOrganization
     : uiText.tabularXlsxSelectTemplate;
 }

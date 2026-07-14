@@ -387,12 +387,19 @@ function UserProfileEditor({
           {shouldChooseScope && (
             <fieldset className="organization-root-selector">
               <legend>Организации в зоне управления</legend>
-              <p>Выбранная организация включает все дочерние организации.</p>
-              <OrganizationRootSelector
-                nodes={organizationTree}
-                selectedIds={values.organizationIds}
-                onChange={(organizationIds) => updateValues({ organizationIds })}
-              />
+              <details className="organization-root-dropdown">
+                <summary>
+                  {values.organizationIds.length
+                    ? `Выбрано организаций: ${values.organizationIds.length}`
+                    : "Выбрать организации"}
+                </summary>
+                <p>Выбранная организация включает все дочерние организации.</p>
+                <OrganizationRootSelector
+                  nodes={organizationTree}
+                  selectedIds={values.organizationIds}
+                  onChange={(organizationIds) => updateValues({ organizationIds })}
+                />
+              </details>
             </fieldset>
           )}
           {canToggleAccessDelegation && (

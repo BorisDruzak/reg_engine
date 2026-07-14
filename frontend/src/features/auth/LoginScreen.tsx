@@ -37,6 +37,7 @@ export function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => v
             {uiText.email}
             <input
               autoComplete="username"
+              aria-label="Логин, электронная почта"
               name="login"
               type="text"
               value={email}

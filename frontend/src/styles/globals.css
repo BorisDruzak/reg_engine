@@ -5198,6 +5198,25 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   font-weight: 700;
 }
 
+.organization-root-dropdown {
+  border: 1px solid #d6dde8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.organization-root-dropdown > summary {
+  min-height: 42px;
+  padding: 11px 12px;
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.organization-root-dropdown > p,
+.organization-root-dropdown > .organization-root-options {
+  margin-inline: 12px;
+}
+
 .organization-root-selector p {
   margin: 0;
 }

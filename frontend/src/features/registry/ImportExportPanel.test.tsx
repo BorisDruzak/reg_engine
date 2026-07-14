@@ -91,6 +91,7 @@ test("configures the wide XLSX format without technical controls", async () => {
   expect(screen.getByRole("button", { name: "Скачать список" })).toBeDisabled();
 
   await user.selectOptions(screen.getByLabelText("Шаблон карточки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
   await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
 
@@ -117,17 +118,18 @@ test("separates export and import into distinct operations", async () => {
   expect(importSection).toContainElement(screen.getByRole("button", { name: "Проверить импорт" }));
 });
 
-test("hides organization by default and requires an import target for several organizations", async () => {
+test("uses the organization picker and requires an import target for several organizations", async () => {
   const user = userEvent.setup();
   renderPanel();
 
   const templateSelect = await screen.findByLabelText("Шаблон карточки");
   await user.selectOptions(templateSelect, "template-1");
+  await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
   await user.click(screen.getByLabelText("Управление (office)"));
   await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
 
-  expect(screen.getByLabelText("Скрывать колонку «Организация»")).toBeChecked();
+  expect(screen.queryByLabelText("Скрывать колонку «Организация»")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Организация для импорта")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Скачать список" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Скачать шаблон импорта" })).toBeDisabled();
@@ -147,6 +149,7 @@ test("renders a template-download error inside the import operation", async () =
   await screen.findByRole("heading", { name: "Импорт карточек" });
   const templateSelect = await screen.findByLabelText("Шаблон карточки");
   await user.selectOptions(templateSelect, "template-1");
+  await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
   await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
   await user.click(screen.getByRole("button", { name: "Скачать шаблон импорта" }));
