@@ -2,7 +2,7 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 
 import { archiveOrganization, createOrganization, updateOrganization } from "@/api/client";
-import type { OrganizationRead, OrganizationTreeNodeRead } from "@/api/types";
+import type { OrganizationRead, OrganizationTreeNodeRead, OrgUnitType } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
 import { activityLabel, uiText } from "@/app/uiText";
 import {
@@ -39,6 +39,10 @@ export function OrganizationsTable({
   const [formState, setFormState] = useState<OrganizationFormState | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<OrganizationRead | null>(null);
   const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null);
+  const [unitCreateRequest, setUnitCreateRequest] = useState<{
+    organizationId: string;
+    unitType: OrgUnitType;
+  } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createMutation = useMutation({
@@ -169,6 +173,7 @@ export function OrganizationsTable({
     setSelectedOrganizationId((currentId) =>
       currentId === organization.id ? null : organization.id,
     );
+    setUnitCreateRequest(null);
   }
 
   return (
@@ -252,6 +257,11 @@ export function OrganizationsTable({
             setFormState((current) => (current ? { ...current, name } : current))
           }
           onCreateChildOrganization={(organization) => openCreateForm(organization.id)}
+          onCreateUnit={(organization, unitType) =>
+            setUnitCreateRequest({ organizationId: organization.id, unitType })
+          }
+          unitCreateRequest={unitCreateRequest}
+          onUnitCreateRequestConsumed={() => setUnitCreateRequest(null)}
           onSubmitEdit={handleFormSubmit}
           onToggleOrganizationCard={toggleOrganizationCard}
         />
@@ -274,6 +284,9 @@ function OrganizationTree({
   onCancelEdit,
   onChangeEditName,
   onCreateChildOrganization,
+  onCreateUnit,
+  unitCreateRequest,
+  onUnitCreateRequestConsumed,
   onSubmitEdit,
   onToggleOrganizationCard,
 }: {
@@ -288,6 +301,9 @@ function OrganizationTree({
   onCancelEdit: () => void;
   onChangeEditName: (name: string) => void;
   onCreateChildOrganization: (organization: OrganizationRead) => void;
+  onCreateUnit: (organization: OrganizationRead, unitType: OrgUnitType) => void;
+  unitCreateRequest: { organizationId: string; unitType: OrgUnitType } | null;
+  onUnitCreateRequestConsumed: () => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleOrganizationCard: (organization: OrganizationRead) => void;
 }) {
@@ -308,6 +324,9 @@ function OrganizationTree({
           onCancelEdit={onCancelEdit}
           onChangeEditName={onChangeEditName}
           onCreateChildOrganization={onCreateChildOrganization}
+          onCreateUnit={onCreateUnit}
+          unitCreateRequest={unitCreateRequest}
+          onUnitCreateRequestConsumed={onUnitCreateRequestConsumed}
           onSubmitEdit={onSubmitEdit}
           onToggleOrganizationCard={onToggleOrganizationCard}
         />
@@ -329,6 +348,9 @@ function OrganizationTreeNode({
   onCancelEdit,
   onChangeEditName,
   onCreateChildOrganization,
+  onCreateUnit,
+  unitCreateRequest,
+  onUnitCreateRequestConsumed,
   onSubmitEdit,
   onToggleOrganizationCard,
 }: {
@@ -344,6 +366,9 @@ function OrganizationTreeNode({
   onCancelEdit: () => void;
   onChangeEditName: (name: string) => void;
   onCreateChildOrganization: (organization: OrganizationRead) => void;
+  onCreateUnit: (organization: OrganizationRead, unitType: OrgUnitType) => void;
+  unitCreateRequest: { organizationId: string; unitType: OrgUnitType } | null;
+  onUnitCreateRequestConsumed: () => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleOrganizationCard: (organization: OrganizationRead) => void;
 }) {
@@ -430,11 +455,28 @@ function OrganizationTreeNode({
             >
               Добавить подведомственную организацию
             </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => onCreateUnit(node, "management")}
+            >
+              {uiText.addManagement}
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => onCreateUnit(node, "department")}
+            >
+              {uiText.addDepartment}
+            </button>
           </div>
           <OrganizationUnitsPanel
             organization={node}
             token={token}
-            onClose={() => onToggleOrganizationCard(node)}
+            createUnitType={
+              unitCreateRequest?.organizationId === node.id ? unitCreateRequest.unitType : null
+            }
+            onCreateUnitRequestConsumed={onUnitCreateRequestConsumed}
           />
         </section>
       )}
@@ -455,6 +497,9 @@ function OrganizationTreeNode({
               onCancelEdit={onCancelEdit}
               onChangeEditName={onChangeEditName}
               onCreateChildOrganization={onCreateChildOrganization}
+              onCreateUnit={onCreateUnit}
+              unitCreateRequest={unitCreateRequest}
+              onUnitCreateRequestConsumed={onUnitCreateRequestConsumed}
               onSubmitEdit={onSubmitEdit}
               onToggleOrganizationCard={onToggleOrganizationCard}
             />

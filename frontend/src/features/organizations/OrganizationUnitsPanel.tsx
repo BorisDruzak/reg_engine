@@ -4,7 +4,7 @@ import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { archiveOrgUnit, createOrgUnit, listOrgUnits, updateOrgUnit } from "@/api/client";
 import type { OrganizationRead, OrgUnitRead, OrgUnitType } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
-import { activityLabel, organizationUnitsTitle, uiText } from "@/app/uiText";
+import { activityLabel, uiText } from "@/app/uiText";
 import {
   AdminMutationDialog,
   AdminMutationForm,
@@ -23,10 +23,16 @@ type UnitFormState = {
 type Props = {
   organization: OrganizationRead;
   token: string;
-  onClose: () => void;
+  createUnitType: OrgUnitType | null;
+  onCreateUnitRequestConsumed: () => void;
 };
 
-export function OrganizationUnitsPanel({ organization, token, onClose }: Props) {
+export function OrganizationUnitsPanel({
+  organization,
+  token,
+  createUnitType,
+  onCreateUnitRequestConsumed,
+}: Props) {
   const queryClient = useQueryClient();
   const [formState, setFormState] = useState<UnitFormState | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<OrgUnitRead | null>(null);
@@ -66,6 +72,7 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
     mutationFn: (unitId: string) => archiveOrgUnit(token, unitId),
     onSuccess: async () => {
       setArchiveTarget(null);
+      setFormState(null);
       setSuccessMessage(uiText.organizationUnitArchived);
       await invalidateUnitData(queryClient, token, organization.id);
     },
@@ -74,20 +81,19 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
     ? new Error(localError)
     : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
-
-  function openCreateForm(unitType: OrgUnitType, parentId = "") {
-    setLocalError(null);
-    setSuccessMessage(null);
-    setFormState({
-      mode: "create",
-      unit: null,
-      unitType,
-      name: "",
-      parentId,
-    });
-  }
+  const requestedCreateForm = createUnitType
+    ? {
+        mode: "create" as const,
+        unit: null,
+        unitType: createUnitType,
+        name: "",
+        parentId: "",
+      }
+    : null;
+  const activeFormState = formState ?? requestedCreateForm;
 
   function openEditForm(unit: OrgUnitRead) {
+    onCreateUnitRequestConsumed();
     setLocalError(null);
     setSuccessMessage(null);
     setFormState({
@@ -102,13 +108,14 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
   function closeForm() {
     setFormState(null);
     setLocalError(null);
+    onCreateUnitRequestConsumed();
   }
 
   function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formState) return;
+    if (!activeFormState) return;
 
-    const name = formState.name.trim();
+    const name = activeFormState.name.trim();
     if (!name) {
       setLocalError(uiText.requiredFields);
       return;
@@ -116,11 +123,12 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
 
     setLocalError(null);
     setSuccessMessage(null);
-    if (formState.mode === "edit" && formState.unit) {
-      updateMutation.mutate({ unitId: formState.unit.id, name });
+    if (activeFormState.mode === "edit" && activeFormState.unit) {
+      updateMutation.mutate({ unitId: activeFormState.unit.id, name });
       return;
     }
 
+    onCreateUnitRequestConsumed();
     createMutation.mutate({
       code: generateTechnicalCode(
         name,
@@ -128,8 +136,9 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
         units.map((unit) => unit.code),
       ),
       name,
-      parent_id: formState.unitType === "management" ? null : formState.parentId || null,
-      unit_type: formState.unitType,
+      parent_id:
+        activeFormState.unitType === "management" ? null : activeFormState.parentId || null,
+      unit_type: activeFormState.unitType,
     });
   }
 
@@ -138,48 +147,25 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
         (unit) => unit.type === "department" && unit.parent_id === archiveTarget.id,
       )
     : [];
+  const editingUnit = activeFormState?.mode === "edit" ? activeFormState.unit : null;
 
   return (
-    <section className="data-panel organization-units-panel">
-      <header>
-        <h3>{organizationUnitsTitle(organization.name)}</h3>
-        <button type="button" className="ghost-button" onClick={onClose}>
-          {uiText.close}
-        </button>
-      </header>
-      <div className="panel-toolbar organization-units-toolbar">
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => openCreateForm("management")}
-        >
-          {uiText.addManagement}
-        </button>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => openCreateForm("department")}
-        >
-          {uiText.addDepartment}
-        </button>
-      </div>
+    <section className="organization-units-panel">
       <div className="panel-feedback">
         <MutationFeedback
-          error={formState ? null : mutationError}
+          error={activeFormState ? null : mutationError}
           successMessage={successMessage}
         />
       </div>
-      {formState && (
+      {activeFormState?.mode === "create" && (
         <div className="panel-form">
           <AdminMutationForm
             title={
-              formState.mode === "create"
-                ? formState.unitType === "management"
-                  ? uiText.addManagement
-                  : uiText.addDepartment
-                : uiText.editOrganizationUnit
+              activeFormState.unitType === "management"
+                ? uiText.addManagement
+                : uiText.addDepartment
             }
-            submitLabel={formState.mode === "create" ? uiText.create : uiText.save}
+            submitLabel={uiText.create}
             isSubmitting={isFormSubmitting}
             error={mutationError}
             successMessage={null}
@@ -189,18 +175,12 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
             <label>
               {uiText.organizationUnitName}
               <input
-                value={formState.name}
+                value={activeFormState.name}
                 onChange={(event) =>
-                  setFormState({ ...formState, name: event.currentTarget.value })
+                  setFormState({ ...activeFormState, name: event.currentTarget.value })
                 }
               />
             </label>
-            {formState.mode === "create" && formState.unitType === "department" && (
-              <p>
-                {uiText.parentManagement}:{" "}
-                {activeUnits.find((unit) => unit.id === formState.parentId)?.name ?? uiText.noData}
-              </p>
-            )}
           </AdminMutationForm>
         </div>
       )}
@@ -248,8 +228,17 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
           {!unitsQuery.error && (
             <OrganizationUnitTree
               units={activeUnits}
+              editingUnit={editingUnit}
+              editName={activeFormState?.mode === "edit" ? activeFormState.name : ""}
+              editError={mutationError}
+              isEditSubmitting={updateMutation.isPending}
+              onCancelEdit={closeForm}
+              onChangeEditName={(name) =>
+                setFormState((current) => (current ? { ...current, name } : current))
+              }
               onEdit={openEditForm}
               onArchive={setArchiveTarget}
+              onSubmitEdit={handleFormSubmit}
             />
           )}
         </>
@@ -260,12 +249,26 @@ export function OrganizationUnitsPanel({ organization, token, onClose }: Props) 
 
 function OrganizationUnitTree({
   units,
+  editingUnit,
+  editName,
+  editError,
+  isEditSubmitting,
+  onCancelEdit,
+  onChangeEditName,
   onEdit,
   onArchive,
+  onSubmitEdit,
 }: {
   units: OrgUnitRead[];
+  editingUnit: OrgUnitRead | null;
+  editName: string;
+  editError: unknown;
+  isEditSubmitting: boolean;
+  onCancelEdit: () => void;
+  onChangeEditName: (name: string) => void;
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
+  onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const managements = units.filter((unit) => unit.type === "management");
   const rootDepartments = units.filter(
@@ -285,8 +288,15 @@ function OrganizationUnitTree({
           children={units.filter(
             (unit) => unit.type === "department" && unit.parent_id === management.id,
           )}
+          editingUnit={editingUnit}
+          editName={editName}
+          editError={editError}
+          isEditSubmitting={isEditSubmitting}
+          onCancelEdit={onCancelEdit}
+          onChangeEditName={onChangeEditName}
           onEdit={onEdit}
           onArchive={onArchive}
+          onSubmitEdit={onSubmitEdit}
         />
       ))}
       {rootDepartments.map((department) => (
@@ -295,8 +305,15 @@ function OrganizationUnitTree({
           unit={department}
           level={1}
           children={[]}
+          editingUnit={editingUnit}
+          editName={editName}
+          editError={editError}
+          isEditSubmitting={isEditSubmitting}
+          onCancelEdit={onCancelEdit}
+          onChangeEditName={onChangeEditName}
           onEdit={onEdit}
           onArchive={onArchive}
+          onSubmitEdit={onSubmitEdit}
         />
       ))}
     </ul>
@@ -307,16 +324,31 @@ function OrganizationUnitTreeNode({
   unit,
   level,
   children,
+  editingUnit,
+  editName,
+  editError,
+  isEditSubmitting,
+  onCancelEdit,
+  onChangeEditName,
   onEdit,
   onArchive,
+  onSubmitEdit,
 }: {
   unit: OrgUnitRead;
   level: number;
   children: OrgUnitRead[];
+  editingUnit: OrgUnitRead | null;
+  editName: string;
+  editError: unknown;
+  isEditSubmitting: boolean;
+  onCancelEdit: () => void;
+  onChangeEditName: (name: string) => void;
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
+  onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isEditing = editingUnit?.id === unit.id;
   const isManagement = unit.type === "management";
   const canToggleChildren = isManagement && children.length > 0;
 
@@ -338,10 +370,6 @@ function OrganizationUnitTreeNode({
     toggleChildren();
   }
 
-  function stopControlKeyboardPropagation(event: KeyboardEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-  }
-
   return (
     <li>
       <div
@@ -358,39 +386,55 @@ function OrganizationUnitTreeNode({
         onClick={toggleChildren}
         onKeyDown={handleRowKeyDown}
       >
-        <div className="organization-unit-main">
-          <strong>{unit.name}</strong>
-          <span className="organization-unit-kind">
-            {unit.type === "management" ? uiText.management : uiText.department}
-          </span>
-        </div>
-        <span className="organization-unit-status">{activityLabel(unit.is_active)}</span>
-        <div className="row-actions">
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.editOrganizationUnit} ${unit.name}`}
-            onKeyDown={stopControlKeyboardPropagation}
-            onClick={(event) => {
-              event.stopPropagation();
-              onEdit(unit);
-            }}
+        {isEditing ? (
+          <form
+            className="organization-unit-inline-name-form"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            onSubmit={onSubmitEdit}
           >
-            {uiText.edit}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label={`${uiText.archiveOrganizationUnit} ${unit.name}`}
-            onKeyDown={stopControlKeyboardPropagation}
-            onClick={(event) => {
-              event.stopPropagation();
-              onArchive(unit);
-            }}
-          >
-            {uiText.moveToArchive}
-          </button>
-        </div>
+            <label>
+              {uiText.organizationUnitName}
+              <input
+                autoFocus
+                value={editName}
+                onChange={(event) => onChangeEditName(event.currentTarget.value)}
+              />
+            </label>
+            <div className="organization-unit-inline-name-actions">
+              <button type="submit" className="primary-button" disabled={isEditSubmitting}>
+                {isEditSubmitting ? uiText.saving : uiText.save}
+              </button>
+              <button type="button" className="ghost-button" onClick={onCancelEdit}>
+                {uiText.cancel}
+              </button>
+              <button type="button" className="danger-button" onClick={() => onArchive(unit)}>
+                {uiText.moveToArchive}
+              </button>
+            </div>
+            <MutationFeedback error={editError} successMessage={null} />
+          </form>
+        ) : (
+          <div className="organization-unit-main">
+            <button
+              type="button"
+              className="organization-unit-name"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit(unit);
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              {unit.name}
+            </button>
+            <span className="organization-unit-kind">
+              {unit.type === "management" ? uiText.management : uiText.department}
+            </span>
+          </div>
+        )}
+        {!isEditing && (
+          <span className="organization-unit-status">{activityLabel(unit.is_active)}</span>
+        )}
       </div>
       {isManagement && isExpanded && children.length > 0 && (
         <ul role="group">
@@ -400,8 +444,15 @@ function OrganizationUnitTreeNode({
               unit={child}
               level={level + 1}
               children={[]}
+              editingUnit={editingUnit}
+              editName={editName}
+              editError={editError}
+              isEditSubmitting={isEditSubmitting}
+              onCancelEdit={onCancelEdit}
+              onChangeEditName={onChangeEditName}
               onEdit={onEdit}
               onArchive={onArchive}
+              onSubmitEdit={onSubmitEdit}
             />
           ))}
         </ul>
