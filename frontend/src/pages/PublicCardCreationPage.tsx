@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { createCardDraftFromCreationLink, readPublicCardCreationLinkPreview } from "@/api/client";
 import { uiText } from "@/app/uiText";
+import { BrandMark } from "@/components/common/BrandMark";
 import { errorText } from "@/components/common/dataUtils";
 
 export function PublicCardCreationPage() {
@@ -35,7 +36,7 @@ export function PublicCardCreationPage() {
     <main className="public-shell">
       <header className="public-header">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true" />
+          <BrandMark />
           <div>
             <h1>{uiText.productName}</h1>
             <span>Создание карточки</span>

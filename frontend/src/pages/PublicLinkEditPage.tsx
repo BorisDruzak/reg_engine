@@ -19,6 +19,7 @@ import type {
   PublicLinkSafeStatusRead,
 } from "@/api/types";
 import { formatUiDateTime, instanceLabel, uiText } from "@/app/uiText";
+import { BrandMark } from "@/components/common/BrandMark";
 import { copyTextToClipboard } from "@/components/common/clipboard";
 import { errorText } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
@@ -103,7 +104,7 @@ export function PublicLinkEditPage() {
     <main className="public-shell">
       <header className="public-header">
         <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true" />
+          <BrandMark />
           <div>
             <h1>{uiText.productName}</h1>
             <span>{uiText.publicCardEdit}</span>

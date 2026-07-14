@@ -21,6 +21,7 @@ import {
   type VisibleSection,
 } from "@/app/uiText";
 import type { CardFieldFilterPayload } from "@/api/types";
+import { BrandMark } from "@/components/common/BrandMark";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { AuditTable } from "@/features/audit/AuditTable";
 import { LoginScreen } from "@/features/auth/LoginScreen";
@@ -350,7 +351,7 @@ export function HomePage() {
       >
         <div className="sidebar-header">
           <div className="brand-lockup">
-            <span className="brand-mark" aria-hidden="true" />
+            <BrandMark />
             <div className="brand-text">
               <h1>{uiText.productName}</h1>
               <span>{uiText.brandSubtitle}</span>

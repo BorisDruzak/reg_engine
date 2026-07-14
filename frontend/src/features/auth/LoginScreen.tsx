@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { login } from "@/api/client";
 import { uiText } from "@/app/uiText";
+import { BrandMark } from "@/components/common/BrandMark";
 import { errorText } from "@/components/common/dataUtils";
 
 import type { SessionState } from "./session";
@@ -26,7 +27,7 @@ export function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => v
     <main className="login-shell">
       <section className="login-panel">
         <div className="brand-lockup login-brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <BrandMark />
           <div>
             <h1>{uiText.productName}</h1>
             <span>{uiText.adminWorkspace}</span>
