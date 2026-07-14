@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -209,6 +209,38 @@ test("cancels inline unit editing and keeps management expansion on its non-cont
   await user.click(management);
   expect(management).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByRole("button", { name: "Отдел дошкольного образования" })).toBeVisible();
+});
+
+test("creates a department from an expanded management with that management as its parent", async () => {
+  const user = userEvent.setup();
+  const fetchMock = stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  const management = await screen.findByRole("treeitem", { name: /Управление образования/ });
+  await user.click(management);
+  const managementItem = management.closest("li");
+  expect(managementItem).not.toBeNull();
+
+  await user.click(
+    within(managementItem as HTMLLIElement).getByRole("button", { name: "Добавить отдел" }),
+  );
+  await user.type(screen.getByLabelText("Название подразделения"), "Отдел проектов");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input).endsWith("/organizations/organization-administration/org-units") &&
+        init?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+      name: "Отдел проектов",
+      parent_id: "unit-education",
+      unit_type: "department",
+    });
+  });
 });
 
 test("opens unit archive confirmation only from inline edit mode without collapsing management", async () => {

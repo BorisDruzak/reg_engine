@@ -111,6 +111,20 @@ export function OrganizationUnitsPanel({
     });
   }
 
+  function openChildDepartmentForm(management: OrgUnitRead) {
+    onCreateUnitRequestConsumed();
+    setLocalError(null);
+    setSuccessMessage(null);
+    setFormState({
+      createRequestId: null,
+      mode: "create",
+      unit: null,
+      unitType: "department",
+      name: "",
+      parentId: management.id,
+    });
+  }
+
   function closeForm() {
     setFormState(null);
     setLocalError(null);
@@ -242,6 +256,7 @@ export function OrganizationUnitsPanel({
               onChangeEditName={(name) =>
                 setFormState((current) => (current ? { ...current, name } : current))
               }
+              onCreateChildDepartment={openChildDepartmentForm}
               onEdit={openEditForm}
               onArchive={setArchiveTarget}
               onSubmitEdit={handleFormSubmit}
@@ -261,6 +276,7 @@ function OrganizationUnitTree({
   isEditSubmitting,
   onCancelEdit,
   onChangeEditName,
+  onCreateChildDepartment,
   onEdit,
   onArchive,
   onSubmitEdit,
@@ -272,6 +288,7 @@ function OrganizationUnitTree({
   isEditSubmitting: boolean;
   onCancelEdit: () => void;
   onChangeEditName: (name: string) => void;
+  onCreateChildDepartment: (management: OrgUnitRead) => void;
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
@@ -300,6 +317,7 @@ function OrganizationUnitTree({
           isEditSubmitting={isEditSubmitting}
           onCancelEdit={onCancelEdit}
           onChangeEditName={onChangeEditName}
+          onCreateChildDepartment={onCreateChildDepartment}
           onEdit={onEdit}
           onArchive={onArchive}
           onSubmitEdit={onSubmitEdit}
@@ -317,6 +335,7 @@ function OrganizationUnitTree({
           isEditSubmitting={isEditSubmitting}
           onCancelEdit={onCancelEdit}
           onChangeEditName={onChangeEditName}
+          onCreateChildDepartment={onCreateChildDepartment}
           onEdit={onEdit}
           onArchive={onArchive}
           onSubmitEdit={onSubmitEdit}
@@ -336,6 +355,7 @@ function OrganizationUnitTreeNode({
   isEditSubmitting,
   onCancelEdit,
   onChangeEditName,
+  onCreateChildDepartment,
   onEdit,
   onArchive,
   onSubmitEdit,
@@ -349,6 +369,7 @@ function OrganizationUnitTreeNode({
   isEditSubmitting: boolean;
   onCancelEdit: () => void;
   onChangeEditName: (name: string) => void;
+  onCreateChildDepartment: (management: OrgUnitRead) => void;
   onEdit: (unit: OrgUnitRead) => void;
   onArchive: (unit: OrgUnitRead) => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
@@ -443,25 +464,39 @@ function OrganizationUnitTreeNode({
         )}
       </div>
       {isManagement && isExpanded && children.length > 0 && (
-        <ul role="group">
-          {children.map((child) => (
-            <OrganizationUnitTreeNode
-              key={child.id}
-              unit={child}
-              level={level + 1}
-              children={[]}
-              editingUnit={editingUnit}
-              editName={editName}
-              editError={editError}
-              isEditSubmitting={isEditSubmitting}
-              onCancelEdit={onCancelEdit}
-              onChangeEditName={onChangeEditName}
-              onEdit={onEdit}
-              onArchive={onArchive}
-              onSubmitEdit={onSubmitEdit}
-            />
-          ))}
-        </ul>
+        <>
+          <ul role="group">
+            {children.map((child) => (
+              <OrganizationUnitTreeNode
+                key={child.id}
+                unit={child}
+                level={level + 1}
+                children={[]}
+                editingUnit={editingUnit}
+                editName={editName}
+                editError={editError}
+                isEditSubmitting={isEditSubmitting}
+                onCancelEdit={onCancelEdit}
+                onChangeEditName={onChangeEditName}
+                onCreateChildDepartment={onCreateChildDepartment}
+                onEdit={onEdit}
+                onArchive={onArchive}
+                onSubmitEdit={onSubmitEdit}
+              />
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onCreateChildDepartment(unit);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {uiText.addDepartment}
+          </button>
+        </>
       )}
     </li>
   );

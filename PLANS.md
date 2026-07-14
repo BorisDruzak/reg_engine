@@ -5078,3 +5078,5 @@ Status: implementation complete locally; release verification in progress.
   department creation. The redundant unit header and close control are removed.
 - Management and department names edit inline with Save, Cancel, and archive.
   Unit-form requests remain monotonic across failed create attempts.
+- An expanded management offers contextual `Добавить отдел`; the resulting
+  department create request keeps that management as `parent_id`.
