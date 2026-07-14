@@ -43,10 +43,10 @@ test("renders exactly three Russian stages and contextual canvas actions without
   );
   expect(screen.queryByLabelText("Палитра элементов")).not.toBeInTheDocument();
   expect(screen.queryByRole("complementary", { name: /Свойства/ })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Создать блок в этой области" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Создать блок" })).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Вставить существующий блок в эту область" }),
-  ).toBeInTheDocument();
+    screen.queryByRole("button", { name: "Вставить существующий блок в эту область" }),
+  ).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Создать поле в блоке Основной блок" }),
   ).toBeInTheDocument();
@@ -60,7 +60,7 @@ test("creates a block inside the canvas and saves its placement with the current
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  await user.click(await screen.findByRole("button", { name: "Создать блок в этой области" }));
+  await user.click(await screen.findByRole("button", { name: "Создать блок" }));
   const title = screen.getByLabelText("Название блока");
   expect(title).toHaveValue("Новый блок");
   await user.clear(title);
@@ -75,11 +75,42 @@ test("creates a block inside the canvas and saves its placement with the current
       expected_revision: "revision-1",
       form_layout: expect.objectContaining({
         sections: expect.arrayContaining([
-          expect.objectContaining({ block_id: "block-created", row_span: 1, column_span: 3 }),
+          expect.objectContaining({ block_id: "block-created", row_span: 1, column_span: 12 }),
         ]),
       }),
     }),
   );
+});
+
+test("normalizes a loaded crooked web layout before the next template save", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ crookedFormLayout: true });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await screen.findByRole("button", { name: "Создать блок" });
+  expect(api.formSavePayloads).toHaveLength(0);
+
+  await user.click(screen.getByRole("button", { name: "Создать блок" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0].form_layout.sections).toEqual([
+    expect.objectContaining({
+      block_id: "block-1",
+      row: 1,
+      column: 1,
+      row_span: 1,
+      column_span: 12,
+    }),
+    expect.objectContaining({
+      block_id: "block-created",
+      row: 2,
+      column: 1,
+      row_span: 1,
+      column_span: 12,
+    }),
+  ]);
 });
 
 test("merges a deferred block create into the newest geometry before the first layout PATCH", async () => {
@@ -88,7 +119,7 @@ test("merges a deferred block create into the newest geometry before the first l
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  await user.click(await screen.findByRole("button", { name: "Создать блок в этой области" }));
+  await user.click(await screen.findByRole("button", { name: "Создать блок" }));
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
   await waitFor(() => expect(api.createdBlockPayloads).toHaveLength(1));
 
@@ -240,38 +271,14 @@ test("waits for an in-flight layout PATCH before creating a field", async () => 
   await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
 });
 
-test("inserts an existing block through a contextual chooser and saves once", async () => {
-  const user = userEvent.setup();
-  const api = createEditorFetchMock();
-  vi.stubGlobal("fetch", api.fetchMock);
-  renderEditor();
-
-  await user.click(
-    await screen.findByRole("button", { name: "Вставить существующий блок в эту область" }),
-  );
-  const chooser = screen.getByRole("dialog", { name: "Вставка существующего блока" });
-  await user.selectOptions(within(chooser).getByLabelText("Блок"), "block-2");
-  await user.click(within(chooser).getByRole("button", { name: "Вставить" }));
-
-  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
-  expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
-  expect(api.formSavePayloads[0].form_layout.sections).toEqual(
-    expect.arrayContaining([expect.objectContaining({ block_id: "block-2" })]),
-  );
-});
-
 test("reorders adjacent blocks atomically and restores the previous layout with one undo", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
-  await user.click(
-    await screen.findByRole("button", { name: "Вставить существующий блок в эту область" }),
-  );
-  const chooser = screen.getByRole("dialog", { name: "Вставка существующего блока" });
-  await user.selectOptions(within(chooser).getByLabelText("Блок"), "block-2");
-  await user.click(within(chooser).getByRole("button", { name: "Вставить" }));
+  await user.click(await screen.findByRole("button", { name: "Создать блок" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
 
   const moveDown = screen.getByRole("button", { name: "Переместить блок Основной блок вниз" });
@@ -280,7 +287,7 @@ test("reorders adjacent blocks atomically and restores the previous layout with 
 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
   expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.block_id)).toEqual([
-    "block-2",
+    "block-created",
     "block-1",
   ]);
   expect(api.formSavePayloads[1].form_layout.sections.map((section) => section.row)).toEqual([
@@ -292,7 +299,7 @@ test("reorders adjacent blocks atomically and restores the previous layout with 
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(3));
   expect(api.formSavePayloads[2].form_layout.sections.map((section) => section.block_id)).toEqual([
     "block-1",
-    "block-2",
+    "block-created",
   ]);
   expect(screen.queryByRole("button", { name: "Повторить изменение" })).not.toBeInTheDocument();
 });
@@ -314,7 +321,7 @@ test("saves field geometry and the preview uses the latest draft", async () => {
 
   await user.click(screen.getByRole("tab", { name: "Предпросмотр" }));
   for (const block of screen.getAllByTestId("layout-block-block-block-1")) {
-    expect(block).toHaveStyle({ gridColumn: "1 / span 6" });
+    expect(block).toHaveStyle({ gridColumn: "1 / span 12" });
   }
   expect(screen.queryByRole("button", { name: /Переместить блок/ })).not.toBeInTheDocument();
 });
@@ -340,14 +347,14 @@ test("keeps a conflicting local draft visible and accepts the reviewed server ve
 
   const comparison = await screen.findByRole("region", { name: "Сравнение версий макета" });
   expect(within(comparison).getByTestId("conflict-local-layout")).toHaveTextContent("колонка 1");
-  expect(within(comparison).getByTestId("conflict-server-layout")).toHaveTextContent("колонка 5");
+  expect(within(comparison).getByTestId("conflict-server-layout")).toHaveTextContent("колонка 1");
   expect(api.formSavePayloads).toHaveLength(1);
 
   await user.click(within(comparison).getByRole("button", { name: "Принять версию сервера" }));
 
   expect(api.formSavePayloads).toHaveLength(1);
   expect(screen.getByTestId("layout-block-block-block-1")).toHaveStyle({
-    gridColumn: "5 / span 6",
+    gridColumn: "1 / span 12",
   });
 });
 
@@ -944,11 +951,22 @@ function createEditorFetchMock(
     formSaveErrorOnFirst?: boolean;
     fieldUpdateError?: boolean;
     legacyPrintView?: boolean;
+    crookedFormLayout?: boolean;
   } = {},
 ) {
   let layout = unifiedLayoutPayload(
     options.legacyPrintView ? legacyPrintLayout() : emptyPrintLayout(),
   );
+  if (options.crookedFormLayout) {
+    layout = layoutWithBlockColumn({ ...layout, revision: "revision-crooked" }, 7);
+    layout = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: layout.form_layout.sections.map((section) => ({ ...section, row: 3, row_span: 2 })),
+      },
+    };
+  }
   let formSaveAttempts = 0;
   const formSavePayloads: FormSavePayload[] = [];
   const printSavePayloads: PrintSavePayload[] = [];

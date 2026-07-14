@@ -46,8 +46,8 @@ import {
 } from "@/features/cardLayout/a4LinkedCardLayout";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 import type { CardLayoutSelection } from "@/features/cardLayout/CardLayoutRenderer";
-import type { CardLayoutCreatePosition } from "@/features/cardLayout/CardWebLayoutCanvas";
 import {
+  normalizeWebBlockSections,
   reorderBlockSections,
   type BlockOrderDirection,
 } from "@/features/cardLayout/blockOrdering";
@@ -86,7 +86,12 @@ const stages: Array<{ id: StudioStage; label: string }> = [
 ];
 
 type InsertBlockDialogState = {
-  position: CardLayoutCreatePosition;
+  position: {
+    row: number;
+    column: number;
+    row_span: 1;
+    column_span: 12;
+  };
   blockId: string;
 };
 
@@ -444,7 +449,7 @@ function CardLayoutStudioSession({
     void saveNextFormLayout(entry.before);
   }
 
-  function startCreateBlock(position: CardLayoutCreatePosition) {
+  function startCreateBlock() {
     const currentLayout = draftLayoutRef.current;
     const temporaryId = nextTemporaryId("block");
     const block: FormBlockRead = {
@@ -471,18 +476,21 @@ function CardLayoutStudioSession({
         ...currentLayout.structure,
         blocks: [...currentLayout.structure.blocks, block],
       },
-      form_layout: {
+      form_layout: normalizeWebBlockSections({
         ...currentLayout.form_layout,
         sections: [
           ...currentLayout.form_layout.sections,
           {
             id: `layout-${temporaryId}`,
             block_id: temporaryId,
-            ...position,
+            row: currentLayout.form_layout.sections.length + 1,
+            column: 1,
+            row_span: 1,
+            column_span: 12,
             items: [],
           },
         ],
-      },
+      }),
     };
     temporaryBlockIds.current.add(temporaryId);
     localStructure.current = next.structure;
@@ -720,7 +728,7 @@ function CardLayoutStudioSession({
     }
   }
 
-  function openInsertBlock(position: CardLayoutCreatePosition) {
+  function openInsertBlock(position: InsertBlockDialogState["position"]) {
     setInsertDialog({ position, blockId: unusedBlocks[0]?.id ?? "" });
   }
 
@@ -1336,12 +1344,16 @@ function mergeExternalStructure(
   blocks: FormBlockRead[],
   fields: FormFieldRead[],
 ): CardTemplateLayoutRead {
-  return {
+  const merged = {
     ...layout,
     structure: {
       blocks: mergeById(layout.structure.blocks, blocks),
       fields: mergeById(layout.structure.fields, fields),
     },
+  };
+  return {
+    ...merged,
+    form_layout: normalizeWebBlockSections(merged.form_layout),
   };
 }
 

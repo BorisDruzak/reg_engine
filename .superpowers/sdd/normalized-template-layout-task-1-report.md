@@ -104,3 +104,36 @@ Planned commit subject: `feat: normalize web template blocks`.
   commit typechecks.
 - No deployment, browser proof, migration, push, or production data mutation
   was performed for this isolated task.
+
+## Review remediation
+
+The Task 1 review found that the normalizer was not yet invoked by production
+draft state and that the canvas callback still carried a placement payload.
+
+- `mergeExternalStructure` now normalizes the merged layout. It is used for
+  the initial draft and for a freshly retrieved server layout during conflict
+  review. Loading alone does not call the save endpoint.
+- The canvas and studio now use a parameter-free `onCreateBlock` callback.
+  `startCreateBlock` appends a temporary section and immediately normalizes
+  the complete section list before the block can be saved.
+- The obsolete `CardLayoutCreatePosition` export and its import are removed.
+  The retained Task 2 insert-dialog code uses a local dialog-state position
+  type only.
+- The editor integration test starts with a crooked mocked server layout,
+  proves no PATCH occurs on load, then creates/saves a block and asserts that
+  the PATCH contains sequential full-width sections. Obsolete insert-action
+  integration coverage was replaced by the supported create-and-reorder flow.
+
+### Remediation verification
+
+```text
+pnpm --dir frontend test:run src/features/cardLayout/blockOrdering.test.ts src/features/cardLayout/CardLayoutRenderer.test.tsx src/features/registry/CardPrintTemplateEditor.test.tsx
+```
+
+Observed result: 3 test files passed, 102 tests passed.
+
+```text
+pnpm --dir frontend typecheck
+```
+
+Observed result: passed with no errors. `git diff --check` also passed.

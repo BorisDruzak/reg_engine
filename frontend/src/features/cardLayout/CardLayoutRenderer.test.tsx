@@ -1545,12 +1545,7 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByText("Вставить существующий блок")).not.toBeInTheDocument();
     expect(screen.queryByTestId("card-layout-empty-area")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Создать блок" }));
-    expect(onCreateBlock).toHaveBeenCalledWith({
-      row: 3,
-      column: 1,
-      row_span: 1,
-      column_span: 12,
-    });
+    expect(onCreateBlock).toHaveBeenCalledWith();
     expect(
       within(screen.getByTestId("layout-block-block-fio")).getByRole("button", {
         name: "Создать поле в блоке ФИО",

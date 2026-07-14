@@ -35,13 +35,6 @@ import type {
   LayoutGeometrySession,
 } from "./useLayoutGeometrySession";
 
-export type CardLayoutCreatePosition = {
-  row: number;
-  column: number;
-  row_span: 1;
-  column_span: 12;
-};
-
 export type CardWebLayoutCanvasProps = {
   layout: CardTemplateLayoutRead;
   blocks?: FormBlockRead[];
@@ -68,7 +61,7 @@ export type CardWebLayoutCanvasProps = {
   canActivateBlock?: (context: CardLayoutBlockRenderContext) => boolean;
   onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
-  onCreateBlock?: (position: CardLayoutCreatePosition) => void;
+  onCreateBlock?: () => void;
   onCreateField?: (blockId: string) => void;
   onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
   onCancelBlock?: (blockId: string) => void;
@@ -139,13 +132,6 @@ function CardWebLayoutCanvasSession({
       : activeSelection?.kind === "field"
         ? Boolean(onCommitField)
         : false);
-  const createBlockPosition = useMemo<CardLayoutCreatePosition>(() => {
-    const lastOccupiedRow = layout.form_layout.sections.reduce(
-      (lastRow, section) => Math.max(lastRow, section.row + section.row_span - 1),
-      0,
-    );
-    return { row: lastOccupiedRow + 1, column: 1, row_span: 1, column_span: 12 };
-  }, [layout.form_layout.sections]);
   const validateGeometry = useCallback(
     (session: LayoutGeometrySession) => geometryError(layout, session),
     [layout],
@@ -262,7 +248,7 @@ function CardWebLayoutCanvasSession({
           <button
             type="button"
             className="ghost-button"
-            onClick={() => onCreateBlock(createBlockPosition)}
+            onClick={() => onCreateBlock()}
           >
             Создать блок
           </button>
