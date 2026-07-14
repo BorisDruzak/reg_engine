@@ -583,24 +583,28 @@ function publicCardTemplateLayout(preview: PublicCardPreview): CardTemplateLayou
     display_config_json: block.display_config_json ?? null,
   }));
   const fields = [...publicPreviewFieldsById(preview.blocks).values()].map(
-    ({ field, blockId }, index): FormFieldRead => ({
-      id: field.field_id,
-      block_id: blockId,
-      code: field.code,
-      label: field.label,
-      description: field.description,
-      field_type: field.field_type,
-      position: index,
-      required_mode: field.required_mode,
-      options_source_type: field.options_source_type,
-      options_source_id: field.options_source_id,
-      options_config_json: field.options_config_json ?? null,
-      display_config_json: field.display_config_json ?? null,
-      is_active: true,
-      is_list_display: false,
-      public_visible: true,
-      public_editable: field.field_type !== "file_ref" && field.field_type !== "static_text",
-    }),
+    ({ field, blockId }, index): FormFieldRead => {
+      const publicEditable =
+        field.public_editable && !["file_ref", "static_text"].includes(field.field_type);
+      return {
+        id: field.field_id,
+        block_id: blockId,
+        code: field.code,
+        label: field.label,
+        description: field.description,
+        field_type: field.field_type,
+        position: index,
+        required_mode: publicEditable ? field.required_mode : "not_required",
+        options_source_type: field.options_source_type,
+        options_source_id: field.options_source_id,
+        options_config_json: field.options_config_json ?? null,
+        display_config_json: field.display_config_json ?? null,
+        is_active: true,
+        is_list_display: false,
+        public_visible: true,
+        public_editable: publicEditable,
+      };
+    },
   );
   return {
     version: "card_template_layout_v1",

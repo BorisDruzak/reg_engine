@@ -166,6 +166,34 @@ describe("PublicLinkEditPage", () => {
     expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/attachments")).toBe(false);
   });
 
+  test("does not block public completion for a required server-read-only field", async () => {
+    preview.form_layout.sections[0].items.push(
+      layoutItem("item-readonly-required", "field-readonly-required", 3, 1, 1, 6),
+    );
+    preview.blocks[0].instances[0].fields.push(
+      previewField(
+        "field-readonly-required",
+        "readonly_required",
+        "Сведения администратора",
+        "text",
+        "",
+        { public_editable: false, required_mode: "required" },
+      ),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Основные сведения: заполнено 4 из 5",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("public-field-item-readonly-required")).toHaveClass("is-empty");
+    expect(screen.getByTestId("public-field-item-readonly-required")).not.toHaveClass(
+      "is-required-missing",
+    );
+  });
+
   test("renders public fields as one inline label and control row", async () => {
     renderPage();
 
