@@ -18,6 +18,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         CheckConstraint(f"source in ({quoted(AUDIT_SOURCES)})", name="source"),
         Index("ix_audit_events_actor_user_id", "actor_user_id"),
         Index("ix_audit_events_actor_public_link_id", "actor_public_link_id"),
+        Index("ix_audit_events_actor_reference_edit_link_id", "actor_reference_edit_link_id"),
         Index("ix_audit_events_object", "object_type", "object_id"),
         Index("ix_audit_events_action", "action"),
         Index("ix_audit_events_source", "source"),
@@ -31,6 +32,9 @@ class AuditEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
     actor_public_link_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("card_public_links.id")
+    )
+    actor_reference_edit_link_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("reference_edit_links.id")
     )
     action: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[str] = mapped_column(String, nullable=False)

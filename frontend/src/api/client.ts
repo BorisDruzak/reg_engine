@@ -74,6 +74,13 @@ import type {
   PublicLinkTokenRead,
   PublicLinkAttachmentListRead,
   PublicLinkAttachmentRead,
+  PublicReferenceItemRead,
+  PublicReferenceListRead,
+  PublicReferenceWorkspaceRead,
+  ReferenceEditLinkCreatePayload,
+  ReferenceEditLinkListRead,
+  ReferenceEditLinkRead,
+  ReferenceEditLinkTokenRead,
   PermissionListRead,
   PublicLinkPreviewRead,
   ReferenceItemCreatePayload,
@@ -604,10 +611,116 @@ export async function listCardFieldOrgUnitOptions(token: string, cardId: string,
   );
 }
 
-export async function listCardFieldOrganizationOptions(token: string, cardId: string, fieldId: string) {
+export async function listCardFieldOrganizationOptions(
+  token: string,
+  cardId: string,
+  fieldId: string,
+) {
   return apiRequest<CardFieldOptionListRead>(
     `/api/v1/cards/${cardId}/fields/${fieldId}/organization-options`,
     { token },
+  );
+}
+
+export async function createReferenceEditLink(
+  token: string,
+  registryId: string,
+  payload: ReferenceEditLinkCreatePayload,
+) {
+  return apiRequest<ReferenceEditLinkTokenRead>(
+    `/api/v1/registries/${registryId}/reference-edit-links`,
+    { method: "POST", token, body: payload },
+  );
+}
+
+export async function listReferenceEditLinks(token: string, registryId: string) {
+  return apiRequest<ReferenceEditLinkListRead>(
+    `/api/v1/registries/${registryId}/reference-edit-links`,
+    { token },
+  );
+}
+
+export async function closeReferenceEditLink(token: string, linkId: string) {
+  return apiRequest<ReferenceEditLinkRead>(`/api/v1/reference-edit-links/${linkId}/close`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function getPublicReferenceWorkspace(rawToken: string) {
+  return apiRequest<PublicReferenceWorkspaceRead>("/api/v1/public/reference-edit-links/workspace", {
+    method: "POST",
+    body: { raw_token: rawToken },
+  });
+}
+
+export async function createPublicReferenceList(
+  rawToken: string,
+  name: string,
+  description?: string,
+) {
+  return apiRequest<PublicReferenceListRead>("/api/v1/public/reference-edit-links/lists", {
+    method: "POST",
+    body: { raw_token: rawToken, name, description },
+  });
+}
+
+export async function updatePublicReferenceList(
+  rawToken: string,
+  listId: string,
+  payload: { name?: string; description?: string | null },
+) {
+  return apiRequest<PublicReferenceListRead>(
+    `/api/v1/public/reference-edit-links/lists/${listId}`,
+    {
+      method: "PATCH",
+      body: { raw_token: rawToken, ...payload },
+    },
+  );
+}
+
+export async function archivePublicReferenceList(rawToken: string, listId: string) {
+  return apiRequest<PublicReferenceListRead>(
+    `/api/v1/public/reference-edit-links/lists/${listId}`,
+    {
+      method: "DELETE",
+      body: { raw_token: rawToken },
+    },
+  );
+}
+
+export async function createPublicReferenceItem(
+  rawToken: string,
+  listId: string,
+  payload: { label: string; parent_id?: string | null; description?: string; position?: number },
+) {
+  return apiRequest<PublicReferenceItemRead>(
+    `/api/v1/public/reference-edit-links/lists/${listId}/items`,
+    { method: "POST", body: { raw_token: rawToken, ...payload } },
+  );
+}
+
+export async function updatePublicReferenceItem(
+  rawToken: string,
+  itemId: string,
+  payload: { label?: string; description?: string | null; position?: number },
+) {
+  return apiRequest<PublicReferenceItemRead>(
+    `/api/v1/public/reference-edit-links/items/${itemId}`,
+    {
+      method: "PATCH",
+      body: { raw_token: rawToken, ...payload },
+    },
+  );
+}
+
+export async function archivePublicReferenceItem(rawToken: string, itemId: string) {
+  return apiRequest<PublicReferenceItemRead>(
+    `/api/v1/public/reference-edit-links/items/${itemId}`,
+    {
+      method: "DELETE",
+      body: { raw_token: rawToken },
+    },
   );
 }
 

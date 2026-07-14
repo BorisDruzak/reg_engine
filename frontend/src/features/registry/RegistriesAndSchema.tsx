@@ -7,10 +7,13 @@ import {
   archiveReferenceList,
   archiveRegistry,
   createCardTemplate,
+  createReferenceEditLink,
   createReferenceItem,
   createReferenceList,
   createRegistry,
   listReferenceItems,
+  listReferenceEditLinks,
+  closeReferenceEditLink,
   listReferenceLists,
   updateCardTemplate,
   updateReferenceItem,
@@ -383,9 +386,7 @@ export function RegistriesAndSchema({
           {activeTab === "importExport" && (
             <ImportExportPanel selectedRegistryId={selectedRegistryId} token={token} />
           )}
-          {showReports && (
-            <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />
-          )}
+          {showReports && <ReportsPanel selectedRegistryId={selectedRegistryId} token={token} />}
         </div>
       </div>
     </div>
@@ -664,6 +665,11 @@ function SchemaVisualEditor({
           successMessage={successMessage}
         />
       </div>
+      <ReferenceEditLinksPanel
+        token={token}
+        registryId={selectedRegistryId}
+        organizations={organizations}
+      />
       <section className="card-template-section" role="region" aria-label={uiText.cardTemplates}>
         <header className="card-template-section-header">
           <h3>{uiText.cardTemplates}</h3>
@@ -770,7 +776,9 @@ function SchemaVisualEditor({
                               <input
                                 aria-label={uiText.cardTemplateName}
                                 value={templateNameDraft}
-                                onChange={(event) => setTemplateNameDraft(event.currentTarget.value)}
+                                onChange={(event) =>
+                                  setTemplateNameDraft(event.currentTarget.value)
+                                }
                               />
                             </label>
                           </AdminMutationForm>
@@ -1466,6 +1474,107 @@ function ReferenceListsPanel({
           />
         </AdminMutationDialog>
       )}
+    </section>
+  );
+}
+
+function ReferenceEditLinksPanel({
+  token,
+  registryId,
+  organizations,
+}: {
+  token: string;
+  registryId: string;
+  organizations: OrganizationRead[];
+}) {
+  const queryClient = useQueryClient();
+  const [ownerOrganizationId, setOwnerOrganizationId] = useState("");
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const linksQuery = useQuery({
+    queryKey: ["reference-edit-links", token, registryId],
+    queryFn: () => listReferenceEditLinks(token, registryId),
+    enabled: Boolean(token && registryId),
+  });
+  const refresh = async () =>
+    queryClient.invalidateQueries({ queryKey: ["reference-edit-links", token, registryId] });
+  const createLink = useMutation({
+    mutationFn: () =>
+      createReferenceEditLink(token, registryId, {
+        owner_organization_id: ownerOrganizationId || null,
+      }),
+    onSuccess: async (created) => {
+      setCreatedUrl(`${window.location.origin}/public/references/${created.raw_token}`);
+      await refresh();
+    },
+  });
+  const closeLink = useMutation({
+    mutationFn: (linkId: string) => closeReferenceEditLink(token, linkId),
+    onSuccess: refresh,
+  });
+  return (
+    <section
+      className="data-panel reference-edit-links-panel"
+      aria-label="Ссылки на заполнение справочников"
+    >
+      <header>
+        <h3>Ссылки на заполнение справочников</h3>
+      </header>
+      <div className="row-actions">
+        <label>
+          <span>Организация-владелец</span>
+          <select
+            value={ownerOrganizationId}
+            onChange={(event) => setOwnerOrganizationId(event.currentTarget.value)}
+          >
+            <option value="">Без организации-владельца</option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => createLink.mutate()}
+          disabled={createLink.isPending}
+        >
+          Создать ссылку
+        </button>
+      </div>
+      {createdUrl ? (
+        <div className="row-actions">
+          <output>{createdUrl}</output>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void navigator.clipboard?.writeText(createdUrl)}
+          >
+            Копировать ссылку
+          </button>
+        </div>
+      ) : null}
+      {linksQuery.data?.items.map((link) => (
+        <div className="reference-edit-link-row" key={link.id}>
+          <span>
+            {link.status === "active"
+              ? "Действует"
+              : link.status === "closed"
+                ? "Закрыта"
+                : "Истекла"}
+          </span>
+          {link.status === "active" ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => closeLink.mutate(link.id)}
+            >
+              Закрыть ссылку
+            </button>
+          ) : null}
+        </div>
+      ))}
     </section>
   );
 }

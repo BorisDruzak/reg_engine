@@ -27,6 +27,7 @@ class AuditService:
             actor_type="user",
             actor_user_id=actor_user_id,
             actor_public_link_id=None,
+            actor_reference_edit_link_id=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -49,12 +50,36 @@ class AuditService:
             actor_type="public_link",
             actor_user_id=None,
             actor_public_link_id=actor_public_link_id,
+            actor_reference_edit_link_id=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source="public_link",
+        )
+
+    def record_reference_edit_link_event(
+        self,
+        *,
+        actor_reference_edit_link_id: UUID,
+        action: str,
+        object_type: str,
+        object_id: UUID | None = None,
+        old_data_json: dict[str, Any] | None = None,
+        new_data_json: dict[str, Any] | None = None,
+    ) -> AuditEvent:
+        return self._record(
+            actor_type="reference_edit_link",
+            actor_user_id=None,
+            actor_public_link_id=None,
+            actor_reference_edit_link_id=actor_reference_edit_link_id,
+            action=action,
+            object_type=object_type,
+            object_id=object_id,
+            old_data_json=old_data_json,
+            new_data_json=new_data_json,
+            source="reference_edit_link",
         )
 
     def record_system_event(
@@ -70,6 +95,7 @@ class AuditService:
             actor_type="system",
             actor_user_id=None,
             actor_public_link_id=None,
+            actor_reference_edit_link_id=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -108,6 +134,7 @@ class AuditService:
         actor_type: str,
         actor_user_id: UUID | None,
         actor_public_link_id: UUID | None,
+        actor_reference_edit_link_id: UUID | None,
         action: str,
         object_type: str,
         object_id: UUID | None,
@@ -121,6 +148,7 @@ class AuditService:
             actor_type=actor_type,
             actor_user_id=actor_user_id,
             actor_public_link_id=actor_public_link_id,
+            actor_reference_edit_link_id=actor_reference_edit_link_id,
             action=action,
             object_type=object_type,
             object_id=object_id,

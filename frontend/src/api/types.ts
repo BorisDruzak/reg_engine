@@ -40,6 +40,49 @@ export type OrganizationTreeRead = {
   items: OrganizationTreeNodeRead[];
 };
 
+export type ReferenceEditLinkRead = {
+  id: string;
+  registry_id: string;
+  owner_organization_id: string | null;
+  status: "active" | "closed" | "expired";
+  expires_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+};
+
+export type ReferenceEditLinkTokenRead = ReferenceEditLinkRead & { raw_token: string };
+export type ReferenceEditLinkListRead = { items: ReferenceEditLinkRead[] };
+export type ReferenceEditLinkCreatePayload = {
+  owner_organization_id?: string | null;
+  expires_in_days?: number | null;
+};
+
+export type PublicReferenceListRead = {
+  id: string;
+  name: string;
+  description: string | null;
+  archived_at: string | null;
+};
+
+export type PublicReferenceItemRead = {
+  id: string;
+  list_id: string;
+  parent_id: string | null;
+  label: string;
+  description: string | null;
+  position: number;
+  archived_at: string | null;
+};
+
+export type PublicReferenceWorkspaceRead = {
+  status: "active" | "closed" | "expired";
+  can_edit: boolean;
+  registry_id: string;
+  owner_organization_id: string | null;
+  lists: PublicReferenceListRead[];
+  items: PublicReferenceItemRead[];
+};
+
 export type OrganizationCreatePayload = {
   code: string;
   name: string;

@@ -48,6 +48,9 @@ class ReferenceList(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    created_via_reference_edit_link_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("reference_edit_links.id")
+    )
 
 
 class ReferenceItem(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):

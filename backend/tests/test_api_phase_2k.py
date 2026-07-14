@@ -258,6 +258,17 @@ def test_phase_2k_organization_reference_options_route_is_registered_without_dat
     assert "/api/v1/cards/{card_id}/fields/{field_id}/organization-options" in paths
 
 
+def test_public_reference_edit_link_routes_are_registered_without_database() -> None:
+    app = create_app()
+    paths = set(app.openapi()["paths"])
+
+    assert "/api/v1/registries/{registry_id}/reference-edit-links" in paths
+    assert "/api/v1/reference-edit-links/{link_id}/close" in paths
+    assert "/api/v1/public/reference-edit-links/workspace" in paths
+    assert "/api/v1/public/reference-edit-links/lists" in paths
+    assert "/api/v1/public/reference-edit-links/lists/{list_id}/items" in paths
+
+
 def test_phase_2k_registry_update_archive_routes_are_registered_without_database() -> None:
     app = create_app()
     registry_path = app.openapi()["paths"]["/api/v1/registries/{registry_id}"]
@@ -628,6 +639,93 @@ def test_organization_reference_options_and_public_allowlist_are_enforced(
         },
     )
     assert allowed_edit.status_code == 200, allowed_edit.text
+
+
+def test_public_reference_edit_link_is_isolated_audited_and_read_only_after_close(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-public-reference-link-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-public-reference-link-org", "name": "Owner organization"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-public-reference-link-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    created_link = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/reference-edit-links",
+        {"owner_organization_id": organization["id"]},
+        actor_id=system_admin.id,
+    )
+
+    list_response = api_client.post(
+        "/api/v1/public/reference-edit-links/lists",
+        json={"raw_token": created_link["raw_token"], "name": "Public list"},
+    )
+    assert list_response.status_code == 201, list_response.text
+    public_list = list_response.json()
+    root_response = api_client.post(
+        f"/api/v1/public/reference-edit-links/lists/{public_list['id']}/items",
+        json={"raw_token": created_link["raw_token"], "label": "Root item"},
+    )
+    assert root_response.status_code == 201, root_response.text
+    child_response = api_client.post(
+        f"/api/v1/public/reference-edit-links/lists/{public_list['id']}/items",
+        json={
+            "raw_token": created_link["raw_token"],
+            "label": "Child item",
+            "parent_id": root_response.json()["id"],
+        },
+    )
+    assert child_response.status_code == 201, child_response.text
+
+    workspace = api_client.post(
+        "/api/v1/public/reference-edit-links/workspace",
+        json={"raw_token": created_link["raw_token"]},
+    )
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["can_edit"] is True
+    assert [item["id"] for item in workspace.json()["lists"]] == [public_list["id"]]
+    assert {item["id"] for item in workspace.json()["items"]} == {
+        root_response.json()["id"],
+        child_response.json()["id"],
+    }
+
+    close_response = api_client.post(
+        f"/api/v1/reference-edit-links/{created_link['id']}/close",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert close_response.status_code == 200, close_response.text
+    read_only_workspace = api_client.post(
+        "/api/v1/public/reference-edit-links/workspace",
+        json={"raw_token": created_link["raw_token"]},
+    )
+    assert read_only_workspace.json()["status"] == "closed"
+    assert read_only_workspace.json()["can_edit"] is False
+    rejected_create = api_client.post(
+        "/api/v1/public/reference-edit-links/lists",
+        json={"raw_token": created_link["raw_token"], "name": "Blocked"},
+    )
+    assert rejected_create.status_code == 403, rejected_create.text
+    audit_events = list(
+        db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.actor_reference_edit_link_id == UUID(created_link["id"])
+            )
+        )
+    )
+    assert {event.action for event in audit_events} >= {"create"}
 
 
 def test_system_admin_can_manage_org_units(

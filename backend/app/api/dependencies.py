@@ -24,6 +24,7 @@ from app.services.permissions import (
     PublicLinkSubmittedReadOnlyError,
 )
 from app.services.public_links import PublicLinkError, PublicLinkTransitionError
+from app.services.reference_edit_links import ReferenceEditLinkError, ReferenceEditLinkReadOnlyError
 from app.services.references import ReferenceListError
 from app.services.registry_schema import RegistrySchemaError
 from app.services.reports import ReportServiceError
@@ -168,6 +169,14 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(
             status_code=400,
             detail="Операция с публичной ссылкой недоступна.",
+        ) from exc
+    if isinstance(exc, ReferenceEditLinkReadOnlyError):
+        raise HTTPException(
+            status_code=403, detail="Публичная ссылка на справочники доступна только для чтения."
+        ) from exc
+    if isinstance(exc, ReferenceEditLinkError):
+        raise HTTPException(
+            status_code=400, detail="Операция со ссылкой на справочники недоступна."
         ) from exc
     if isinstance(
         exc,
