@@ -28,7 +28,7 @@ const referenceFieldTypes = new Set([
   "user_ref",
 ]);
 
-const immediateAutosaveFieldTypes = new Set(["bool", "date", "datetime", "multi_select", "select"]);
+const immediateAutosaveFieldTypes = new Set(["bool", "multi_select", "select"]);
 
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
   day: "2-digit",

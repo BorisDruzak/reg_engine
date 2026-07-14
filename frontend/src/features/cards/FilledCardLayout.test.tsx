@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
@@ -39,6 +39,7 @@ const fields: FormFieldRead[] = [
   field({ id: "first-name", code: "first_name", label: "Имя", position: 0 }),
   field({ id: "last-name", code: "last_name", label: "Фамилия", position: 1 }),
   field({ id: "status", code: "status", label: "Статус", field_type: "select", position: 2 }),
+  field({ id: "birth-date", code: "birth_date", label: "Дата рождения", field_type: "date", position: 3 }),
 ];
 
 const layout: CardTemplateLayoutRead = {
@@ -55,12 +56,13 @@ const layout: CardTemplateLayoutRead = {
         block_id: block.id,
         row: 1,
         column: 1,
-        row_span: 2,
+        row_span: 3,
         column_span: 12,
         items: [
           layoutField("first-name", 1, 1, 1, 6),
           layoutField("last-name", 1, 7, 1, 6),
           layoutField("status", 2, 1, 1, 6),
+          layoutField("birth-date", 3, 1, 1, 6),
         ],
       },
     ],
@@ -74,6 +76,7 @@ const values: FieldValueRead[] = [
   value("first-name", "Иван"),
   value("last-name", "Иванов"),
   value("status", "approved"),
+  value("birth-date", "2000-01-01"),
 ];
 
 const blockInstances: FilledCardBlockInstanceRead[] = [
@@ -85,6 +88,7 @@ const blockInstances: FilledCardBlockInstanceRead[] = [
       first_name: { field_id: "first-name", code: "first_name", field_type: "text", value: "Иван" },
       last_name: { field_id: "last-name", code: "last_name", field_type: "text", value: "Иванов" },
       status: { field_id: "status", code: "status", field_type: "select", value: "approved" },
+      birth_date: { field_id: "birth-date", code: "birth_date", field_type: "date", value: "2000-01-01" },
     },
   },
 ];
@@ -260,6 +264,34 @@ describe("FilledCardLayout", () => {
       }),
     );
   });
+
+  test("debounces date saves while its input remains focused", async () => {
+    vi.useFakeTimers();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    try {
+      fireEvent.click(screen.getByTestId("filled-field-layout-birth-date"));
+      const input = screen.getByLabelText("Дата рождения");
+      input.focus();
+      fireEvent.change(input, { target: { value: "2001-02-03" } });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(599);
+      });
+      expect(saveValues).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [{ field_id: "birth-date", value: "2001-02-03", block_instance_id: null }],
+      });
+      expect(screen.getByLabelText("Дата рождения")).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function EditableFilledCard({
@@ -269,13 +301,13 @@ function EditableFilledCard({
 }) {
   const blockEditor = useBlockEditor({
     fields,
-    editableFieldIds: new Set(["first-name", "last-name", "status"]),
+    editableFieldIds: new Set(["first-name", "last-name", "status", "birth-date"]),
     saveValues,
   });
   return (
     <FilledCardLayout
       {...defaultProps({
-        editableFieldIds: new Set(["first-name", "last-name", "status"]),
+        editableFieldIds: new Set(["first-name", "last-name", "status", "birth-date"]),
         blockEditor,
       })}
     />

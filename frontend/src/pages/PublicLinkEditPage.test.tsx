@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -246,6 +246,38 @@ describe("PublicLinkEditPage", () => {
       "first",
       "latest",
     ]);
+  });
+
+  test("debounces a public date field and flushes it on blur", async () => {
+    preview.form_layout.sections[0].items.push(
+      layoutItem("item-public-date", "field-public-date", 3, 1, 1, 6),
+    );
+    preview.blocks[0].instances[0].fields.push(
+      previewField("field-public-date", "public_date", "Публичная дата", "date", "2000-01-01"),
+    );
+    renderPage();
+
+    const input = await screen.findByLabelText("Публичная дата");
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(input, { target: { value: "2001-02-03" } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(599);
+      });
+      expect(editCalls()).toHaveLength(0);
+
+      fireEvent.blur(input);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(editCalls()).toHaveLength(1);
+      expect(editCalls()[0].body).toMatchObject({
+        field_id: "field-public-date",
+        value: "2001-02-03",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("keeps a rejected local value visible and shows the server error", async () => {

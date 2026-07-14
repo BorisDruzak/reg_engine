@@ -14,6 +14,7 @@ export function FieldEditorControl({
   fileRefOptions = [],
   value,
   disabled = false,
+  onBlur,
   onChange,
 }: {
   fieldType: string;
@@ -23,6 +24,7 @@ export function FieldEditorControl({
   fileRefOptions?: FieldEditorFileRefOption[];
   value: FieldEditorState;
   disabled?: boolean;
+  onBlur?: () => void;
   onChange: (value: FieldEditorState) => void;
 }) {
   if (fieldType === "bool") {
@@ -44,6 +46,7 @@ export function FieldEditorControl({
       <textarea
         aria-label={label}
         disabled={disabled}
+        onBlur={onBlur}
         placeholder={hint || undefined}
         onChange={(event) => onChange(event.currentTarget.value)}
         value={typeof value === "string" ? value : "{}"}
@@ -141,6 +144,7 @@ export function FieldEditorControl({
     <input
       aria-label={label}
       disabled={disabled}
+      onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value)}
       placeholder={fieldType === "text" || fieldType === "number" ? hint || undefined : undefined}
       type={inputTypeForField(fieldType)}

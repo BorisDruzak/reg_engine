@@ -69,7 +69,7 @@ export function BlockFieldControl({
           archived: option.archived,
         }))}
         value={value}
-        disabled={pending}
+        disabled={false}
         onChange={onChange}
       />
       {error ? (

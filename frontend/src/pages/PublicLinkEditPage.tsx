@@ -835,12 +835,16 @@ function PublicFieldEditor({
   const latestVersionRef = useRef(0);
   const queuedSaveRef = useRef<{ value: unknown; version: number } | null>(null);
   const savingRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+      }
     };
   }, []);
 
@@ -884,6 +888,14 @@ function PublicFieldEditor({
     savingRef.current = false;
   }
 
+  function flushPendingSave() {
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    void drainSaveQueue();
+  }
+
   function updateRawValue(nextValue: FieldEditorState) {
     setRawValue(nextValue);
     setLocalError(null);
@@ -896,7 +908,17 @@ function PublicFieldEditor({
       };
       setSaveState("saving");
       onSaveStateChange(fieldKey, "saving");
-      void drainSaveQueue();
+      if (usesDelayedPublicSave(field.field_type)) {
+        if (saveTimerRef.current !== null) {
+          clearTimeout(saveTimerRef.current);
+        }
+        saveTimerRef.current = setTimeout(() => {
+          saveTimerRef.current = null;
+          void drainSaveQueue();
+        }, 600);
+      } else {
+        void drainSaveQueue();
+      }
     } catch (error) {
       queuedSaveRef.current = null;
       setLocalError(errorText(error));
@@ -913,6 +935,7 @@ function PublicFieldEditor({
         hint={field.description}
         options={field.options}
         value={rawValue}
+        onBlur={flushPendingSave}
         onChange={updateRawValue}
       />
       {saveState === "saving" && <p className="public-muted">Сохранение…</p>}
@@ -920,6 +943,10 @@ function PublicFieldEditor({
       {saveState === "saved" && <p className="inline-success">Все изменения сохранены</p>}
     </div>
   );
+}
+
+function usesDelayedPublicSave(fieldType: string) {
+  return ["text", "number", "date", "datetime", "json"].includes(fieldType);
 }
 
 function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
