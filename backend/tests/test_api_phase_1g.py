@@ -27,6 +27,7 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.services.registry_schema import RegistrySchemaService
 
 
 def _require_test_database_url() -> str:
@@ -280,6 +281,7 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
         "/api/v1/reference-items/{item_id}",
         "/api/v1/registries/{registry_id}/cards",
         "/api/v1/organizations/{organization_id}/cards",
+        "/api/v1/organizations/{organization_id}/cards/draft-public-link",
         "/api/v1/cards/{card_id}",
         "/api/v1/cards/{card_id}/blocks/{block_id}/instances",
         "/api/v1/cards/{card_id}/public-links",
@@ -289,6 +291,64 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
 
     assert expected_paths <= paths
     assert "get" in openapi_paths["/api/v1/organizations/{organization_id}/cards"]
+
+
+def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase1g-draft-public-link-system@example.test",
+        is_superuser=True,
+    )
+    outsider = _create_user(db_session, "phase1g-draft-public-link-outsider@example.test")
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase1g-draft-public-link", "name": "Draft public link organization"},
+        actor_id=system_admin.id,
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        UUID(organization["id"])
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-draft-public-link-template",
+        name="Draft public link template",
+        field_schema_json={"field_ids": []},
+    )
+    payload = {
+        "display_name": "Draft public link card",
+        "card_template_id": str(template.id),
+        "public_access": {
+            "public_view_enabled": True,
+            "public_edit_enabled": False,
+        },
+    }
+
+    created = _post_json(
+        api_client,
+        f"/api/v1/organizations/{organization['id']}/cards/draft-public-link",
+        payload,
+        actor_id=system_admin.id,
+    )
+
+    assert created["card"]["lifecycle_status"] == "draft"
+    assert created["raw_token"]
+    public_link = db_session.get(CardPublicLink, UUID(created["public_link_id"]))
+    assert public_link is not None
+    assert str(public_link.card_id) == created["card"]["id"]
+    assert public_link.review_enabled is True
+
+    denied = api_client.post(
+        f"/api/v1/organizations/{organization['id']}/cards/draft-public-link",
+        json=payload,
+        headers=_actor_headers(outsider.id),
+    )
+
+    assert denied.status_code == 403, denied.text
 
 
 def test_phase_1g_rest_workflow_completion(

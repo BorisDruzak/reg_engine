@@ -17,6 +17,8 @@ from app.schemas.cards import (
     CardCreationPreviewFieldRead,
     CardCreationPreviewOptionRead,
     CardCreationPreviewRead,
+    CardDraftPublicLinkRead,
+    CardDraftPublicLinkRequest,
     CardFieldOptionListRead,
     CardFieldOptionRead,
     CardFieldRead,
@@ -133,6 +135,35 @@ def first_save_organization_card(
     except Exception as exc:
         raise_service_http_error(exc)
     return _card_to_summary(card, card_service)
+
+
+@router.post(
+    "/organizations/{organization_id}/cards/draft-public-link",
+    response_model=CardDraftPublicLinkRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_organization_card_draft_with_public_link(
+    organization_id: UUID,
+    payload: CardDraftPublicLinkRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardDraftPublicLinkRead:
+    try:
+        card_service = CardService(session)
+        created = card_service.create_card_draft_with_public_link_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            display_name=payload.display_name,
+            card_template_id=payload.card_template_id,
+            public_access=payload.public_access,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardDraftPublicLinkRead(
+        card=_card_to_summary(created.card, card_service),
+        raw_token=created.public_link.raw_token,
+        public_link_id=created.public_link.public_link.id,
+    )
 
 
 @router.post(

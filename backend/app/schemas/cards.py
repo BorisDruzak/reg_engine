@@ -109,6 +109,12 @@ class CardPublicAccessUpdate(BaseModel):
     fields: list[CardPublicFieldSettingUpdate] = Field(default_factory=list)
 
 
+class CardDraftPublicLinkRequest(BaseModel):
+    display_name: str | None = None
+    card_template_id: UUID
+    public_access: CardPublicAccessUpdate = Field(default_factory=CardPublicAccessUpdate)
+
+
 class CardPublicFieldSettingRead(BaseModel):
     field_id: UUID
     public_visible: bool
@@ -120,6 +126,12 @@ class CardPublicAccessRead(BaseModel):
     public_view_enabled: bool
     public_edit_enabled: bool
     fields: list[CardPublicFieldSettingRead] = Field(default_factory=list)
+
+
+class CardDraftPublicLinkRead(BaseModel):
+    card: CardSummaryRead
+    raw_token: str
+    public_link_id: UUID
 
 
 class FieldValueUpdate(BaseModel):

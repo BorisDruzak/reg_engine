@@ -1262,6 +1262,81 @@ def test_card_public_access_is_individual_to_the_card_and_is_audited(
         )
 
 
+def test_create_draft_card_and_public_link_saves_access_and_audits(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-template",
+        name="Draft public link template",
+        field_schema_json={"field_ids": []},
+    )
+
+    created = CardService(db_session).create_card_draft_with_public_link_for_actor(
+        actor_user_id=context["system_admin"].id,
+        organization_id=context["child"].id,
+        display_name="Draft public link card",
+        card_template_id=template.id,
+        public_access=CardPublicAccessUpdate(
+            public_view_enabled=True,
+            public_edit_enabled=False,
+        ),
+    )
+
+    assert created.card.lifecycle_status == "draft"
+    assert created.public_link.public_link.card_id == created.card.id
+    assert created.public_link.public_link.review_enabled is True
+    assert CardPublicAccessService(db_session).read_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=created.card.id,
+    ).model_dump() == {
+        "card_id": created.card.id,
+        "public_view_enabled": True,
+        "public_edit_enabled": False,
+        "fields": [],
+    }
+    audit_object_types = set(
+        db_session.scalars(
+            select(AuditEvent.object_type).where(
+                AuditEvent.object_id.in_([created.card.id, created.public_link.public_link.id])
+            )
+        ).all()
+    )
+    assert {"card", "card_public_link"}.issubset(audit_object_types)
+
+
+def test_create_draft_card_and_public_link_denies_actor_without_card_management(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-denied-template",
+        name="Draft public link denied template",
+        field_schema_json={"field_ids": []},
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        CardService(db_session).create_card_draft_with_public_link_for_actor(
+            actor_user_id=context["registry_admin"].id,
+            organization_id=context["child"].id,
+            display_name=None,
+            card_template_id=template.id,
+            public_access=CardPublicAccessUpdate(),
+        )
+
+    assert db_session.scalar(select(func.count(Card.id))) == 0
+
+
 def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
     db_session: Session,
 ) -> None:

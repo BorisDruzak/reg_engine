@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import delete, func, or_, select
@@ -31,6 +31,10 @@ from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
+
+if TYPE_CHECKING:
+    from app.schemas.cards import CardPublicAccessUpdate
+    from app.services.public_links import PublicLinkToken
 
 
 class CardServiceError(ValueError):
@@ -93,6 +97,12 @@ class CardCreationPreviewRead:
     card_template_id: UUID
     display_name: str
     blocks: list[CardCreationPreviewBlockRead] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CardDraftPublicLink:
+    card: Card
+    public_link: "PublicLinkToken"
 
 
 @dataclass(frozen=True)
@@ -241,6 +251,38 @@ class CardService:
             public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
         )
+
+    def create_card_draft_with_public_link_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        display_name: str | None,
+        card_template_id: UUID,
+        public_access: "CardPublicAccessUpdate",
+    ) -> CardDraftPublicLink:
+        from app.services.card_public_access import CardPublicAccessService
+        from app.services.public_links import PublicLinkService
+
+        with self.session.begin_nested():
+            card = self.create_card_for_organization_for_actor(
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                display_name=display_name,
+                card_template_id=card_template_id,
+            )
+            CardPublicAccessService(self.session).update_for_actor(
+                actor_user_id=actor_user_id,
+                card_id=card.id,
+                payload=public_access,
+            )
+            public_link = PublicLinkService(self.session).create_public_link_for_actor(
+                actor_user_id=actor_user_id,
+                card_id=card.id,
+                expires_in_days=7,
+                review_enabled=True,
+            )
+        return CardDraftPublicLink(card=card, public_link=public_link)
 
     def preview_card_creation_for_actor(
         self,
