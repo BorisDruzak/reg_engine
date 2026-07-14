@@ -7,6 +7,20 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 card-creation scroll surface is verified locally and awaiting
+  publication. Only the outer `data-panel` that directly contains
+  `single-stage-card-creation` is transparent and uses `overflow: visible`;
+  the application background therefore remains visible while the independent
+  base/template cards retain their existing surfaces. Removing the outer
+  clipping lets the established desktop `CardBlockNavigator` remain sticky and
+  mark the current block during page scrolling. The existing `900px` rule
+  keeps navigation as a regular list above the fields on narrow screens. No
+  API, card lifecycle, access, or template-preview logic changed. The focused
+  frontend suite passes (9), TypeScript and the production build pass, and
+  ESLint has no errors with the existing unrelated `FilledCardLayout.tsx`
+  hook-dependency warning. HTTPS desktop/mobile Browser proof and deployment
+  remain pending.
+
 - 2026-07-14 card-creation block navigation is released at `e6772731`.
   One-stage creation retains the separate static `Базовый блок` with
   organization, template, and optional name. Preview blocks again render in

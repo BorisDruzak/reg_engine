@@ -119,6 +119,10 @@ describe("CardsWorkspace", () => {
     expect(globalStyles).toContain(".single-stage-card-creation {\n  width: min(100%, 72rem);");
     expect(globalStyles).toContain(".single-stage-card-creation-block.is-attention {");
     expect(globalStyles).toContain(".single-stage-card-creation-field.is-filled {");
+    expect(globalStyles).toContain(".data-panel:has(> .single-stage-card-creation) {");
+    expect(globalStyles).toContain(
+      ".data-panel:has(> .single-stage-card-creation) {\n  overflow: visible;\n  border-color: transparent;\n  background: transparent;",
+    );
   });
 
   test("restores scroll-linked template block navigation while creating a card", async () => {

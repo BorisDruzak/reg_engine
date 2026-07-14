@@ -497,6 +497,12 @@ button {
   overflow: visible;
 }
 
+.data-panel:has(> .single-stage-card-creation) {
+  overflow: visible;
+  border-color: transparent;
+  background: transparent;
+}
+
 .data-panel > header {
   display: flex;
   align-items: center;
