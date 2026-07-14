@@ -13,6 +13,7 @@ import type {
   CardCreationLinkPublicPreviewRead,
   CardCreationLinkRead,
   CardCreationPreviewRead,
+  CardDraftPublicLinkRead,
   CardFirstSavePayload,
   CardPrintTemplateCreatePayload,
   CardPrintTemplateBlankDownloadPayload,
@@ -469,11 +470,38 @@ export async function firstSaveOrganizationCard(
   organizationId: string,
   payload: CardFirstSavePayload,
 ) {
-  return apiRequest<CardSummaryRead>(`/api/v1/organizations/${organizationId}/cards/first-save`, {
-    method: "POST",
-    token,
-    body: payload,
-  });
+  const { public_access: publicAccess, ...firstSavePayload } = payload;
+  const created = await apiRequest<CardSummaryRead>(
+    `/api/v1/organizations/${organizationId}/cards/first-save`,
+    {
+      method: "POST",
+      token,
+      body: firstSavePayload,
+    },
+  );
+  if (publicAccess) {
+    await updateCardPublicAccess(token, created.id, publicAccess);
+  }
+  return created;
+}
+
+export async function createOrganizationCardDraftPublicLink(
+  token: string,
+  organizationId: string,
+  payload: {
+    display_name?: string | null;
+    card_template_id: string;
+    public_access: CardPublicAccessPayload;
+  },
+) {
+  return apiRequest<CardDraftPublicLinkRead>(
+    `/api/v1/organizations/${organizationId}/cards/draft-public-link`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
 }
 
 export async function readCard(token: string, cardId: string) {

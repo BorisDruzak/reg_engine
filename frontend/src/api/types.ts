@@ -452,9 +452,16 @@ export type CardFirstSavePayload = {
   card_template_id: string;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
+  public_access?: CardPublicAccessPayload;
   field_id: string;
   value: unknown;
   block_instance_id?: string | null;
+};
+
+export type CardDraftPublicLinkRead = {
+  card: CardSummaryRead;
+  raw_token: string;
+  public_link_id: string;
 };
 
 export type CardUpdatePayload = {

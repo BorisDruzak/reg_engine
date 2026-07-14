@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { firstSaveOrganizationCard, getCardCreationPreview } from "@/api/client";
+import {
+  createOrganizationCardDraftPublicLink,
+  firstSaveOrganizationCard,
+  getCardCreationPreview,
+} from "@/api/client";
 import type {
   CardCreationPreviewFieldRead,
+  CardPublicAccessPayload,
+  CardPublicAccessRead,
   CardTemplateRead,
+  FormFieldRead,
   OrganizationRead,
 } from "@/api/types";
 import { DataAlert } from "@/components/common/DataSurfaces";
@@ -13,30 +20,30 @@ import { errorText } from "@/components/common/dataUtils";
 import { FieldEditorControl } from "./FieldEditorControl";
 import type { CardBlockNavigationItem } from "./CardBlockNavigator";
 import { CardPresentationShell } from "./CardPresentationShell";
+import { PublicAccessFieldPicker } from "./PublicAccessFieldPicker";
 import { buildBlockCompletions } from "./cardCompletion";
-import {
-  type FieldEditorState,
-  coerceEditorValue,
-  initialEditorValue,
-} from "./fieldEditorUtils";
+import { type FieldEditorState, coerceEditorValue, initialEditorValue } from "./fieldEditorUtils";
 
 type CreationState = {
   organizationId: string;
   templateId: string;
   displayName: string;
   values: Record<string, FieldEditorState>;
+  publicAccess: CardPublicAccessPayload;
 };
 
 export function SingleStageCardCreation({
   token,
   organizations,
   templates,
+  schemaFields,
   onCancel,
   onCardCreated,
 }: {
   token: string;
   organizations: OrganizationRead[];
   templates: CardTemplateRead[];
+  schemaFields: readonly FormFieldRead[];
   onCancel: () => void;
   onCardCreated: (cardId: string) => Promise<void>;
 }) {
@@ -45,6 +52,11 @@ export function SingleStageCardCreation({
     templateId: "",
     displayName: "",
     values: {},
+    publicAccess: {
+      public_view_enabled: true,
+      public_edit_enabled: true,
+      fields: [],
+    },
   }));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -57,9 +69,22 @@ export function SingleStageCardCreation({
     enabled: canLoadPreview,
   });
   const preview = previewQuery.data ?? null;
-  const fields = useMemo(
+  const creationFields = useMemo(
     () => preview?.blocks.flatMap((block) => block.fields) ?? [],
     [preview?.blocks],
+  );
+  const publicAccessFields = useMemo(() => {
+    const previewFieldIds = new Set(creationFields.map((field) => field.field_id));
+    return schemaFields.filter((field) => previewFieldIds.has(field.id));
+  }, [creationFields, schemaFields]);
+  const publicAccess = useMemo<CardPublicAccessRead>(
+    () => ({
+      card_id: "",
+      public_view_enabled: state.publicAccess.public_view_enabled ?? true,
+      public_edit_enabled: state.publicAccess.public_edit_enabled ?? true,
+      fields: state.publicAccess.fields ?? [],
+    }),
+    [state.publicAccess],
   );
   const completions = useMemo(() => {
     const previewBlocks = preview?.blocks ?? [];
@@ -107,7 +132,49 @@ export function SingleStageCardCreation({
       );
       if (!confirmed) return;
     }
-    setState((current) => ({ ...current, ...next, values: {} }));
+    setState((current) => ({
+      ...current,
+      ...next,
+      values: {},
+      publicAccess: { ...current.publicAccess, fields: [] },
+    }));
+  }
+
+  function updatePublicAccess(payload: CardPublicAccessPayload) {
+    setState((current) => ({
+      ...current,
+      publicAccess: {
+        ...current.publicAccess,
+        ...payload,
+        fields: payload.fields ?? current.publicAccess.fields,
+      },
+    }));
+  }
+
+  function publicAccessPayload(): CardPublicAccessPayload {
+    return {
+      public_view_enabled: state.publicAccess.public_view_enabled ?? true,
+      public_edit_enabled: state.publicAccess.public_edit_enabled ?? true,
+      fields: state.publicAccess.fields ?? [],
+    };
+  }
+
+  async function createDraftPublicLink() {
+    if (!canLoadPreview) return;
+    setError(null);
+    setIsSaving(true);
+    try {
+      const created = await createOrganizationCardDraftPublicLink(token, state.organizationId, {
+        display_name: state.displayName.trim() || undefined,
+        card_template_id: templateId,
+        public_access: publicAccessPayload(),
+      });
+      await onCardCreated(created.card.id);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function saveFirstValue(field: CardCreationPreviewFieldRead, nextValue: FieldEditorState) {
@@ -118,7 +185,10 @@ export function SingleStageCardCreation({
       setError(nextError);
       return;
     }
-    setState((current) => ({ ...current, values: { ...current.values, [field.field_id]: nextValue } }));
+    setState((current) => ({
+      ...current,
+      values: { ...current.values, [field.field_id]: nextValue },
+    }));
     if (isEmptyFirstValue(value)) return;
 
     setError(null);
@@ -129,6 +199,9 @@ export function SingleStageCardCreation({
         card_template_id: templateId,
         field_id: field.field_id,
         value,
+        public_view_enabled: state.publicAccess.public_view_enabled ?? true,
+        public_edit_enabled: state.publicAccess.public_edit_enabled ?? true,
+        public_access: publicAccessPayload(),
       });
       await onCardCreated(created.id);
     } catch (nextError) {
@@ -144,7 +217,9 @@ export function SingleStageCardCreation({
         <header className="admin-mutation-header">
           <div>
             <strong>Базовый блок</strong>
-            <small>Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.</small>
+            <small>
+              Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.
+            </small>
           </div>
         </header>
         <div className="admin-mutation-body">
@@ -173,7 +248,10 @@ export function SingleStageCardCreation({
               disabled={isSaving || templates.length === 0}
               value={templateId}
               onChange={(event) =>
-                resetTemplateValues({ organizationId: state.organizationId, templateId: event.currentTarget.value })
+                resetTemplateValues({
+                  organizationId: state.organizationId,
+                  templateId: event.currentTarget.value,
+                })
               }
             >
               {templates.length !== 1 && <option value="">Выберите шаблон карточки</option>}
@@ -197,7 +275,50 @@ export function SingleStageCardCreation({
             />
           </label>
         </div>
+        <div className="card-base-block-public-settings">
+          <div className="card-base-block-public-heading">
+            <strong>Публичный доступ</strong>
+          </div>
+          <div className="card-base-toggle-grid">
+            <label className="checkbox-control">
+              <input
+                type="checkbox"
+                checked={publicAccess.public_view_enabled}
+                disabled={isSaving || publicAccess.public_edit_enabled}
+                onChange={(event) =>
+                  updatePublicAccess({ public_view_enabled: event.currentTarget.checked })
+                }
+              />
+              <span>Публичный просмотр карточки</span>
+            </label>
+            <label className="checkbox-control">
+              <input
+                type="checkbox"
+                checked={publicAccess.public_edit_enabled}
+                disabled={isSaving}
+                onChange={(event) =>
+                  updatePublicAccess({ public_edit_enabled: event.currentTarget.checked })
+                }
+              />
+              <span>Публичное редактирование карточки</span>
+            </label>
+          </div>
+          <PublicAccessFieldPicker
+            fields={publicAccessFields}
+            publicAccess={publicAccess}
+            disabled={isSaving}
+            onChange={updatePublicAccess}
+          />
+        </div>
         <footer className="admin-mutation-actions">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={isSaving || !canLoadPreview}
+            onClick={() => void createDraftPublicLink()}
+          >
+            Создать публичную ссылку
+          </button>
           <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
             Отмена
           </button>
@@ -206,11 +327,7 @@ export function SingleStageCardCreation({
 
       <DataAlert
         error={
-          error instanceof Error
-            ? error
-            : error
-              ? new Error(errorText(error))
-              : previewQuery.error
+          error instanceof Error ? error : error ? new Error(errorText(error)) : previewQuery.error
         }
       />
       {previewQuery.isLoading ? <p>Загрузка полей шаблона…</p> : null}
@@ -256,7 +373,10 @@ export function SingleStageCardCreation({
                                 : field.description
                             }
                             options={field.options}
-                            value={state.values[field.field_id] ?? initialEditorValue({ field_type: field.field_type, value: null })}
+                            value={
+                              state.values[field.field_id] ??
+                              initialEditorValue({ field_type: field.field_type, value: null })
+                            }
                             disabled={isSaving || isFile}
                             onChange={(nextValue) => void saveFirstValue(field, nextValue)}
                           />
@@ -270,8 +390,10 @@ export function SingleStageCardCreation({
           </div>
         </CardPresentationShell>
       ) : null}
-      {fields.length > 0 ? (
-        <p className="field-editor-hint">После первого заполненного поля карточка сохранится автоматически.</p>
+      {creationFields.length > 0 ? (
+        <p className="field-editor-hint">
+          После первого заполненного поля карточка сохранится автоматически.
+        </p>
       ) : null}
     </section>
   );

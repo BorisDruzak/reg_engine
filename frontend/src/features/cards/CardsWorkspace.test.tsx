@@ -114,8 +114,12 @@ afterEach(() => vi.unstubAllGlobals());
 describe("CardsWorkspace", () => {
   test("keeps dynamic multi-line creation fields compact before the user enters long text", () => {
     expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {");
-    expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {\n  min-height: 42px;");
-    expect(globalStyles).toContain(".single-stage-card-creation .admin-mutation-header small {\n  display: block;");
+    expect(globalStyles).toContain(
+      ".single-stage-card-creation .field-editor-autosize-text {\n  min-height: 42px;",
+    );
+    expect(globalStyles).toContain(
+      ".single-stage-card-creation .admin-mutation-header small {\n  display: block;",
+    );
     expect(globalStyles).toContain(".single-stage-card-creation {\n  width: min(100%, 72rem);");
     expect(globalStyles).toContain(".single-stage-card-creation-block.is-attention {");
     expect(globalStyles).toContain(".single-stage-card-creation-field.is-filled {");
@@ -308,7 +312,9 @@ describe("CardsWorkspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
     const field = await screen.findByLabelText("Наименование");
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(
+      false,
+    );
 
     fireEvent.change(field, { target: { value: "Первое значение" } });
 
@@ -318,11 +324,71 @@ describe("CardsWorkspace", () => {
       );
     });
     expect(onOpenCreatedCard).toHaveBeenCalledWith("new-card-1");
-    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cards/first-save"))!;
+    const [, init] = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/cards/first-save"),
+    )!;
     expect(JSON.parse(String(init?.body))).toMatchObject({
       card_template_id: "template-1",
       field_id: "field-1",
       value: "Первое значение",
+    });
+  });
+
+  test("creates a draft and public link from the creation base block", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/creation-preview")) {
+        return Response.json({
+          organization_id: organization.id,
+          card_template_id: "template-1",
+          display_name: "Шаблон",
+          blocks: [],
+        });
+      }
+      if (url.endsWith("/cards/draft-public-link")) {
+        return Response.json({
+          card: {
+            id: "draft-card-1",
+            registry_id: "registry-1",
+            card_template_id: "template-1",
+            organization_id: organization.id,
+            org_unit_id: null,
+            display_name: "Шаблон",
+            lifecycle_status: "draft",
+            public_view_enabled: true,
+            public_edit_enabled: true,
+            list_fields: [],
+          },
+          raw_token: "public-token",
+          public_link_id: "public-link-1",
+        });
+      }
+      return Response.json({ items: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onOpenCreatedCard = vi.fn().mockResolvedValue(undefined);
+    renderWorkspace({ onOpenCreatedCard });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+    const createLink = await screen.findByRole("button", { name: "Создать публичную ссылку" });
+    fireEvent.click(createLink);
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/draft-public-link")),
+      ).toBe(true);
+    });
+    expect(onOpenCreatedCard).toHaveBeenCalledWith("draft-card-1");
+    const [, init] = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith("/cards/draft-public-link"),
+    )!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      card_template_id: "template-1",
+      public_access: {
+        public_view_enabled: true,
+        public_edit_enabled: true,
+      },
     });
   });
 

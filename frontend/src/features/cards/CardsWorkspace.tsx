@@ -64,9 +64,9 @@ import { errorText, shortId } from "@/components/common/dataUtils";
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardCreationLinksPanel } from "./CardCreationLinksPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
-import { resolveCardPublicFieldAccess } from "./cardPublicAccessDefaults";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
+import { PublicAccessFieldPicker } from "./PublicAccessFieldPicker";
 import { SingleStageCardCreation } from "./SingleStageCardCreation";
 import {
   type FieldEditorState,
@@ -84,10 +84,7 @@ const cardUtilityTabLabels: Record<CardUtilityTab, string> = {
   "create-card": "Создать карточку",
   "creation-links": "Ссылки на заполнение",
 };
-const fixedCardUtilityTabs: CardUtilityTab[] = [
-  "create-card",
-  "creation-links",
-];
+const fixedCardUtilityTabs: CardUtilityTab[] = ["create-card", "creation-links"];
 
 const cardTabsStorageKey = "reg_engine.card_tabs.v1";
 
@@ -592,6 +589,7 @@ export function CardsWorkspace({
             token={token}
             organizations={organizations}
             templates={activeCardTemplates}
+            schemaFields={schema?.fields ?? []}
             onCancel={() => handleShellTabChange("list")}
             onCardCreated={openCreatedCardEditor}
           />
@@ -788,11 +786,6 @@ function CardBaseBlock({
   onAddBlockInstance: (blockId: string) => void;
   onArchiveBlockInstance: (blockInstanceId: string) => void;
 }) {
-  const settingsByFieldId = useMemo(
-    () => new Map(publicAccess?.fields.map((setting) => [setting.field_id, setting]) ?? []),
-    [publicAccess?.fields],
-  );
-  const publicFields = fields.filter((field) => field.is_active);
   const publicViewEnabled = publicAccess?.public_view_enabled ?? false;
   const publicEditEnabled = publicAccess?.public_edit_enabled ?? false;
 
@@ -852,57 +845,12 @@ function CardBaseBlock({
         {canManage ? (
           <details className="card-base-field-access">
             <summary>Настройки полей для публичной ссылки</summary>
-            <div className="card-base-field-access-list">
-              {publicFields.map((field) => {
-                const setting = settingsByFieldId.get(field.id);
-                const { publicEditable: editable, publicVisible: visible } =
-                  resolveCardPublicFieldAccess(setting, field.field_type);
-                const fieldCanEdit = !["file_ref", "static_text"].includes(field.field_type);
-                return (
-                  <div key={field.id} className="card-base-field-access-row">
-                    <span>{field.label}</span>
-                    <label className="checkbox-control">
-                      <input
-                        type="checkbox"
-                        checked={visible}
-                        disabled={isUpdatingPublicAccess}
-                        onChange={(event) =>
-                          onPublicAccessChange({
-                            fields: [
-                              {
-                                field_id: field.id,
-                                public_visible: event.currentTarget.checked,
-                                public_editable: event.currentTarget.checked && editable,
-                              },
-                            ],
-                          })
-                        }
-                      />
-                      <span>Показывать</span>
-                    </label>
-                    <label className="checkbox-control">
-                      <input
-                        type="checkbox"
-                        checked={editable}
-                        disabled={isUpdatingPublicAccess || !fieldCanEdit}
-                        onChange={(event) =>
-                          onPublicAccessChange({
-                            fields: [
-                              {
-                                field_id: field.id,
-                                public_visible: visible || event.currentTarget.checked,
-                                public_editable: event.currentTarget.checked,
-                              },
-                            ],
-                          })
-                        }
-                      />
-                      <span>Разрешить изменение</span>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
+            <PublicAccessFieldPicker
+              fields={fields}
+              publicAccess={publicAccess}
+              disabled={isUpdatingPublicAccess}
+              onChange={onPublicAccessChange}
+            />
           </details>
         ) : null}
         {canManage && repeatableBlocks.length > 0 ? (

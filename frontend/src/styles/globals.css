@@ -2219,6 +2219,24 @@ tr:last-child td {
   font-weight: 700;
 }
 
+.public-access-field-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.public-access-field-picker-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.public-access-field-picker-control > span {
+  color: #40536b;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .card-base-field-access-list {
   display: grid;
   gap: 7px;
@@ -2237,6 +2255,12 @@ tr:last-child td {
 .card-base-field-access-row > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .public-access-field-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .card-workspace-following-block {
