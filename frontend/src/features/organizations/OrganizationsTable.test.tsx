@@ -240,6 +240,23 @@ test("shows an inline unit update failure without expanding the management row",
   expect(management).toHaveAttribute("aria-expanded", "false");
 });
 
+test("replaces a failed create form when the alternate card action is selected", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi({ createStatus: 500 });
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  await user.click(screen.getByRole("button", { name: "Добавить управление" }));
+  await user.type(screen.getByLabelText("Название подразделения"), "Черновик управления");
+  await user.click(screen.getByRole("button", { name: "Создать" }));
+  expect(await screen.findByRole("alert")).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "Добавить отдел" }));
+
+  expect(screen.getByRole("heading", { name: "Добавить отдел" })).toBeVisible();
+  expect(screen.getByLabelText("Название подразделения")).toHaveValue("");
+});
+
 function renderOrganizations() {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
@@ -255,7 +272,10 @@ function renderOrganizations() {
   );
 }
 
-function stubOrgUnitApi({ updateStatus = 200 }: { updateStatus?: number } = {}) {
+function stubOrgUnitApi({
+  createStatus = 200,
+  updateStatus = 200,
+}: { createStatus?: number; updateStatus?: number } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const organizationMatch = url.match(/\/organizations\/([^/]+)\/org-units$/);
@@ -265,6 +285,9 @@ function stubOrgUnitApi({ updateStatus = 200 }: { updateStatus?: number } = {}) 
       });
     }
     if (organizationMatch && init?.method === "POST") {
+      if (createStatus !== 200) {
+        return Response.json({ detail: "Create failed" }, { status: createStatus });
+      }
       return Response.json({
         id: "unit-created",
         organization_id: organizationMatch[1],

@@ -27,3 +27,9 @@ No deployment or remote actions were performed.
 - Added regressions for mouse and keyboard (Enter/Space) form switching, plus inline update-failure display and management-expansion propagation.
 - RED: the three replacement scenarios failed because the original management draft remained active.
 - GREEN: focused suite now reports 13 passed; TypeScript and ESLint run with no errors. The existing unrelated `FilledCardLayout.tsx` hook-dependency warning remains.
+
+## Final review follow-up
+
+- Add-unit request IDs now come from an independent monotonic ref and are not reset when a request is consumed.
+- Added a failed-POST then alternate-add regression to prevent stale failed create drafts from being reused.
+- RED: the alternate add still displayed the failed management draft. GREEN: the focused suite reports 14 passed.

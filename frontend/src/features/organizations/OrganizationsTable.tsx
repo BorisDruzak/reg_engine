@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 
 import { archiveOrganization, createOrganization, updateOrganization } from "@/api/client";
 import type { OrganizationRead, OrganizationTreeNodeRead, OrgUnitType } from "@/api/types";
@@ -44,6 +44,7 @@ export function OrganizationsTable({
     requestId: number;
     unitType: OrgUnitType;
   } | null>(null);
+  const unitCreateRequestCounter = useRef(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const createMutation = useMutation({
@@ -259,11 +260,11 @@ export function OrganizationsTable({
           }
           onCreateChildOrganization={(organization) => openCreateForm(organization.id)}
           onCreateUnit={(organization, unitType) =>
-            setUnitCreateRequest((current) => ({
+            setUnitCreateRequest({
               organizationId: organization.id,
-              requestId: (current?.requestId ?? 0) + 1,
+              requestId: ++unitCreateRequestCounter.current,
               unitType,
-            }))
+            })
           }
           unitCreateRequest={unitCreateRequest}
           onUnitCreateRequestConsumed={() => setUnitCreateRequest(null)}
