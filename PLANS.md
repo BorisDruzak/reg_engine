@@ -7,14 +7,17 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 reference filling links are moved from `Схема карточки` to
+- 2026-07-14 reference filling links are released at `8489037e`, moved from `Схема карточки` to
   `Расширенное → Справочники`, alongside reference-list administration. The
   component, API calls, active/closed lifecycle, and public URLs are unchanged.
   A focused frontend regression test confirms that the panel is absent from
   the schema tab and present only in the advanced reference-list tab. Focused
   frontend tests (34), TypeScript, and the production build pass; ESLint has
   no errors and retains the existing unrelated `FilledCardLayout.tsx`
-  hook-dependency warning. Deployment and browser verification are pending.
+  hook-dependency warning. The server checkout and frontend bundle are
+  deployed; the service and same-origin smoke check pass. Browser verification
+  confirmed zero link panels in `Схема карточки` and one panel in
+  `Расширенное → Справочники`, with no console warnings or errors.
 
 - 2026-07-14 readable card-list reference values are released at `d7bd35d7`.
   `GET` card summaries preserve each stored
