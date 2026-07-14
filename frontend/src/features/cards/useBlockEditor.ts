@@ -50,6 +50,7 @@ type BlockEditorSession = {
   pending: boolean;
   errors: Record<string, string>;
   pendingOpen: BlockEditorSession | null;
+  closeAfterSave: boolean;
   autoSaveDelayMs: number | null;
 };
 
@@ -152,7 +153,19 @@ export function useBlockEditor({
     try {
       await saveValues({ values: changedValues });
       setSession((current) =>
-        current?.id === session.id ? (current.pendingOpen ?? null) : current,
+        current?.id === session.id
+          ? current.pendingOpen ??
+            (current.closeAfterSave
+              ? null
+              : {
+                  ...current,
+                  initialValues: { ...current.values },
+                  dirty: false,
+                  pending: false,
+                  errors: {},
+                  autoSaveDelayMs: null,
+                })
+          : current,
       );
       return true;
     } catch (error) {
@@ -176,9 +189,10 @@ export function useBlockEditor({
   const cancel = useCallback(() => setSession(null), []);
   const commitAndClose = useCallback(() => {
     setSession((current) => {
-      if (!current || current.pending) return current;
+      if (!current) return current;
+      if (current.pending) return { ...current, closeAfterSave: true };
       if (!current.dirty) return null;
-      return { ...current, pendingOpen: null, autoSaveDelayMs: 0 };
+      return { ...current, closeAfterSave: true, pendingOpen: null, autoSaveDelayMs: 0 };
     });
   }, []);
 
@@ -229,6 +243,7 @@ function createSession(
     pending: false,
     errors: {},
     pendingOpen: null,
+    closeAfterSave: false,
     autoSaveDelayMs: null,
   };
 }

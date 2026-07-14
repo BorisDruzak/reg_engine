@@ -218,10 +218,11 @@ describe("PublicLinkEditPage", () => {
     );
   });
 
-  test("serializes field autosaves and confirms only the latest local value", async () => {
+  test("serializes field autosaves without replacing the focused local draft", async () => {
     editResponseMode = "deferred";
     renderPage();
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
+    statusInput.focus();
 
     fireEvent.change(statusInput, { target: { value: "first" } });
     expect(await screen.findByText("Сохранение…")).toBeInTheDocument();
@@ -239,7 +240,8 @@ describe("PublicLinkEditPage", () => {
 
     resolveNextEdit("latest canonical");
     expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
-    expect(statusInput).toHaveValue("latest canonical");
+    expect(statusInput).toHaveFocus();
+    expect(statusInput).toHaveValue("latest");
     expect(editCalls().map((call) => (call.body as { value: unknown }).value)).toEqual([
       "first",
       "latest",

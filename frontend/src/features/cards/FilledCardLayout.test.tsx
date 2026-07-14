@@ -206,7 +206,7 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
-  test("automatically saves a text field after the short typing delay", async () => {
+  test("keeps an automatically saved text field open and focused", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(<EditableFilledCard saveValues={saveValues} />);
@@ -221,7 +221,8 @@ describe("FilledCardLayout", () => {
         }),
       { timeout: 1500 },
     );
-    expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Имя")).toHaveFocus();
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
   });
 
   test("saves the current field before opening another field", async () => {

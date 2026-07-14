@@ -862,9 +862,6 @@ function PublicFieldEditor({
           pendingSave.version === latestVersionRef.current &&
           queuedSaveRef.current === null
         ) {
-          setRawValue(
-            initialEditorValue({ field_type: field.field_type, value: savedFieldValue.value }),
-          );
           setLocalError(null);
           setSaveState("saved");
           onSaveStateChange(fieldKey, "saved");
