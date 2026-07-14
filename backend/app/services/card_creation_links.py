@@ -665,6 +665,7 @@ class CardCreationLinkService:
             options_source_id=field_model.options_source_id,
             options_config_json=field_model.options_config_json,
             display_config_json=field_model.display_config_json,
+            public_editable=default_public_field_access(field_model.field_type)[1],
             options=options,
         )
 

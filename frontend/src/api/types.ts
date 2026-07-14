@@ -729,6 +729,7 @@ export type PublicLinkPreviewFieldRead = {
   options_source_id: string | null;
   options_config_json?: Record<string, unknown> | null;
   display_config_json?: Record<string, unknown> | null;
+  public_editable: boolean;
   options: PublicLinkPreviewOptionRead[];
 };
 

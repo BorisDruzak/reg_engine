@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 
@@ -98,6 +98,7 @@ class PublicLinkPreviewFieldRead(BaseModel):
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None
     display_config_json: dict[str, Any] | None
+    public_editable: bool
     options: list[PublicLinkPreviewOptionRead]
 
 
@@ -127,6 +128,8 @@ class PublicLinkPreviewRead(BaseModel):
 
 
 class PublicLinkEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str
     field_id: UUID
     value: Any

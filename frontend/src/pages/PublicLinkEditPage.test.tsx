@@ -134,6 +134,38 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
+  test("keeps the public card surface limited to safe fields and read-only metadata", async () => {
+    preview.form_layout.sections[0].items.push(
+      layoutItem("item-readonly", "field-readonly", 3, 1, 1, 6),
+    );
+    preview.blocks[0].instances[0].fields.push(
+      previewField(
+        "field-readonly",
+        "readonly_note",
+        "Только для просмотра",
+        "text",
+        "Значение, которое нельзя изменить",
+        { public_editable: false },
+      ),
+    );
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("navigation", { name: "Содержание карточки" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("public-field-item-readonly")).toHaveTextContent(
+      "Значение, которое нельзя изменить",
+    );
+    expect(screen.queryByRole("textbox", { name: "Только для просмотра" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Публичный доступ")).not.toBeInTheDocument();
+    expect(screen.queryByText("Архивировать карточку")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Организация карточки")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
+    expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/attachments")).toBe(false);
+  });
+
   test("renders public fields as one inline label and control row", async () => {
     renderPage();
 
@@ -687,6 +719,7 @@ function previewField(
     options_source_id: null,
     options_config_json: null,
     display_config_json: null,
+    public_editable: true,
     options: [],
     ...overrides,
   };

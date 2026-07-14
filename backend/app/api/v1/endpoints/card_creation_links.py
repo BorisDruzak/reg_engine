@@ -262,6 +262,7 @@ def _public_preview_to_read(
                                 options_source_id=field.options_source_id,
                                 options_config_json=field.options_config_json,
                                 display_config_json=field.display_config_json,
+                                public_editable=field.public_editable,
                                 options=[
                                     PublicLinkPreviewOptionRead(
                                         id=option.id,

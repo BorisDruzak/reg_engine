@@ -336,6 +336,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
         for preview_instance in preview_block.instances
         for preview_field in preview_instance.fields
     ] == [field.id]
+    assert preview.blocks[0].instances[0].fields[0].public_editable is True
 
     with pytest.raises(CardCreationLinkError):
         service.create_card_from_public_link(

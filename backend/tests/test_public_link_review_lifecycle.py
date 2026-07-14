@@ -1319,6 +1319,69 @@ def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
         "PublicLinkReviewRead",
         "PublicLinkRequestChanges",
     } <= schemas
+    public_edit_schema = openapi["components"]["schemas"]["PublicLinkEditRequest"]
+    assert set(public_edit_schema["properties"]) == {
+        "raw_token",
+        "field_id",
+        "value",
+        "block_instance_id",
+    }
+    assert public_edit_schema["additionalProperties"] is False
+
+
+def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inputs(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    admin_headers = _actor_headers(review_api_fixture.admin_id)
+    created = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201, created.text
+    raw_token = created.json()["raw_token"]
+
+    with Session(migrated_test_engine) as verify_session:
+        card_before = verify_session.get(Card, review_api_fixture.card_id)
+        assert card_before is not None
+        organization_id = card_before.organization_id
+        card_template_id = card_before.card_template_id
+
+    field_update = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Публичное значение поля",
+        },
+    )
+    assert field_update.status_code == 200, field_update.text
+
+    with Session(migrated_test_engine) as verify_session:
+        card_after_field_update = verify_session.get(Card, review_api_fixture.card_id)
+        assert card_after_field_update is not None
+        assert card_after_field_update.organization_id == organization_id
+        assert card_after_field_update.card_template_id == card_template_id
+
+    metadata_update = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Недопустимое изменение метаданных",
+            "organization_id": str(organization_id),
+            "card_template_id": str(card_template_id),
+        },
+    )
+    assert metadata_update.status_code == 422, metadata_update.text
+
+    with Session(migrated_test_engine) as verify_session:
+        card_after_rejection = verify_session.get(Card, review_api_fixture.card_id)
+        assert card_after_rejection is not None
+        assert card_after_rejection.organization_id == organization_id
+        assert card_after_rejection.card_template_id == card_template_id
 
 
 def test_public_link_create_api_uses_card_settings_not_allowlists(

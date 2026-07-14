@@ -30,6 +30,7 @@ import { buildBlockCompletions, type CompletionResult } from "@/features/cards/c
 import {
   type FieldEditorState,
   coerceEditorValue,
+  formatValue,
   initialEditorValue,
 } from "@/features/cards/fieldEditorUtils";
 
@@ -458,6 +459,13 @@ function PublicCardLayoutSurface({
               </div>
             );
           }
+          if (!context.field.public_editable) {
+            return (
+              <div className="public-readonly-field-value">
+                {publicReadonlyFieldValue(context.field)}
+              </div>
+            );
+          }
           return (
             <PublicFieldEditor
               key={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
@@ -774,4 +782,19 @@ function usesDelayedPublicSave(fieldType: string) {
 function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
   const value = field.options_config_json?.static_text;
   return typeof value === "string" && value.trim() ? value : uiText.empty;
+}
+
+function publicReadonlyFieldValue(field: PublicLinkPreviewFieldRead) {
+  const optionLabels = new Map(field.options.map((option) => [option.id, option.label]));
+  if (Array.isArray(field.value)) {
+    return field.value
+      .map((value) =>
+        typeof value === "string" ? (optionLabels.get(value) ?? value) : formatValue(value),
+      )
+      .join(", ");
+  }
+  if (typeof field.value === "string") {
+    return optionLabels.get(field.value) ?? field.value;
+  }
+  return formatValue(field.value);
 }

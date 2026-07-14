@@ -2126,6 +2126,17 @@ tr:last-child td {
   width: 100%;
 }
 
+.public-readonly-field-value {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #475467;
+  background: #f8fafc;
+}
+
 .filled-card-layout {
   display: grid;
   min-width: 0;

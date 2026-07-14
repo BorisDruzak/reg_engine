@@ -86,6 +86,7 @@ class PublicPreviewField:
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None = None
     display_config_json: dict[str, Any] | None = None
+    public_editable: bool = False
     options: list[PublicPreviewOption] = field(default_factory=list)
 
 
@@ -517,7 +518,12 @@ class PublicLinkService:
         if not card.public_view_enabled:
             raise PermissionDeniedError("Public viewing is disabled for this card.")
 
-        schema_rows = CardPublicAccessService(self.session).public_schema_rows_for_card(card)
+        public_access = CardPublicAccessService(self.session)
+        schema_rows = public_access.public_schema_rows_for_card(card)
+        editable_field_ids = {
+            field_model.id
+            for _, field_model in public_access.public_editable_schema_rows_for_card(card)
+        }
         field_ids = [field_model.id for _, field_model in schema_rows]
         values_by_instance_field = self._field_values_by_instance(
             card_id=card.id,
@@ -546,6 +552,7 @@ class PublicLinkService:
                         ),
                         item_ids_by_value_id=item_ids_by_value_id,
                         card=card,
+                        public_editable=field_model.id in editable_field_ids,
                     )
                     for field_model in block_fields
                 ]
@@ -1243,6 +1250,7 @@ class PublicLinkService:
         field_value: FieldValue | None,
         item_ids_by_value_id: dict[UUID, list[UUID]],
         card: Card,
+        public_editable: bool,
     ) -> PublicPreviewField:
         return PublicPreviewField(
             field_id=field_model.id,
@@ -1256,6 +1264,7 @@ class PublicLinkService:
             options_source_id=field_model.options_source_id,
             options_config_json=field_model.options_config_json,
             display_config_json=field_model.display_config_json,
+            public_editable=public_editable,
             options=self._reference_options(
                 field_model,
                 card=card,
