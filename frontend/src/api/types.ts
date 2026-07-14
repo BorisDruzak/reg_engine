@@ -370,6 +370,7 @@ export type CardListFieldValueRead = {
   label: string;
   field_type: string;
   value: unknown;
+  display_value?: unknown;
 };
 
 export type CardSummaryRead = {

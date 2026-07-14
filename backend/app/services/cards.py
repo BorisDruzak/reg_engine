@@ -56,6 +56,7 @@ class CardListFieldRead:
     label: str
     field_type: str
     value: object | None
+    display_value: object | None
 
 
 @dataclass(frozen=True)
@@ -380,20 +381,141 @@ class CardService:
         for field_value in field_values:
             values_by_field_id.setdefault(field_value.field_id, field_value)
 
+        raw_values_by_field_id = {
+            field_model.id: self._read_field_value(
+                field_model,
+                values_by_field_id.get(field_model.id),
+                item_ids_by_value_id,
+            )
+            for field_model in field_models
+        }
+        display_values_by_field_id = self._list_display_values_for_card(
+            card=card,
+            field_models=field_models,
+            raw_values_by_field_id=raw_values_by_field_id,
+        )
+
         return [
             CardListFieldRead(
                 field_id=field_model.id,
                 code=field_model.code,
                 label=field_model.label,
                 field_type=field_model.field_type,
-                value=self._read_field_value(
-                    field_model,
-                    values_by_field_id.get(field_model.id),
-                    item_ids_by_value_id,
-                ),
+                value=raw_values_by_field_id[field_model.id],
+                display_value=display_values_by_field_id[field_model.id],
             )
             for field_model in field_models
         ]
+
+    def _list_display_values_for_card(
+        self,
+        *,
+        card: Card,
+        field_models: Sequence[FormField],
+        raw_values_by_field_id: dict[UUID, object | None],
+    ) -> dict[UUID, object | None]:
+        reference_item_ids: set[UUID] = set()
+        organization_ids: set[UUID] = set()
+        org_unit_ids: set[UUID] = set()
+        user_ids: set[UUID] = set()
+        card_ids: set[UUID] = set()
+        registry_ids: set[UUID] = set()
+
+        for field_model in field_models:
+            value = raw_values_by_field_id[field_model.id]
+            if field_model.field_type in {"select", "multi_select"}:
+                reference_item_ids.update(self._uuid_values(value))
+            elif field_model.field_type == "organization_ref":
+                organization_ids.update(self._uuid_values(value))
+            elif field_model.field_type == "org_unit_ref":
+                org_unit_ids.update(self._uuid_values(value))
+            elif field_model.field_type == "user_ref":
+                user_ids.update(self._uuid_values(value))
+            elif field_model.field_type == "card_ref":
+                card_ids.update(self._uuid_values(value))
+            elif field_model.field_type == "registry_ref":
+                registry_ids.update(self._uuid_values(value))
+
+        reference_labels = self._labels_by_id(ReferenceItem, reference_item_ids, "label")
+        organization_labels = self._labels_by_id(Organization, organization_ids, "name")
+        user_labels = self._labels_by_id(User, user_ids, "display_name")
+        card_labels = self._labels_by_id(Card, card_ids, "display_name")
+        registry_labels = self._labels_by_id(Registry, registry_ids, "name")
+        org_unit_labels = self._org_unit_list_labels(card.organization_id, org_unit_ids)
+
+        result: dict[UUID, object | None] = {}
+        for field_model in field_models:
+            value = raw_values_by_field_id[field_model.id]
+            labels = (
+                reference_labels
+                if field_model.field_type in {"select", "multi_select"}
+                else organization_labels
+                if field_model.field_type == "organization_ref"
+                else org_unit_labels
+                if field_model.field_type == "org_unit_ref"
+                else user_labels
+                if field_model.field_type == "user_ref"
+                else card_labels
+                if field_model.field_type == "card_ref"
+                else registry_labels
+                if field_model.field_type == "registry_ref"
+                else None
+            )
+            if labels is None:
+                result[field_model.id] = value
+            elif field_model.field_type == "multi_select":
+                result[field_model.id] = [
+                    labels.get(item_id, str(item_id)) for item_id in self._uuid_values(value)
+                ]
+            elif isinstance(value, UUID):
+                result[field_model.id] = labels.get(value, str(value))
+            else:
+                result[field_model.id] = value
+        return result
+
+    def _uuid_values(self, value: object | None) -> list[UUID]:
+        if isinstance(value, UUID):
+            return [value]
+        if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+            return [item for item in value if isinstance(item, UUID)]
+        return []
+
+    def _labels_by_id(
+        self,
+        model: Any,
+        ids: set[UUID],
+        attribute: str,
+    ) -> dict[UUID, str]:
+        if not ids:
+            return {}
+        return {
+            item.id: str(getattr(item, attribute))
+            for item in self.session.scalars(select(model).where(model.id.in_(ids))).all()
+        }
+
+    def _org_unit_list_labels(
+        self,
+        organization_id: UUID,
+        org_unit_ids: set[UUID],
+    ) -> dict[UUID, str]:
+        if not org_unit_ids:
+            return {}
+        org_units = list(
+            self.session.scalars(
+                select(OrgUnit).where(OrgUnit.organization_id == organization_id)
+            ).all()
+        )
+        org_units_by_id = {org_unit.id: org_unit for org_unit in org_units}
+        labels: dict[UUID, str] = {}
+        for org_unit_id in org_unit_ids:
+            org_unit = org_units_by_id.get(org_unit_id)
+            if org_unit is None:
+                continue
+            parent = org_units_by_id.get(org_unit.parent_id) if org_unit.parent_id else None
+            labels[org_unit_id] = (
+                f"{parent.name} → {org_unit.name}" if parent is not None else org_unit.name
+            )
+        return labels
 
     def _filtered_organization_scope(
         self,

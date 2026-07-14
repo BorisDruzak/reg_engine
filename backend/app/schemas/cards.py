@@ -26,6 +26,7 @@ class CardListFieldValueRead(BaseModel):
     label: str
     field_type: str
     value: Any
+    display_value: Any = None
 
 
 class CardSummaryRead(BaseModel):

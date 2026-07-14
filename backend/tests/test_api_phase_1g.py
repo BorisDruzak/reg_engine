@@ -836,6 +836,7 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
             "code": "state",
             "label": "State",
             "field_type": "select",
+            "is_list_display": True,
             "options_source_type": "reference_list",
             "options_source_id": reference_list["id"],
         },
@@ -874,16 +875,13 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
     assert text_query_response.status_code == 200, text_query_response.text
     assert {item["id"] for item in text_query_response.json()["items"]} == {matching_card["id"]}
     matching_summary = text_query_response.json()["items"][0]
-    assert matching_summary["list_fields"] == [
-        {
-            "field_id": text_field["id"],
-            "code": "person",
-            "label": "Person",
-            "field_type": "text",
-            "value": matching_summary["list_fields"][0]["value"],
-        }
-    ]
-    assert matching_summary["list_fields"][0]["value"]
+    list_fields_by_code = {
+        item["code"]: item for item in matching_summary["list_fields"]
+    }
+    assert list_fields_by_code["person"]["value"]
+    assert list_fields_by_code["person"]["display_value"] == list_fields_by_code["person"]["value"]
+    assert list_fields_by_code["state"]["value"] == ready_item["id"]
+    assert list_fields_by_code["state"]["display_value"] == "Ready"
 
     field_filters = json.dumps(
         [

@@ -593,4 +593,5 @@ def _card_list_field_to_schema(list_field: ServiceCardListFieldRead) -> CardList
         label=list_field.label,
         field_type=list_field.field_type,
         value=_serialize_field_value(list_field.value),
+        display_value=_serialize_field_value(list_field.display_value),
     )

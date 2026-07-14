@@ -586,7 +586,10 @@ export function CardsWorkspace({
       item.lifecycle_status,
     )}`;
     const selectedFieldDetails = (item.list_fields ?? []).map(
-      (field) => `${field.label}: ${formatEditorValue(field.value)}`,
+      (field) =>
+        `${field.label}: ${formatEditorValue(
+          field.display_value === undefined ? field.value : field.display_value,
+        )}`,
     );
     return [baseDetail, ...selectedFieldDetails].join(" / ");
   }

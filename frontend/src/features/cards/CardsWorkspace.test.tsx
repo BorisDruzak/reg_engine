@@ -108,6 +108,32 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test("shows the reference-list label instead of its stored identifier in a card row", async () => {
+    const referenceItemId = "ffca44e1-85b0-47ad-99b0-cadcc2e757a5";
+    const referenceCard: CardSummaryRead = {
+      ...organizationUnitCardSummary,
+      id: "card-reference-list",
+      display_name: "Карточка со справочником",
+      list_fields: [
+        {
+          field_id: "field-position-group",
+          code: "position_group",
+          label: "Группа должностей",
+          field_type: "select",
+          value: referenceItemId,
+          display_value: "Высшая",
+        },
+      ],
+    };
+
+    renderWorkspace({ cards: [referenceCard] });
+
+    expect(
+      await screen.findByRole("button", { name: /Группа должностей: Высшая/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(referenceItemId)).not.toBeInTheDocument();
+  });
+
   test("renders fixed creation actions in the shared card tab strip without a dropdown", () => {
     renderWorkspace();
 
