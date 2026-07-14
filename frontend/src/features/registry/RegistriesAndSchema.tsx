@@ -467,6 +467,7 @@ function SchemaVisualEditor({
   const queryClient = useQueryClient();
   const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateActionHost, setTemplateActionHost] = useState<HTMLElement | null>(null);
   const [templateNameDraft, setTemplateNameDraft] = useState<string | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -520,6 +521,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setSelectedTemplateId(null);
+    setTemplateActionHost(null);
     setTemplateFormState({
       mode: "create",
       code: "",
@@ -534,6 +536,7 @@ function SchemaVisualEditor({
     setSuccessMessage(null);
     setTemplateFormState(null);
     setTemplateNameDraft(null);
+    setTemplateActionHost(null);
     setSelectedTemplateId(template.id);
   }
 
@@ -544,6 +547,7 @@ function SchemaVisualEditor({
 
   function closeTemplateEditor() {
     setSelectedTemplateId(null);
+    setTemplateActionHost(null);
     setTemplateNameDraft(null);
     setLocalError(null);
   }
@@ -709,6 +713,14 @@ function SchemaVisualEditor({
                       {selectedFields.length > 0 && <small>{selectedFields.join(", ")}</small>}
                     </div>
                     <div className="row-actions">
+                      {isSelectedTemplate ? (
+                        <div
+                          ref={setTemplateActionHost}
+                          className="card-template-editor-actions"
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        />
+                      ) : null}
                       <button
                         type="button"
                         className="ghost-button"
@@ -722,6 +734,58 @@ function SchemaVisualEditor({
                       </button>
                     </div>
                   </header>
+                  {isSelectedTemplate ? (
+                    <section
+                      className="schema-template-editor"
+                      role="region"
+                      aria-label={`${uiText.cardTemplateEditor} ${template.name}`}
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <header className="schema-template-editor-header">
+                        {templateNameDraft === null ? (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={openTemplateNameForm}
+                          >
+                            {template.name}
+                          </button>
+                        ) : (
+                          <AdminMutationForm
+                            title={uiText.editCardTemplate}
+                            submitLabel={uiText.save}
+                            cancelLabel="Отменить"
+                            isSubmitting={updateTemplateMutation.isPending}
+                            error={mutationError}
+                            successMessage={null}
+                            onCancel={cancelTemplateNameForm}
+                            onSubmit={handleTemplateNameSubmit}
+                          >
+                            <label>
+                              <span>{uiText.cardTemplateName}</span>
+                              <input
+                                aria-label={uiText.cardTemplateName}
+                                value={templateNameDraft}
+                                onChange={(event) => setTemplateNameDraft(event.currentTarget.value)}
+                              />
+                            </label>
+                          </AdminMutationForm>
+                        )}
+                      </header>
+                      <CardLayoutStudio
+                        token={token}
+                        registryId={selectedRegistryId}
+                        cardTemplate={template}
+                        blocks={blocks}
+                        fields={fields}
+                        referenceLists={referenceLists}
+                        actionPortalTarget={templateActionHost}
+                        onClose={closeTemplateEditor}
+                        onSchemaChanged={() => invalidateRegistryData(queryClient, token)}
+                      />
+                    </section>
+                  ) : null}
                 </article>
               );
             })
@@ -738,55 +802,6 @@ function SchemaVisualEditor({
             onConfirm={() => archiveTemplateMutation.mutate(templateArchiveTarget.id)}
           />
         </AdminMutationDialog>
-      )}
-      {selectedTemplate && (
-        <section
-          className="schema-template-editor"
-          role="region"
-          aria-label={`${uiText.cardTemplateEditor} ${selectedTemplate.name}`}
-        >
-          <header className="schema-template-editor-header">
-            {templateNameDraft === null ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={openTemplateNameForm}
-              >
-                {selectedTemplate.name}
-              </button>
-            ) : (
-              <AdminMutationForm
-                title={uiText.editCardTemplate}
-                submitLabel={uiText.save}
-                cancelLabel="Отменить"
-                isSubmitting={updateTemplateMutation.isPending}
-                error={mutationError}
-                successMessage={null}
-                onCancel={cancelTemplateNameForm}
-                onSubmit={handleTemplateNameSubmit}
-              >
-                <label>
-                  <span>{uiText.cardTemplateName}</span>
-                  <input
-                    aria-label={uiText.cardTemplateName}
-                    value={templateNameDraft}
-                    onChange={(event) => setTemplateNameDraft(event.currentTarget.value)}
-                  />
-                </label>
-              </AdminMutationForm>
-            )}
-          </header>
-          <CardLayoutStudio
-            token={token}
-            registryId={selectedRegistryId}
-            cardTemplate={selectedTemplate}
-            blocks={blocks}
-            fields={fields}
-            referenceLists={referenceLists}
-            onClose={closeTemplateEditor}
-            onSchemaChanged={() => invalidateRegistryData(queryClient, token)}
-          />
-        </section>
       )}
     </section>
   );

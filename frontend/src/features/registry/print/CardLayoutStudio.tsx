@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   ApiError,
@@ -73,6 +74,7 @@ export type CardLayoutStudioProps = {
   fields: FormFieldRead[];
   referenceLists?: ReferenceListRead[];
   selectedCardId?: string | null;
+  actionPortalTarget?: HTMLElement | null;
   onClose?: () => void;
   onSchemaChanged?: () => Promise<void> | void;
 };
@@ -123,6 +125,7 @@ function CardLayoutStudioSession({
   fields,
   referenceLists,
   selectedCardId = null,
+  actionPortalTarget = null,
   onClose,
   onSchemaChanged,
   initialLayout,
@@ -901,6 +904,50 @@ function CardLayoutStudioSession({
     generationPending ||
     conversionPending ||
     conflictReviewPending;
+  const commandToolbar = (
+    <div className="row-actions" role="toolbar" aria-label="Действия макета карточки">
+      <button
+        type="button"
+        className="ghost-button"
+        aria-label="Отменить изменение"
+        disabled={geometryHistory.undo.length === 0 || hasFormConflict || schemaPending}
+        onClick={undoGeometryChange}
+      >
+        Отменить
+      </button>
+      <button
+        type="button"
+        className="ghost-button"
+        disabled={busy}
+        onClick={() => void generate("docx")}
+      >
+        DOCX
+      </button>
+      <button
+        type="button"
+        className="ghost-button"
+        disabled={busy}
+        onClick={() => void generate("pdf")}
+      >
+        PDF
+      </button>
+      {lastGenerated ? (
+        <button
+          type="button"
+          className="ghost-button"
+          disabled={busy}
+          onClick={() => void downloadLast()}
+        >
+          Скачать
+        </button>
+      ) : null}
+      {onClose ? (
+        <button type="button" className="ghost-button" disabled={busy} onClick={onClose}>
+          Закрыть
+        </button>
+      ) : null}
+    </div>
+  );
 
   return (
     <section
@@ -918,49 +965,9 @@ function CardLayoutStudioSession({
               : (localMessage ?? (localError ? "Не сохранено" : "Сохранено"))}
           </span>
         </div>
-        <div className="row-actions" role="toolbar" aria-label="Действия макета карточки">
-          <button
-            type="button"
-            className="ghost-button"
-            aria-label="Отменить изменение"
-            disabled={geometryHistory.undo.length === 0 || hasFormConflict || schemaPending}
-            onClick={undoGeometryChange}
-          >
-            Отменить
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={busy}
-            onClick={() => void generate("docx")}
-          >
-            DOCX
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            disabled={busy}
-            onClick={() => void generate("pdf")}
-          >
-            PDF
-          </button>
-          {lastGenerated ? (
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={busy}
-              onClick={() => void downloadLast()}
-            >
-              Скачать
-            </button>
-          ) : null}
-          {onClose ? (
-            <button type="button" className="ghost-button" disabled={busy} onClick={onClose}>
-              Закрыть
-            </button>
-          ) : null}
-        </div>
+        {!actionPortalTarget ? commandToolbar : null}
       </header>
+      {actionPortalTarget ? createPortal(commandToolbar, actionPortalTarget) : null}
 
       {localError ? (
         <section className="card-layout-studio-recovery" aria-label="Восстановление макета">

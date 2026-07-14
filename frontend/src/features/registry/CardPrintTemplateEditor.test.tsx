@@ -888,13 +888,17 @@ test("converts a saved legacy print view through the real API and then shows the
   expect(screen.getAllByText("Создана новая версия связанного макета").length).toBeGreaterThan(0);
 });
 
-test("opens the contextual studio directly from the selected template", async () => {
+test("embeds contextual studio commands in the selected template card", async () => {
   const user = userEvent.setup();
-  vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  stubBrowserDownload();
   const { container } = renderRegistrySchemaEditor();
 
   await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
   await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
+
+  const selected = container.querySelector(".card-template-card.is-selected") as HTMLElement;
 
   expect(await screen.findByRole("tab", { name: "Макет карточки" })).toHaveAttribute(
     "aria-selected",
@@ -905,7 +909,33 @@ test("opens the contextual studio directly from the selected template", async ()
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
   expect(container.querySelector(".schema-template-editor-header")).not.toBeNull();
   expect(container.querySelectorAll(".card-layout-studio-header")).toHaveLength(1);
-  expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+  expect(within(selected).getByRole("button", { name: "DOCX" })).toBeInTheDocument();
+  expect(within(selected).getByRole("button", { name: "PDF" })).toBeInTheDocument();
+  expect(within(selected).getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+  expect(container.querySelector(".card-layout-studio-header .row-actions")).toBeNull();
+
+  await user.click(within(selected).getByRole("button", { name: "DOCX" }));
+  await user.click(within(selected).getByRole("button", { name: "PDF" }));
+  await waitFor(() => expect(api.blankDownloadPayloads).toHaveLength(2));
+
+  const field = within(selected).getByTestId("layout-field-field-field-1");
+  field.focus();
+  await user.keyboard("{ArrowRight}");
+  await user.click(within(selected).getByRole("button", { name: "Готово" }));
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+
+  const undo = within(selected).getByRole("button", { name: "Отменить изменение" });
+  expect(undo).toBeEnabled();
+  await user.click(undo);
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(2));
+  expect(within(selected).getByTestId("layout-field-field-field-1")).toHaveStyle({
+    gridColumn: "1 / span 6",
+  });
+
+  await user.click(within(selected).getByRole("button", { name: "Закрыть" }));
+  await waitFor(() =>
+    expect(container.querySelector(".card-template-card.is-selected")).toBeNull(),
+  );
 });
 
 test("renames the opened card template with a name-only PATCH", async () => {

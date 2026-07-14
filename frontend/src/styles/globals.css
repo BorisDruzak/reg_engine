@@ -1513,6 +1513,17 @@ tr:last-child td {
   opacity: 0.72;
 }
 
+.card-template-card .schema-template-editor {
+  grid-column: 1 / -1;
+}
+
+.card-template-card-header .card-template-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .card-template-card span,
 .card-template-card small {
   display: block;
