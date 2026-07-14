@@ -544,13 +544,21 @@ def test_organization_reference_options_and_public_allowlist_are_enforced(
     allowed_organization = _post_json(
         api_client,
         "/api/v1/organizations",
-        {"code": "phase2k-organization-reference-allowed", "name": "Allowed organization"},
+        {
+            "code": "phase2k-organization-reference-allowed",
+            "name": "Allowed organization",
+            "parent_id": card_organization["id"],
+        },
         actor_id=system_admin.id,
     )
     foreign_organization = _post_json(
         api_client,
         "/api/v1/organizations",
-        {"code": "phase2k-organization-reference-foreign", "name": "Foreign organization"},
+        {
+            "code": "phase2k-organization-reference-foreign",
+            "name": "Foreign organization",
+            "parent_id": card_organization["id"],
+        },
         actor_id=system_admin.id,
     )
     registry = _post_json(
