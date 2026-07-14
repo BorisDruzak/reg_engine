@@ -7,8 +7,7 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 card-creation scroll surface is verified locally and awaiting
-  publication. Only the outer `data-panel` that directly contains
+- 2026-07-14 card-creation scroll surface is released at `da84b810`. Only the outer `data-panel` that directly contains
   `single-stage-card-creation` is transparent and uses `overflow: visible`;
   the application background therefore remains visible while the independent
   base/template cards retain their existing surfaces. Removing the outer
@@ -19,8 +18,12 @@ not a hardcoded employee registry.
   API, card lifecycle, access, or template-preview logic changed. The focused
   frontend suites pass (11), TypeScript and the production build pass, and
   ESLint has no errors with the existing unrelated `FilledCardLayout.tsx`
-  hook-dependency warning. HTTPS desktop/mobile Browser proof and deployment
-  remain pending.
+  hook-dependency warning. The server checkout is synchronized, the service,
+  same-origin frontend/API smoke checks, and HTTPS browser proof pass. Desktop
+  proof confirms transparent outer surface, `sticky` navigation at `16px`, and
+  the `Должность` marker while that block occupies the reading line; mobile
+  proof confirms static navigation above fields with no horizontal overflow.
+  Browser console has no warnings or errors; no card was created during QA.
 
 - 2026-07-14 card-creation block navigation is released at `e6772731`.
   One-stage creation retains the separate static `Базовый блок` with
