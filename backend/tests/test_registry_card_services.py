@@ -495,6 +495,97 @@ def test_organization_centered_card_create_uses_root_default_registry(
     assert card.organization_id == child.id
 
 
+def test_card_creation_preview_uses_template_layout_field_order(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "creation-preview-layout-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="creation-preview-layout-root",
+        name="Preview layout root",
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        organization.id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-layout-main",
+        title="Preview layout main",
+    )
+    first_layout_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="creation_preview_first_layout",
+        label="First layout field",
+        field_type="text",
+        position=1,
+    )
+    second_layout_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="creation_preview_second_layout",
+        label="Second layout field",
+        field_type="text",
+        position=0,
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-layout-template",
+        name="Preview layout template",
+        field_schema_json={
+            "field_ids": [str(first_layout_field.id), str(second_layout_field.id)],
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "creation-preview-layout-section",
+                        "block_id": str(block.id),
+                        "row": 1,
+                        "column": 1,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "creation-preview-layout-first",
+                                "kind": "field",
+                                "field_id": str(first_layout_field.id),
+                                "row": 1,
+                                "column": 1,
+                                "column_span": 12,
+                            },
+                            {
+                                "id": "creation-preview-layout-second",
+                                "kind": "field",
+                                "field_id": str(second_layout_field.id),
+                                "row": 2,
+                                "column": 1,
+                                "column_span": 12,
+                            },
+                        ],
+                    }
+                ],
+            },
+        },
+    )
+
+    preview = CardService(db_session).preview_card_creation_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        card_template_id=template.id,
+    )
+
+    assert [item.field_id for item in preview.blocks[0].fields] == [
+        first_layout_field.id,
+        second_layout_field.id,
+    ]
+
+
 def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
     db_session: Session,
 ) -> None:

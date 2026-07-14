@@ -263,10 +263,24 @@ class CardService:
             actor_user_id=actor_user_id,
         )
         template_field_ids = self._template_field_ids(template)
+        schema_rows = self._active_schema_rows_for_registry(registry.id)
+        layout_rank = self._creation_preview_layout_field_ranks(template)
+        legacy_rank = {
+            field_model.id: len(layout_rank) + index
+            for index, (_block, field_model) in enumerate(schema_rows)
+        }
+        schema_rows.sort(
+            key=lambda row: (
+                layout_rank.get(row[1].id, legacy_rank[row[1].id]),
+                row[0].position,
+                row[1].position,
+                row[1].code,
+            )
+        )
         blocks: list[CardCreationPreviewBlockRead] = []
         fields_by_block: dict[UUID, list[CardCreationPreviewFieldRead]] = {}
         blocks_by_id: dict[UUID, FormBlock] = {}
-        for block, field_model in self._active_schema_rows_for_registry(registry.id):
+        for block, field_model in schema_rows:
             if field_model.id not in template_field_ids:
                 continue
             blocks_by_id[block.id] = block
@@ -2577,6 +2591,49 @@ class CardService:
             .order_by(FormBlock.position, FormBlock.code, FormField.position, FormField.code)
         )
         return [(block, field_model) for block, field_model in rows]
+
+    @staticmethod
+    def _creation_preview_layout_field_ranks(template: CardTemplate) -> dict[UUID, int]:
+        form_layout = template.field_schema_json.get("form_layout")
+        if not isinstance(form_layout, dict):
+            return {}
+        raw_sections = form_layout.get("sections")
+        if not isinstance(raw_sections, list):
+            return {}
+
+        def layout_coordinate(raw_value: object) -> int:
+            if isinstance(raw_value, int) and not isinstance(raw_value, bool):
+                return raw_value
+            return 0
+
+        layout_rank: dict[UUID, int] = {}
+        valid_sections = [section for section in raw_sections if isinstance(section, dict)]
+        for section in sorted(
+            valid_sections,
+            key=lambda item: (
+                layout_coordinate(item.get("row")),
+                layout_coordinate(item.get("column")),
+            ),
+        ):
+            raw_items = section.get("items")
+            if not isinstance(raw_items, list):
+                continue
+            valid_items = [item for item in raw_items if isinstance(item, dict)]
+            for item in sorted(
+                valid_items,
+                key=lambda value: (
+                    layout_coordinate(value.get("row")),
+                    layout_coordinate(value.get("column")),
+                ),
+            ):
+                if item.get("kind") != "field":
+                    continue
+                try:
+                    field_id = UUID(str(item.get("field_id")))
+                except (TypeError, ValueError):
+                    continue
+                layout_rank.setdefault(field_id, len(layout_rank))
+        return layout_rank
 
     def _existing_block_instances(self, card_id: UUID, block_id: UUID) -> list[CardBlockInstance]:
         return list(
