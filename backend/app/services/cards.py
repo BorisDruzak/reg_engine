@@ -67,6 +67,35 @@ class CardFieldOptionRead:
 
 
 @dataclass(frozen=True)
+class CardCreationPreviewFieldRead:
+    field_id: UUID
+    code: str
+    label: str
+    description: str | None
+    field_type: str
+    required_mode: str
+    options: list[CardFieldOptionRead] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CardCreationPreviewBlockRead:
+    block_id: UUID
+    code: str
+    title: str
+    description: str | None
+    is_repeatable: bool
+    fields: list[CardCreationPreviewFieldRead] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CardCreationPreviewRead:
+    organization_id: UUID
+    card_template_id: UUID
+    display_name: str
+    blocks: list[CardCreationPreviewBlockRead] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class FileRefValueRead:
     attachment_id: UUID
     title: str
@@ -212,6 +241,129 @@ class CardService:
             public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
         )
+
+    def preview_card_creation_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        card_template_id: UUID,
+    ) -> CardCreationPreviewRead:
+        registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
+            organization_id
+        )
+        self._require_card_permission(
+            actor_user_id,
+            organization_id,
+            registry_id=registry.id,
+        )
+        template = self._get_active_card_template_for_registry(
+            card_template_id,
+            registry_id=registry.id,
+            actor_user_id=actor_user_id,
+        )
+        template_field_ids = self._template_field_ids(template)
+        blocks: list[CardCreationPreviewBlockRead] = []
+        fields_by_block: dict[UUID, list[CardCreationPreviewFieldRead]] = {}
+        blocks_by_id: dict[UUID, FormBlock] = {}
+        for block, field_model in self._active_schema_rows_for_registry(registry.id):
+            if field_model.id not in template_field_ids:
+                continue
+            blocks_by_id[block.id] = block
+            fields_by_block.setdefault(block.id, []).append(
+                CardCreationPreviewFieldRead(
+                    field_id=field_model.id,
+                    code=field_model.code,
+                    label=field_model.label,
+                    description=field_model.description,
+                    field_type=field_model.field_type,
+                    required_mode=field_model.required_mode,
+                    options=self._creation_preview_options(
+                        actor_user_id=actor_user_id,
+                        organization_id=organization_id,
+                        registry_id=registry.id,
+                        field_model=field_model,
+                    ),
+                )
+            )
+        for block_id, fields in fields_by_block.items():
+            block = blocks_by_id[block_id]
+            blocks.append(
+                CardCreationPreviewBlockRead(
+                    block_id=block.id,
+                    code=block.code,
+                    title=block.title,
+                    description=block.description,
+                    is_repeatable=block.is_repeatable,
+                    fields=fields,
+                )
+            )
+        return CardCreationPreviewRead(
+            organization_id=organization_id,
+            card_template_id=template.id,
+            display_name=self._card_display_name_from_input(display_name=None, template=template),
+            blocks=blocks,
+        )
+
+    def create_card_with_first_value_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        display_name: str | None,
+        card_template_id: UUID,
+        public_view_enabled: bool,
+        public_edit_enabled: bool,
+        field_id: UUID,
+        value: object,
+        block_instance_id: UUID | None = None,
+    ) -> Card:
+        registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
+            organization_id
+        )
+        self._require_card_permission(
+            actor_user_id,
+            organization_id,
+            registry_id=registry.id,
+        )
+        template = self._get_active_card_template_for_registry(
+            card_template_id,
+            registry_id=registry.id,
+            actor_user_id=actor_user_id,
+        )
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != registry.id or field_model.id not in self._template_field_ids(
+            template
+        ):
+            raise CardServiceError("Field does not belong to the selected card template.")
+        assignment = self._coerce_field_assignment(
+            field_model,
+            value,
+            registry_id=registry.id,
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+        )
+        if self._field_assignment_is_empty(assignment):
+            raise InvalidFieldValueError("At least one non-empty field value is required.")
+        with self.session.begin_nested():
+            card = self.create_card_for_actor(
+                actor_user_id=actor_user_id,
+                registry_id=registry.id,
+                organization_id=organization_id,
+                display_name=display_name,
+                card_template_id=template.id,
+                public_view_enabled=public_view_enabled,
+                public_edit_enabled=public_edit_enabled,
+            )
+            self.set_field_value_for_actor(
+                actor_user_id=actor_user_id,
+                card_id=card.id,
+                field_id=field_model.id,
+                value=value,
+                block_instance_id=block_instance_id,
+            )
+        return card
 
     def create_card(
         self,
@@ -2108,6 +2260,72 @@ class CardService:
                     organization.name.casefold(),
                     organization.code.casefold(),
                     str(organization.id),
+                ),
+            )
+        ]
+
+    def _creation_preview_options(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        registry_id: UUID,
+        field_model: FormField,
+    ) -> list[CardFieldOptionRead]:
+        if field_model.field_type in {"select", "multi_select"}:
+            try:
+                return [
+                    CardFieldOptionRead(
+                        id=item.id,
+                        label=item.label,
+                        archived=item.archived_at is not None,
+                    )
+                    for item in ReferenceListService(self.session).list_effective_items_for_field(
+                        field_model=field_model,
+                        registry_id=registry_id,
+                        organization_id=organization_id,
+                    )
+                ]
+            except ReferenceListError as exc:
+                raise InvalidFieldValueError(str(exc)) from exc
+        if field_model.field_type == "organization_ref":
+            return self._organization_options(
+                OrganizationService(self.session).list_organizations_for_actor(
+                    actor_user_id=actor_user_id
+                )
+            )
+        if field_model.field_type == "org_unit_ref":
+            return self._active_org_unit_options_for_organization(organization_id)
+        return []
+
+    def _active_org_unit_options_for_organization(
+        self,
+        organization_id: UUID,
+    ) -> list[CardFieldOptionRead]:
+        active_units = [
+            unit
+            for unit in self.session.scalars(
+                select(OrgUnit).where(OrgUnit.organization_id == organization_id)
+            ).all()
+            if unit.archived_at is None and unit.is_active
+        ]
+        units_by_id = {unit.id: unit for unit in active_units}
+        return [
+            CardFieldOptionRead(
+                id=unit.id,
+                label=(
+                    f"{units_by_id[unit.parent_id].name} → {unit.name}"
+                    if unit.parent_id in units_by_id
+                    else unit.name
+                ),
+            )
+            for unit in sorted(
+                active_units,
+                key=lambda item: (
+                    0 if item.type == "management" else 1,
+                    item.name.casefold(),
+                    item.code.casefold(),
+                    str(item.id),
                 ),
             )
         ]

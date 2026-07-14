@@ -495,6 +495,91 @@ def test_organization_centered_card_create_uses_root_default_registry(
     assert card.organization_id == child.id
 
 
+def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "single-stage-card-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="single-stage-card-root",
+        name="Single-stage card root",
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        organization.id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="single-stage-main",
+        title="Single-stage main",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="single_stage_name",
+        label="Single-stage name",
+        field_type="text",
+        required_mode="required",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="single-stage-template",
+        name="Single-stage template",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+    card_service = CardService(db_session)
+
+    preview = card_service.preview_card_creation_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        card_template_id=template.id,
+    )
+
+    assert preview.card_template_id == template.id
+    assert [(item.title, item.fields[0].field_id) for item in preview.blocks] == [
+        (block.title, field.id)
+    ]
+
+    with pytest.raises(InvalidFieldValueError, match="At least one non-empty"):
+        card_service.create_card_with_first_value_for_actor(
+            actor_user_id=system_admin.id,
+            organization_id=organization.id,
+            display_name=None,
+            card_template_id=template.id,
+            public_view_enabled=True,
+            public_edit_enabled=True,
+            field_id=field.id,
+            value="",
+        )
+
+    assert not db_session.scalars(select(Card).where(Card.organization_id == organization.id)).all()
+
+    card = card_service.create_card_with_first_value_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        display_name=None,
+        card_template_id=template.id,
+        public_view_enabled=True,
+        public_edit_enabled=True,
+        field_id=field.id,
+        value="Created after first value",
+    )
+
+    stored_value = db_session.scalar(
+        select(FieldValue).where(FieldValue.card_id == card.id, FieldValue.field_id == field.id)
+    )
+    assert card.lifecycle_status == "active"
+    assert card.display_name == template.name
+    assert stored_value is not None
+    assert stored_value.value_text == "Created after first value"
+
+
 def test_organization_centered_card_list_uses_default_registry_not_arbitrary_first_registry(
     db_session: Session,
 ) -> None:

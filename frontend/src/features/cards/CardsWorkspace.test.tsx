@@ -139,8 +139,7 @@ describe("CardsWorkspace", () => {
 
     const tabList = screen.getByRole("tablist", { name: "Вкладки карточек" });
     expect(within(tabList).getByRole("tab", { name: "Создать карточку" })).toBeInTheDocument();
-    expect(within(tabList).getByRole("tab", { name: "Создать ссылку" })).toBeInTheDocument();
-    expect(within(tabList).getByRole("tab", { name: "Список ссылок" })).toBeInTheDocument();
+    expect(within(tabList).getByRole("tab", { name: "Ссылки на заполнение" })).toBeInTheDocument();
     expect(screen.queryByRole("menu", { name: "Создание карточек" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Создать карточку" })).not.toBeInTheDocument();
   });
@@ -149,20 +148,91 @@ describe("CardsWorkspace", () => {
     renderWorkspace();
 
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
-    expect(screen.getByRole("form", { name: "Создать карточку" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Создание карточки" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
+    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
     expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Создать ссылку" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Ссылки на заполнение" }));
     expect(screen.getByRole("region", { name: "Ссылки на создание карточек" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Закрыть вкладку Создать ссылку" }),
+      screen.queryByRole("button", { name: "Закрыть вкладку Ссылки на заполнение" }),
     ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Список ссылок" }));
-    expect(screen.getByRole("tab", { name: "Список ссылок" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Ссылки на заполнение" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
+  });
+
+  test("creates a card only after the first non-empty dynamic field value", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/creation-preview")) {
+        return Response.json({
+          organization_id: organization.id,
+          card_template_id: "template-1",
+          display_name: "Шаблон",
+          blocks: [
+            {
+              block_id: "block-1",
+              code: "main",
+              title: "Основной блок",
+              description: null,
+              is_repeatable: false,
+              fields: [
+                {
+                  field_id: "field-1",
+                  code: "name",
+                  label: "Наименование",
+                  description: null,
+                  field_type: "text",
+                  required_mode: "required",
+                  options: [],
+                },
+              ],
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/cards/first-save")) {
+        return Response.json({
+          id: "new-card-1",
+          registry_id: "registry-1",
+          card_template_id: "template-1",
+          organization_id: organization.id,
+          org_unit_id: null,
+          display_name: "Шаблон",
+          lifecycle_status: "active",
+          public_view_enabled: true,
+          public_edit_enabled: true,
+          list_fields: [],
+        });
+      }
+      return Response.json({ items: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onOpenCreatedCard = vi.fn().mockResolvedValue(undefined);
+    renderWorkspace({ onOpenCreatedCard });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+    const field = await screen.findByLabelText("Наименование");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(false);
+
+    fireEvent.change(field, { target: { value: "Первое значение" } });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(
+        true,
+      );
+    });
+    expect(onOpenCreatedCard).toHaveBeenCalledWith("new-card-1");
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cards/first-save"))!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      card_template_id: "template-1",
+      field_id: "field-1",
+      value: "Первое значение",
+    });
   });
 
   test("clears card-list filters through the parent before opening a created card", async () => {
@@ -176,7 +246,7 @@ describe("CardsWorkspace", () => {
     const onSelectCard = vi.fn();
     renderWorkspace({ onOpenCreatedCard, onSelectCard });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Список ссылок" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Ссылки на заполнение" }));
     fireEvent.doubleClick(await screen.findByRole("button", { name: /Созданная карточка/ }));
 
     await waitFor(() => {

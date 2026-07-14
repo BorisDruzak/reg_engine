@@ -415,6 +415,48 @@ export type OrganizationCardCreatePayload = {
   public_edit_enabled?: boolean;
 };
 
+export type CardCreationPreviewOptionRead = {
+  id: string;
+  label: string;
+  archived: boolean;
+};
+
+export type CardCreationPreviewFieldRead = {
+  field_id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  field_type: string;
+  required_mode: string;
+  options: CardCreationPreviewOptionRead[];
+};
+
+export type CardCreationPreviewBlockRead = {
+  block_id: string;
+  code: string;
+  title: string;
+  description: string | null;
+  is_repeatable: boolean;
+  fields: CardCreationPreviewFieldRead[];
+};
+
+export type CardCreationPreviewRead = {
+  organization_id: string;
+  card_template_id: string;
+  display_name: string;
+  blocks: CardCreationPreviewBlockRead[];
+};
+
+export type CardFirstSavePayload = {
+  display_name?: string | null;
+  card_template_id: string;
+  public_view_enabled?: boolean;
+  public_edit_enabled?: boolean;
+  field_id: string;
+  value: unknown;
+  block_instance_id?: string | null;
+};
+
 export type CardUpdatePayload = {
   display_name?: string | null;
   org_unit_id?: string | null;

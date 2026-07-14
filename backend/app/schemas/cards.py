@@ -20,6 +20,48 @@ class OrganizationCardCreate(BaseModel):
     public_edit_enabled: bool = True
 
 
+class CardCreationPreviewOptionRead(BaseModel):
+    id: UUID
+    label: str
+    archived: bool = False
+
+
+class CardCreationPreviewFieldRead(BaseModel):
+    field_id: UUID
+    code: str
+    label: str
+    description: str | None
+    field_type: str
+    required_mode: str
+    options: list[CardCreationPreviewOptionRead] = Field(default_factory=list)
+
+
+class CardCreationPreviewBlockRead(BaseModel):
+    block_id: UUID
+    code: str
+    title: str
+    description: str | None
+    is_repeatable: bool
+    fields: list[CardCreationPreviewFieldRead] = Field(default_factory=list)
+
+
+class CardCreationPreviewRead(BaseModel):
+    organization_id: UUID
+    card_template_id: UUID
+    display_name: str
+    blocks: list[CardCreationPreviewBlockRead] = Field(default_factory=list)
+
+
+class CardFirstSaveRequest(BaseModel):
+    display_name: str | None = None
+    card_template_id: UUID
+    public_view_enabled: bool = True
+    public_edit_enabled: bool = True
+    field_id: UUID
+    value: Any
+    block_instance_id: UUID | None = None
+
+
 class CardListFieldValueRead(BaseModel):
     field_id: UUID
     code: str

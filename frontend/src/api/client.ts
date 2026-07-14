@@ -12,6 +12,8 @@ import type {
   CardCreationLinkListRead,
   CardCreationLinkPublicPreviewRead,
   CardCreationLinkRead,
+  CardCreationPreviewRead,
+  CardFirstSavePayload,
   CardPrintTemplateCreatePayload,
   CardPrintTemplateBlankDownloadPayload,
   CardPrintTemplateVersionCreatePayload,
@@ -445,6 +447,29 @@ export async function createOrganizationCard(
   payload: OrganizationCardCreatePayload,
 ) {
   return apiRequest<CardSummaryRead>(`/api/v1/organizations/${organizationId}/cards`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
+}
+
+export async function getCardCreationPreview(
+  token: string,
+  organizationId: string,
+  cardTemplateId: string,
+) {
+  return apiRequest<CardCreationPreviewRead>(
+    `/api/v1/organizations/${organizationId}/card-templates/${cardTemplateId}/creation-preview`,
+    { token },
+  );
+}
+
+export async function firstSaveOrganizationCard(
+  token: string,
+  organizationId: string,
+  payload: CardFirstSavePayload,
+) {
+  return apiRequest<CardSummaryRead>(`/api/v1/organizations/${organizationId}/cards/first-save`, {
     method: "POST",
     token,
     body: payload,

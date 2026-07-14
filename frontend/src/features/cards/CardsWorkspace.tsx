@@ -18,7 +18,6 @@ import {
 import {
   archiveCard,
   archiveCardBlockInstance,
-  createOrganizationCard,
   createCardBlockInstance,
   downloadGeneratedDocumentContent,
   generateCardTemplateLayoutDocx,
@@ -57,7 +56,6 @@ import {
 } from "@/app/uiText";
 import {
   AdminMutationDialog,
-  AdminMutationForm,
   ArchiveConfirmation,
   MutationFeedback,
 } from "@/components/common/AdminMutation";
@@ -69,6 +67,7 @@ import { CardTagSearchBar } from "./CardTagSearchBar";
 import { resolveCardPublicFieldAccess } from "./cardPublicAccessDefaults";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
+import { SingleStageCardCreation } from "./SingleStageCardCreation";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -148,12 +147,8 @@ export function CardsWorkspace({
   useEffect(() => {
     activeCardIdRef.current = activeShellCardId;
   }, [activeShellCardId]);
-  const [cardForm, setCardForm] = useState<CardFormState>(() =>
-    initialCreateCardForm(organizations),
-  );
   const [archiveTarget, setArchiveTarget] = useState<CardSummaryRead | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
@@ -360,24 +355,6 @@ export function CardsWorkspace({
         ),
     [schema?.templates],
   );
-  const createCardMutation = useMutation({
-    mutationFn: () =>
-      createOrganizationCard(token, cardForm.organizationId, {
-        display_name: cardForm.displayName.trim() || undefined,
-        card_template_id: cardForm.cardTemplateId,
-        public_view_enabled: cardForm.publicViewEnabled,
-        public_edit_enabled: cardForm.publicEditEnabled,
-      }),
-    onSuccess: async (created) => {
-      setSuccessMessage(uiText.cardCreated);
-      onSelectCard(created.id);
-      setOpenCardIds((current) =>
-        current.includes(created.id) ? current : [...current, created.id],
-      );
-      setActiveShellTab(`card:${created.id}`);
-      await invalidateCardQueries(queryClient, token, created.registry_id, created.id);
-    },
-  });
   const archiveCardMutation = useMutation({
     mutationFn: (target: CardSummaryRead) => archiveCard(token, target.id),
     onSuccess: async (archived) => {
@@ -501,32 +478,11 @@ export function CardsWorkspace({
   }, [activeShellTab, visibleOpenCardIds]);
 
   function openUtilityTab(tabId: CardUtilityTab) {
-    if (tabId === "create-card") {
-      setCardForm({
-        ...initialCreateCardForm(organizations),
-        cardTemplateId: activeCardTemplates[0]?.id ?? "",
-      });
-    }
     setActiveShellTab(tabId);
     activeCardIdRef.current = null;
     setArchiveTarget(null);
     setSuccessMessage(null);
-    setLocalError(null);
     resetSelectedCardMutationState();
-  }
-
-  function handleCardFormSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLocalError(null);
-    if (!cardForm.organizationId) {
-      setLocalError(uiText.requiredFields);
-      return;
-    }
-    if (!cardForm.cardTemplateId) {
-      setLocalError(uiText.requiredFields);
-      return;
-    }
-    createCardMutation.mutate();
   }
 
   function openCardEditor(cardId: string) {
@@ -535,7 +491,6 @@ export function CardsWorkspace({
     activeCardIdRef.current = cardId;
     setArchiveTarget(null);
     setSuccessMessage(null);
-    setLocalError(null);
     resetSelectedCardMutationState();
     onSelectCard(cardId);
   }
@@ -555,7 +510,6 @@ export function CardsWorkspace({
     activeCardIdRef.current = cardId;
     setArchiveTarget(null);
     setSuccessMessage(null);
-    setLocalError(null);
     resetSelectedCardMutationState();
     if (cardId) {
       onSelectCard(cardId);
@@ -570,7 +524,6 @@ export function CardsWorkspace({
     setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
     setArchiveTarget(null);
     setSuccessMessage(null);
-    setLocalError(null);
     resetSelectedCardMutationState();
     if (activeShellTab === tabId) {
       setActiveShellTab("list");
@@ -635,15 +588,12 @@ export function CardsWorkspace({
         </Panel>
       ) : activeShellTab === "create-card" ? (
         <Panel title={cardUtilityTabLabels["create-card"]}>
-          <CardMutationForm
-            form={cardForm}
+          <SingleStageCardCreation
+            token={token}
             organizations={organizations}
             templates={activeCardTemplates}
-            isSubmitting={createCardMutation.isPending}
-            error={localError ? new Error(localError) : createCardMutation.error}
             onCancel={() => handleShellTabChange("list")}
-            onChange={setCardForm}
-            onSubmit={handleCardFormSubmit}
+            onCardCreated={openCreatedCardEditor}
           />
         </Panel>
       ) : activeShellTab === "creation-links" ? (
@@ -802,14 +752,6 @@ export function CardsWorkspace({
     </div>
   );
 }
-
-type CardFormState = {
-  organizationId: string;
-  displayName: string;
-  cardTemplateId: string;
-  publicViewEnabled: boolean;
-  publicEditEnabled: boolean;
-};
 
 function CardBaseBlock({
   card,
@@ -1129,98 +1071,6 @@ function CardListFilters({
   );
 }
 
-function CardMutationForm({
-  form,
-  organizations,
-  templates,
-  isSubmitting,
-  error,
-  onCancel,
-  onChange,
-  onSubmit,
-}: {
-  form: CardFormState;
-  organizations: OrganizationRead[];
-  templates: CardTemplateRead[];
-  isSubmitting: boolean;
-  error?: unknown;
-  onCancel: () => void;
-  onChange: (form: CardFormState) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <AdminMutationForm
-      title={uiText.createCard}
-      submitLabel={uiText.create}
-      isSubmitting={isSubmitting}
-      error={error}
-      onCancel={onCancel}
-      onSubmit={onSubmit}
-    >
-      <label>
-        <span>{uiText.cardName}</span>
-        <input
-          aria-label={uiText.cardName}
-          value={form.displayName}
-          placeholder="Если не указать, будет использовано имя шаблона"
-          onChange={(event) => onChange({ ...form, displayName: event.currentTarget.value })}
-        />
-      </label>
-      <label>
-        <span>{uiText.cardOrganization}</span>
-        <select
-          value={form.organizationId}
-          onChange={(event) => onChange({ ...form, organizationId: event.currentTarget.value })}
-        >
-          <option value="">{uiText.noData}</option>
-          {organizations.map((organization) => (
-            <option key={organization.id} value={organization.id}>
-              {organization.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span>{uiText.cardTemplate}</span>
-        <select
-          aria-label={uiText.cardTemplate}
-          value={form.cardTemplateId}
-          onChange={(event) => onChange({ ...form, cardTemplateId: event.currentTarget.value })}
-        >
-          {templates.length === 0 && <option value="">{uiText.noData}</option>}
-          {templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="checkbox-control">
-        <input
-          aria-label={uiText.publicViewCard}
-          checked={form.publicViewEnabled}
-          type="checkbox"
-          onChange={(event) =>
-            onChange({ ...form, publicViewEnabled: event.currentTarget.checked })
-          }
-        />
-        <span>{uiText.publicViewCard}</span>
-      </label>
-      <label className="checkbox-control">
-        <input
-          aria-label={uiText.publicEditCard}
-          checked={form.publicEditEnabled}
-          type="checkbox"
-          onChange={(event) =>
-            onChange({ ...form, publicEditEnabled: event.currentTarget.checked })
-          }
-        />
-        <span>{uiText.publicEditCard}</span>
-      </label>
-    </AdminMutationForm>
-  );
-}
-
 function RepeatableBlockControls({
   blocks,
   card,
@@ -1284,16 +1134,6 @@ function RepeatableBlockControls({
       })}
     </div>
   );
-}
-
-function initialCreateCardForm(organizations: OrganizationRead[]): CardFormState {
-  return {
-    organizationId: organizations[0]?.id ?? "",
-    displayName: "",
-    cardTemplateId: "",
-    publicViewEnabled: true,
-    publicEditEnabled: true,
-  };
 }
 
 function loadCardTabs(): { activeTab: CardShellTab; openCardIds: string[] } {

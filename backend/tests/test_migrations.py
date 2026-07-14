@@ -56,6 +56,7 @@ EXPECTED_TABLES = {
     "organizations",
     "permissions",
     "reference_items",
+    "reference_edit_links",
     "reference_lists",
     "registries",
     "report_runs",

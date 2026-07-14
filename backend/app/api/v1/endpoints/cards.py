@@ -13,9 +13,14 @@ from app.schemas.cards import (
     CardBlockInstanceSummaryRead,
     CardBlockRead,
     CardCreate,
+    CardCreationPreviewBlockRead,
+    CardCreationPreviewFieldRead,
+    CardCreationPreviewOptionRead,
+    CardCreationPreviewRead,
     CardFieldOptionListRead,
     CardFieldOptionRead,
     CardFieldRead,
+    CardFirstSaveRequest,
     CardListFieldValueRead,
     CardListRead,
     CardOrganizationUpdate,
@@ -45,6 +50,89 @@ from app.services.cards import CardListFieldRead as ServiceCardListFieldRead
 from app.services.cards import CardRead as ServiceCardRead
 
 router = APIRouter(tags=["cards"])
+
+
+@router.get(
+    "/organizations/{organization_id}/card-templates/{card_template_id}/creation-preview",
+    response_model=CardCreationPreviewRead,
+)
+def read_organization_card_creation_preview(
+    organization_id: UUID,
+    card_template_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardCreationPreviewRead:
+    try:
+        preview = CardService(session).preview_card_creation_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            card_template_id=card_template_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardCreationPreviewRead(
+        organization_id=preview.organization_id,
+        card_template_id=preview.card_template_id,
+        display_name=preview.display_name,
+        blocks=[
+            CardCreationPreviewBlockRead(
+                block_id=block.block_id,
+                code=block.code,
+                title=block.title,
+                description=block.description,
+                is_repeatable=block.is_repeatable,
+                fields=[
+                    CardCreationPreviewFieldRead(
+                        field_id=field.field_id,
+                        code=field.code,
+                        label=field.label,
+                        description=field.description,
+                        field_type=field.field_type,
+                        required_mode=field.required_mode,
+                        options=[
+                            CardCreationPreviewOptionRead(
+                                id=option.id,
+                                label=option.label,
+                                archived=option.archived,
+                            )
+                            for option in field.options
+                        ],
+                    )
+                    for field in block.fields
+                ],
+            )
+            for block in preview.blocks
+        ],
+    )
+
+
+@router.post(
+    "/organizations/{organization_id}/cards/first-save",
+    response_model=CardSummaryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def first_save_organization_card(
+    organization_id: UUID,
+    payload: CardFirstSaveRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card_service = CardService(session)
+        card = card_service.create_card_with_first_value_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            display_name=payload.display_name,
+            card_template_id=payload.card_template_id,
+            public_view_enabled=payload.public_view_enabled,
+            public_edit_enabled=payload.public_edit_enabled,
+            field_id=payload.field_id,
+            value=coerce_api_field_value(session, payload.field_id, payload.value),
+            block_instance_id=payload.block_instance_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card, card_service)
 
 
 @router.post(

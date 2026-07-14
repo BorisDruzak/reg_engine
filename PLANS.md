@@ -7,6 +7,21 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 single-stage internal card creation is implemented locally and
+  ready for deployment. The create-card workspace keeps organization, template,
+  and optional card name in a static base block; a selected template loads its
+  schema fields dynamically without a page refresh. No card is stored before a
+  non-empty editable value is entered. The first value is validated and saved
+  atomically with the card, and the existing lifecycle synchronizer keeps the
+  card as a draft until all required fields are complete, then marks it active.
+  File attachments remain available only after the first save. No database
+  migration is needed. Full backend pytest passes (268 passed, 215 skipped);
+  the new focused frontend scenario passes, as do TypeScript and production
+  build. The existing `FilledCardLayout.tsx` hook-dependency warning and Vite
+  chunk-size advisory remain non-blocking. The previously stale model/migration
+  table expectations and retired navigation expectation were updated so the
+  backend suite is green. Commit, deploy, and live browser proof are next.
+
 - 2026-07-14 global branding refresh is released at `e8914940`. The supplied logo
   is used consistently on the login, administrator, and public-link screens.
   The supplied background is now applied to every screen as a fixed,

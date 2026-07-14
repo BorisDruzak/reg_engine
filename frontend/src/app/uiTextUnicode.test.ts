@@ -11,7 +11,6 @@ describe("uiText unicode regression", () => {
       "Реестры",
       "Карточки",
       "Пользователи",
-      "Доступ",
       "Аудит",
     ]);
     expect(userDisplayNameLabel("System Admin")).toBe("Системный администратор");
