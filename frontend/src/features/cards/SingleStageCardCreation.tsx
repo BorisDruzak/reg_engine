@@ -100,13 +100,13 @@ export function SingleStageCardCreation({
   return (
     <section className="single-stage-card-creation stack" aria-label="Создание карточки">
       <section className="data-panel single-stage-card-creation-base">
-        <header>
+        <header className="admin-mutation-header">
           <div>
             <strong>Базовый блок</strong>
             <small>Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.</small>
           </div>
         </header>
-        <div className="form-grid">
+        <div className="admin-mutation-body">
           <label>
             <span>Организация карточки</span>
             <select
@@ -156,9 +156,11 @@ export function SingleStageCardCreation({
             />
           </label>
         </div>
-        <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
-          Отмена
-        </button>
+        <footer className="admin-mutation-actions">
+          <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
+            Отмена
+          </button>
+        </footer>
       </section>
 
       <DataAlert
@@ -176,13 +178,13 @@ export function SingleStageCardCreation({
       ) : null}
       {preview?.blocks.map((block) => (
         <section key={block.block_id} className="data-panel single-stage-card-creation-block">
-          <header>
+          <header className="admin-mutation-header">
             <div>
               <strong>{block.title}</strong>
               {block.description ? <small>{block.description}</small> : null}
             </div>
           </header>
-          <div className="form-grid">
+          <div className="admin-mutation-body">
             {block.fields.map((field) => {
               const isFile = field.field_type === "file_ref";
               return (

@@ -149,7 +149,9 @@ describe("CardsWorkspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
     expect(screen.getByRole("region", { name: "Создание карточки" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Организация карточки")).toBeInTheDocument();
+    const organizationControl = screen.getByLabelText("Организация карточки");
+    expect(organizationControl).toBeInTheDocument();
+    expect(organizationControl.closest(".admin-mutation-body")).not.toBeNull();
     expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
     expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
 
