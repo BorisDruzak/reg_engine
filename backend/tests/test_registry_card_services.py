@@ -862,6 +862,157 @@ def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
     assert stored_value.value_text == "Created after first value"
 
 
+def test_first_card_value_discards_card_when_public_access_update_fails_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NestedTransaction:
+        def __init__(self, session: "_FirstSaveRollbackSession") -> None:
+            self.session = session
+            self.created_count = len(session.created_cards)
+
+        def __enter__(self) -> "_NestedTransaction":
+            return self
+
+        def __exit__(self, exc_type: object, _exc: object, _traceback: object) -> bool:
+            if exc_type is not None:
+                del self.session.created_cards[self.created_count :]
+            return False
+
+    class _FirstSaveRollbackSession:
+        def __init__(self) -> None:
+            self.created_cards: list[SimpleNamespace] = []
+
+        def begin_nested(self) -> _NestedTransaction:
+            return _NestedTransaction(self)
+
+    session = _FirstSaveRollbackSession()
+    service = CardService(cast(Session, session))
+    actor_id = uuid4()
+    organization_id = uuid4()
+    registry_id = uuid4()
+    template_id = uuid4()
+    field_id = uuid4()
+    card = SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(
+        RegistrySchemaService,
+        "resolve_default_registry_for_organization",
+        lambda _self, _organization_id: SimpleNamespace(id=registry_id),
+    )
+    monkeypatch.setattr(service, "_require_card_permission", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        service,
+        "_get_active_card_template_for_registry",
+        lambda *_args, **_kwargs: SimpleNamespace(id=template_id),
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_active_field",
+        lambda _field_id: SimpleNamespace(id=field_id, block_id=uuid4()),
+    )
+    monkeypatch.setattr(
+        service,
+        "_get_active_block",
+        lambda _block_id: SimpleNamespace(registry_id=registry_id),
+    )
+    monkeypatch.setattr(service, "_template_field_ids", lambda _template: {field_id})
+    monkeypatch.setattr(
+        service,
+        "_coerce_field_assignment",
+        lambda *_args, **_kwargs: "first value",
+    )
+    monkeypatch.setattr(service, "_field_assignment_is_empty", lambda _assignment: False)
+
+    def create_card(*_args: object, **_kwargs: object) -> SimpleNamespace:
+        session.created_cards.append(card)
+        return card
+
+    monkeypatch.setattr(service, "create_card_for_actor", create_card)
+    monkeypatch.setattr(service, "set_field_value_for_actor", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CardPublicAccessService,
+        "update_for_actor",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("forced public-access update failure")
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="forced public-access update failure"):
+        service.create_card_with_first_value_for_actor(
+            actor_user_id=actor_id,
+            organization_id=organization_id,
+            display_name=None,
+            card_template_id=template_id,
+            public_view_enabled=True,
+            public_edit_enabled=True,
+            public_access=CardPublicAccessUpdate(),
+            field_id=field_id,
+            value="Created value",
+        )
+
+    assert session.created_cards == []
+
+
+def test_first_card_value_rolls_back_when_public_access_update_fails(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="first-save-public-access-rollback",
+        title="First-save public-access rollback",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="first_save_value",
+        label="First-save value",
+        field_type="text",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="first-save-public-access-rollback",
+        name="First-save public-access rollback",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+
+    def fail_public_access_update(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("forced public-access update failure")
+
+    monkeypatch.setattr(
+        CardPublicAccessService,
+        "update_for_actor",
+        fail_public_access_update,
+    )
+
+    with pytest.raises(RuntimeError, match="forced public-access update failure"):
+        CardService(db_session).create_card_with_first_value_for_actor(
+            actor_user_id=context["system_admin"].id,
+            organization_id=context["child"].id,
+            display_name=None,
+            card_template_id=template.id,
+            public_view_enabled=True,
+            public_edit_enabled=True,
+            public_access=CardPublicAccessUpdate(),
+            field_id=field.id,
+            value="Created value",
+        )
+
+    assert (
+        db_session.scalar(
+            select(func.count(Card.id)).where(Card.organization_id == context["child"].id)
+        )
+        == 0
+    )
+
+
 def test_organization_centered_card_list_uses_default_registry_not_arbitrary_first_registry(
     db_session: Session,
 ) -> None:

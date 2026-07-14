@@ -394,8 +394,11 @@ class CardService:
         public_edit_enabled: bool,
         field_id: UUID,
         value: object,
+        public_access: "CardPublicAccessUpdate | None" = None,
         block_instance_id: UUID | None = None,
     ) -> Card:
+        from app.services.card_public_access import CardPublicAccessService
+
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             organization_id
         )
@@ -441,6 +444,12 @@ class CardService:
                 value=value,
                 block_instance_id=block_instance_id,
             )
+            if public_access is not None:
+                CardPublicAccessService(self.session).update_for_actor(
+                    actor_user_id=actor_user_id,
+                    card_id=card.id,
+                    payload=public_access,
+                )
         return card
 
     def create_card(

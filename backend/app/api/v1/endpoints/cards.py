@@ -128,6 +128,7 @@ def first_save_organization_card(
             card_template_id=payload.card_template_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
+            public_access=payload.public_access,
             field_id=payload.field_id,
             value=coerce_api_field_value(session, payload.field_id, payload.value),
             block_instance_id=payload.block_instance_id,

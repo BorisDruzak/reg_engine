@@ -470,19 +470,14 @@ export async function firstSaveOrganizationCard(
   organizationId: string,
   payload: CardFirstSavePayload,
 ) {
-  const { public_access: publicAccess, ...firstSavePayload } = payload;
-  const created = await apiRequest<CardSummaryRead>(
+  return apiRequest<CardSummaryRead>(
     `/api/v1/organizations/${organizationId}/cards/first-save`,
     {
       method: "POST",
       token,
-      body: firstSavePayload,
+      body: payload,
     },
   );
-  if (publicAccess) {
-    await updateCardPublicAccess(token, created.id, publicAccess);
-  }
-  return created;
 }
 
 export async function createOrganizationCardDraftPublicLink(

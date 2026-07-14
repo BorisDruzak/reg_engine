@@ -52,16 +52,6 @@ class CardCreationPreviewRead(BaseModel):
     blocks: list[CardCreationPreviewBlockRead] = Field(default_factory=list)
 
 
-class CardFirstSaveRequest(BaseModel):
-    display_name: str | None = None
-    card_template_id: UUID
-    public_view_enabled: bool = True
-    public_edit_enabled: bool = True
-    field_id: UUID
-    value: Any
-    block_instance_id: UUID | None = None
-
-
 class CardListFieldValueRead(BaseModel):
     field_id: UUID
     code: str
@@ -107,6 +97,17 @@ class CardPublicAccessUpdate(BaseModel):
     public_view_enabled: bool | None = None
     public_edit_enabled: bool | None = None
     fields: list[CardPublicFieldSettingUpdate] = Field(default_factory=list)
+
+
+class CardFirstSaveRequest(BaseModel):
+    display_name: str | None = None
+    card_template_id: UUID
+    public_view_enabled: bool = True
+    public_edit_enabled: bool = True
+    public_access: CardPublicAccessUpdate | None = None
+    field_id: UUID
+    value: Any
+    block_instance_id: UUID | None = None
 
 
 class CardDraftPublicLinkRequest(BaseModel):
