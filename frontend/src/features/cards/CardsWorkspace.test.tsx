@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
+import { readFileSync } from "node:fs";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -7,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { CardRead, CardSummaryRead, OrganizationRead, RegistrySchemaRead } from "@/api/types";
 
 import { CardsWorkspace } from "./CardsWorkspace";
+
+const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
 const organization: OrganizationRead = {
   id: "organization-1",
@@ -108,6 +112,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test("keeps dynamic multi-line creation fields compact before the user enters long text", () => {
+    expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {");
+    expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {\n  min-height: 42px;");
+    expect(globalStyles).toContain(".single-stage-card-creation .admin-mutation-header small {\n  display: block;");
+  });
+
   test("shows the reference-list label instead of its stored identifier in a card row", async () => {
     const referenceItemId = "ffca44e1-85b0-47ad-99b0-cadcc2e757a5";
     const referenceCard: CardSummaryRead = {

@@ -5327,6 +5327,18 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   resize: vertical;
 }
 
+.single-stage-card-creation .field-editor-autosize-text {
+  min-height: 42px;
+  resize: none;
+}
+
+.single-stage-card-creation .admin-mutation-header small {
+  display: block;
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .admin-mutation-body input:focus,
 .admin-mutation-body select:focus,
 .admin-mutation-body textarea:focus {
