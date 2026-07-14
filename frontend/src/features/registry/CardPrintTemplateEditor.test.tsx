@@ -862,9 +862,65 @@ test("opens the contextual studio directly from the selected template", async ()
   expect(screen.getByRole("region", { name: "Редактор макета карточки" })).toBeInTheDocument();
   expect(screen.queryByRole("tab", { name: "Экспорт" })).not.toBeInTheDocument();
   expect(container.querySelector(".schema-canvas.schema-block-layout-grid")).toBeNull();
-  expect(container.querySelector(".schema-template-editor-header")).toBeNull();
+  expect(container.querySelector(".schema-template-editor-header")).not.toBeNull();
   expect(container.querySelectorAll(".card-layout-studio-header")).toHaveLength(1);
   expect(screen.getByRole("button", { name: "Закрыть" })).toBeInTheDocument();
+});
+
+test("renames the opened card template with a name-only PATCH", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderRegistrySchemaEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
+  await user.click(screen.getByRole("button", { name: "Базовый шаблон" }));
+
+  const form = screen.getByRole("form", { name: "Редактировать шаблон карточки" });
+  const nameInput = within(form).getByLabelText("Название шаблона карточки");
+  await user.clear(nameInput);
+  await user.type(nameInput, "Переименованный шаблон");
+  await user.click(within(form).getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() =>
+    expect(api.templateUpdatePayloads).toContainEqual({ name: "Переименованный шаблон" }),
+  );
+});
+
+test("cancels card template renaming without a PATCH", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderRegistrySchemaEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
+  await user.click(screen.getByRole("button", { name: "Базовый шаблон" }));
+
+  const form = screen.getByRole("form", { name: "Редактировать шаблон карточки" });
+  await user.click(within(form).getByRole("button", { name: "Отменить" }));
+
+  expect(api.templateUpdatePayloads).toEqual([]);
+  expect(screen.getByRole("button", { name: "Базовый шаблон" })).toBeInTheDocument();
+});
+
+test("rejects a blank inline card template name without a PATCH", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderRegistrySchemaEditor();
+
+  await user.click(await screen.findByRole("tab", { name: "Схема карточки" }));
+  await user.click(await screen.findByRole("button", { name: "Шаблон карточки Базовый шаблон" }));
+  await user.click(screen.getByRole("button", { name: "Базовый шаблон" }));
+
+  const form = screen.getByRole("form", { name: "Редактировать шаблон карточки" });
+  await user.clear(within(form).getByLabelText("Название шаблона карточки"));
+  await user.click(within(form).getByRole("button", { name: "Сохранить" }));
+
+  expect(await within(form).findByText("Заполните обязательные поля")).toBeInTheDocument();
+  expect(api.templateUpdatePayloads).toEqual([]);
 });
 
 type FormSavePayload = {

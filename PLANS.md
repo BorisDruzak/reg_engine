@@ -5080,3 +5080,22 @@ Status: implementation complete locally; release verification in progress.
   Unit-form requests remain monotonic across failed create attempts.
 - An expanded management offers contextual `Добавить отдел`; the resulting
   department create request keeps that management as `parent_id`.
+
+#### Inline card-template name editing
+
+Status: implementation complete locally; deployment and Browser acceptance are
+not part of this isolated frontend slice.
+
+- Only the currently opened `Шаблон карточки` exposes its name as an inline
+  edit control. It switches between the visible name and a Russian form with
+  `Название шаблона карточки`, `Сохранить`, and `Отменить`.
+- Saving trims and validates the name, then calls the existing card-template
+  PATCH endpoint with exactly `{ name }`. It invalidates registry data and
+  reports the existing Russian success or error feedback without changing the
+  archive workflow.
+- Cancelling does not send a request and restores the visible name control.
+- Local verification passed: `pnpm --dir frontend test:run
+  CardPrintTemplateEditor.test.tsx` (32 tests), `pnpm --dir frontend typecheck`,
+  and `pnpm --dir frontend build`. `pnpm --dir frontend lint` completed with no
+  errors and retains the unrelated existing `FilledCardLayout.tsx` hook-
+  dependency warning.

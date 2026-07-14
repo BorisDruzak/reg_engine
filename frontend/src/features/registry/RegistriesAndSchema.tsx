@@ -12,6 +12,7 @@ import {
   createRegistry,
   listReferenceItems,
   listReferenceLists,
+  updateCardTemplate,
   updateReferenceItem,
   updateReferenceList,
   updateRegistry,
@@ -466,6 +467,7 @@ function SchemaVisualEditor({
   const queryClient = useQueryClient();
   const [templateFormState, setTemplateFormState] = useState<CardTemplateFormState | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateNameDraft, setTemplateNameDraft] = useState<string | null>(null);
   const [templateArchiveTarget, setTemplateArchiveTarget] = useState<CardTemplateRead | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -498,9 +500,20 @@ function SchemaVisualEditor({
       await invalidateRegistryData(queryClient, token);
     },
   });
+  const updateTemplateMutation = useMutation({
+    mutationFn: ({ templateId, name }: { templateId: string; name: string }) =>
+      updateCardTemplate(token, templateId, { name }),
+    onSuccess: async () => {
+      setTemplateNameDraft(null);
+      setSuccessMessage(uiText.cardTemplateUpdated);
+      await invalidateRegistryData(queryClient, token);
+    },
+  });
   const mutationError = localError
     ? new Error(localError)
-    : (createTemplateMutation.error ?? archiveTemplateMutation.error);
+    : (createTemplateMutation.error ??
+      archiveTemplateMutation.error ??
+      updateTemplateMutation.error);
   const isTemplateFormSubmitting = createTemplateMutation.isPending;
 
   function openCreateTemplateForm() {
@@ -520,6 +533,7 @@ function SchemaVisualEditor({
     setLocalError(null);
     setSuccessMessage(null);
     setTemplateFormState(null);
+    setTemplateNameDraft(null);
     setSelectedTemplateId(template.id);
   }
 
@@ -530,7 +544,38 @@ function SchemaVisualEditor({
 
   function closeTemplateEditor() {
     setSelectedTemplateId(null);
+    setTemplateNameDraft(null);
     setLocalError(null);
+  }
+
+  function openTemplateNameForm() {
+    if (!selectedTemplate) {
+      return;
+    }
+    setLocalError(null);
+    setSuccessMessage(null);
+    setTemplateNameDraft(selectedTemplate.name);
+  }
+
+  function cancelTemplateNameForm() {
+    setLocalError(null);
+    setTemplateNameDraft(null);
+  }
+
+  function handleTemplateNameSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedTemplate || templateNameDraft === null) {
+      return;
+    }
+    const name = templateNameDraft.trim();
+    if (!name) {
+      setLocalError(uiText.requiredFields);
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    updateTemplateMutation.mutate({ templateId: selectedTemplate.id, name });
   }
 
   function handleTemplateFormSubmit(event: FormEvent<HTMLFormElement>) {
@@ -607,7 +652,10 @@ function SchemaVisualEditor({
       aria-label={uiText.visualCardSchemaEditor}
     >
       <div className="panel-feedback">
-        <MutationFeedback error={mutationError} successMessage={successMessage} />
+        <MutationFeedback
+          error={templateNameDraft === null ? mutationError : undefined}
+          successMessage={successMessage}
+        />
       </div>
       <section className="card-template-section" role="region" aria-label={uiText.cardTemplates}>
         <header className="card-template-section-header">
@@ -697,6 +745,37 @@ function SchemaVisualEditor({
           role="region"
           aria-label={`${uiText.cardTemplateEditor} ${selectedTemplate.name}`}
         >
+          <header className="schema-template-editor-header">
+            {templateNameDraft === null ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={openTemplateNameForm}
+              >
+                {selectedTemplate.name}
+              </button>
+            ) : (
+              <AdminMutationForm
+                title={uiText.editCardTemplate}
+                submitLabel={uiText.save}
+                cancelLabel="Отменить"
+                isSubmitting={updateTemplateMutation.isPending}
+                error={mutationError}
+                successMessage={null}
+                onCancel={cancelTemplateNameForm}
+                onSubmit={handleTemplateNameSubmit}
+              >
+                <label>
+                  <span>{uiText.cardTemplateName}</span>
+                  <input
+                    aria-label={uiText.cardTemplateName}
+                    value={templateNameDraft}
+                    onChange={(event) => setTemplateNameDraft(event.currentTarget.value)}
+                  />
+                </label>
+              </AdminMutationForm>
+            )}
+          </header>
           <CardLayoutStudio
             token={token}
             registryId={selectedRegistryId}
