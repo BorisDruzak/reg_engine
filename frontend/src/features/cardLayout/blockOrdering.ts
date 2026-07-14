@@ -1,9 +1,15 @@
-import type {
-  CardTemplateFormLayoutRead,
-  CardTemplateFormLayoutSectionRead,
-} from "@/api/types";
+import type { CardTemplateFormLayoutRead, CardTemplateFormLayoutSectionRead } from "@/api/types";
 
 export type BlockOrderDirection = "up" | "down";
+
+export function normalizeWebBlockSections(
+  layout: CardTemplateFormLayoutRead,
+): CardTemplateFormLayoutRead {
+  return {
+    ...layout,
+    sections: normalizeSections([...layout.sections].sort(compareSections)),
+  };
+}
 
 export function reorderBlockSections(
   layout: CardTemplateFormLayoutRead,
@@ -18,17 +24,17 @@ export function reorderBlockSections(
   }
 
   [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
-  let nextRow = 1;
-  const sections = ordered.map((section) => {
-    const column = Math.min(
-      Math.max(1, section.column),
-      Math.max(1, layout.columns - section.column_span + 1),
-    );
-    const placed = { ...section, row: nextRow, column };
-    nextRow += section.row_span;
-    return placed;
-  });
-  return { ...layout, sections };
+  return { ...layout, sections: normalizeSections(ordered) };
+}
+
+function normalizeSections(sections: CardTemplateFormLayoutSectionRead[]) {
+  return sections.map((section, index) => ({
+    ...section,
+    row: index + 1,
+    column: 1,
+    row_span: 1 as const,
+    column_span: 12 as const,
+  }));
 }
 
 function compareSections(

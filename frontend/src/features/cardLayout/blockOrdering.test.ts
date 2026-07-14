@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
 
-import type {
-  CardTemplateFormLayoutRead,
-  CardTemplateFormLayoutSectionRead,
-} from "@/api/types";
+import type { CardTemplateFormLayoutRead, CardTemplateFormLayoutSectionRead } from "@/api/types";
 
 import { rectsOverlap } from "./layoutGeometry";
-import { reorderBlockSections } from "./blockOrdering";
+import { normalizeWebBlockSections, reorderBlockSections } from "./blockOrdering";
 
 function section(
   id: string,
@@ -52,61 +49,58 @@ function hasCollision(sections: CardTemplateFormLayoutSectionRead[]) {
 }
 
 describe("reorderBlockSections", () => {
-  test("moves a mixed-size block up and repacks vertical bands without changing dimensions", () => {
-    const original = layout([
-      section("section-a", 1, 1, 1, 12),
-      section("section-b", 2, 7, 2, 6),
-      section("section-c", 4, 10, 1, 3),
-    ]);
+  test("normalizes crooked block geometry into sequential full-width rows", () => {
+    const normalized = normalizeWebBlockSections(
+      layout([
+        section("section-a", 3, 7, 2, 6),
+        section("section-b", 1, 10, 1, 3),
+        section("section-c", 2, 1, 1, 9),
+      ]),
+    );
 
-    const moved = reorderBlockSections(original, "section-b", "up");
-
-    expect(moved?.sections.map((item) => item.id)).toEqual([
-      "section-b",
-      "section-a",
-      "section-c",
-    ]);
-    expect(moved?.sections.map((item) => item.row)).toEqual([1, 3, 4]);
     expect(
-      moved?.sections.map(({ id, column, column_span, row_span }) => ({
+      normalized.sections.map(({ id, row, column, row_span, column_span }) => ({
         id,
+        row,
         column,
         column_span,
         row_span,
       })),
     ).toEqual([
-      { id: "section-b", column: 7, column_span: 6, row_span: 2 },
-      { id: "section-a", column: 1, column_span: 12, row_span: 1 },
-      { id: "section-c", column: 10, column_span: 3, row_span: 1 },
+      { id: "section-b", row: 1, column: 1, column_span: 12, row_span: 1 },
+      { id: "section-c", row: 2, column: 1, column_span: 12, row_span: 1 },
+      { id: "section-a", row: 3, column: 1, column_span: 12, row_span: 1 },
     ]);
-    expect(hasCollision(moved?.sections ?? [])).toBe(false);
-    expect(original.sections.map((item) => item.row)).toEqual([1, 2, 4]);
   });
 
-  test("moves a block down by one visual position", () => {
+  test("reorders normalized sections without restoring source geometry", () => {
     const moved = reorderBlockSections(
       layout([
-        section("section-a", 1, 1, 1, 12),
-        section("section-b", 2, 1, 1, 12),
-        section("section-c", 3, 1, 1, 12),
+        section("section-a", 3, 7, 2, 6),
+        section("section-b", 1, 10, 1, 3),
+        section("section-c", 2, 1, 1, 9),
       ]),
-      "section-b",
-      "down",
+      "section-c",
+      "up",
     );
 
-    expect(moved?.sections.map((item) => item.id)).toEqual([
-      "section-a",
-      "section-c",
-      "section-b",
-    ]);
+    expect(moved?.sections.map((item) => item.id)).toEqual(["section-c", "section-b", "section-a"]);
     expect(moved?.sections.map((item) => item.row)).toEqual([1, 2, 3]);
+    expect(
+      moved?.sections.map(({ column, column_span, row_span }) => ({
+        column,
+        column_span,
+        row_span,
+      })),
+    ).toEqual([
+      { column: 1, column_span: 12, row_span: 1 },
+      { column: 1, column_span: 12, row_span: 1 },
+      { column: 1, column_span: 12, row_span: 1 },
+    ]);
   });
 
   test("returns null at boundaries and for an unknown section", () => {
-    const original = layout([
-      section("section-a", 1, 1, 1, 12),
-      section("section-b", 2, 1, 1, 12),
-    ]);
+    const original = layout([section("section-a", 1, 1, 1, 12), section("section-b", 2, 1, 1, 12)]);
 
     expect(reorderBlockSections(original, "section-a", "up")).toBeNull();
     expect(reorderBlockSections(original, "section-b", "down")).toBeNull();
@@ -124,21 +118,18 @@ describe("reorderBlockSections", () => {
       "up",
     );
 
-    expect(moved?.sections.map((item) => item.id)).toEqual([
-      "section-a",
-      "section-c",
-      "section-b",
-    ]);
+    expect(moved?.sections.map((item) => item.id)).toEqual(["section-a", "section-c", "section-b"]);
   });
 
-  test("clamps a preserved column when its width would leave the grid", () => {
+  test("normalizes reordered sections that started outside the grid", () => {
     const moved = reorderBlockSections(
       layout([section("section-a", 1, 11, 1, 4), section("section-b", 2, 1, 1, 12)]),
       "section-a",
       "down",
     );
 
-    expect(moved?.sections.find((item) => item.id === "section-a")?.column).toBe(9);
+    expect(moved?.sections.find((item) => item.id === "section-a")?.column).toBe(1);
+    expect(moved?.sections.find((item) => item.id === "section-a")?.column_span).toBe(12);
     expect(hasCollision(moved?.sections ?? [])).toBe(false);
   });
 });

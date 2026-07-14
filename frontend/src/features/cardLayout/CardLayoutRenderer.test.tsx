@@ -10,6 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { CardTemplateLayoutRead, FormBlockRead, FormFieldRead } from "@/api/types";
 import { FIELD_TYPES, fieldTypeLabel } from "@/app/uiText";
 
+import { normalizeWebBlockSections } from "./blockOrdering";
 import { CardLayoutRenderer } from "./CardLayoutRenderer";
 import { CardWebLayoutCanvas, type CardWebLayoutCanvasProps } from "./CardWebLayoutCanvas";
 
@@ -173,7 +174,6 @@ function canvasProps(overrides: Partial<CardWebLayoutCanvasProps> = {}): CardWeb
     mode: "design",
     onSelectionChange: vi.fn(),
     onCreateBlock: vi.fn(),
-    onInsertBlock: vi.fn(),
     onCreateField: vi.fn(),
     onCommitBlock: vi.fn(),
     onCancelBlock: vi.fn(),
@@ -377,12 +377,7 @@ describe("CardWebLayoutCanvas", () => {
   test("hides design actions that do not have callback boundaries", () => {
     render(<CardWebLayoutCanvas layout={layout} mode="design" />);
 
-    expect(
-      screen.queryByRole("button", { name: "Создать блок в этой области" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Вставить существующий блок в эту область" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать блок" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Создать поле в блоке ФИО" }),
     ).not.toBeInTheDocument();
@@ -421,7 +416,9 @@ describe("CardWebLayoutCanvas", () => {
     ).not.toBeInTheDocument();
     await user.click(firstDown);
     expect(onMoveBlock).toHaveBeenCalledWith(block.id, "down");
-    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /Изменить размер блока ФИО:/ }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("article", {
         name: "Поле Имя. Нажмите, чтобы изменить; удерживайте и перетащите, чтобы переместить.",
@@ -567,7 +564,7 @@ describe("CardWebLayoutCanvas", () => {
     expect(fieldGrid!.style.minHeight).toBe("9rem");
 
     const resizeHandle = screen.getByRole("button", {
-      name: "Изменить размер блока ФИО: нижний правый угол",
+      name: "Изменить размер поля Имя: нижний правый угол",
     });
     mockGridRect(canvas);
     installPointerCapture(resizeHandle);
@@ -1447,22 +1444,24 @@ describe("CardWebLayoutCanvas", () => {
   test("keeps eight field resize zones available until another geometry target is active", () => {
     render(<CardWebLayoutCanvas {...canvasProps({ onGeometryCommit: vi.fn() })} />);
 
-    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /Изменить размер блока ФИО:/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
 
     const canvas = screen.getByTestId("card-layout-canvas");
     const resizeHandle = screen.getByRole("button", {
-      name: "Изменить размер блока ФИО: нижний правый угол",
+      name: "Изменить размер поля Имя: нижний правый угол",
     });
     mockGridRect(canvas);
     installPointerCapture(resizeHandle);
     dispatchPointer(resizeHandle, "pointerdown", { pointerId: 45, clientX: 0, clientY: 0 });
     dispatchPointer(resizeHandle, "pointermove", { pointerId: 45, clientX: 100, clientY: 0 });
 
-    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(8);
     expect(
-      screen.queryByRole("button", { name: /Изменить размер поля Имя:/ }),
+      screen.queryByRole("button", { name: /Изменить размер блока ФИО:/ }),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Изменить размер поля Имя:/ })).toHaveLength(8);
   });
 
   test("requires commit callbacks before opening inline editors", async () => {
@@ -1518,7 +1517,7 @@ describe("CardWebLayoutCanvas", () => {
 
     const canvas = screen.getByTestId("card-layout-canvas");
     const resizeHandle = screen.getByRole("button", {
-      name: "Изменить размер блока ФИО: нижний правый угол",
+      name: "Изменить размер поля Имя: нижний правый угол",
     });
     mockGridRect(canvas);
     const capture = installPointerCapture(resizeHandle);
@@ -1531,18 +1530,27 @@ describe("CardWebLayoutCanvas", () => {
     expect(
       screen.queryByRole("region", { name: "Предпросмотр веб-карточки" }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Изменить размер блока ФИО:/ })).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: /Изменить размер блока ФИО:/ }),
+    ).not.toBeInTheDocument();
   });
 
-  test("keeps the idle canvas contextual and exposes creation actions locally", () => {
-    render(<CardWebLayoutCanvas {...canvasProps()} />);
+  test("keeps the idle canvas contextual with one bottom block creation action", () => {
+    const onCreateBlock = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onCreateBlock })} />);
 
     expect(screen.queryByText("Свойства элемента")).not.toBeInTheDocument();
     expect(screen.queryByText("Палитра типов полей")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Создать блок в этой области" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Вставить существующий блок в эту область" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Создать блок" })).toBeInTheDocument();
+    expect(screen.queryByText("Вставить существующий блок")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("card-layout-empty-area")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Создать блок" }));
+    expect(onCreateBlock).toHaveBeenCalledWith({
+      row: 3,
+      column: 1,
+      row_span: 1,
+      column_span: 12,
+    });
     expect(
       within(screen.getByTestId("layout-block-block-fio")).getByRole("button", {
         name: "Создать поле в блоке ФИО",
@@ -1550,28 +1558,10 @@ describe("CardWebLayoutCanvas", () => {
     ).toBeInTheDocument();
   });
 
-  test("places create actions only in a quarter area that does not overlap a shifted block", () => {
-    const shiftedLayout: CardTemplateLayoutRead = {
-      ...layout,
-      form_layout: {
-        ...layout.form_layout,
-        sections: [
-          {
-            ...layout.form_layout.sections[0],
-            column: 2,
-            column_span: 3,
-            row_span: 1,
-          },
-        ],
-      },
-    };
+  test("does not expose block resize diagnostics in design mode", () => {
+    render(<CardWebLayoutCanvas {...canvasProps({ showGeometryDiagnostics: true })} />);
 
-    render(<CardWebLayoutCanvas {...canvasProps({ layout: shiftedLayout })} />);
-
-    expect(screen.getByTestId("card-layout-empty-area")).toHaveStyle({
-      gridColumn: "7 / span 3",
-      gridRow: "1 / span 1",
-    });
+    expect(screen.queryByLabelText(/Размер блока:/)).not.toBeInTheDocument();
   });
 
   test("opens the block editor inside the block and commits a valid click-away", async () => {
@@ -1857,7 +1847,7 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByLabelText("Название поля")).not.toBeInTheDocument();
   });
 
-  test("maps block and field geometry exactly and hides diagnostics by default", () => {
+  test("keeps field geometry diagnostics without design-mode block diagnostics", () => {
     const { rerender } = render(<CardWebLayoutCanvas {...canvasProps()} />);
 
     expect(screen.getByTestId("layout-block-block-fio")).toHaveStyle({
@@ -1872,8 +1862,58 @@ describe("CardWebLayoutCanvas", () => {
     expect(screen.queryByTestId("layout-field-field-name-geometry")).not.toBeInTheDocument();
 
     rerender(<CardWebLayoutCanvas {...canvasProps({ showGeometryDiagnostics: true })} />);
-    expect(screen.getByTestId("layout-block-block-fio-geometry")).toHaveTextContent("6 × 2");
+    expect(screen.queryByTestId("layout-block-block-fio-geometry")).not.toBeInTheDocument();
     expect(screen.getByTestId("layout-field-field-name-geometry")).toHaveTextContent("9 × 1");
+  });
+
+  test("renders caller-normalized blocks as sequential full-width rows", () => {
+    const normalizedLayout: CardTemplateLayoutRead = {
+      ...layout,
+      form_layout: normalizeWebBlockSections({
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            id: "section-a",
+            row: 3,
+            column: 7,
+            row_span: 2,
+            column_span: 6,
+          },
+          {
+            ...layout.form_layout.sections[0],
+            id: "section-b",
+            row: 1,
+            column: 10,
+            row_span: 1,
+            column_span: 3,
+          },
+          {
+            ...layout.form_layout.sections[0],
+            id: "section-c",
+            row: 2,
+            column: 1,
+            row_span: 1,
+            column_span: 9,
+          },
+        ],
+      }),
+    };
+
+    render(<CardWebLayoutCanvas {...canvasProps({ layout: normalizedLayout })} />);
+
+    expect(screen.getByTestId("layout-block-section-b")).toHaveStyle({
+      gridColumn: "1 / span 12",
+      gridRow: "1 / span 1",
+    });
+    expect(screen.getByTestId("layout-block-section-c")).toHaveStyle({
+      gridColumn: "1 / span 12",
+      gridRow: "2 / span 1",
+    });
+    expect(screen.getByTestId("layout-block-section-a")).toHaveStyle({
+      gridColumn: "1 / span 12",
+      gridRow: "3 / span 1",
+    });
   });
 
   test("keeps design controls out of readonly and public editing modes", () => {
@@ -1888,9 +1928,7 @@ describe("CardWebLayoutCanvas", () => {
 
     expect(screen.getByText("Анна")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Изменить блок ФИО" })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Создать блок в этой области" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать блок" })).not.toBeInTheDocument();
 
     rerender(
       <CardWebLayoutCanvas
@@ -1960,12 +1998,7 @@ describe("CardWebLayoutCanvas", () => {
       />,
     );
 
-    expect(
-      screen.queryByRole("button", { name: "Создать блок в этой области" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Вставить существующий блок в эту область" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать блок" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Создать поле в блоке ФИО" }),
     ).not.toBeInTheDocument();

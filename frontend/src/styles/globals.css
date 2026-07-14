@@ -2436,15 +2436,10 @@ tr:last-child td {
   font-size: 0.84rem;
 }
 
-.card-layout-empty-area-actions {
-  display: grid;
-  gap: 6px;
-  align-content: center;
-  min-width: 0;
-  padding: 8px;
-  border: 1px dashed #94a3b8;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
+.card-layout-create-block-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .card-layout-inline-editor {
@@ -3418,8 +3413,7 @@ button.searchable-choice-picker-option:hover:not(:disabled),
     overflow-x: hidden;
   }
 
-  .card-layout-responsive-grid > .card-layout-block-node,
-  .card-layout-responsive-grid > .card-layout-empty-area-actions {
+  .card-layout-responsive-grid > .card-layout-block-node {
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
   }

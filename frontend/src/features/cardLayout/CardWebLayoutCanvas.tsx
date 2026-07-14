@@ -39,7 +39,7 @@ export type CardLayoutCreatePosition = {
   row: number;
   column: number;
   row_span: 1;
-  column_span: 3;
+  column_span: 12;
 };
 
 export type CardWebLayoutCanvasProps = {
@@ -69,7 +69,6 @@ export type CardWebLayoutCanvasProps = {
   onActivateBlock?: (context: CardLayoutBlockRenderContext) => void;
   onSelectionChange?: (selection: CardLayoutSelection) => void;
   onCreateBlock?: (position: CardLayoutCreatePosition) => void;
-  onInsertBlock?: (position: CardLayoutCreatePosition) => void;
   onCreateField?: (blockId: string) => void;
   onCommitBlock?: (block: FormBlockRead) => boolean | void | Promise<boolean | void>;
   onCancelBlock?: (blockId: string) => void;
@@ -112,7 +111,6 @@ function CardWebLayoutCanvasSession({
   onActivateBlock,
   onSelectionChange,
   onCreateBlock,
-  onInsertBlock,
   onCreateField,
   onCommitBlock,
   onCancelBlock,
@@ -141,7 +139,13 @@ function CardWebLayoutCanvasSession({
       : activeSelection?.kind === "field"
         ? Boolean(onCommitField)
         : false);
-  const emptyPosition = useMemo(() => firstEmptyQuarterCell(layout), [layout]);
+  const createBlockPosition = useMemo<CardLayoutCreatePosition>(() => {
+    const lastOccupiedRow = layout.form_layout.sections.reduce(
+      (lastRow, section) => Math.max(lastRow, section.row + section.row_span - 1),
+      0,
+    );
+    return { row: lastOccupiedRow + 1, column: 1, row_span: 1, column_span: 12 };
+  }, [layout.form_layout.sections]);
   const validateGeometry = useCallback(
     (session: LayoutGeometrySession) => geometryError(layout, session),
     [layout],
@@ -244,7 +248,7 @@ function CardWebLayoutCanvasSession({
               onCommitField={onCommitField}
               onCancelField={onCancelField}
               onFieldValueChange={onFieldValueChange}
-              geometry={geometryEnabled ? geometry : undefined}
+              geometry={geometryEnabled && activeSelection?.kind !== "block" ? geometry : undefined}
               onMoveBlock={onMoveBlock}
               canMoveBlockUp={index > 0}
               canMoveBlockDown={index < orderedSections.length - 1}
@@ -252,39 +256,18 @@ function CardWebLayoutCanvasSession({
             />
           );
         })}
-        {designMode && !geometryActive && emptyPosition && (onCreateBlock || onInsertBlock) ? (
-          <div
-            className="card-layout-empty-area-actions"
-            data-testid="card-layout-empty-area"
-            style={{
-              gridColumn: `${emptyPosition.column} / span ${emptyPosition.column_span}`,
-              gridRow: `${emptyPosition.row} / span ${emptyPosition.row_span}`,
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {onCreateBlock ? (
-              <button
-                type="button"
-                className="ghost-button"
-                aria-label="Создать блок в этой области"
-                onClick={() => onCreateBlock(emptyPosition)}
-              >
-                Создать блок
-              </button>
-            ) : null}
-            {onInsertBlock ? (
-              <button
-                type="button"
-                className="ghost-button"
-                aria-label="Вставить существующий блок в эту область"
-                onClick={() => onInsertBlock(emptyPosition)}
-              >
-                Вставить существующий блок
-              </button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
+      {designMode && !geometryActive && onCreateBlock ? (
+        <div className="card-layout-create-block-footer">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onCreateBlock(createBlockPosition)}
+          >
+            Создать блок
+          </button>
+        </div>
+      ) : null}
       {geometry.session ? (
         <aside className="card-layout-geometry-session" aria-label="Изменение геометрии макета">
           <div
@@ -312,29 +295,6 @@ function CardWebLayoutCanvasSession({
       ) : null}
     </>
   );
-}
-
-function firstEmptyQuarterCell(layout: CardTemplateLayoutRead): CardLayoutCreatePosition | null {
-  for (let row = 1; row <= 4; row += 1) {
-    for (const column of [1, 4, 7, 10]) {
-      const occupied = layout.form_layout.sections.some((section) => {
-        const candidateRight = column + 3;
-        const candidateBottom = row + 1;
-        const sectionRight = section.column + section.column_span;
-        const sectionBottom = section.row + section.row_span;
-        return !(
-          candidateRight <= section.column ||
-          sectionRight <= column ||
-          candidateBottom <= section.row ||
-          sectionBottom <= row
-        );
-      });
-      if (!occupied) {
-        return { row, column, row_span: 1, column_span: 3 };
-      }
-    }
-  }
-  return null;
 }
 
 function geometryError(layout: CardTemplateLayoutRead, session: LayoutGeometrySession) {

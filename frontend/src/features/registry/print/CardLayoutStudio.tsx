@@ -1133,7 +1133,6 @@ function CardLayoutStudioSession({
           selection={selection}
           onSelectionChange={setSelection}
           onCreateBlock={startCreateBlock}
-          onInsertBlock={openInsertBlock}
           onCreateField={startCreateField}
           onCommitBlock={commitBlock}
           onCancelBlock={cancelBlock}

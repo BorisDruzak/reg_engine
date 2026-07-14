@@ -295,7 +295,7 @@ export function CardBlockLayoutNode({
           ) : null}
         </>
       )}
-      {showGeometryDiagnostics ? (
+      {showGeometryDiagnostics && !designMode ? (
         <small
           className="card-layout-geometry-diagnostic"
           data-testid={`${testIdPrefix}-block-${section.id}-geometry`}
@@ -304,7 +304,7 @@ export function CardBlockLayoutNode({
           {section.column_span} × {section.row_span}
         </small>
       ) : null}
-      {geometryTarget ? (
+      {geometryTarget && !designMode ? (
         <small
           className="card-layout-geometry-dimension-badge"
           data-testid={`${testIdPrefix}-block-${section.id}-active-geometry`}
@@ -312,7 +312,7 @@ export function CardBlockLayoutNode({
           Размер: {section.column_span} из 12 × {section.row_span} из 4
         </small>
       ) : null}
-      {geometry && (!geometryActive || geometryTarget) && !schemaEditing ? (
+      {geometry && !designMode && (!geometryActive || geometryTarget) && !schemaEditing ? (
         <LayoutGeometryAffordances
           kindLabel="блока"
           objectLabel={block?.title ?? "Недоступный блок"}
