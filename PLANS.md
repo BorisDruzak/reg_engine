@@ -7,6 +7,15 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 global branding refresh is ready for release. The supplied logo
+  is used consistently on the login, administrator, and public-link screens.
+  The supplied background is now applied to every screen as a fixed,
+  non-repeating, viewport-covering layer with a light overlay; workspace,
+  public, and login surfaces remain translucent enough to preserve contrast.
+  Focused asset tests (2), TypeScript, scoped ESLint and Prettier, and the
+  Vite production build pass. No API, database, or migration change is
+  required. Deployment and live smoke checks are the remaining step.
+
 - 2026-07-14 login and XLSX workflow refinement is released at `0e09d30b`.
   User logins no longer require an e-mail format: non-empty values without
   whitespace are accepted, including special characters, while the compatible

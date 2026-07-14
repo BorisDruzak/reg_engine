@@ -1,6 +1,6 @@
 :root {
   color: #182230;
-  background: #f5f6f8;
+  background: #d8d6d4;
   font-family:
     Inter,
     ui-sans-serif,
@@ -21,6 +21,14 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
+  background-color: #d8d6d4;
+  background-image:
+    linear-gradient(rgba(248, 250, 252, 0.58), rgba(248, 250, 252, 0.58)),
+    url("../assets/branding/registry-background.png");
+  background-position: center, center;
+  background-size: cover, cover;
+  background-attachment: fixed, fixed;
+  background-repeat: no-repeat, no-repeat;
 }
 
 button,
@@ -39,7 +47,7 @@ button {
   display: grid;
   place-items: center;
   padding: 32px;
-  background: linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 42%), #f5f6f8;
+  background: transparent;
 }
 
 .login-panel {
@@ -47,7 +55,7 @@ button {
   padding: 28px;
   border: 1px solid #d6dce3;
   border-radius: 8px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 18px 48px rgba(24, 34, 48, 0.12);
 }
 
@@ -58,14 +66,13 @@ button {
   min-width: 0;
 }
 
-.brand-mark {
+.brand-mark-image {
+  display: block;
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, #0f766e 0 50%, transparent 50%),
-    linear-gradient(315deg, #b42348 0 50%, #17324d 50%);
+  object-fit: contain;
 }
 
 .brand-lockup h1 {
@@ -178,7 +185,7 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  background: #f5f6f8;
+  background: transparent;
   transition: grid-template-columns 180ms ease;
 }
 
@@ -194,7 +201,7 @@ button {
   min-height: 0;
   padding: 22px 18px;
   border-right: 1px solid #d9dee7;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
   overflow-x: hidden;
   overflow-y: auto;
   transition: padding 180ms ease;
@@ -312,14 +319,14 @@ button {
 
 .public-shell {
   min-height: 100vh;
-  background: #f5f6f8;
+  background: transparent;
 }
 
 .public-header {
   min-height: 70px;
   padding: 18px 24px;
   border-bottom: 1px solid #d9dee7;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .public-main {
@@ -439,7 +446,7 @@ button {
 .data-panel {
   border: 1px solid #d9dee7;
   border-radius: 8px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .metric-card {
