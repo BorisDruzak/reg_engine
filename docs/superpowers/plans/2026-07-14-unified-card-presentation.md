@@ -17,6 +17,7 @@
 - An explicit public-link action creates a draft card even when every field is empty.
 - Saved template layout defines field order; schema position is the fallback for legacy layouts.
 - Public pages contain only public fields and no administrative, archive, or attachment actions.
+- Public pages may display the card organization and template as read-only metadata, but the public UI and API never permit changing either value.
 
 ---
 
@@ -268,7 +269,13 @@ git commit -m "feat: align card creation and editing presentation"
 expect(screen.getByRole("navigation", { name: "Содержание карточки" })).toBeInTheDocument();
 expect(screen.queryByText("Публичный доступ")).not.toBeInTheDocument();
 expect(screen.queryByText("Архивировать карточку")).not.toBeInTheDocument();
+expect(screen.queryByLabelText("Организация карточки")).not.toBeInTheDocument();
+expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
 ```
+
+Add an API contract test that sends a public field-value update and proves the
+card's organization and template are unchanged. Public endpoint schemas must
+not accept organization/template identifiers.
 
 - [ ] **Step 2: Verify RED**
 
@@ -278,7 +285,7 @@ Expected: FAIL because the public page has not adopted the shared shell.
 
 - [ ] **Step 3: Implement the public projection**
 
-Wrap public surfaces in `CardPresentationShell`, derive items from existing server-filtered blocks, and preserve `can_edit`, field saver, submission and review behavior. Do not add attachments or any admin metadata.
+Wrap public surfaces in `CardPresentationShell`, derive items from existing server-filtered blocks, and preserve `can_edit`, field saver, submission and review behavior. If organization and template are shown, render them as read-only text only. Do not add attachments, administrative metadata, or any organization/template mutation control.
 
 - [ ] **Step 4: Verify GREEN and commit**
 
