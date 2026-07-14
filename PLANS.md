@@ -16,9 +16,12 @@ not a hardcoded employee registry.
   card as a draft until all required fields are complete, then marks it active.
   File attachments remain available only after the first save. No database
   migration is needed. Full backend pytest passes (268 passed, 215 skipped),
-  the full frontend suite and the focused new-card scenario pass, as do
-  TypeScript and the production build. The existing `FilledCardLayout.tsx`
-  hook-dependency warning and Vite chunk-size advisory remain non-blocking.
+  and the focused new-card frontend scenario passes (7 tests), as do
+  TypeScript and the production build. The full frontend suite still has 30
+  unrelated stale integration expectations in `App.test.tsx` (retired
+  technical-code, card-action, and attachment UI assertions). The existing
+  `FilledCardLayout.tsx` hook-dependency warning and Vite chunk-size advisory
+  remain non-blocking.
   The previously stale model/migration table expectations and retired
   navigation expectation were updated so the backend suite is green. The
   server checkout is synchronized, `reg-engine.service` is active, and
