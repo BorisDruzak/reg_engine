@@ -244,7 +244,13 @@ export function FilledCardLayout({
                   fieldPresentation={({ field }) => {
                     const completion = completionBySurface.get(surface.key)?.fields.get(field.id);
                     return completion
-                      ? { state: completion.state, description: completion.label }
+                      ? {
+                          state: completion.state,
+                          description:
+                            completion.state !== "filled"
+                              ? field.description?.trim() || completion.label
+                              : completion.label,
+                        }
                       : undefined;
                   }}
                   canActivateField={({ field }) =>
@@ -468,7 +474,7 @@ function renderReadValue(
     const staticText = field.options_config_json?.static_text;
     return typeof staticText === "string" && staticText.trim() ? staticText : emptyValue();
   }
-  if (isEmptyValue(value)) return emptyValue();
+  if (isEmptyValue(value)) return emptyValue(field);
 
   if (field.field_type === "bool") return booleanLabel(Boolean(value));
   if (field.field_type === "date" && typeof value === "string") {
@@ -574,6 +580,7 @@ function isEmptyValue(value: unknown) {
   );
 }
 
-function emptyValue() {
-  return <span className="filled-card-empty-value">Не заполнено</span>;
+function emptyValue(field?: FormFieldRead) {
+  const description = field?.description?.trim();
+  return <span className="filled-card-empty-value">{description || "Не заполнено"}</span>;
 }

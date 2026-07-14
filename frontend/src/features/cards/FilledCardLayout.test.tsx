@@ -181,6 +181,30 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByRole("button", { name: "Отмена" })).not.toBeInTheDocument();
   });
 
+  test("shows the field description instead of the empty-value fallback", () => {
+    const hintedStatus = { ...fields[2], description: "Выберите статус из списка" };
+    render(
+      <FilledCardLayout
+        {...defaultProps({
+          fields: fields.map((candidate) => (candidate.id === hintedStatus.id ? hintedStatus : candidate)),
+          values: values.filter((candidate) => candidate.field_id !== hintedStatus.id),
+          blockInstances: [
+            {
+              ...blockInstances[0],
+              fields: {
+                ...blockInstances[0].fields,
+                status: { ...blockInstances[0].fields.status, value: null },
+              },
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getAllByText("Выберите статус из списка")).toHaveLength(2);
+    expect(screen.queryByText("Не заполнено")).not.toBeInTheDocument();
+  });
+
   test("closes an unchanged field when the pointer leaves its field surface", async () => {
     const user = userEvent.setup();
     render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);
@@ -255,7 +279,9 @@ describe("FilledCardLayout", () => {
     render(<EditableFilledCard saveValues={saveValues} />);
 
     await user.click(screen.getByTestId("filled-field-layout-status"));
-    await user.click(screen.getByRole("combobox", { name: "Статус" }));
+    expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
+    expect(screen.getByRole("listbox", { name: "Статус" })).toBeVisible();
+    expect(saveValues).not.toHaveBeenCalled();
     await user.click(screen.getByRole("option", { name: "Черновик" }));
 
     await waitFor(() =>

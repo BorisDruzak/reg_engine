@@ -67,6 +67,7 @@ describe("PublicLinkEditPage", () => {
     preview.blocks[0].instances[0].fields[0] = {
       ...preview.blocks[0].instances[0].fields[0],
       required_mode: "required",
+      description: "Укажите публичный статус",
       value: "",
     };
     renderPage();
@@ -78,6 +79,11 @@ describe("PublicLinkEditPage", () => {
       screen.getByRole("button", { name: "Основные сведения: нужно заполнить 1 из 4" }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-required-missing");
+    expect(
+      screen
+        .getByTestId("public-field-item-status")
+        .querySelector(".card-layout-presentation-description"),
+    ).toHaveTextContent("Укажите публичный статус");
 
     fireEvent.change(screen.getByRole("textbox", { name: "Публичный статус" }), {
       target: { value: "Подтверждено" },

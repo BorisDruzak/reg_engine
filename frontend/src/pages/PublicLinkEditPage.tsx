@@ -445,7 +445,13 @@ function PublicCardLayoutSurface({
         fieldPresentation={({ field }) => {
           const completion = completions?.fields.get(field.id);
           return completion
-            ? { state: completion.state, description: completion.label }
+            ? {
+                state: completion.state,
+                description:
+                  completion.state !== "filled"
+                    ? field.description?.trim() || completion.label
+                    : completion.label,
+              }
             : undefined;
         }}
         renderFieldValue={({ field }) => {
@@ -583,7 +589,7 @@ function publicCardTemplateLayout(preview: PublicCardPreview): CardTemplateLayou
       block_id: blockId,
       code: field.code,
       label: field.label,
-      description: null,
+      description: field.description,
       field_type: field.field_type,
       position: index,
       required_mode: field.required_mode,

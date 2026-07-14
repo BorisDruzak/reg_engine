@@ -44,12 +44,9 @@ describe("FieldEditorControl hints", () => {
     );
   });
 
-  test.each([
-    ["select", "single"],
-    ["multi_select", "multiple"],
-    ["organization_ref", "single"],
-    ["org_unit_ref", "single"],
-  ] as const)("opens %s choices immediately without saving an empty value", (fieldType) => {
+  test.each(["select", "multi_select", "organization_ref", "org_unit_ref"] as const)(
+    "opens %s choices immediately without saving an empty value",
+    (fieldType) => {
     const onChange = vi.fn();
     render(
       <FieldEditorControl
@@ -66,7 +63,8 @@ describe("FieldEditorControl hints", () => {
     expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
     expect(screen.getByTestId("searchable-choice-options")).toBeVisible();
     expect(onChange).not.toHaveBeenCalled();
-  });
+    },
+  );
 
   test("filters server-supplied single choices and never exposes a free-text value", async () => {
     const user = userEvent.setup();

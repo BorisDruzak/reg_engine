@@ -5,6 +5,8 @@ import type { FormFieldRead } from "@/api/types";
 import { FieldEditorControl } from "./FieldEditorControl";
 import type { FieldEditorState } from "./fieldEditorUtils";
 
+const pickerFieldTypes = new Set(["select", "multi_select", "organization_ref", "org_unit_ref"]);
+
 export type BlockFieldControlProps = {
   field: FormFieldRead;
   value: FieldEditorState | undefined;
@@ -31,11 +33,12 @@ export function BlockFieldControl({
   onChange,
 }: BlockFieldControlProps) {
   const controlRef = useRef<HTMLDivElement>(null);
+  const autoOpenChoice = autoFocus && pickerFieldTypes.has(field.field_type);
 
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!autoFocus || autoOpenChoice) return;
     controlRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
-  }, [autoFocus]);
+  }, [autoFocus, autoOpenChoice]);
 
   if (field.field_type === "file_ref") {
     if (fileRefControl) {
@@ -70,6 +73,7 @@ export function BlockFieldControl({
         }))}
         value={value}
         disabled={false}
+        autoOpenChoice={autoOpenChoice}
         onChange={onChange}
       />
       {error ? (
