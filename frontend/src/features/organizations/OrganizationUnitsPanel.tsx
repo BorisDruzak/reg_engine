@@ -13,6 +13,7 @@ import {
 import { DataAlert } from "@/components/common/DataSurfaces";
 
 type UnitFormState = {
+  createRequestId: number | null;
   mode: "create" | "edit";
   unit: OrgUnitRead | null;
   unitType: OrgUnitType;
@@ -23,14 +24,14 @@ type UnitFormState = {
 type Props = {
   organization: OrganizationRead;
   token: string;
-  createUnitType: OrgUnitType | null;
+  createUnitRequest: { requestId: number; unitType: OrgUnitType } | null;
   onCreateUnitRequestConsumed: () => void;
 };
 
 export function OrganizationUnitsPanel({
   organization,
   token,
-  createUnitType,
+  createUnitRequest,
   onCreateUnitRequestConsumed,
 }: Props) {
   const queryClient = useQueryClient();
@@ -81,22 +82,27 @@ export function OrganizationUnitsPanel({
     ? new Error(localError)
     : (createMutation.error ?? updateMutation.error ?? archiveMutation.error);
   const isFormSubmitting = createMutation.isPending || updateMutation.isPending;
-  const requestedCreateForm = createUnitType
+  const requestedCreateForm = createUnitRequest
     ? {
+        createRequestId: createUnitRequest.requestId,
         mode: "create" as const,
         unit: null,
-        unitType: createUnitType,
+        unitType: createUnitRequest.unitType,
         name: "",
         parentId: "",
       }
     : null;
-  const activeFormState = formState ?? requestedCreateForm;
+  const activeFormState =
+    requestedCreateForm && formState?.createRequestId !== requestedCreateForm.createRequestId
+      ? requestedCreateForm
+      : (formState ?? requestedCreateForm);
 
   function openEditForm(unit: OrgUnitRead) {
     onCreateUnitRequestConsumed();
     setLocalError(null);
     setSuccessMessage(null);
     setFormState({
+      createRequestId: null,
       mode: "edit",
       unit,
       unitType: unit.type,

@@ -125,6 +125,42 @@ test.each([
   });
 });
 
+test("replaces a typed unit create form when another card action is selected", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  await user.click(screen.getByRole("button", { name: "Добавить управление" }));
+  const input = screen.getByLabelText("Название подразделения");
+  await user.type(input, "Черновик управления");
+
+  await user.click(screen.getByRole("button", { name: "Добавить отдел" }));
+
+  expect(screen.getByRole("heading", { name: "Добавить отдел" })).toBeVisible();
+  expect(screen.getByLabelText("Название подразделения")).toHaveValue("");
+});
+
+test.each([
+  ["Enter", "{Enter}"],
+  ["Space", " "],
+] as const)("replaces the create form when %s activates another card action", async (_, key) => {
+  const user = userEvent.setup();
+  stubOrgUnitApi();
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  await user.click(screen.getByRole("button", { name: "Добавить управление" }));
+  await user.type(screen.getByLabelText("Название подразделения"), "Черновик управления");
+
+  const departmentAction = screen.getByRole("button", { name: "Добавить отдел" });
+  departmentAction.focus();
+  await user.keyboard(key);
+
+  expect(screen.getByRole("heading", { name: "Добавить отдел" })).toBeVisible();
+  expect(screen.getByLabelText("Название подразделения")).toHaveValue("");
+});
+
 test.each([
   ["Управление образования", "unit-education"],
   ["Отдел бухгалтерии", "unit-accounting"],
@@ -190,6 +226,20 @@ test("opens unit archive confirmation only from inline edit mode without collaps
   expect(screen.getByRole("dialog", { name: "Архивировать подразделение" })).toBeVisible();
 });
 
+test("shows an inline unit update failure without expanding the management row", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi({ updateStatus: 500 });
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  const management = await screen.findByRole("treeitem", { name: /Управление образования/ });
+  await user.click(screen.getByRole("button", { name: "Управление образования" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(await screen.findByRole("alert")).toBeVisible();
+  expect(management).toHaveAttribute("aria-expanded", "false");
+});
+
 function renderOrganizations() {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
@@ -205,7 +255,7 @@ function renderOrganizations() {
   );
 }
 
-function stubOrgUnitApi() {
+function stubOrgUnitApi({ updateStatus = 200 }: { updateStatus?: number } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const organizationMatch = url.match(/\/organizations\/([^/]+)\/org-units$/);
@@ -230,6 +280,9 @@ function stubOrgUnitApi() {
       });
     }
     if (url.includes("/org-units/") && init?.method === "PATCH") {
+      if (updateStatus !== 200) {
+        return Response.json({ detail: "Update failed" }, { status: updateStatus });
+      }
       return Response.json({ id: url.split("/").at(-1), ...JSON.parse(String(init.body)) });
     }
     return Response.json({ detail: "Not Found" }, { status: 404 });

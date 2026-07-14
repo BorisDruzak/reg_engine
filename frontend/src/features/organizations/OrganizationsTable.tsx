@@ -41,6 +41,7 @@ export function OrganizationsTable({
   const [selectedOrganizationId, setSelectedOrganizationId] = useState<string | null>(null);
   const [unitCreateRequest, setUnitCreateRequest] = useState<{
     organizationId: string;
+    requestId: number;
     unitType: OrgUnitType;
   } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -258,7 +259,11 @@ export function OrganizationsTable({
           }
           onCreateChildOrganization={(organization) => openCreateForm(organization.id)}
           onCreateUnit={(organization, unitType) =>
-            setUnitCreateRequest({ organizationId: organization.id, unitType })
+            setUnitCreateRequest((current) => ({
+              organizationId: organization.id,
+              requestId: (current?.requestId ?? 0) + 1,
+              unitType,
+            }))
           }
           unitCreateRequest={unitCreateRequest}
           onUnitCreateRequestConsumed={() => setUnitCreateRequest(null)}
@@ -302,7 +307,11 @@ function OrganizationTree({
   onChangeEditName: (name: string) => void;
   onCreateChildOrganization: (organization: OrganizationRead) => void;
   onCreateUnit: (organization: OrganizationRead, unitType: OrgUnitType) => void;
-  unitCreateRequest: { organizationId: string; unitType: OrgUnitType } | null;
+  unitCreateRequest: {
+    organizationId: string;
+    requestId: number;
+    unitType: OrgUnitType;
+  } | null;
   onUnitCreateRequestConsumed: () => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleOrganizationCard: (organization: OrganizationRead) => void;
@@ -367,7 +376,11 @@ function OrganizationTreeNode({
   onChangeEditName: (name: string) => void;
   onCreateChildOrganization: (organization: OrganizationRead) => void;
   onCreateUnit: (organization: OrganizationRead, unitType: OrgUnitType) => void;
-  unitCreateRequest: { organizationId: string; unitType: OrgUnitType } | null;
+  unitCreateRequest: {
+    organizationId: string;
+    requestId: number;
+    unitType: OrgUnitType;
+  } | null;
   onUnitCreateRequestConsumed: () => void;
   onSubmitEdit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleOrganizationCard: (organization: OrganizationRead) => void;
@@ -473,8 +486,13 @@ function OrganizationTreeNode({
           <OrganizationUnitsPanel
             organization={node}
             token={token}
-            createUnitType={
-              unitCreateRequest?.organizationId === node.id ? unitCreateRequest.unitType : null
+            createUnitRequest={
+              unitCreateRequest?.organizationId === node.id
+                ? {
+                    requestId: unitCreateRequest.requestId,
+                    unitType: unitCreateRequest.unitType,
+                  }
+                : null
             }
             onCreateUnitRequestConsumed={onUnitCreateRequestConsumed}
           />

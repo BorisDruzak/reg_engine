@@ -20,3 +20,10 @@
 - Scoped Prettier check and `git diff --check` — passed.
 
 No deployment or remote actions were performed.
+
+## Review follow-up
+
+- A card action now carries a monotonically increasing request ID. A new management/department request replaces any active local create or edit form before it is rendered.
+- Added regressions for mouse and keyboard (Enter/Space) form switching, plus inline update-failure display and management-expansion propagation.
+- RED: the three replacement scenarios failed because the original management draft remained active.
+- GREEN: focused suite now reports 13 passed; TypeScript and ESLint run with no errors. The existing unrelated `FilledCardLayout.tsx` hook-dependency warning remains.
