@@ -14,7 +14,9 @@ not a hardcoded employee registry.
   public, and login surfaces remain translucent enough to preserve contrast.
   Focused asset tests (2), TypeScript, scoped ESLint and Prettier, and the
   Vite production build pass. No API, database, or migration change is
-  required. Deployment and live smoke checks are the remaining step.
+  required. Deployment and live smoke checks are blocked while
+  `192.168.100.12` is unreachable from the deployment workstation on both
+  SSH/22 and HTTPS/443; the verified commits are already pushed to `main`.
 
 - 2026-07-14 login and XLSX workflow refinement is released at `0e09d30b`.
   User logins no longer require an e-mail format: non-empty values without
