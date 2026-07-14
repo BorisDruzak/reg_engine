@@ -5369,6 +5369,13 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   line-height: 1.45;
 }
 
+.single-stage-card-creation .card-base-block-header small {
+  display: block;
+  color: #667085;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .single-stage-card-creation {
   width: min(100%, 72rem);
   margin: 0 auto;

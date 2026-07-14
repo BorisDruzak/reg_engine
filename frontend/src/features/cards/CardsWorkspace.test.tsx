@@ -186,9 +186,11 @@ describe("CardsWorkspace", () => {
     renderWorkspace();
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
 
-    expect(await screen.findByText("Базовый блок")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Базовый блок")).toBeInTheDocument();
     expect(await screen.findByLabelText("Фамилия")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Содержание карточки" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Создать публичную ссылку" })).toBeEnabled();
+    const navigator = screen.getByRole("navigation", { name: "Содержание карточки" });
+    expect(within(navigator).getByRole("button", { name: /Базовый блок/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ФИО: нужно заполнить 1 из 1/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Сведения: не заполнено/ })).toBeInTheDocument();
     expect(document.getElementById("creation-card-block-block-person")).toHaveClass(

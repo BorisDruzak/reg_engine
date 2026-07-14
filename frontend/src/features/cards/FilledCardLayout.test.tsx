@@ -136,15 +136,21 @@ describe("FilledCardLayout", () => {
               requiredMissingCount: 0,
             },
           ],
-          beforeContent: <section id="card-base-block">Базовый блок</section>,
+          beforeContent: (
+            <section id="card-base-block" aria-label="Базовый блок">
+              Базовый блок
+            </section>
+          ),
           afterContent: <section id="card-attachments-block">Вложения карточки</section>,
         })}
       />,
     );
 
     const navigator = screen.getByRole("navigation", { name: "Содержание карточки" });
+    const baseBlock = screen.getByLabelText("Базовый блок");
     expect(within(navigator).getByRole("button", { name: /Базовый блок/i })).toBeInTheDocument();
     expect(within(navigator).getByRole("button", { name: /Вложения/i })).toBeInTheDocument();
+    expect(baseBlock.parentElement).toHaveClass("card-presentation-content");
     expect(screen.getByTestId("filled-block-identity")).toHaveAttribute(
       "id",
       "card-block-primary-identity",

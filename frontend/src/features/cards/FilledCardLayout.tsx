@@ -175,9 +175,11 @@ export function FilledCardLayout({
 
   return (
     <>
-      <CardPresentationShell items={[...navigationBefore, ...navigationItems, ...navigationAfter]}>
+      <CardPresentationShell
+        items={[...navigationBefore, ...navigationItems, ...navigationAfter]}
+        beforeContent={beforeContent}
+      >
         <div className="filled-card-layout" data-testid="filled-card-layout">
-          {beforeContent}
           {surfaces.map((surface) => {
             const fieldValues = Object.fromEntries(
               fields.map((field) => [

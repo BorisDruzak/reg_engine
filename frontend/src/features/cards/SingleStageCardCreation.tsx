@@ -211,120 +211,127 @@ export function SingleStageCardCreation({
     }
   }
 
-  return (
-    <section className="single-stage-card-creation stack" aria-label="Создание карточки">
-      <section className="data-panel single-stage-card-creation-base">
-        <header className="admin-mutation-header">
-          <div>
-            <strong>Базовый блок</strong>
-            <small>
-              Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.
-            </small>
-          </div>
-        </header>
-        <div className="admin-mutation-body">
-          <label>
-            <span>Организация карточки</span>
-            <select
-              aria-label="Организация карточки"
-              disabled={isSaving}
-              value={state.organizationId}
-              onChange={(event) =>
-                resetTemplateValues({ organizationId: event.currentTarget.value, templateId })
-              }
-            >
-              <option value="">Нет данных</option>
-              {organizations.map((organization) => (
-                <option key={organization.id} value={organization.id}>
-                  {organization.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Шаблон карточки</span>
-            <select
-              aria-label="Шаблон карточки"
-              disabled={isSaving || templates.length === 0}
-              value={templateId}
-              onChange={(event) =>
-                resetTemplateValues({
-                  organizationId: state.organizationId,
-                  templateId: event.currentTarget.value,
-                })
-              }
-            >
-              {templates.length !== 1 && <option value="">Выберите шаблон карточки</option>}
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Наименование карточки</span>
+  const baseBlock = (
+    <section
+      id="creation-card-base-block"
+      className="data-panel card-base-block single-stage-card-creation-base"
+      aria-label="Базовый блок"
+    >
+      <header className="card-base-block-header">
+        <div>
+          <strong>Базовый блок</strong>
+          <small>
+            Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.
+          </small>
+        </div>
+      </header>
+      <div className="admin-mutation-body">
+        <label>
+          <span>Организация карточки</span>
+          <select
+            aria-label="Организация карточки"
+            disabled={isSaving}
+            value={state.organizationId}
+            onChange={(event) =>
+              resetTemplateValues({ organizationId: event.currentTarget.value, templateId })
+            }
+          >
+            <option value="">Нет данных</option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Шаблон карточки</span>
+          <select
+            aria-label="Шаблон карточки"
+            disabled={isSaving || templates.length === 0}
+            value={templateId}
+            onChange={(event) =>
+              resetTemplateValues({
+                organizationId: state.organizationId,
+                templateId: event.currentTarget.value,
+              })
+            }
+          >
+            {templates.length !== 1 && <option value="">Выберите шаблон карточки</option>}
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Наименование карточки</span>
+          <input
+            aria-label="Наименование карточки"
+            disabled={isSaving}
+            placeholder={preview?.display_name || "Необязательно"}
+            value={state.displayName}
+            onChange={(event) =>
+              setState((current) => ({ ...current, displayName: event.currentTarget.value }))
+            }
+          />
+        </label>
+      </div>
+      <div className="card-base-block-public-settings">
+        <div className="card-base-block-public-heading">
+          <strong>Публичный доступ</strong>
+        </div>
+        <div className="card-base-toggle-grid">
+          <label className="checkbox-control">
             <input
-              aria-label="Наименование карточки"
-              disabled={isSaving}
-              placeholder={preview?.display_name || "Необязательно"}
-              value={state.displayName}
+              type="checkbox"
+              checked={publicAccess.public_view_enabled}
+              disabled={isSaving || publicAccess.public_edit_enabled}
               onChange={(event) =>
-                setState((current) => ({ ...current, displayName: event.currentTarget.value }))
+                updatePublicAccess({ public_view_enabled: event.currentTarget.checked })
               }
             />
+            <span>Публичный просмотр карточки</span>
+          </label>
+          <label className="checkbox-control">
+            <input
+              type="checkbox"
+              checked={publicAccess.public_edit_enabled}
+              disabled={isSaving}
+              onChange={(event) =>
+                updatePublicAccess({ public_edit_enabled: event.currentTarget.checked })
+              }
+            />
+            <span>Публичное редактирование карточки</span>
           </label>
         </div>
-        <div className="card-base-block-public-settings">
-          <div className="card-base-block-public-heading">
-            <strong>Публичный доступ</strong>
-          </div>
-          <div className="card-base-toggle-grid">
-            <label className="checkbox-control">
-              <input
-                type="checkbox"
-                checked={publicAccess.public_view_enabled}
-                disabled={isSaving || publicAccess.public_edit_enabled}
-                onChange={(event) =>
-                  updatePublicAccess({ public_view_enabled: event.currentTarget.checked })
-                }
-              />
-              <span>Публичный просмотр карточки</span>
-            </label>
-            <label className="checkbox-control">
-              <input
-                type="checkbox"
-                checked={publicAccess.public_edit_enabled}
-                disabled={isSaving}
-                onChange={(event) =>
-                  updatePublicAccess({ public_edit_enabled: event.currentTarget.checked })
-                }
-              />
-              <span>Публичное редактирование карточки</span>
-            </label>
-          </div>
-          <PublicAccessFieldPicker
-            fields={publicAccessFields}
-            publicAccess={publicAccess}
-            disabled={isSaving}
-            onChange={updatePublicAccess}
-          />
-        </div>
-        <footer className="admin-mutation-actions">
-          <button
-            type="button"
-            className="primary-button"
-            disabled={isSaving || !canLoadPreview}
-            onClick={() => void createDraftPublicLink()}
-          >
-            Создать публичную ссылку
-          </button>
-          <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
-            Отмена
-          </button>
-        </footer>
-      </section>
+        <PublicAccessFieldPicker
+          fields={publicAccessFields}
+          publicAccess={publicAccess}
+          disabled={isSaving}
+          onChange={updatePublicAccess}
+        />
+      </div>
+      <footer className="admin-mutation-actions">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={isSaving || !canLoadPreview}
+          onClick={() => void createDraftPublicLink()}
+        >
+          Создать публичную ссылку
+        </button>
+        <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
+          Отмена
+        </button>
+      </footer>
+    </section>
+  );
 
+  return (
+    <section className="single-stage-card-creation stack" aria-label="Создание карточки">
+      {preview?.blocks.length ? null : baseBlock}
       <DataAlert
         error={
           error instanceof Error ? error : error ? new Error(errorText(error)) : previewQuery.error
@@ -335,7 +342,20 @@ export function SingleStageCardCreation({
         <p className="data-empty">В выбранном шаблоне нет доступных полей.</p>
       ) : null}
       {preview?.blocks.length ? (
-        <CardPresentationShell items={navigationItems}>
+        <CardPresentationShell
+          items={[
+            {
+              anchorId: "creation-card-base-block",
+              label: "Базовый блок",
+              state: "neutral",
+              filledCount: 0,
+              totalCount: 0,
+              requiredMissingCount: 0,
+            },
+            ...navigationItems,
+          ]}
+          beforeContent={baseBlock}
+        >
           <div className="single-stage-card-creation-template">
             {preview.blocks.map((block) => {
               const blockState = completions.blocks.get(block.block_id)?.state ?? "empty";
