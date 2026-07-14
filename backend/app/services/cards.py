@@ -271,6 +271,10 @@ class CardService:
                 display_name=display_name,
                 card_template_id=card_template_id,
             )
+            self._preserve_draft_lifecycle_for_public_link_creation(
+                card,
+                actor_user_id=actor_user_id,
+            )
             CardPublicAccessService(self.session).update_for_actor(
                 actor_user_id=actor_user_id,
                 card_id=card.id,
@@ -283,6 +287,24 @@ class CardService:
                 review_enabled=True,
             )
         return CardDraftPublicLink(card=card, public_link=public_link)
+
+    def _preserve_draft_lifecycle_for_public_link_creation(
+        self,
+        card: Card,
+        *,
+        actor_user_id: UUID,
+    ) -> None:
+        if card.lifecycle_status == "draft":
+            return
+        old_status = card.lifecycle_status
+        card.lifecycle_status = "draft"
+        self.session.flush()
+        self._record_lifecycle_transition(
+            card,
+            old_status=old_status,
+            actor_user_id=actor_user_id,
+            actor_public_link_id=None,
+        )
 
     def preview_card_creation_for_actor(
         self,

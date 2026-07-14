@@ -20,6 +20,7 @@ from app.models import (
     Card,
     CardBlockInstance,
     CardPublicFieldSetting,
+    CardPublicLink,
     CardTemplate,
     FieldValue,
     FieldValueItem,
@@ -42,6 +43,7 @@ from app.services.cards import (
 )
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
+from app.services.public_links import PublicLinkService
 from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
@@ -1308,6 +1310,160 @@ def test_create_draft_card_and_public_link_saves_access_and_audits(
         ).all()
     )
     assert {"card", "card_public_link"}.issubset(audit_object_types)
+
+
+def test_create_draft_card_and_public_link_preserves_draft_for_empty_template_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NestedTransaction:
+        def __enter__(self) -> "_NestedTransaction":
+            return self
+
+        def __exit__(self, *_args: object) -> bool:
+            return False
+
+    class _NestedSession:
+        def begin_nested(self) -> _NestedTransaction:
+            return _NestedTransaction()
+
+        def flush(self) -> None:
+            pass
+
+    card = SimpleNamespace(id=uuid4(), lifecycle_status="active", updated_by=None)
+    service = CardService(cast(Session, _NestedSession()))
+    monkeypatch.setattr(
+        service,
+        "create_card_for_organization_for_actor",
+        lambda **_payload: card,
+    )
+    monkeypatch.setattr(service, "_record_lifecycle_transition", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CardPublicAccessService,
+        "update_for_actor",
+        lambda _self, **_payload: None,
+    )
+    monkeypatch.setattr(
+        PublicLinkService,
+        "create_public_link_for_actor",
+        lambda _self, **_payload: SimpleNamespace(),
+    )
+
+    created = service.create_card_draft_with_public_link_for_actor(
+        actor_user_id=uuid4(),
+        organization_id=uuid4(),
+        display_name=None,
+        card_template_id=uuid4(),
+        public_access=CardPublicAccessUpdate(),
+    )
+
+    assert created.card.lifecycle_status == "draft"
+
+
+def test_create_draft_card_and_public_link_keeps_draft_for_required_template(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-required",
+        title="Draft public link required",
+    )
+    required_field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="required_value",
+        label="Required value",
+        field_type="text",
+        required_mode="required",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-required-template",
+        name="Draft public link required template",
+        field_schema_json={"field_ids": [str(required_field.id)]},
+    )
+
+    created = CardService(db_session).create_card_draft_with_public_link_for_actor(
+        actor_user_id=context["system_admin"].id,
+        organization_id=context["child"].id,
+        display_name=None,
+        card_template_id=template.id,
+        public_access=CardPublicAccessUpdate(),
+    )
+
+    assert created.card.lifecycle_status == "draft"
+
+
+def test_create_draft_card_and_public_link_rolls_back_after_public_link_failure(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-rollback",
+        title="Draft public link rollback",
+    )
+    field_model = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="rollback_value",
+        label="Rollback value",
+        field_type="text",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="draft-public-link-rollback-template",
+        name="Draft public link rollback template",
+        field_schema_json={"field_ids": [str(field_model.id)]},
+    )
+    counts_before = {
+        "cards": db_session.scalar(select(func.count(Card.id))),
+        "links": db_session.scalar(select(func.count(CardPublicLink.id))),
+        "settings": db_session.scalar(select(func.count(CardPublicFieldSetting.id))),
+        "audits": db_session.scalar(select(func.count(AuditEvent.id))),
+    }
+
+    def fail_public_link(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("forced public-link failure")
+
+    monkeypatch.setattr(PublicLinkService, "create_public_link_for_actor", fail_public_link)
+
+    with pytest.raises(RuntimeError, match="forced public-link failure"):
+        CardService(db_session).create_card_draft_with_public_link_for_actor(
+            actor_user_id=context["system_admin"].id,
+            organization_id=context["child"].id,
+            display_name=None,
+            card_template_id=template.id,
+            public_access=CardPublicAccessUpdate(
+                fields=[
+                    CardPublicFieldSettingUpdate(
+                        field_id=field_model.id,
+                        public_visible=True,
+                        public_editable=True,
+                    )
+                ]
+            ),
+        )
+
+    assert {
+        "cards": db_session.scalar(select(func.count(Card.id))),
+        "links": db_session.scalar(select(func.count(CardPublicLink.id))),
+        "settings": db_session.scalar(select(func.count(CardPublicFieldSetting.id))),
+        "audits": db_session.scalar(select(func.count(AuditEvent.id))),
+    } == counts_before
 
 
 def test_create_draft_card_and_public_link_denies_actor_without_card_management(

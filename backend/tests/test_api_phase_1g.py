@@ -342,6 +342,36 @@ def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
     assert str(public_link.card_id) == created["card"]["id"]
     assert public_link.review_enabled is True
 
+    block = RegistrySchemaService(db_session).create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-draft-public-link-required",
+        title="Draft public link required",
+    )
+    required_field = RegistrySchemaService(db_session).create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="required_value",
+        label="Required value",
+        field_type="text",
+        required_mode="required",
+    )
+    required_template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-draft-public-link-required-template",
+        name="Draft public link required template",
+        field_schema_json={"field_ids": [str(required_field.id)]},
+    )
+    required_created = _post_json(
+        api_client,
+        f"/api/v1/organizations/{organization['id']}/cards/draft-public-link",
+        {**payload, "card_template_id": str(required_template.id)},
+        actor_id=system_admin.id,
+    )
+
+    assert required_created["card"]["lifecycle_status"] == "draft"
+
     denied = api_client.post(
         f"/api/v1/organizations/{organization['id']}/cards/draft-public-link",
         json=payload,
