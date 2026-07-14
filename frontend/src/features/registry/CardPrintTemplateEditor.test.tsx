@@ -20,6 +20,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("shows reference filling links only in Advanced reference lists", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
+  renderRegistrySchemaEditor();
+
+  expect(
+    screen.queryByRole("region", { name: "Ссылки на заполнение справочников" }),
+  ).not.toBeInTheDocument();
+
+  await user.click(await screen.findByRole("tab", { name: "Расширенное" }));
+  await user.click(await screen.findByRole("tab", { name: "Справочники" }));
+
+  expect(
+    await screen.findByRole("region", { name: "Ссылки на заполнение справочников" }),
+  ).toBeInTheDocument();
+});
+
 test("renders exactly three Russian stages and contextual canvas actions without permanent panels", async () => {
   vi.stubGlobal("fetch", createEditorFetchMock().fetchMock);
 

@@ -665,11 +665,6 @@ function SchemaVisualEditor({
           successMessage={successMessage}
         />
       </div>
-      <ReferenceEditLinksPanel
-        token={token}
-        registryId={selectedRegistryId}
-        organizations={organizations}
-      />
       <section className="card-template-section" role="region" aria-label={uiText.cardTemplates}>
         <header className="card-template-section-header">
           <h3>{uiText.cardTemplates}</h3>
@@ -1366,6 +1361,11 @@ function ReferenceListsPanel({
           successMessage={successMessage}
         />
       </div>
+      <ReferenceEditLinksPanel
+        token={token}
+        registryId={selectedRegistryId}
+        organizations={organizations}
+      />
       <div className="reference-list-toolbar">
         <h3>{uiText.referenceListCollection}</h3>
         <button

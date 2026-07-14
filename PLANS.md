@@ -7,6 +7,15 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 reference filling links are moved from `Схема карточки` to
+  `Расширенное → Справочники`, alongside reference-list administration. The
+  component, API calls, active/closed lifecycle, and public URLs are unchanged.
+  A focused frontend regression test confirms that the panel is absent from
+  the schema tab and present only in the advanced reference-list tab. Focused
+  frontend tests (34), TypeScript, and the production build pass; ESLint has
+  no errors and retains the existing unrelated `FilledCardLayout.tsx`
+  hook-dependency warning. Deployment and browser verification are pending.
+
 - 2026-07-14 readable card-list reference values are released at `d7bd35d7`.
   `GET` card summaries preserve each stored
   `value` and add `display_value`; the latter resolves labels for reference
