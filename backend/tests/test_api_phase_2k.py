@@ -251,6 +251,13 @@ def test_phase_2k_org_unit_routes_are_registered_without_database() -> None:
     assert "/api/v1/cards/{card_id}/fields/{field_id}/org-unit-options" in paths
 
 
+def test_phase_2k_organization_reference_options_route_is_registered_without_database() -> None:
+    app = create_app()
+    paths = set(app.openapi()["paths"])
+
+    assert "/api/v1/cards/{card_id}/fields/{field_id}/organization-options" in paths
+
+
 def test_phase_2k_registry_update_archive_routes_are_registered_without_database() -> None:
     app = create_app()
     registry_path = app.openapi()["paths"]["/api/v1/registries/{registry_id}"]
@@ -506,6 +513,121 @@ def test_public_org_unit_preview_and_edit_are_scoped_to_card_organization(
         },
     )
     assert archived_edit.status_code == 400, archived_edit.text
+
+
+def test_organization_reference_options_and_public_allowlist_are_enforced(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-organization-reference-system@example.test",
+        is_superuser=True,
+    )
+    card_organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-organization-reference-card", "name": "Card organization"},
+        actor_id=system_admin.id,
+    )
+    allowed_organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-organization-reference-allowed", "name": "Allowed organization"},
+        actor_id=system_admin.id,
+    )
+    foreign_organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-organization-reference-foreign", "name": "Foreign organization"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-organization-reference-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {
+            "code": "organization",
+            "label": "Organization",
+            "field_type": "organization_ref",
+            "options_config_json": {"allowed_organization_ids": [allowed_organization["id"]]},
+        },
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": card_organization["id"], "display_name": "Organization card"},
+        actor_id=system_admin.id,
+    )
+    public_link = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/public-links",
+        {},
+        actor_id=system_admin.id,
+    )
+
+    options_response = api_client.get(
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}/organization-options",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert options_response.status_code == 200, options_response.text
+    assert {item["id"] for item in options_response.json()["items"]} == {
+        card_organization["id"],
+        allowed_organization["id"],
+        foreign_organization["id"],
+    }
+
+    preview_response = api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": public_link["raw_token"]},
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview_field = next(
+        item
+        for preview_block in preview_response.json()["blocks"]
+        for instance in preview_block["instances"]
+        for item in instance["fields"]
+        if item["field_id"] == field["id"]
+    )
+    assert preview_field["options"] == [
+        {
+            "id": allowed_organization["id"],
+            "code": "",
+            "label": "Allowed organization",
+            "archived": False,
+        }
+    ]
+
+    denied_edit = api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": public_link["raw_token"],
+            "field_id": field["id"],
+            "value": foreign_organization["id"],
+        },
+    )
+    assert denied_edit.status_code == 400, denied_edit.text
+    allowed_edit = api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": public_link["raw_token"],
+            "field_id": field["id"],
+            "value": allowed_organization["id"],
+        },
+    )
+    assert allowed_edit.status_code == 200, allowed_edit.text
 
 
 def test_system_admin_can_manage_org_units(

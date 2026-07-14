@@ -22,6 +22,7 @@ from app.models import (
     FieldValueItem,
     FormBlock,
     FormField,
+    Organization,
     StoredFile,
 )
 from app.services.audit import AuditService
@@ -1267,6 +1268,27 @@ class PublicLinkService:
         *,
         card: Card,
     ) -> list[PublicPreviewOption]:
+        if field_model.field_type == "organization_ref":
+            allowed_ids = CardService(self.session)._public_allowed_organization_ids(field_model)
+            organizations = [
+                organization
+                for organization in self.session.scalars(
+                    select(Organization).where(
+                        Organization.id.in_(allowed_ids),
+                        Organization.archived_at.is_(None),
+                        Organization.is_active.is_(True),
+                    )
+                ).all()
+            ] if allowed_ids else []
+            return [
+                PublicPreviewOption(
+                    id=option.id,
+                    code="",
+                    label=option.label,
+                    archived=option.archived,
+                )
+                for option in CardService(self.session)._organization_options(organizations)
+            ]
         if field_model.field_type == "org_unit_ref":
             return [
                 PublicPreviewOption(

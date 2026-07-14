@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 
-import type { CardTemplateFormLayoutItemRead, FormFieldRead, ReferenceListRead } from "@/api/types";
+import type {
+  CardTemplateFormLayoutItemRead,
+  FormFieldRead,
+  OrganizationRead,
+  ReferenceListRead,
+} from "@/api/types";
 import { fieldTypeLabel } from "@/app/uiText";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
@@ -52,6 +57,7 @@ export type CardFieldLayoutNodeProps = {
   options?: FieldEditorOption[];
   fileRefOptions?: FieldEditorFileRefOption[];
   referenceLists?: ReferenceListRead[];
+  organizations?: OrganizationRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
@@ -78,6 +84,7 @@ export function CardFieldLayoutNode({
   options = [],
   fileRefOptions = [],
   referenceLists = [],
+  organizations = [],
   inlineReferenceEditorContext,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
@@ -422,6 +429,7 @@ export function CardFieldLayoutNode({
         <InlineFieldEditor
           field={retryDraft ?? field}
           referenceLists={referenceLists}
+          organizations={organizations}
           inlineReferenceEditorContext={inlineReferenceEditorContext}
           onCommit={(draft) => {
             setRetryDraft(draft);

@@ -972,6 +972,33 @@ class CardService:
             raise CardServiceError("Опции подразделений доступны только для поля org_unit_ref.")
         return self._org_unit_options_for_card_field(card=card, field_model=field_model)
 
+    def list_organization_options_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        field_id: UUID,
+    ) -> list[CardFieldOptionRead]:
+        card = self._get_readable_card(card_id, include_archive=False)
+        if not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            card.organization_id,
+            registry_id=card.registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot read this card.")
+
+        field_model = self._get_active_field(field_id)
+        block = self._get_active_block(field_model.block_id)
+        if block.registry_id != card.registry_id:
+            raise CardServiceError("Field does not belong to the card registry.")
+        if field_model.field_type != "organization_ref":
+            raise CardServiceError("Опции организаций доступны только для поля organization_ref.")
+
+        organizations = OrganizationService(self.session).list_organizations_for_actor(
+            actor_user_id=actor_user_id,
+        )
+        return self._organization_options(organizations)
+
     def archive_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> Card:
         card = self._get_editable_card(card_id)
         self._require_card_permission(
@@ -1780,7 +1807,13 @@ class CardService:
                 value,
                 "Organization reference fields require an organization id.",
             )
-            self._ensure_active_organization_reference(organization_id)
+            self._ensure_active_organization_reference(
+                organization_id,
+                field_model=field_model,
+                actor_user_id=actor_user_id,
+                registry_id=registry_id,
+                public_context=public_context,
+            )
             return _FieldAssignment(value_organization_id=organization_id)
 
         if field_model.field_type == "org_unit_ref":
@@ -1899,7 +1932,15 @@ class CardService:
             or config.get("allow_owner_override") is True
         )
 
-    def _ensure_active_organization_reference(self, organization_id: UUID) -> None:
+    def _ensure_active_organization_reference(
+        self,
+        organization_id: UUID,
+        *,
+        field_model: FormField,
+        actor_user_id: UUID | None,
+        registry_id: UUID | None,
+        public_context: bool,
+    ) -> None:
         organization = self.session.get(Organization, organization_id)
         if (
             organization is None
@@ -1907,6 +1948,47 @@ class CardService:
             or not organization.is_active
         ):
             raise InvalidFieldValueError("Organization reference target was not found.")
+        if public_context:
+            allowed_ids = self._public_allowed_organization_ids(field_model)
+            if organization_id not in allowed_ids:
+                raise InvalidFieldValueError(
+                    "Organization reference target is not available for this public link."
+                )
+            return
+        if actor_user_id is None or not PermissionService(self.session).can_see_organization(
+            actor_user_id,
+            organization_id,
+            registry_id=registry_id,
+        ):
+            raise PermissionDeniedError("Actor cannot select this organization.")
+
+    def _public_allowed_organization_ids(self, field_model: FormField) -> set[UUID]:
+        raw_ids = (field_model.options_config_json or {}).get("allowed_organization_ids", [])
+        if not isinstance(raw_ids, list):
+            return set()
+        allowed_ids: set[UUID] = set()
+        for raw_id in raw_ids:
+            try:
+                allowed_ids.add(UUID(str(raw_id)))
+            except (TypeError, ValueError):
+                continue
+        return allowed_ids
+
+    def _organization_options(
+        self,
+        organizations: Sequence[Organization],
+    ) -> list[CardFieldOptionRead]:
+        return [
+            CardFieldOptionRead(id=organization.id, label=organization.name)
+            for organization in sorted(
+                organizations,
+                key=lambda organization: (
+                    organization.name.casefold(),
+                    organization.code.casefold(),
+                    str(organization.id),
+                ),
+            )
+        ]
 
     def _ensure_active_org_unit_reference(
         self,

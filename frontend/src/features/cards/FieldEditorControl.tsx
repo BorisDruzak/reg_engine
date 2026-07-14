@@ -70,7 +70,7 @@ export function FieldEditorControl({
     );
   }
 
-  if (fieldType === "org_unit_ref") {
+  if (fieldType === "organization_ref" || fieldType === "org_unit_ref") {
     return (
       <SearchableChoicePicker
         label={label}

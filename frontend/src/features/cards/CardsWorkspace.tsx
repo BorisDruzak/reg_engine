@@ -23,6 +23,7 @@ import {
   downloadGeneratedDocumentContent,
   generateCardTemplateLayoutDocx,
   generateCardTemplateLayoutPdf,
+  listCardFieldOrganizationOptions,
   listCardFieldOrgUnitOptions,
   listCardFieldReferenceItems,
   listAttachments,
@@ -271,6 +272,25 @@ export function CardsWorkspace({
       enabled: Boolean(token && card?.organization_id),
     })),
   });
+  const organizationReferenceFields = useMemo(() => {
+    const unique = new Map<string, FormFieldRead>();
+    for (const field of fieldRows) {
+      if (field.field.field_type === "organization_ref" && field.schema) {
+        unique.set(field.schema.id, field.schema);
+      }
+    }
+    return Array.from(unique.values());
+  }, [fieldRows]);
+  const organizationReferenceQueries = useQueries({
+    queries: organizationReferenceFields.map((field) => ({
+      queryKey: ["card-field-organization-options", token, card?.id, field.id],
+      queryFn: () => {
+        if (!card) throw new Error(uiText.notFound);
+        return listCardFieldOrganizationOptions(token, card.id, field.id);
+      },
+      enabled: Boolean(token && card),
+    })),
+  });
   const referenceOptions = useMemo(
     () =>
       Object.fromEntries([
@@ -282,8 +302,19 @@ export function CardsWorkspace({
           field.id,
           orgUnitQueries[index]?.data?.items ?? [],
         ]),
+        ...organizationReferenceFields.map((field, index) => [
+          field.id,
+          organizationReferenceQueries[index]?.data?.items ?? [],
+        ]),
       ]),
-    [orgUnitFields, orgUnitQueries, referenceFields, referenceQueries],
+    [
+      orgUnitFields,
+      orgUnitQueries,
+      organizationReferenceFields,
+      organizationReferenceQueries,
+      referenceFields,
+      referenceQueries,
+    ],
   );
   const cardBlockInstances = useMemo(
     (): FilledCardBlockInstanceRead[] =>

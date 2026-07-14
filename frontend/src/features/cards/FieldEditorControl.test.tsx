@@ -192,4 +192,23 @@ describe("FieldEditorControl hints", () => {
     await user.click(screen.getByRole("option", { name: "Управление образования → Отдел кадров" }));
     expect(onChange).toHaveBeenLastCalledWith("department");
   });
+
+  test("selects an organization from supplied choices without a free-text input", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="organization_ref"
+        label="Организация"
+        options={[{ id: "organization-1", label: "Администрация" }]}
+        value=""
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Организация" }));
+    expect(screen.queryByRole("textbox", { name: "Организация" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Администрация" }));
+    expect(onChange).toHaveBeenCalledWith("organization-1");
+  });
 });

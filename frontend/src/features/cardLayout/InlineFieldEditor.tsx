@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import type { FormFieldRead, ReferenceListRead } from "@/api/types";
+import type { FormFieldRead, OrganizationRead, ReferenceListRead } from "@/api/types";
 import { FIELD_TYPE_OPTIONS } from "@/app/uiText";
 
 import { InlineReferenceEditor, type InlineReferenceEditorContext } from "./InlineReferenceEditor";
@@ -9,6 +9,7 @@ import { InlineReferenceEditor, type InlineReferenceEditorContext } from "./Inli
 export type InlineFieldEditorProps = {
   field: FormFieldRead;
   referenceLists?: ReferenceListRead[];
+  organizations?: OrganizationRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   onCommit: (field: FormFieldRead) => void;
   onClose: () => void;
@@ -18,6 +19,7 @@ export type InlineFieldEditorProps = {
 export function InlineFieldEditor({
   field,
   referenceLists = [],
+  organizations = [],
   inlineReferenceEditorContext,
   onCommit,
   onClose,
@@ -96,6 +98,11 @@ export function InlineFieldEditor({
     typeof draft.options_config_json?.static_text === "string"
       ? draft.options_config_json.static_text
       : "";
+  const allowedOrganizationIds = Array.isArray(draft.options_config_json?.allowed_organization_ids)
+    ? draft.options_config_json.allowed_organization_ids.filter(
+        (organizationId): organizationId is string => typeof organizationId === "string",
+      )
+    : [];
 
   if (editorScreen !== "field" && inlineReferenceEditorContext) {
     return (
@@ -247,6 +254,39 @@ export function InlineFieldEditor({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {draft.field_type === "organization_ref" ? (
+        <fieldset className="inline-reference-field-settings">
+          <legend>Организации для публичного выбора</legend>
+          {organizations.length === 0 ? <p className="data-empty">Нет доступных организаций</p> : null}
+          {organizations.map((organization) => {
+            const checked = allowedOrganizationIds.includes(organization.id);
+            return (
+              <label key={organization.id} className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => {
+                    const nextIds = new Set(allowedOrganizationIds);
+                    if (event.currentTarget.checked) {
+                      nextIds.add(organization.id);
+                    } else {
+                      nextIds.delete(organization.id);
+                    }
+                    setDraft({
+                      ...draft,
+                      options_config_json: {
+                        ...draft.options_config_json,
+                        allowed_organization_ids: Array.from(nextIds),
+                      },
+                    });
+                  }}
+                />
+                <span>{organization.name}</span>
+              </label>
+            );
+          })}
+        </fieldset>
       ) : null}
       {draft.field_type === "static_text" ? (
         <label>

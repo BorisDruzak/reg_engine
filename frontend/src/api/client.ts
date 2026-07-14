@@ -604,6 +604,13 @@ export async function listCardFieldOrgUnitOptions(token: string, cardId: string,
   );
 }
 
+export async function listCardFieldOrganizationOptions(token: string, cardId: string, fieldId: string) {
+  return apiRequest<CardFieldOptionListRead>(
+    `/api/v1/cards/${cardId}/fields/${fieldId}/organization-options`,
+    { token },
+  );
+}
+
 export async function listReferenceItems(token: string, listId: string) {
   return apiRequest<ReferenceItemListRead>(`/api/v1/reference-lists/${listId}/items`, { token });
 }

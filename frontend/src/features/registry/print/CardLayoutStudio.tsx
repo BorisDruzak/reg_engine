@@ -33,6 +33,7 @@ import type {
   FormBlockRead,
   FormFieldRead,
   GeneratedDocumentRead,
+  OrganizationRead,
   ReferenceListRead,
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
@@ -73,6 +74,7 @@ export type CardLayoutStudioProps = {
   blocks: FormBlockRead[];
   fields: FormFieldRead[];
   referenceLists?: ReferenceListRead[];
+  organizations?: OrganizationRead[];
   selectedCardId?: string | null;
   actionPortalTarget?: HTMLElement | null;
   onClose?: () => void;
@@ -124,6 +126,7 @@ function CardLayoutStudioSession({
   blocks,
   fields,
   referenceLists,
+  organizations,
   selectedCardId = null,
   actionPortalTarget = null,
   onClose,
@@ -1068,6 +1071,7 @@ function CardLayoutStudioSession({
           blocks={allBlocks}
           fields={allFields}
           referenceLists={effectiveReferenceLists}
+          organizations={organizations}
           inlineReferenceEditorContext={{
             token,
             registryId,

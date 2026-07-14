@@ -5,6 +5,7 @@ import type {
   CardTemplateLayoutRead,
   FormBlockRead,
   FormFieldRead,
+  OrganizationRead,
   ReferenceListRead,
 } from "@/api/types";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
@@ -46,6 +47,7 @@ export type CardWebLayoutCanvasProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  organizations?: OrganizationRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   responsive?: boolean;
   compactBlockHeight?: boolean;
@@ -88,6 +90,7 @@ function CardWebLayoutCanvasSession({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  organizations,
   inlineReferenceEditorContext,
   responsive = true,
   compactBlockHeight = true,
@@ -214,6 +217,7 @@ function CardWebLayoutCanvasSession({
               fieldOptions={fieldOptions}
               fileRefOptions={fileRefOptions}
               referenceLists={referenceLists}
+              organizations={organizations}
               inlineReferenceEditorContext={inlineReferenceEditorContext}
               compactBlockHeight={compactBlockHeight}
               showGeometryDiagnostics={showGeometryDiagnostics}

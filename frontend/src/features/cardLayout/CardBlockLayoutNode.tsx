@@ -4,6 +4,7 @@ import type {
   CardTemplateFormLayoutSectionRead,
   FormBlockRead,
   FormFieldRead,
+  OrganizationRead,
   ReferenceListRead,
 } from "@/api/types";
 import type { FieldEditorFileRefOption } from "@/features/cards/FieldEditorControl";
@@ -39,6 +40,7 @@ export type CardBlockLayoutNodeProps = {
   fieldOptions?: Readonly<Record<string, FieldEditorOption[]>>;
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
+  organizations?: OrganizationRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
@@ -77,6 +79,7 @@ export function CardBlockLayoutNode({
   fieldOptions,
   fileRefOptions,
   referenceLists,
+  organizations,
   inlineReferenceEditorContext,
   compactBlockHeight = true,
   showGeometryDiagnostics = false,
@@ -262,6 +265,7 @@ export function CardBlockLayoutNode({
                   options={fieldOptions?.[valueKey]}
                   fileRefOptions={fileRefOptions?.[valueKey]}
                   referenceLists={referenceLists}
+                  organizations={organizations}
                   inlineReferenceEditorContext={inlineReferenceEditorContext}
                   showGeometryDiagnostics={showGeometryDiagnostics}
                   testIdPrefix={testIdPrefix}

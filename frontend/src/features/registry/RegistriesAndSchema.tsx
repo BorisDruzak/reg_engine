@@ -364,6 +364,7 @@ export function RegistriesAndSchema({
                 fields={schema?.fields ?? []}
                 templates={schema?.templates ?? []}
                 referenceLists={referenceLists}
+                organizations={organizations}
                 selectedRegistryId={selectedRegistryId}
                 token={token}
               />
@@ -454,6 +455,7 @@ function SchemaVisualEditor({
   fields,
   templates,
   referenceLists,
+  organizations,
   selectedRegistryId,
   token,
 }: {
@@ -461,6 +463,7 @@ function SchemaVisualEditor({
   fields: FormFieldRead[];
   templates: CardTemplateRead[];
   referenceLists: ReferenceListRead[];
+  organizations: OrganizationRead[];
   selectedRegistryId: string;
   token: string;
 }) {
@@ -780,6 +783,7 @@ function SchemaVisualEditor({
                         blocks={blocks}
                         fields={fields}
                         referenceLists={referenceLists}
+                        organizations={organizations}
                         actionPortalTarget={templateActionHost}
                         onClose={closeTemplateEditor}
                         onSchemaChanged={() => invalidateRegistryData(queryClient, token)}
