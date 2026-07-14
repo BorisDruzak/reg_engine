@@ -328,7 +328,7 @@ function UserProfileEditor({
         <label>
           {uiText.userEmail}
           <input
-            type="email"
+            type="text"
             value={values.email}
             onChange={(event) => updateValues({ email: event.currentTarget.value })}
           />
