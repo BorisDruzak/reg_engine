@@ -1436,10 +1436,21 @@ def test_create_draft_card_and_public_link_rolls_back_after_public_link_failure(
         "audits": db_session.scalar(select(func.count(AuditEvent.id))),
     }
 
-    def fail_public_link(*_args: object, **_kwargs: object) -> None:
+    original_create_public_link = PublicLinkService.create_public_link_for_actor
+    created_public_link_ids: list[UUID] = []
+    created_card_ids: list[UUID] = []
+
+    def create_public_link_then_fail(*args: object, **kwargs: object) -> None:
+        token = original_create_public_link(*args, **kwargs)  # type: ignore[arg-type]
+        created_public_link_ids.append(token.public_link.id)
+        created_card_ids.append(token.public_link.card_id)
         raise RuntimeError("forced public-link failure")
 
-    monkeypatch.setattr(PublicLinkService, "create_public_link_for_actor", fail_public_link)
+    monkeypatch.setattr(
+        PublicLinkService,
+        "create_public_link_for_actor",
+        create_public_link_then_fail,
+    )
 
     with pytest.raises(RuntimeError, match="forced public-link failure"):
         CardService(db_session).create_card_draft_with_public_link_for_actor(
@@ -1458,6 +1469,28 @@ def test_create_draft_card_and_public_link_rolls_back_after_public_link_failure(
             ),
         )
 
+    assert len(created_card_ids) == 1
+    assert len(created_public_link_ids) == 1
+    card_id = created_card_ids[0]
+    public_link_id = created_public_link_ids[0]
+    assert db_session.get(Card, card_id) is None
+    assert db_session.get(CardPublicLink, public_link_id) is None
+    assert (
+        db_session.scalar(
+            select(func.count(CardPublicFieldSetting.id)).where(
+                CardPublicFieldSetting.card_id == card_id
+            )
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(
+            select(func.count(AuditEvent.id)).where(
+                AuditEvent.object_id.in_([card_id, public_link_id])
+            )
+        )
+        == 0
+    )
     assert {
         "cards": db_session.scalar(select(func.count(Card.id))),
         "links": db_session.scalar(select(func.count(CardPublicLink.id))),
