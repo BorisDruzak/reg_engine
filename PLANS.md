@@ -7,17 +7,18 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 in-progress checkpoint: focused card and public-link autosave
-  regressions are fixed locally in commits `29d04fee` and `5fd9cd1a`.
-  Organization reference fields now use scoped choice endpoints and a
-  public-link allowlist in commit `3ff9d18d`. The next un-released slice adds
-  migration `0029_public_reference_edit_links`, isolated public
-  reference-list/item mutations, administrator link issuance, and the public
-  `/public/references/:rawToken` workspace. Focused no-database route tests,
-  frontend typecheck, and focused frontend tests pass; the disposable
-  PostgreSQL migration/API test remains pending because `TEST_DATABASE_URL` is
-  not configured locally. No current changes are pushed, deployed, or claimed
-  live-browser verified.
+- 2026-07-14 release checkpoint: commits through `6319519f` are pushed to
+  `main`, deployed, and live. This includes debounced card/public-link text
+  editing (`29d04fee`, `5fd9cd1a`), scoped organization choices and public
+  allowlists (`3ff9d18d`, `6319519f`), and migration
+  `0029_public_reference_edit_links` with public reference-list/item edit
+  links. Migration `0029` passed 24 disposable-PostgreSQL smoke/API tests,
+  then a fresh production backup, preflight, migration, and post-migration
+  schema checks. Backend Ruff and mypy pass; frontend typecheck and production
+  build pass. The existing frontend lint warning about `blockEditor` remains
+  unchanged. Same-origin frontend/API smoke checks and an authenticated browser
+  check pass: the published date editor is enabled and no longer reports a
+  pending autosave state. No card data was changed during the browser check.
 
 - Completed baseline: backend, frontend, attachments, generated documents,
   import/export, reports, MCP phases through Phase 5R, live verification, and
