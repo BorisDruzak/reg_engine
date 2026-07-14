@@ -116,6 +116,81 @@ describe("CardsWorkspace", () => {
     expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {");
     expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {\n  min-height: 42px;");
     expect(globalStyles).toContain(".single-stage-card-creation .admin-mutation-header small {\n  display: block;");
+    expect(globalStyles).toContain(".single-stage-card-creation {\n  width: min(100%, 72rem);");
+    expect(globalStyles).toContain(".single-stage-card-creation-block.is-attention {");
+    expect(globalStyles).toContain(".single-stage-card-creation-field.is-filled {");
+  });
+
+  test("restores scroll-linked template block navigation while creating a card", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.includes("/creation-preview")) {
+          return Response.json({
+            organization_id: organization.id,
+            card_template_id: "template-1",
+            display_name: "Шаблон",
+            blocks: [
+              {
+                block_id: "block-person",
+                code: "person",
+                title: "ФИО",
+                description: "Основные сведения",
+                is_repeatable: false,
+                fields: [
+                  {
+                    field_id: "field-name",
+                    code: "name",
+                    label: "Фамилия",
+                    description: null,
+                    field_type: "text",
+                    required_mode: "required",
+                    options: [],
+                  },
+                ],
+              },
+              {
+                block_id: "block-details",
+                code: "details",
+                title: "Сведения",
+                description: null,
+                is_repeatable: false,
+                fields: [
+                  {
+                    field_id: "field-note",
+                    code: "note",
+                    label: "Примечание",
+                    description: null,
+                    field_type: "text",
+                    required_mode: "optional",
+                    options: [],
+                  },
+                ],
+              },
+            ],
+          });
+        }
+        return Response.json({ items: [] });
+      }),
+    );
+
+    renderWorkspace();
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+
+    expect(await screen.findByText("Базовый блок")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Фамилия")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Содержание карточки" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ФИО: нужно заполнить 1 из 1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Сведения: не заполнено/ })).toBeInTheDocument();
+    expect(document.getElementById("creation-card-block-block-person")).toHaveClass(
+      "single-stage-card-creation-block",
+      "is-attention",
+    );
+    expect(document.getElementById("creation-card-block-block-details")).toHaveClass(
+      "single-stage-card-creation-block",
+      "is-empty",
+    );
   });
 
   test("shows the reference-list label instead of its stored identifier in a card row", async () => {

@@ -5339,6 +5339,62 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   line-height: 1.45;
 }
 
+.single-stage-card-creation {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  gap: 20px;
+  padding: 4px 12px 28px;
+}
+
+.single-stage-card-creation-base {
+  padding: 20px;
+  border-color: #83c7b6;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.single-stage-card-creation-template {
+  display: grid;
+  gap: 16px;
+}
+
+.single-stage-card-creation-block {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  scroll-margin-top: 16px;
+  border-color: #d5dfeb;
+  box-shadow: 0 5px 18px rgba(15, 23, 42, 0.05);
+}
+
+.single-stage-card-creation-block.is-attention {
+  border-color: #e6aa4a;
+  background: #fffdf7;
+}
+
+.single-stage-card-creation-block.is-complete {
+  border-color: #83c7b6;
+  background: #fbfffd;
+}
+
+.single-stage-card-creation-field {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid #d5dfeb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.single-stage-card-creation-field.is-required-missing {
+  border-color: #e6aa4a;
+  background: #fff8eb;
+}
+
+.single-stage-card-creation-field.is-filled {
+  border-color: #b9ddd1;
+  background: #f5fcf8;
+}
+
 .admin-mutation-body input:focus,
 .admin-mutation-body select:focus,
 .admin-mutation-body textarea:focus {
@@ -5424,6 +5480,16 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   .card-block-navigator-list {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
     overflow: visible;
+  }
+
+  .single-stage-card-creation {
+    width: 100%;
+    padding-inline: 0;
+  }
+
+  .single-stage-card-creation-base,
+  .single-stage-card-creation-block {
+    padding: 16px;
   }
 
   .card-base-field-access-row {

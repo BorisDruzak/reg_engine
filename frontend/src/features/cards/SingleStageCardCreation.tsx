@@ -11,6 +11,9 @@ import { DataAlert } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
 
 import { FieldEditorControl } from "./FieldEditorControl";
+import type { CardBlockNavigationItem } from "./CardBlockNavigator";
+import { CardPresentationShell } from "./CardPresentationShell";
+import { buildBlockCompletions } from "./cardCompletion";
 import {
   type FieldEditorState,
   coerceEditorValue,
@@ -57,6 +60,44 @@ export function SingleStageCardCreation({
   const fields = useMemo(
     () => preview?.blocks.flatMap((block) => block.fields) ?? [],
     [preview?.blocks],
+  );
+  const completions = useMemo(() => {
+    const previewBlocks = preview?.blocks ?? [];
+    const fieldsById = new Map(
+      previewBlocks.flatMap((block) => block.fields.map((field) => [field.field_id, field])),
+    );
+    return buildBlockCompletions({
+      blocks: previewBlocks.map((block) => ({ id: block.block_id, title: block.title })),
+      fields: previewBlocks.flatMap((block) =>
+        block.fields.map((field) => ({
+          id: field.field_id,
+          block_id: block.block_id,
+          field_type: field.field_type,
+          required_mode: field.required_mode,
+        })),
+      ),
+      valueForField: (field) => {
+        const previewField = fieldsById.get(field.id);
+        return previewField
+          ? creationValueForCompletion(previewField, state.values[field.id])
+          : null;
+      },
+    });
+  }, [preview?.blocks, state.values]);
+  const navigationItems = useMemo<readonly CardBlockNavigationItem[]>(
+    () =>
+      (preview?.blocks ?? []).map((block) => {
+        const completion = completions.blocks.get(block.block_id)!;
+        return {
+          anchorId: creationBlockAnchorId(block.block_id),
+          label: block.title,
+          state: completion.state,
+          filledCount: completion.filledCount,
+          totalCount: completion.totalCount,
+          requiredMissingCount: completion.requiredMissingCount,
+        };
+      }),
+    [completions.blocks, preview?.blocks],
   );
 
   function resetTemplateValues(next: Pick<CreationState, "organizationId" | "templateId">) {
@@ -176,42 +217,59 @@ export function SingleStageCardCreation({
       {canLoadPreview && !previewQuery.isLoading && preview?.blocks.length === 0 ? (
         <p className="data-empty">В выбранном шаблоне нет доступных полей.</p>
       ) : null}
-      {preview?.blocks.map((block) => (
-        <section key={block.block_id} className="data-panel single-stage-card-creation-block">
-          <header className="admin-mutation-header">
-            <div>
-              <strong>{block.title}</strong>
-              {block.description ? <small>{block.description}</small> : null}
-            </div>
-          </header>
-          <div className="admin-mutation-body">
-            {block.fields.map((field) => {
-              const isFile = field.field_type === "file_ref";
+      {preview?.blocks.length ? (
+        <CardPresentationShell items={navigationItems}>
+          <div className="single-stage-card-creation-template">
+            {preview.blocks.map((block) => {
+              const blockState = completions.blocks.get(block.block_id)?.state ?? "empty";
               return (
-                <label key={field.field_id} className="single-stage-card-creation-field">
-                  <span>
-                    {field.label}
-                    {isRequired(field.required_mode) ? " *" : ""}
-                  </span>
-                  <FieldEditorControl
-                    label={field.label}
-                    fieldType={field.field_type}
-                    hint={
-                      isFile
-                        ? "Файл можно добавить после первого сохранения карточки."
-                        : field.description
-                    }
-                    options={field.options}
-                    value={state.values[field.field_id] ?? initialEditorValue({ field_type: field.field_type, value: null })}
-                    disabled={isSaving || isFile}
-                    onChange={(nextValue) => void saveFirstValue(field, nextValue)}
-                  />
-                </label>
+                <section
+                  key={block.block_id}
+                  id={creationBlockAnchorId(block.block_id)}
+                  className={`data-panel single-stage-card-creation-block is-${blockState}`}
+                >
+                  <header className="admin-mutation-header">
+                    <div>
+                      <strong>{block.title}</strong>
+                      {block.description ? <small>{block.description}</small> : null}
+                    </div>
+                  </header>
+                  <div className="admin-mutation-body">
+                    {block.fields.map((field) => {
+                      const isFile = field.field_type === "file_ref";
+                      const fieldState = completions.fields.get(field.field_id)?.state ?? "empty";
+                      return (
+                        <label
+                          key={field.field_id}
+                          className={`single-stage-card-creation-field is-${fieldState}`}
+                        >
+                          <span>
+                            {field.label}
+                            {isRequired(field.required_mode) ? " *" : ""}
+                          </span>
+                          <FieldEditorControl
+                            label={field.label}
+                            fieldType={field.field_type}
+                            hint={
+                              isFile
+                                ? "Файл можно добавить после первого сохранения карточки."
+                                : field.description
+                            }
+                            options={field.options}
+                            value={state.values[field.field_id] ?? initialEditorValue({ field_type: field.field_type, value: null })}
+                            disabled={isSaving || isFile}
+                            onChange={(nextValue) => void saveFirstValue(field, nextValue)}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
               );
             })}
           </div>
-        </section>
-      ))}
+        </CardPresentationShell>
+      ) : null}
       {fields.length > 0 ? (
         <p className="field-editor-hint">После первого заполненного поля карточка сохранится автоматически.</p>
       ) : null}
@@ -227,4 +285,20 @@ function isEmptyFirstValue(value: unknown) {
   if (value === null || value === undefined || value === "") return true;
   if (Array.isArray(value)) return value.length === 0;
   return false;
+}
+
+function creationValueForCompletion(
+  field: CardCreationPreviewFieldRead,
+  value: FieldEditorState | undefined,
+) {
+  if (value === undefined) return null;
+  try {
+    return coerceEditorValue(field.field_type, value);
+  } catch {
+    return null;
+  }
+}
+
+function creationBlockAnchorId(blockId: string) {
+  return `creation-card-block-${blockId}`;
 }
