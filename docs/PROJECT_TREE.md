@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-13 21:56:58 +05:00
+- Generated: 2026-07-14 07:43:15 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -25,6 +25,7 @@
 - `.github/workflows/ci.yml`
 - `.gitignore`
 - `.pre-commit-config.yaml`
+- `.superpowers/sdd/2026-07-14-embedded-actions-report.md`
 - `AGENTS.md`
 - `backend/alembic.ini`
 - `backend/app/__init__.py`
@@ -239,6 +240,7 @@
 - `docs/superpowers/plans/2026-07-13-organization-cards-and-unit-picker.md`
 - `docs/superpowers/plans/2026-07-13-organization-unit-hierarchy.md`
 - `docs/superpowers/plans/2026-07-13-searchable-choice-fields-and-unit-tree.md`
+- `docs/superpowers/plans/2026-07-14-embedded-unit-actions-and-inline-edit.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -263,6 +265,7 @@
 - `docs/superpowers/specs/2026-07-13-organization-cards-and-unit-picker-design.md`
 - `docs/superpowers/specs/2026-07-13-organization-unit-hierarchy-design.md`
 - `docs/superpowers/specs/2026-07-13-searchable-choice-fields-and-unit-tree-design.md`
+- `docs/superpowers/specs/2026-07-14-embedded-unit-actions-and-inline-edit-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`

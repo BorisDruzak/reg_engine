@@ -5069,3 +5069,12 @@ Status: implementation complete locally; release verification in progress.
   is never stored as a controlled value.
 - Organization unit cards expose standalone department creation; management
   rows expand directly, and unit technical codes remain hidden.
+
+#### Embedded organization-unit actions and inline editing
+
+Status: implementation complete locally; release verification in progress.
+
+- Organization-card actions now include child organization, management, and
+  department creation. The redundant unit header and close control are removed.
+- Management and department names edit inline with Save, Cancel, and archive.
+  Unit-form requests remain monotonic across failed create attempts.
