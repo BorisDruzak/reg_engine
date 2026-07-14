@@ -7,15 +7,23 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 login and XLSX workflow refinement is ready for release. User
-  logins no longer require an e-mail format: non-empty values without
+- 2026-07-14 login and XLSX workflow refinement is released at `0e09d30b`.
+  User logins no longer require an e-mail format: non-empty values without
   whitespace are accepted, including special characters, while the compatible
   API/database field remains unchanged. When XLSX exchange has exactly one
   available card template, it is selected automatically with all supported
   columns selected. The columns use the existing searchable multiple-choice
   control; import and export are compact separate tabs that share these
-  parameters. Focused backend and frontend tests, frontend TypeScript, and
-  scoped ESLint pass. Production deployment and browser proof are pending.
+  parameters. Focused backend tests pass (7) and database-backed access tests
+  are skipped locally without `TEST_DATABASE_URL`; focused frontend tests (7),
+  TypeScript, scoped ESLint and Prettier, and the Vite production build pass.
+  The local aggregate quality gate still stops at the pre-existing format drift
+  in `backend/tests/test_api_phase_1g.py` and
+  `backend/tests/test_schema_constraints.py`. The server checkout, service,
+  HTTPS same-origin frontend/API smoke checks, and deployed `index-C2nD7Jzr.js`
+  bundle pass. Browser automation could not claim the pre-opened HTTPS tab
+  because it was stale in the browser bridge, so a fresh live DOM proof remains
+  pending a later browser session.
 
 - 2026-07-14 organization and link workflow refinement is released at
   `a6ab810f`. Visible user identity labels now use
