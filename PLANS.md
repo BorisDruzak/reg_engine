@@ -7,6 +7,28 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 card-creation block navigation is released at `e6772731`.
+  One-stage creation retains the separate static `Базовый блок` with
+  organization, template, and optional name. Preview blocks again render in
+  the established two-column card presentation: the left `Блоки карточки`
+  navigator is sticky while the right column scrolls through distinct template
+  blocks. Navigator clicks move to the matching block and scrolling marks the
+  current item. Before the first save, required-empty blocks and fields use the
+  amber state, optional empty fields remain neutral, and entered values use the
+  green state. Creation lifecycle, API contracts, dynamic preview loading, and
+  file-field restrictions are unchanged. Focused frontend tests pass (9), as
+  do TypeScript and the production build; ESLint has no errors and retains the
+  existing unrelated `FilledCardLayout.tsx` hook-dependency warning. The broad
+  local gate stops at pre-existing Ruff format drift in
+  `backend/tests/test_api_phase_1g.py` and
+  `backend/tests/test_schema_constraints.py`; this frontend-only change does
+  not touch those files. The server checkout is synchronized at `e6772731`,
+  service and same-origin frontend/API smoke checks pass with
+  `index-CDVvIIfS.js` and `index-BVtOMcoD.css`. Live HTTPS browser verification
+  confirmed separated panels, visible sticky navigation during scrolling, a
+  working transition to `Иное`, and no console warnings or errors. No card was
+  created during visual QA.
+
 - 2026-07-14 the single-stage card-creation CSS regression is fixed and
   released at `94724280`. The new form now reuses the established
   administrative form body, label, control, and action styles instead of
