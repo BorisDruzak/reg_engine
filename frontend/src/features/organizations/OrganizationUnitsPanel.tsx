@@ -377,7 +377,7 @@ function OrganizationUnitTreeNode({
   const [isExpanded, setIsExpanded] = useState(false);
   const isEditing = editingUnit?.id === unit.id;
   const isManagement = unit.type === "management";
-  const canToggleChildren = isManagement && children.length > 0;
+  const canToggleChildren = isManagement;
 
   function toggleChildren() {
     if (canToggleChildren) {
@@ -463,7 +463,7 @@ function OrganizationUnitTreeNode({
           <span className="organization-unit-status">{activityLabel(unit.is_active)}</span>
         )}
       </div>
-      {isManagement && isExpanded && children.length > 0 && (
+      {isManagement && isExpanded && (
         <>
           <ul role="group">
             {children.map((child) => (

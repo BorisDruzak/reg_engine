@@ -59,6 +59,16 @@ const administrationUnits: OrgUnitRead[] = [
   },
 ];
 
+const emptyManagement: OrgUnitRead = {
+  id: "unit-empty-management",
+  organization_id: administration.id,
+  parent_id: null,
+  code: "empty_management",
+  name: "Управление без отделов",
+  type: "management",
+  is_active: true,
+};
+
 afterEach(() => vi.unstubAllGlobals());
 
 test("places all add actions in the organization card without a unit-panel header or close button", async () => {
@@ -243,6 +253,25 @@ test("creates a department from an expanded management with that management as i
   });
 });
 
+test("expands an empty management to offer its first child-department action", async () => {
+  const user = userEvent.setup();
+  stubOrgUnitApi({ units: [...administrationUnits, emptyManagement] });
+  renderOrganizations();
+
+  await user.click(screen.getByRole("treeitem", { name: administration.name }));
+  const management = await screen.findByRole("treeitem", { name: /Управление без отделов/ });
+  expect(management).toHaveAttribute("aria-expanded", "false");
+
+  await user.click(management);
+
+  expect(management).toHaveAttribute("aria-expanded", "true");
+  expect(
+    within(management.closest("li") as HTMLLIElement).getByRole("button", {
+      name: "Добавить отдел",
+    }),
+  ).toBeVisible();
+});
+
 test("opens unit archive confirmation only from inline edit mode without collapsing management", async () => {
   const user = userEvent.setup();
   stubOrgUnitApi();
@@ -307,13 +336,14 @@ function renderOrganizations() {
 function stubOrgUnitApi({
   createStatus = 200,
   updateStatus = 200,
-}: { createStatus?: number; updateStatus?: number } = {}) {
+  units = administrationUnits,
+}: { createStatus?: number; updateStatus?: number; units?: OrgUnitRead[] } = {}) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const organizationMatch = url.match(/\/organizations\/([^/]+)\/org-units$/);
     if (organizationMatch && init?.method !== "POST") {
       return Response.json({
-        items: organizationMatch[1] === administration.id ? administrationUnits : [],
+        items: organizationMatch[1] === administration.id ? units : [],
       });
     }
     if (organizationMatch && init?.method === "POST") {

@@ -20,3 +20,9 @@
 ## Notes
 
 - No deployment, migration, remote operation, or production-data action was performed.
+
+## Empty-management follow-up
+
+- Management nodes are now expandable even when they have no departments, so the expanded group exposes `Добавить отдел` for the first child.
+- RED: an empty management had no `aria-expanded` state and could not expose the contextual action.
+- GREEN: the focused suite reports 16 passed, including the empty-management regression; TypeScript typecheck passed.
