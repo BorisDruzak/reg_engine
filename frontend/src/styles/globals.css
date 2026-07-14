@@ -2491,6 +2491,38 @@ tr:last-child td {
   min-width: 0;
 }
 
+.field-editor-autosize-text,
+.filled-card-block-field-control input:not([type="checkbox"]),
+.filled-card-block-field-control select,
+.public-inline-field-control input:not([type="checkbox"]),
+.public-inline-field-control select,
+.public-inline-field-control textarea {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  color: #101828;
+  background: #ffffff;
+}
+
+.field-editor-autosize-text {
+  display: block;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+}
+
+.field-editor-autosize-text:focus-visible,
+.filled-card-block-field-control input:focus-visible,
+.filled-card-block-field-control select:focus-visible,
+.public-inline-field-control input:focus-visible,
+.public-inline-field-control select:focus-visible,
+.public-inline-field-control textarea:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.16);
+  border-color: #0f766e;
+}
+
 .inline-reference-editor-header {
   display: flex;
   flex-wrap: wrap;
@@ -2540,8 +2572,8 @@ tr:last-child td {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 38px;
-  padding: 7px 10px;
+  min-height: 42px;
+  padding: 10px 12px;
   border: 1px solid #cbd5df;
   border-radius: 8px;
   background: #ffffff;

@@ -16,6 +16,7 @@ export function SearchableChoicePicker({
   value,
   disabled = false,
   hierarchy = false,
+  openOnMount = false,
   onChange,
 }: {
   label: string;
@@ -25,9 +26,10 @@ export function SearchableChoicePicker({
   value: string | string[];
   disabled?: boolean;
   hierarchy?: boolean;
+  openOnMount?: boolean;
   onChange: (value: string | string[]) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => openOnMount && !disabled);
   const [search, setSearch] = useState("");
   const listboxId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);

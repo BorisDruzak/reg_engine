@@ -28,11 +28,44 @@ describe("FieldEditorControl hints", () => {
     expect(screen.getByLabelText("Поле text")).toHaveAttribute("placeholder", "Заполните значение");
   });
 
+  test("renders ordinary text in a one-row auto-sizing textarea", () => {
+    renderControl("text");
+
+    const control = screen.getByLabelText("Поле text");
+    expect(control.tagName).toBe("TEXTAREA");
+    expect(control).toHaveAttribute("rows", "1");
+    expect(control).toHaveClass("field-editor-autosize-text");
+  });
+
   test("uses the hint as the empty select prompt", () => {
     renderControl("select", "Выберите вариант");
     expect(screen.getByRole("combobox", { name: "Поле select" })).toHaveTextContent(
       "Выберите вариант",
     );
+  });
+
+  test.each([
+    ["select", "single"],
+    ["multi_select", "multiple"],
+    ["organization_ref", "single"],
+    ["org_unit_ref", "single"],
+  ] as const)("opens %s choices immediately without saving an empty value", (fieldType) => {
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType={fieldType}
+        label={`Поле ${fieldType}`}
+        hint="Выберите значение"
+        options={options}
+        value={fieldType === "multi_select" ? [] : ""}
+        autoOpenChoice
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
+    expect(screen.getByTestId("searchable-choice-options")).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   test("filters server-supplied single choices and never exposes a free-text value", async () => {

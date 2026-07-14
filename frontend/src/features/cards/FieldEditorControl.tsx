@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { uiText } from "@/app/uiText";
 
@@ -14,6 +14,7 @@ export function FieldEditorControl({
   fileRefOptions = [],
   value,
   disabled = false,
+  autoOpenChoice = false,
   onBlur,
   onChange,
 }: {
@@ -24,6 +25,7 @@ export function FieldEditorControl({
   fileRefOptions?: FieldEditorFileRefOption[];
   value: FieldEditorState;
   disabled?: boolean;
+  autoOpenChoice?: boolean;
   onBlur?: () => void;
   onChange: (value: FieldEditorState) => void;
 }) {
@@ -62,6 +64,7 @@ export function FieldEditorControl({
           hint={hint}
           options={options}
           mode="multiple"
+          openOnMount={autoOpenChoice}
           value={Array.isArray(value) ? value : []}
           disabled={disabled}
           onChange={(nextValue) => onChange(Array.isArray(nextValue) ? nextValue : [])}
@@ -78,6 +81,7 @@ export function FieldEditorControl({
         options={options}
         value={typeof value === "string" ? value : ""}
         mode="single"
+        openOnMount={autoOpenChoice}
         hierarchy
         disabled={disabled}
         onChange={(nextValue) => onChange(typeof nextValue === "string" ? nextValue : "")}
@@ -92,6 +96,7 @@ export function FieldEditorControl({
         hint={hint}
         options={options}
         mode="single"
+        openOnMount={autoOpenChoice}
         value={typeof value === "string" ? value : ""}
         disabled={disabled}
         onChange={(nextValue) => onChange(typeof nextValue === "string" ? nextValue : "")}
@@ -140,21 +145,69 @@ export function FieldEditorControl({
     );
   }
 
+  if (fieldType === "text") {
+    return (
+      <AutoSizingTextControl
+        label={label}
+        hint={hint}
+        value={typeof value === "string" ? value : ""}
+        disabled={disabled}
+        onBlur={onBlur}
+        onChange={(nextValue) => onChange(nextValue)}
+      />
+    );
+  }
+
   const input = (
     <input
       aria-label={label}
       disabled={disabled}
       onBlur={onBlur}
       onChange={(event) => onChange(event.currentTarget.value)}
-      placeholder={fieldType === "text" || fieldType === "number" ? hint || undefined : undefined}
+      placeholder={fieldType === "number" ? hint || uiText.empty : undefined}
       type={inputTypeForField(fieldType)}
       value={typeof value === "string" ? value : ""}
     />
   );
-  return fieldType === "text" || fieldType === "number" ? (
-    input
-  ) : (
-    <ControlWithHint hint={hint}>{input}</ControlWithHint>
+  return fieldType === "number" ? input : <ControlWithHint hint={hint}>{input}</ControlWithHint>;
+}
+
+function AutoSizingTextControl({
+  label,
+  hint,
+  value,
+  disabled,
+  onBlur,
+  onChange,
+}: {
+  label: string;
+  hint?: string | null;
+  value: string;
+  disabled: boolean;
+  onBlur?: () => void;
+  onChange: (value: string) => void;
+}) {
+  const controlRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const control = controlRef.current;
+    if (!control) return;
+    control.style.height = "auto";
+    control.style.height = `${control.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={controlRef}
+      aria-label={label}
+      className="field-editor-autosize-text"
+      disabled={disabled}
+      onBlur={onBlur}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      placeholder={hint || uiText.empty}
+      rows={1}
+      value={value}
+    />
   );
 }
 
