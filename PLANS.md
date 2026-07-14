@@ -7,6 +7,19 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 release candidate through `4c1a90c3` is ready for full local
+  verification. It replaces empty-card fallback text with field descriptions,
+  keeps text controls focused while they grow, opens controlled choice pickers
+  on the activating click without writing an empty value, and hides the visual
+  attachment panels only from administrator and public card-fill pages. The
+  tabular XLSX workflow now supports schema fields `organization_ref` and
+  `org_unit_ref` with readable, validated labels; imported units are checked
+  against the organization resolved for each row. No migration is required.
+  Focused frontend tests (54), XLSX service tests (9), scoped Ruff, frontend
+  TypeScript, and ESLint pass; ESLint retains the existing non-blocking
+  `FilledCardLayout.tsx` hook-dependency warning. Full checks, deploy, and
+  browser acceptance remain pending.
+
 - 2026-07-14 release checkpoint: commits through `6319519f` are pushed to
   `main`, deployed, and live. This includes debounced card/public-link text
   editing (`29d04fee`, `5fd9cd1a`), scoped organization choices and public
