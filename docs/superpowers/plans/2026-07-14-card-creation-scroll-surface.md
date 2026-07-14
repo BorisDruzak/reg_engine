@@ -4,7 +4,7 @@
 
 **Goal:** Make the card-creation workspace show the application background while keeping desktop block navigation visible and scroll-linked.
 
-**Architecture:** A CSS selector scoped to the outer panel that directly contains `single-stage-card-creation` removes only that panel's white surface and scroll clipping. Existing inner card panels, `CardPresentationShell`, and `CardBlockNavigator` are reused unchanged, so the first-save and template-preview flows retain their current behavior. The existing responsive breakpoint continues to make navigation static on mobile.
+**Architecture:** A CSS selector scoped to the outer panel that directly contains `single-stage-card-creation` removes only that panel's white surface and scroll clipping. Existing inner card panels and `CardPresentationShell` are reused unchanged. `CardBlockNavigator` retains intersection state and selects the entry nearest the reading line, so callback order cannot leave a previous block highlighted. The existing responsive breakpoint continues to make navigation static on mobile.
 
 **Tech Stack:** React 18, TypeScript, Vitest, Testing Library, CSS, Vite.
 
@@ -22,11 +22,13 @@
 **Files:**
 - Modify: `frontend/src/features/cards/CardsWorkspace.test.tsx:115-122`
 - Modify: `frontend/src/styles/globals.css:492-498`
+- Modify: `frontend/src/features/cards/CardBlockNavigator.tsx:48-72`
+- Modify: `frontend/src/features/cards/CardBlockNavigator.test.tsx:26-81`
 - Modify: `PLANS.md`
 
 **Interfaces:**
 - Consumes: the outer `<section className="data-panel">` rendered by `Panel` around `SingleStageCardCreation` and the child selector `.single-stage-card-creation`.
-- Produces: an outer creation surface with `background: transparent`, no visible border, and `overflow: visible`; existing `.card-block-navigator { position: sticky; }` can use page scrolling on desktop.
+- Produces: an outer creation surface with `background: transparent`, no visible border, and `overflow: visible`; existing `.card-block-navigator { position: sticky; }` can use page scrolling on desktop, while its current item follows the block nearest the reading line.
 
 - [ ] **Step 1: Write the failing regression assertion**
 
@@ -61,7 +63,7 @@ Immediately after the general `.data-panel` overflow rules in `frontend/src/styl
 }
 ```
 
-Do not modify `.card-block-navigator` or the mobile media query: their existing `sticky` desktop and `static` mobile behavior is retained. Do not modify `SingleStageCardCreation.tsx` or backend code.
+Keep the mobile media query unchanged: its existing `sticky` desktop and `static` mobile behavior is retained. In `CardBlockNavigator.tsx`, retain the latest observation for each anchor and choose the intersecting entry whose `boundingClientRect.top` is nearest `window.innerHeight * 0.15`. Add a focused test where two neighboring entries intersect together and the later, nearer entry receives `aria-current="location"`. Do not modify `SingleStageCardCreation.tsx` or backend code.
 
 - [ ] **Step 4: Run focused and frontend checks**
 

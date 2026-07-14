@@ -50,11 +50,24 @@ export function CardBlockNavigator({ items }: CardBlockNavigatorProps) {
     if (typeof IntersectionObserver === "undefined") {
       return;
     }
+    const entriesByAnchorId = new Map<string, IntersectionObserverEntry>();
     const observer = new IntersectionObserver(
       (entries) => {
-        const visibleEntry = entries.find((entry) => entry.isIntersecting);
-        if (visibleEntry?.target.id) {
-          setCurrentAnchorId(visibleEntry.target.id);
+        entries.forEach((entry) => {
+          if (entry.target.id) {
+            entriesByAnchorId.set(entry.target.id, entry);
+          }
+        });
+        const readingLine = window.innerHeight * 0.15;
+        const currentEntry = [...entriesByAnchorId.values()]
+          .filter((entry) => entry.isIntersecting && itemIds.includes(entry.target.id))
+          .sort(
+            (left, right) =>
+              Math.abs(left.boundingClientRect.top - readingLine) -
+              Math.abs(right.boundingClientRect.top - readingLine),
+          )[0];
+        if (currentEntry?.target.id) {
+          setCurrentAnchorId(currentEntry.target.id);
         }
       },
       { rootMargin: "-15% 0px -65%" },

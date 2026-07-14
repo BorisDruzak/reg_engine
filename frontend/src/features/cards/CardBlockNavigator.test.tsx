@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -24,7 +24,10 @@ const items = [
 ];
 
 describe("CardBlockNavigator", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   test("moves the document to the selected block and exposes text status", async () => {
     const user = userEvent.setup();
@@ -39,5 +42,39 @@ describe("CardBlockNavigator", () => {
     expect(screen.getByText("Нужно заполнить")).toBeInTheDocument();
     expect(screen.getByText("Заполнено")).toBeInTheDocument();
     expect(screen.getByText("3 из 3")).toBeInTheDocument();
+  });
+
+  test("marks the block nearest the reading line when neighboring blocks intersect together", () => {
+    let observerCallback: IntersectionObserverCallback | undefined;
+    class IntersectionObserverMock {
+      constructor(callback: IntersectionObserverCallback) {
+        observerCallback = callback;
+      }
+
+      disconnect = vi.fn();
+      observe = vi.fn();
+    }
+    vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
+    const firstBlock = document.createElement("section");
+    firstBlock.id = items[0].anchorId;
+    const secondBlock = document.createElement("section");
+    secondBlock.id = items[1].anchorId;
+    document.body.append(firstBlock, secondBlock);
+
+    render(<CardBlockNavigator items={items} />);
+
+    act(() => {
+      observerCallback?.([
+        { boundingClientRect: { top: -180 }, isIntersecting: true, target: firstBlock } as unknown as IntersectionObserverEntry,
+        { boundingClientRect: { top: 110 }, isIntersecting: true, target: secondBlock } as unknown as IntersectionObserverEntry,
+      ], {} as IntersectionObserver);
+    });
+
+    expect(screen.getByRole("button", { name: "Контакты: заполнено 3 из 3" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    firstBlock.remove();
+    secondBlock.remove();
   });
 });

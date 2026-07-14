@@ -12,11 +12,12 @@ not a hardcoded employee registry.
   `single-stage-card-creation` is transparent and uses `overflow: visible`;
   the application background therefore remains visible while the independent
   base/template cards retain their existing surfaces. Removing the outer
-  clipping lets the established desktop `CardBlockNavigator` remain sticky and
-  mark the current block during page scrolling. The existing `900px` rule
+  clipping lets the desktop `CardBlockNavigator` remain sticky. Its observer
+  now retains concurrently intersected entries and marks the block nearest the
+  reading line instead of relying on callback order. The existing `900px` rule
   keeps navigation as a regular list above the fields on narrow screens. No
   API, card lifecycle, access, or template-preview logic changed. The focused
-  frontend suite passes (9), TypeScript and the production build pass, and
+  frontend suites pass (11), TypeScript and the production build pass, and
   ESLint has no errors with the existing unrelated `FilledCardLayout.tsx`
   hook-dependency warning. HTTPS desktop/mobile Browser proof and deployment
   remain pending.
