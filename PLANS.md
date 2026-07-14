@@ -5102,7 +5102,7 @@ not part of this isolated frontend slice.
 
 #### Normalized card-template layout
 
-Status: implementation complete locally; release verification and Browser proof in progress.
+Status: complete, pushed to `main`, deployed, and Browser verified without creating production data.
 
 - Web template blocks are normalized in the editor draft to a sequential
   full-width list (`column=1`, `column_span=12`, one row per block). Opening a
@@ -5124,3 +5124,15 @@ Status: implementation complete locally; release verification and Browser proof 
   TypeScript passes, ESLint has no errors (one pre-existing
   `FilledCardLayout.tsx` hook-dependency warning), and the Vite production
   build passes with the pre-existing main-chunk advisory.
+- Release commits through `26ee1581` are pushed to `main`. The server checkout
+  fast-forwarded to that commit and the server checks confirmed PostgreSQL,
+  attachment storage, API health, and the active service. The frontend build
+  was uploaded and the service restart completed; its first immediate smoke
+  probe raced the service startup, while the subsequent status/log check
+  confirmed `active (running)`, port `8000`, root-page response, and
+  `/api/v1/health` returning `{"status":"ok","service":"reg_engine"}`.
+- Browser proof after reload showed the deployed Russian `Реестры → Схема
+  карточки` workspace with `Нет данных`, as required by the clean production
+  state. No template or card was created for visual QA; the browser console had
+  zero errors and warnings. Interactive template behavior is covered by the
+  focused component suites.
