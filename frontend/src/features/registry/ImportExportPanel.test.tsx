@@ -81,6 +81,30 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+test("selects the only template and all supported XLSX columns by default", async () => {
+  renderPanel();
+
+  expect(await screen.findByLabelText("Шаблон карточки")).toHaveValue("template-1");
+  expect(screen.getByRole("button", { name: "Колонки карточки" })).toHaveTextContent(
+    "Основные сведения: Фамилия",
+  );
+});
+
+test("filters and changes XLSX columns through the searchable multiple-choice control", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+
+  await user.click(await screen.findByRole("button", { name: "Колонки карточки" }));
+  await user.type(screen.getByRole("searchbox", { name: "Поиск варианта" }), "Фамилия");
+
+  const fieldChoice = screen.getByLabelText("Основные сведения: Фамилия");
+  expect(fieldChoice).toBeChecked();
+
+  await user.click(fieldChoice);
+
+  expect(fieldChoice).not.toBeChecked();
+});
+
 test("configures the wide XLSX format without technical controls", async () => {
   const user = userEvent.setup();
   renderPanel();
@@ -90,48 +114,42 @@ test("configures the wide XLSX format without technical controls", async () => {
   expect(screen.queryByText("Скачать JSON")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Скачать список" })).toBeDisabled();
 
-  await user.selectOptions(screen.getByLabelText("Шаблон карточки"), "template-1");
   await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
-  await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
 
   expect(screen.getByRole("button", { name: "Скачать список" })).toBeEnabled();
+  await user.click(screen.getByRole("tab", { name: "Импорт карточек" }));
   expect(screen.getByRole("button", { name: "Скачать шаблон импорта" })).toBeEnabled();
   expect(screen.getByText(/Вложение/)).toBeInTheDocument();
 });
 
-test("separates export and import into distinct operations", async () => {
+test("shows export and import in compact separate tabs", async () => {
+  const user = userEvent.setup();
   renderPanel();
 
-  const exportHeading = await screen.findByRole("heading", { name: "Экспорт карточек" });
-  const importHeading = screen.getByRole("heading", { name: "Импорт карточек" });
-  const exportSection = exportHeading.closest("section");
-  const importSection = importHeading.closest("section");
+  expect(await screen.findByRole("button", { name: "Скачать список" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Импортировать" })).not.toBeInTheDocument();
 
-  expect(exportSection).not.toBeNull();
-  expect(importSection).not.toBeNull();
-  expect(exportSection).toContainElement(screen.getByRole("button", { name: "Скачать список" }));
-  expect(exportSection).not.toContainElement(screen.getByRole("button", { name: "Импортировать" }));
-  expect(importSection).toContainElement(
-    screen.getByRole("button", { name: "Скачать шаблон импорта" }),
-  );
-  expect(importSection).toContainElement(screen.getByRole("button", { name: "Проверить импорт" }));
+  await user.click(screen.getByRole("tab", { name: "Импорт карточек" }));
+
+  expect(screen.queryByRole("button", { name: "Скачать список" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Скачать шаблон импорта" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Проверить импорт" })).toBeInTheDocument();
 });
 
 test("uses the organization picker and requires an import target for several organizations", async () => {
   const user = userEvent.setup();
   renderPanel();
 
-  const templateSelect = await screen.findByLabelText("Шаблон карточки");
-  await user.selectOptions(templateSelect, "template-1");
+  await user.click(await screen.findByRole("tab", { name: "Импорт карточек" }));
+  await screen.findByLabelText("Шаблон карточки");
   await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
   await user.click(screen.getByLabelText("Управление (office)"));
-  await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
 
   expect(screen.queryByLabelText("Скрывать колонку «Организация»")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Организация для импорта")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Скачать список" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "Скачать список" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Скачать шаблон импорта" })).toBeDisabled();
 
   await user.selectOptions(screen.getByLabelText("Организация для импорта"), "organization-2");
@@ -146,12 +164,10 @@ test("renders a template-download error inside the import operation", async () =
   );
   renderPanel();
 
-  await screen.findByRole("heading", { name: "Импорт карточек" });
-  const templateSelect = await screen.findByLabelText("Шаблон карточки");
-  await user.selectOptions(templateSelect, "template-1");
+  await user.click(await screen.findByRole("tab", { name: "Импорт карточек" }));
+  await screen.findByLabelText("Шаблон карточки");
   await user.click(screen.getByRole("button", { name: "Организации" }));
   await user.click(screen.getByLabelText("Администрация (admin)"));
-  await user.click(screen.getByLabelText("Основные сведения: Фамилия"));
   await user.click(screen.getByRole("button", { name: "Скачать шаблон импорта" }));
 
   const importSection = screen.getByRole("heading", { name: "Импорт карточек" }).closest("section");
@@ -167,6 +183,7 @@ test("previews the selected XLSX file before allowing import", async () => {
   const user = userEvent.setup();
   renderPanel();
   await screen.findByRole("heading", { name: "Табличный XLSX" });
+  await user.click(screen.getByRole("tab", { name: "Импорт карточек" }));
   const file = new File(["xlsx"], "cards.xlsx", {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });

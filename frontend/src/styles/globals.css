@@ -4711,9 +4711,24 @@ button.searchable-choice-picker-option:hover:not(:disabled),
 }
 
 .xlsx-operation-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(240px, 1fr));
-  gap: 12px;
+  display: block;
+}
+
+.xlsx-operation-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 0 2px;
+  border-bottom: 1px solid #d9dee7;
+}
+
+.xlsx-operation-tabs .workspace-tab {
+  margin-bottom: -1px;
+  border-radius: 8px 8px 0 0;
+}
+
+.xlsx-operation {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .template-form {

@@ -7,6 +7,16 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 login and XLSX workflow refinement is ready for release. User
+  logins no longer require an e-mail format: non-empty values without
+  whitespace are accepted, including special characters, while the compatible
+  API/database field remains unchanged. When XLSX exchange has exactly one
+  available card template, it is selected automatically with all supported
+  columns selected. The columns use the existing searchable multiple-choice
+  control; import and export are compact separate tabs that share these
+  parameters. Focused backend and frontend tests, frontend TypeScript, and
+  scoped ESLint pass. Production deployment and browser proof are pending.
+
 - 2026-07-14 organization and link workflow refinement is released at
   `a6ab810f`. Visible user identity labels now use
   `Логин`, while the compatible API/database key and existing logins with

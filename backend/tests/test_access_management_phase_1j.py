@@ -245,6 +245,15 @@ def test_system_admin_user_role_permission_and_grant_workflow(
     assert "password_hash" not in created_payload
     assert _auth_headers(api_client, "phase1j-created@example.test", "created-pass")
 
+    patched_login = api_client.patch(
+        f"/api/v1/users/{created_payload['id']}",
+        json={"email": "phase1j_created-admin"},
+        headers=headers,
+    )
+    assert patched_login.status_code == 200, patched_login.text
+    assert patched_login.json()["email"] == "phase1j_created-admin"
+    assert _auth_headers(api_client, "phase1j_created-admin", "created-pass")
+
     patched_user = api_client.patch(
         f"/api/v1/users/{created_payload['id']}",
         json={"display_name": "Phase 1J Updated", "status": "disabled"},
