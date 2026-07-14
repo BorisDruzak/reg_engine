@@ -7,16 +7,16 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 global branding refresh is ready for release. The supplied logo
+- 2026-07-14 global branding refresh is released at `e8914940`. The supplied logo
   is used consistently on the login, administrator, and public-link screens.
   The supplied background is now applied to every screen as a fixed,
   non-repeating, viewport-covering layer with a light overlay; workspace,
   public, and login surfaces remain translucent enough to preserve contrast.
   Focused asset tests (2), TypeScript, scoped ESLint and Prettier, and the
   Vite production build pass. No API, database, or migration change is
-  required. Deployment and live smoke checks are blocked while
-  `192.168.100.12` is unreachable from the deployment workstation on both
-  SSH/22 and HTTPS/443; the verified commits are already pushed to `main`.
+  required. The server checkout is synchronized, `reg-engine.service` is
+  active, and same-origin frontend/API smoke checks pass with
+  `index-Hul0ykhm.js` and `index-DJ2qRC8C.css`.
 
 - 2026-07-14 login and XLSX workflow refinement is released at `0e09d30b`.
   User logins no longer require an e-mail format: non-empty values without
