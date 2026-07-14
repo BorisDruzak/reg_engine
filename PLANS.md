@@ -7,6 +7,15 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-14 the single-stage card-creation CSS regression is fixed and
+  released at `94724280`. The new form now reuses the established
+  administrative form body, label, control, and action styles instead of
+  rendering native browser defaults. Dynamic text inputs remain one line
+  initially and grow only as content requires. A regression test verifies both
+  the styling wrapper and compact field override; focused frontend tests pass
+  (8), as do TypeScript and the production build. The HTTPS browser check
+  confirms the restored layout and has no console errors.
+
 - 2026-07-14 single-stage internal card creation is released at `a74076bb`.
   The create-card workspace keeps organization, template,
   and optional card name in a static base block; a selected template loads its
