@@ -7,8 +7,8 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 organization and link workflow refinement is implemented at
-  `a6ab810f` and pending release. Visible user identity labels now use
+- 2026-07-14 organization and link workflow refinement is released at
+  `a6ab810f`. Visible user identity labels now use
   `Логин`, while the compatible API/database key and existing logins with
   special characters remain unchanged. XLSX organization selection uses the
   existing searchable multi-select control and no longer exposes the
@@ -16,7 +16,8 @@ not a hardcoded employee registry.
   organization when several are selected. The user access organization tree is
   disclosed in an inline dropdown. Card-link creation and the link list now
   share `Ссылки на заполнение`. Focused frontend tests (9), TypeScript, and
-  the production build pass; browser deployment verification remains pending.
+  the production build pass. The server checkout and frontend bundle are
+  deployed; service and same-origin frontend/API smoke checks pass.
 
 - 2026-07-14 reference filling links are released at `8489037e`, moved from `Схема карточки` to
   `Расширенное → Справочники`, alongside reference-list administration. The
