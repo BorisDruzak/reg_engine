@@ -7,18 +7,27 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 release candidate through `4c1a90c3` is ready for full local
-  verification. It replaces empty-card fallback text with field descriptions,
-  keeps text controls focused while they grow, opens controlled choice pickers
-  on the activating click without writing an empty value, and hides the visual
-  attachment panels only from administrator and public card-fill pages. The
-  tabular XLSX workflow now supports schema fields `organization_ref` and
-  `org_unit_ref` with readable, validated labels; imported units are checked
-  against the organization resolved for each row. No migration is required.
-  Focused frontend tests (54), XLSX service tests (9), scoped Ruff, frontend
-  TypeScript, and ESLint pass; ESLint retains the existing non-blocking
-  `FilledCardLayout.tsx` hook-dependency warning. Full checks, deploy, and
-  browser acceptance remain pending.
+- 2026-07-14 card-entry and XLSX reference-field checkpoint is pushed and
+  deployed at `0f58d957`; no migration was required. It replaces empty-card
+  fallback text with configured field descriptions, keeps text controls focused
+  while they grow, opens controlled choice pickers on the activating click
+  without writing a value, and hides visual attachment panels only from
+  administrator and public card-fill pages. Tabular XLSX now supports schema
+  fields `organization_ref` and `org_unit_ref` with readable, validated labels;
+  imported units are checked against the organization resolved for each row.
+  Focused frontend tests pass (54) and XLSX service tests pass (9); scoped Ruff,
+  mypy (88 source files), frontend TypeScript, ESLint, and the Vite production
+  build pass. ESLint retains the existing non-blocking `FilledCardLayout.tsx`
+  hook-dependency warning and Vite retains its chunk-size advisory. The full
+  backend suite has two older exact-metadata failures for existing link tables;
+  full frontend has older broad `App.test.tsx`/navigation expectations; and the
+  global format gate reports the unrelated `tests/test_schema_constraints.py`.
+  Server checkout, PostgreSQL, service health, and same-origin frontend/API
+  smoke checks pass. Browser proof after reload loaded
+  `index-FS-snKLw.js`: configured empty-field descriptions appear, the
+  attachment panel is absent, and one click on `Группа должностей` opened its
+  searchable list without selecting a value. Browser console had no warnings
+  or errors; no card data was changed during this check.
 
 - 2026-07-14 release checkpoint: commits through `6319519f` are pushed to
   `main`, deployed, and live. This includes debounced card/public-link text
