@@ -586,6 +586,195 @@ def test_card_creation_preview_uses_template_layout_field_order(
     ]
 
 
+def test_card_creation_preview_uses_template_layout_section_order_for_blocks(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "creation-preview-sections-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="creation-preview-sections-root",
+        name="Preview sections root",
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        organization.id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    first_schema_block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-first-schema-block",
+        title="First schema block",
+        position=0,
+    )
+    second_schema_block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-second-schema-block",
+        title="Second schema block",
+        position=1,
+    )
+    first_schema_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=first_schema_block.id,
+        code="creation_preview_first_schema_field",
+        label="First schema field",
+        field_type="text",
+    )
+    second_schema_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=second_schema_block.id,
+        code="creation_preview_second_schema_field",
+        label="Second schema field",
+        field_type="text",
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-sections-template",
+        name="Preview sections template",
+        field_schema_json={
+            "field_ids": [str(first_schema_field.id), str(second_schema_field.id)],
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "creation-preview-second-section",
+                        "block_id": str(second_schema_block.id),
+                        "row": 1,
+                        "column": 1,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "creation-preview-second-field",
+                                "kind": "field",
+                                "field_id": str(second_schema_field.id),
+                                "row": 1,
+                                "column": 1,
+                                "column_span": 12,
+                            }
+                        ],
+                    },
+                    {
+                        "id": "creation-preview-first-section",
+                        "block_id": str(first_schema_block.id),
+                        "row": 2,
+                        "column": 1,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "creation-preview-first-field",
+                                "kind": "field",
+                                "field_id": str(first_schema_field.id),
+                                "row": 1,
+                                "column": 1,
+                                "column_span": 12,
+                            }
+                        ],
+                    },
+                ],
+            },
+        },
+    )
+
+    preview = CardService(db_session).preview_card_creation_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        card_template_id=template.id,
+    )
+
+    assert [block.block_id for block in preview.blocks] == [
+        second_schema_block.id,
+        first_schema_block.id,
+    ]
+
+
+def test_card_creation_preview_keeps_unranked_fields_after_partial_layout(
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "creation-preview-partial-system@example.test",
+        is_superuser=True,
+    )
+    organization = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="creation-preview-partial-root",
+        name="Preview partial root",
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        organization.id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-partial-main",
+        title="Preview partial main",
+    )
+    unranked_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="creation_preview_unranked",
+        label="Unranked field",
+        field_type="text",
+        position=0,
+    )
+    ranked_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="creation_preview_ranked",
+        label="Ranked field",
+        field_type="text",
+        position=1,
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="creation-preview-partial-template",
+        name="Preview partial template",
+        field_schema_json={
+            "field_ids": [str(unranked_field.id), str(ranked_field.id)],
+            "form_layout": {
+                "columns": 12,
+                "sections": [
+                    {
+                        "id": "creation-preview-partial-section",
+                        "block_id": str(block.id),
+                        "row": 1,
+                        "column": 1,
+                        "column_span": 12,
+                        "items": [
+                            {
+                                "id": "creation-preview-ranked-field",
+                                "kind": "field",
+                                "field_id": str(ranked_field.id),
+                                "row": 1,
+                                "column": 1,
+                                "column_span": 12,
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+    )
+
+    preview = CardService(db_session).preview_card_creation_for_actor(
+        actor_user_id=system_admin.id,
+        organization_id=organization.id,
+        card_template_id=template.id,
+    )
+
+    assert [item.field_id for item in preview.blocks[0].fields] == [
+        ranked_field.id,
+        unranked_field.id,
+    ]
+
+
 def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
     db_session: Session,
 ) -> None:
