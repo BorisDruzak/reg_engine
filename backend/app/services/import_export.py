@@ -18,6 +18,7 @@ from app.models import (
     FormBlock,
     FormField,
     Organization,
+    OrgUnit,
     ReferenceItem,
 )
 from app.services.audit import AuditService
@@ -36,6 +37,8 @@ TABULAR_XLSX_SUPPORTED_FIELD_TYPES = {
     "bool",
     "select",
     "multi_select",
+    "organization_ref",
+    "org_unit_ref",
 }
 TABULAR_XLSX_FORMAT_VERSION = "tabular_card_xlsx_v1"
 TABULAR_XLSX_SHEET_TITLE = "Карточки"
@@ -80,6 +83,7 @@ class TabularWorkbookConfiguration:
     fixed_organization_id: UUID | None
     organization_labels: dict[str, UUID]
     reference_labels: dict[UUID, dict[str, UUID]]
+    unit_organization_ids: dict[UUID, UUID]
 
 
 class TabularCardExchangeService:
@@ -308,12 +312,12 @@ class TabularCardExchangeService:
 
         ordered_fields = self._order_selected_fields(selected_fields)
 
+        manageable_organizations = self._manageable_organizations(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+        )
         manageable_by_id = {
-            organization.id: organization
-            for organization in self._manageable_organizations(
-                actor_user_id=actor_user_id,
-                registry_id=registry_id,
-            )
+            organization.id: organization for organization in manageable_organizations
         }
         organizations: list[Organization] = []
         for organization_id in organization_ids:
@@ -340,6 +344,18 @@ class TabularCardExchangeService:
             TabularWorkbookField(field=field, block=block, header=headers[field.id])
             for field, block in ordered_fields
         )
+        reference_labels = self._reference_labels(fields)
+        reference_labels.update(
+            self._organization_reference_labels(
+                fields=fields,
+                organizations=manageable_organizations,
+            )
+        )
+        org_unit_labels, unit_organization_ids = self._organization_unit_reference_labels(
+            fields=fields,
+            organizations=organizations,
+        )
+        reference_labels.update(org_unit_labels)
         return TabularWorkbookConfiguration(
             registry_id=registry_id,
             template=template,
@@ -351,7 +367,8 @@ class TabularCardExchangeService:
                 self._organization_label(organization): organization.id
                 for organization in organizations
             },
-            reference_labels=self._reference_labels(fields),
+            reference_labels=reference_labels,
+            unit_organization_ids=unit_organization_ids,
         )
 
     @staticmethod
@@ -603,7 +620,12 @@ class TabularCardExchangeService:
                 formula1='"Да,Нет"',
                 allow_blank=True,
             )
-        elif item.field.field_type in {"select", "multi_select"}:
+        elif item.field.field_type in {
+            "select",
+            "multi_select",
+            "organization_ref",
+            "org_unit_ref",
+        }:
             if not configuration.reference_labels.get(item.field.id):
                 return
             validation = openpyxl.worksheet.datavalidation.DataValidation(
@@ -619,6 +641,11 @@ class TabularCardExchangeService:
                         "Выберите значения из списка. Для нескольких значений "
                         f"перечислите их через «;». Доступно: {values}"
                     ),
+                    "Реестровая система",
+                )
+            elif item.field.field_type == "org_unit_ref":
+                sheet.cell(row=1, column=column).comment = openpyxl.comments.Comment(
+                    "Выберите подразделение в формате «Организация → Управление → Отдел».",
                     "Реестровая система",
                 )
         else:
@@ -749,6 +776,127 @@ class TabularCardExchangeService:
             result[item.field.id] = labels
         return result
 
+    def _organization_reference_labels(
+        self,
+        *,
+        fields: Sequence[TabularWorkbookField],
+        organizations: Sequence[Organization],
+    ) -> dict[UUID, dict[str, UUID]]:
+        if not any(item.field.field_type == "organization_ref" for item in fields):
+            return {}
+        labels = self._organization_reference_label_map(organizations)
+        return {
+            item.field.id: dict(labels)
+            for item in fields
+            if item.field.field_type == "organization_ref"
+        }
+
+    def _organization_unit_reference_labels(
+        self,
+        *,
+        fields: Sequence[TabularWorkbookField],
+        organizations: Sequence[Organization],
+    ) -> tuple[dict[UUID, dict[str, UUID]], dict[UUID, UUID]]:
+        if not any(item.field.field_type == "org_unit_ref" for item in fields):
+            return {}, {}
+        if not organizations:
+            return {}, {}
+
+        organizations_by_id = {organization.id: organization for organization in organizations}
+        organization_labels = self._organization_reference_label_map(organizations)
+        organization_labels_by_id = {
+            organization_id: label for label, organization_id in organization_labels.items()
+        }
+        units = list(
+            self.session.scalars(
+                select(OrgUnit)
+                .where(
+                    OrgUnit.organization_id.in_(organizations_by_id),
+                    OrgUnit.archived_at.is_(None),
+                    OrgUnit.is_active.is_(True),
+                )
+                .order_by(OrgUnit.organization_id, OrgUnit.name, OrgUnit.code, OrgUnit.id)
+            )
+        )
+        units_by_id = {unit.id: unit for unit in units}
+        labels: dict[str, UUID] = {}
+        unit_organization_ids: dict[UUID, UUID] = {}
+        for unit in units:
+            organization = organizations_by_id.get(unit.organization_id)
+            if organization is None:
+                continue
+            unit_organization_ids[unit.id] = unit.organization_id
+            path = self._organization_unit_path(unit, units_by_id)
+            base_label = f"{organization_labels_by_id[organization.id]} → {' → '.join(path)}"
+            label = base_label
+            if label in labels:
+                label = f"{base_label} ({unit.code})"
+            labels[label] = unit.id
+        return (
+            {
+                item.field.id: dict(labels)
+                for item in fields
+                if item.field.field_type == "org_unit_ref"
+            },
+            unit_organization_ids,
+        )
+
+    def _organization_reference_label_map(
+        self,
+        organizations: Sequence[Organization],
+    ) -> dict[str, UUID]:
+        organizations_by_id = {organization.id: organization for organization in organizations}
+        names: dict[str, list[Organization]] = {}
+        for organization in organizations:
+            names.setdefault(organization.name, []).append(organization)
+
+        labels: dict[str, UUID] = {}
+        for organization in organizations:
+            if len(names[organization.name]) == 1:
+                label = organization.name
+            else:
+                label = " → ".join(self._organization_path(organization, organizations_by_id))
+            if label in labels:
+                label = f"{label} ({organization.code})"
+            labels[label] = organization.id
+        return labels
+
+    def _organization_path(
+        self,
+        organization: Organization,
+        organizations_by_id: dict[UUID, Organization],
+    ) -> list[str]:
+        path = [organization.name]
+        parent_id = organization.parent_id
+        seen = {organization.id}
+        while parent_id is not None and parent_id not in seen:
+            parent = organizations_by_id.get(parent_id)
+            if parent is None:
+                break
+            path.append(parent.name)
+            seen.add(parent.id)
+            parent_id = parent.parent_id
+        path.reverse()
+        return path
+
+    def _organization_unit_path(
+        self,
+        unit: OrgUnit,
+        units_by_id: dict[UUID, OrgUnit],
+    ) -> list[str]:
+        path = [unit.name]
+        parent_id = unit.parent_id
+        seen = {unit.id}
+        while parent_id is not None and parent_id not in seen:
+            parent = units_by_id.get(parent_id)
+            if parent is None or parent.organization_id != unit.organization_id:
+                break
+            path.append(parent.name)
+            seen.add(parent.id)
+            parent_id = parent.parent_id
+        path.reverse()
+        return path
+
     def _card_values_by_field(self, card_read: CardRead) -> dict[UUID, object | None]:
         values: dict[UUID, object | None] = {}
         for block in card_read.blocks.values():
@@ -768,7 +916,9 @@ class TabularCardExchangeService:
         labels_by_id = {item_id: label for label, item_id in reference_labels.items()}
         if field.field_type == "bool":
             return "Да" if value else "Нет"
-        if field.field_type == "select" and isinstance(value, UUID):
+        if field.field_type in {"select", "organization_ref", "org_unit_ref"} and isinstance(
+            value, UUID
+        ):
             return labels_by_id.get(value, "")
         if field.field_type == "multi_select" and isinstance(value, list):
             return "; ".join(labels_by_id.get(item, "") for item in value if item in labels_by_id)
@@ -973,6 +1123,8 @@ class TabularCardExchangeService:
                             raw_value,
                             item.field,
                             configuration.reference_labels.get(item.field.id, {}),
+                            organization_id=organization_id,
+                            unit_organization_ids=configuration.unit_organization_ids,
                         )
                     except ImportExportServiceError as exc:
                         errors.append(f"{item.header}: {exc}")
@@ -1069,6 +1221,9 @@ class TabularCardExchangeService:
         raw_value: object,
         field: FormField,
         reference_labels: dict[str, UUID],
+        *,
+        organization_id: UUID | None,
+        unit_organization_ids: dict[UUID, UUID],
     ) -> object:
         if field.field_type == "text":
             return str(raw_value).strip()
@@ -1106,6 +1261,22 @@ class TabularCardExchangeService:
             if not labels or any(item is None for item in selected):
                 raise ImportExportServiceError("укажите значения справочника через «;».")
             return [cast(UUID, item) for item in selected]
+        if field.field_type == "organization_ref":
+            label = self._normalized_label(raw_value)
+            selected_organization_id = reference_labels.get(label or "")
+            if selected_organization_id is None:
+                raise ImportExportServiceError("организация недоступна для выбора.")
+            return selected_organization_id
+        if field.field_type == "org_unit_ref":
+            label = self._normalized_label(raw_value)
+            org_unit_id = reference_labels.get(label or "")
+            if (
+                org_unit_id is None
+                or organization_id is None
+                or unit_organization_ids.get(org_unit_id) != organization_id
+            ):
+                raise ImportExportServiceError("подразделение недоступно выбранной организации.")
+            return org_unit_id
         raise ImportExportServiceError("тип поля не поддерживается в XLSX.")
 
     def _parse_date_text(self, value: str) -> date:

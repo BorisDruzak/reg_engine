@@ -1,10 +1,11 @@
 import json
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from starlette.responses import Response
 
 from app.api.v1.endpoints import import_export as import_export_endpoint
@@ -25,6 +26,8 @@ def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -
         "bool",
         "select",
         "multi_select",
+        "organization_ref",
+        "org_unit_ref",
     }
 
 
@@ -123,6 +126,7 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
         fixed_organization_id=None,
         organization_labels={},
         reference_labels={},
+        unit_organization_ids={},
     )
 
     content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
@@ -158,6 +162,7 @@ def test_tabular_xlsx_template_hides_organization_column_and_records_import_targ
         fixed_organization_id=organization.id,
         organization_labels={},
         reference_labels={},
+        unit_organization_ids={},
     )
 
     content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
@@ -205,6 +210,7 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
             select_field.id: {"Новый": uuid4(), "Готово": uuid4()},
             multi_select_field.id: {"Основная": uuid4(), "Дополнительная": uuid4()},
         },
+        unit_organization_ids={},
     )
 
     content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
@@ -222,6 +228,196 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
     assert validations["C2:C101"].formula1 == f"=field_{select_field.id.hex}_choices"
     assert validations["D2:D101"].formula1 == f"=field_{multi_select_field.id.hex}_choices"
     assert validations["D2:D101"].showErrorMessage is False
+
+
+def test_tabular_xlsx_exports_readable_organization_and_unit_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    card_organization_id = uuid4()
+    organization_field = SimpleNamespace(
+        id=uuid4(),
+        label="Организация для согласования",
+        field_type="organization_ref",
+    )
+    org_unit_field = SimpleNamespace(
+        id=uuid4(),
+        label="Подразделение для согласования",
+        field_type="org_unit_ref",
+    )
+    management_id = uuid4()
+    department_id = uuid4()
+    organization = SimpleNamespace(id=card_organization_id, name="Администрация", code="admin")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=organization_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Организация для согласования",
+            ),
+            import_export.TabularWorkbookField(
+                field=org_unit_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Подразделение для согласования",
+            ),
+        ),
+        organizations=(organization,),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={"Администрация (admin)": card_organization_id},
+        reference_labels={
+            organization_field.id: {"Администрация": card_organization_id},
+            org_unit_field.id: {"Администрация → Управление → Отдел": department_id},
+        },
+        unit_organization_ids={
+            management_id: card_organization_id,
+            department_id: card_organization_id,
+        },
+    )
+    card = SimpleNamespace(id=uuid4(), organization_id=card_organization_id)
+
+    class CardReader:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, *, actor_user_id: object, card_id: object) -> object:
+            assert card_id == card.id
+            return SimpleNamespace(
+                blocks={
+                    "main": SimpleNamespace(
+                        instances=[
+                            SimpleNamespace(
+                                fields={
+                                    "organization": SimpleNamespace(
+                                        field_id=organization_field.id,
+                                        value=card_organization_id,
+                                    ),
+                                    "unit": SimpleNamespace(
+                                        field_id=org_unit_field.id,
+                                        value=department_id,
+                                    ),
+                                }
+                            )
+                        ]
+                    )
+                }
+            )
+
+    monkeypatch.setattr(import_export, "CardService", CardReader)
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=[card],
+    )
+
+    sheet = load_workbook(filename=BytesIO(content), data_only=True)["Карточки"]
+    assert sheet["C2"].value == "Администрация"
+    assert sheet["D2"].value == "Администрация → Управление → Отдел"
+    assert str(card_organization_id) not in {sheet["C2"].value, sheet["D2"].value}
+    assert str(department_id) not in {sheet["C2"].value, sheet["D2"].value}
+
+
+def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_foreign_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    card_organization_id = uuid4()
+    foreign_organization_id = uuid4()
+    organization_field = SimpleNamespace(id=uuid4(), field_type="organization_ref")
+    org_unit_field = SimpleNamespace(id=uuid4(), field_type="org_unit_ref")
+    local_unit_id = uuid4()
+    foreign_unit_id = uuid4()
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=organization_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Организация для согласования",
+            ),
+            import_export.TabularWorkbookField(
+                field=org_unit_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Подразделение для согласования",
+            ),
+        ),
+        organizations=(
+            SimpleNamespace(id=card_organization_id, name="Администрация", code="admin"),
+            SimpleNamespace(id=foreign_organization_id, name="Школа", code="school"),
+        ),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={
+            "Администрация (admin)": card_organization_id,
+            "Школа (school)": foreign_organization_id,
+        },
+        reference_labels={
+            organization_field.id: {"Администрация": card_organization_id},
+            org_unit_field.id: {
+                "Администрация → Управление → Отдел": local_unit_id,
+                "Школа → Отдел": foreign_unit_id,
+            },
+        },
+        unit_organization_ids={
+            local_unit_id: card_organization_id,
+            foreign_unit_id: foreign_organization_id,
+        },
+    )
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(
+        service,
+        "_configuration_from_metadata",
+        lambda **_kwargs: configuration,
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(
+        [
+            "№ п/п",
+            "Организация",
+            "Организация для согласования",
+            "Подразделение для согласования",
+        ]
+    )
+    sheet.append(
+        [
+            1,
+            "Администрация (admin)",
+            "Администрация",
+            "Администрация → Управление → Отдел",
+        ]
+    )
+    sheet.append(
+        [
+            2,
+            "Администрация (admin)",
+            "Администрация",
+            "Школа → Отдел",
+        ]
+    )
+    metadata_sheet = workbook.create_sheet("_registry_engine")
+    metadata_sheet["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=uuid4(),
+        registry_id=registry_id,
+        xlsx_content=content.getvalue(),
+    )
+
+    assert preview["rows"][0]["status"] == "valid"
+    assert preview["rows"][0]["values"] == {
+        organization_field.id: card_organization_id,
+        org_unit_field.id: local_unit_id,
+    }
+    assert preview["rows"][1]["status"] == "invalid"
+    assert preview["rows"][1]["errors"] == [
+        "Подразделение для согласования: подразделение недоступно выбранной организации."
+    ]
 
 
 def test_xlsx_download_headers_are_safe_for_http_response_encoding() -> None:
