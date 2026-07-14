@@ -1270,16 +1270,20 @@ class PublicLinkService:
     ) -> list[PublicPreviewOption]:
         if field_model.field_type == "organization_ref":
             allowed_ids = CardService(self.session)._public_allowed_organization_ids(field_model)
-            organizations = [
-                organization
-                for organization in self.session.scalars(
-                    select(Organization).where(
-                        Organization.id.in_(allowed_ids),
-                        Organization.archived_at.is_(None),
-                        Organization.is_active.is_(True),
-                    )
-                ).all()
-            ] if allowed_ids else []
+            organizations = (
+                [
+                    organization
+                    for organization in self.session.scalars(
+                        select(Organization).where(
+                            Organization.id.in_(allowed_ids),
+                            Organization.archived_at.is_(None),
+                            Organization.is_active.is_(True),
+                        )
+                    ).all()
+                ]
+                if allowed_ids
+                else []
+            )
             return [
                 PublicPreviewOption(
                     id=option.id,
