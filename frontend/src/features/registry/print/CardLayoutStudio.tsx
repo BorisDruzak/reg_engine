@@ -85,16 +85,6 @@ const stages: Array<{ id: StudioStage; label: string }> = [
   { id: "preview", label: "Предпросмотр" },
 ];
 
-type InsertBlockDialogState = {
-  position: {
-    row: number;
-    column: number;
-    row_span: 1;
-    column_span: 12;
-  };
-  blockId: string;
-};
-
 type GeometryHistory = {
   undo: Array<{
     before: CardTemplateFormLayoutRead;
@@ -155,7 +145,6 @@ function CardLayoutStudioSession({
   const [schemaPending, setSchemaPending] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [insertDialog, setInsertDialog] = useState<InsertBlockDialogState | null>(null);
   const [fieldArchiveTarget, setFieldArchiveTarget] = useState<FormFieldRead | null>(null);
   const [printViews, setPrintViews] = useState(initialDraft.print_views);
   const initialPrintView = printViews[0];
@@ -217,14 +206,6 @@ function CardLayoutStudioSession({
     () => mergeById(fields, draftLayout.structure.fields),
     [draftLayout.structure.fields, fields],
   );
-  const unusedBlocks = useMemo(() => {
-    const used = new Set(
-      draftLayout.form_layout.sections
-        .map((section) => section.block_id)
-        .filter((value): value is string => Boolean(value)),
-    );
-    return allBlocks.filter((block) => !used.has(block.id) && block.is_active);
-  }, [allBlocks, draftLayout.form_layout.sections]);
   const effectiveReferenceLists = referenceLists ?? referenceListsQuery.data?.items ?? [];
   const legacyPrintView =
     Boolean(selectedPrintView?.document_template_id) &&
@@ -728,57 +709,6 @@ function CardLayoutStudioSession({
     }
   }
 
-  function openInsertBlock(position: InsertBlockDialogState["position"]) {
-    setInsertDialog({ position, blockId: unusedBlocks[0]?.id ?? "" });
-  }
-
-  async function insertExistingBlock() {
-    if (!insertDialog?.blockId) return;
-    const insertPosition = insertDialog.position;
-    const block = allBlocks.find((item) => item.id === insertDialog.blockId);
-    if (!block) return;
-    const blockFields = allFields.filter((field) => field.block_id === block.id && field.is_active);
-    let releaseGate: (() => void) | null = null;
-    setSchemaPending(true);
-    try {
-      releaseGate = await beginSchemaWrite();
-      await appendFieldsToTemplate(blockFields.map((field) => field.id));
-      const currentFormLayout = draftLayoutRef.current.form_layout;
-      const nextFormLayout: CardTemplateFormLayoutRead = {
-        ...currentFormLayout,
-        sections: [
-          ...currentFormLayout.sections,
-          {
-            id: `block-${block.id}`,
-            block_id: block.id,
-            ...insertPosition,
-            items: blockFields.map((field, index) => ({
-              id: `field-${field.id}`,
-              kind: "field",
-              field_id: field.id,
-              row: Math.floor(index / 2) + 1,
-              column: index % 2 === 0 ? 1 : 7,
-              row_span: 1,
-              column_span: 6,
-              text: null,
-            })),
-          },
-        ],
-      };
-      setInsertDialog(null);
-      const save = saveNextFormLayout(nextFormLayout);
-      releaseGate();
-      releaseGate = null;
-      await save;
-      await onSchemaChanged?.();
-    } catch (error) {
-      setLocalError(errorMessage(error));
-    } finally {
-      releaseGate?.();
-      setSchemaPending(false);
-    }
-  }
-
   async function appendFieldsToTemplate(fieldIds: string[]) {
     const missing = fieldIds.filter((fieldId) => !templateFieldIds.current.has(fieldId));
     if (missing.length === 0) return;
@@ -1259,51 +1189,6 @@ function CardLayoutStudioSession({
         </div>
       ) : null}
 
-      {insertDialog ? (
-        <div className="a4-template-dialog-backdrop" role="presentation">
-          <section
-            className="a4-template-dialog"
-            role="dialog"
-            aria-label="Вставка существующего блока"
-          >
-            <h4>Вставить существующий блок</h4>
-            <label>
-              Блок
-              <select
-                value={insertDialog.blockId}
-                onChange={(event) =>
-                  setInsertDialog({ ...insertDialog, blockId: event.currentTarget.value })
-                }
-              >
-                {unusedBlocks.map((block) => (
-                  <option key={block.id} value={block.id}>
-                    {block.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="row-actions">
-              <button
-                type="button"
-                className="primary-button"
-                disabled={!insertDialog.blockId || busy}
-                onClick={() => void insertExistingBlock()}
-              >
-                Вставить
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => setInsertDialog(null)}
-              >
-                Отмена
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
       {fieldArchiveTarget ? (
         <AdminMutationDialog title="Удалить поле">
           <p>
@@ -1505,19 +1390,15 @@ function removeTemporaryField(layout: CardTemplateLayoutRead, fieldId: string) {
 }
 
 function firstEmptyFieldPosition(items: CardTemplateFormLayoutRead["sections"][number]["items"]) {
-  for (let row = 1; row <= 4; row += 1) {
-    for (const column of [1, 4, 7, 10]) {
-      const collides = items.some(
-        (item) =>
-          column < item.column + item.column_span &&
-          column + 3 > item.column &&
-          row < item.row + item.row_span &&
-          row + 1 > item.row,
-      );
-      if (!collides) return { row, column, row_span: 1 as const, column_span: 3 as const };
-    }
+  const lastOccupiedRow = items.reduce(
+    (last, item) => Math.max(last, item.row + item.row_span - 1),
+    0,
+  );
+  for (let row = 1; row <= lastOccupiedRow + 1; row += 1) {
+    const collides = items.some((item) => row < item.row + item.row_span && row + 1 > item.row);
+    if (!collides) return { row, column: 1, row_span: 1 as const, column_span: 12 as const };
   }
-  return { row: 4, column: 10, row_span: 1 as const, column_span: 3 as const };
+  return { row: lastOccupiedRow + 1, column: 1, row_span: 1 as const, column_span: 12 as const };
 }
 
 function preparePrintLayout(

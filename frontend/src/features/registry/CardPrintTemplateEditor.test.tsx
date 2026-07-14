@@ -149,7 +149,7 @@ test("merges a deferred block create into the newest geometry before the first l
 
 test("creates a field inline with a real canonical type and persists the layout", async () => {
   const user = userEvent.setup();
-  const api = createEditorFetchMock();
+  const api = createEditorFetchMock({ occupiedFieldRows: 0 });
   vi.stubGlobal("fetch", api.fetchMock);
   renderEditor();
 
@@ -157,6 +157,7 @@ test("creates a field inline with a real canonical type and persists the layout"
     await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
   );
   const label = screen.getByLabelText("Название поля");
+  expect(label.closest("article")).toHaveStyle({ gridColumn: "1 / span 12" });
   await user.clear(label);
   await user.type(label, "Настройки JSON");
   await user.selectOptions(screen.getByLabelText("Тип поля"), "json");
@@ -176,7 +177,40 @@ test("creates a field inline with a real canonical type and persists the layout"
   await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
   expect(api.formSavePayloads[0].expected_revision).toBe("revision-1");
   expect(api.formSavePayloads[0].form_layout.sections[0].items).toEqual(
-    expect.arrayContaining([expect.objectContaining({ field_id: "field-created" })]),
+    expect.arrayContaining([
+      expect.objectContaining({
+        field_id: "field-created",
+        row: 1,
+        column: 1,
+        row_span: 1,
+        column_span: 12,
+      }),
+    ]),
+  );
+});
+
+test("appends a full-width field after occupied rows", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock({ occupiedFieldRows: 4 });
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(
+    await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.formSavePayloads).toHaveLength(1));
+  expect(api.formSavePayloads[0].form_layout.sections[0].items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        field_id: "field-created",
+        row: 5,
+        column: 1,
+        row_span: 1,
+        column_span: 12,
+      }),
+    ]),
   );
 });
 
@@ -952,6 +986,7 @@ function createEditorFetchMock(
     fieldUpdateError?: boolean;
     legacyPrintView?: boolean;
     crookedFormLayout?: boolean;
+    occupiedFieldRows?: number;
   } = {},
 ) {
   let layout = unifiedLayoutPayload(
@@ -964,6 +999,31 @@ function createEditorFetchMock(
       form_layout: {
         ...layout.form_layout,
         sections: layout.form_layout.sections.map((section) => ({ ...section, row: 3, row_span: 2 })),
+      },
+    };
+  }
+  if (options.occupiedFieldRows !== undefined) {
+    layout = {
+      ...layout,
+      form_layout: {
+        ...layout.form_layout,
+        sections: layout.form_layout.sections.map((section, index) =>
+          index === 0
+            ? {
+                ...section,
+                items: Array.from({ length: options.occupiedFieldRows ?? 0 }, (_, row) => ({
+                  id: `occupied-field-${row + 1}`,
+                  kind: "field" as const,
+                  field_id: `occupied-field-${row + 1}`,
+                  row: row + 1,
+                  column: 1,
+                  row_span: 1,
+                  column_span: 12,
+                  text: null,
+                })),
+              }
+            : section,
+        ),
       },
     };
   }
