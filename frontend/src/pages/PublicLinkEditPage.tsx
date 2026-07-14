@@ -1,21 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import {
   ApiError,
-  downloadPublicLinkAttachmentContent,
   getPublicLinkStatus,
-  listPublicLinkAttachments,
   readPublicLinkPreview,
   updatePublicLinkFieldValue,
-  uploadPublicLinkAttachment,
 } from "@/api/client";
 import type {
   CardTemplateLayoutRead,
   FormBlockRead,
   FormFieldRead,
-  PublicLinkAttachmentRead,
   PublicLinkPreviewBlockRead,
   PublicLinkPreviewBlockInstanceRead,
   PublicLinkPreviewFieldRead,
@@ -172,7 +168,6 @@ export function PublicLinkEditPage() {
 }
 
 type PublicFieldSaveState = "idle" | "saving" | "saved" | "error";
-type PublicAttachmentUploadState = "idle" | "uploading" | "error";
 
 function PublicEditableCard({
   preview,
@@ -214,11 +209,6 @@ function PublicEditableCard({
           saveFieldValue={saveFieldValue}
         />
       )}
-      <PublicLinkAttachmentsPanel
-        onLifecycleDenial={onLifecycleDenial}
-        onUploadStateChange={() => undefined}
-        rawToken={rawToken}
-      />
     </div>
   );
 }
@@ -643,181 +633,6 @@ function publicPreviewFieldsById(blocks: PublicLinkPreviewBlockRead[]) {
   return result;
 }
 
-function PublicLinkAttachmentsPanel({
-  rawToken,
-  onLifecycleDenial,
-  onUploadStateChange,
-}: {
-  rawToken: string;
-  onLifecycleDenial: (error: unknown) => Promise<boolean>;
-  onUploadStateChange: (state: PublicAttachmentUploadState) => void;
-}) {
-  const queryClient = useQueryClient();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [title, setTitle] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const attachmentsQuery = useQuery({
-    queryKey: ["public-link-attachments", rawToken],
-    queryFn: () => listPublicLinkAttachments(rawToken),
-    enabled: Boolean(rawToken),
-  });
-  useEffect(() => {
-    if (attachmentsQuery.error) {
-      void onLifecycleDenial(attachmentsQuery.error);
-    }
-  }, [attachmentsQuery.error, onLifecycleDenial]);
-  const canUploadAttachments = attachmentsQuery.data?.can_upload_attachments ?? true;
-  const uploadMutation = useMutation({
-    mutationFn: () => {
-      if (!file) {
-        throw new Error(uiText.selectFile);
-      }
-      return uploadPublicLinkAttachment(rawToken, { file, title });
-    },
-    onMutate: () => onUploadStateChange("uploading"),
-    onSuccess: async () => {
-      onUploadStateChange("idle");
-      setMessage(uiText.fileUploaded);
-      setLocalError(null);
-      setTitle("");
-      setFile(null);
-      formRef.current?.reset();
-      await queryClient.invalidateQueries({ queryKey: ["public-link-attachments", rawToken] });
-    },
-    onError: (error) => {
-      onUploadStateChange("error");
-      setLocalError(errorText(error));
-      void onLifecycleDenial(error);
-    },
-  });
-  const downloadMutation = useMutation({
-    mutationFn: (attachment: PublicLinkAttachmentRead) =>
-      downloadPublicLinkAttachmentContent(rawToken, attachment.id),
-    onSuccess: ({ blob, filename }) => {
-      triggerBrowserDownload(blob, filename);
-      setMessage(uiText.fileDownloaded);
-      setLocalError(null);
-    },
-    onError: (error) => {
-      setLocalError(errorText(error));
-      void onLifecycleDenial(error);
-    },
-  });
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!canUploadAttachments) {
-      setMessage(null);
-      setLocalError(uiText.publicLinkUploadLimitExhausted);
-      return;
-    }
-    if (!file) {
-      setMessage(null);
-      setLocalError(uiText.selectFile);
-      return;
-    }
-    uploadMutation.mutate();
-  }
-
-  return (
-    <section className="data-panel">
-      <header>
-        <h3>{uiText.attachments}</h3>
-      </header>
-      <form ref={formRef} className="attachment-form" onSubmit={handleSubmit}>
-        <label className="field-editor-control">
-          <span>{uiText.fileTitle}</span>
-          <input
-            disabled={!canUploadAttachments}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-        <label className="field-editor-control">
-          <span>{uiText.file}</span>
-          <input
-            aria-label={uiText.file}
-            disabled={!canUploadAttachments}
-            type="file"
-            onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null);
-              setLocalError(null);
-              if (!uploadMutation.isPending) {
-                onUploadStateChange("idle");
-              }
-            }}
-          />
-        </label>
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={uploadMutation.isPending || !canUploadAttachments}
-        >
-          {uiText.uploadFile}
-        </button>
-      </form>
-      {attachmentsQuery.data && !attachmentsQuery.data.can_upload_attachments && (
-        <p className="inline-alert attachment-status">{uiText.publicLinkUploadLimitExhausted}</p>
-      )}
-      {message && <p className="inline-success attachment-status">{message}</p>}
-      {localError && <p className="inline-alert attachment-status">{localError}</p>}
-      {attachmentsQuery.error && <p className="data-alert">{errorText(attachmentsQuery.error)}</p>}
-      <PublicAttachmentList
-        items={attachmentsQuery.data?.items ?? []}
-        downloadingId={downloadMutation.isPending ? (downloadMutation.variables?.id ?? null) : null}
-        onDownload={(attachment) => downloadMutation.mutate(attachment)}
-      />
-    </section>
-  );
-}
-
-function PublicAttachmentList({
-  items,
-  downloadingId,
-  onDownload,
-}: {
-  items: PublicLinkAttachmentRead[];
-  downloadingId: string | null;
-  onDownload: (attachment: PublicLinkAttachmentRead) => void;
-}) {
-  if (items.length === 0) {
-    return <p className="data-empty">{uiText.noFiles}</p>;
-  }
-
-  return (
-    <ul className="file-action-list">
-      {items.map((attachment) => {
-        const title = attachment.title || attachment.original_filename;
-        return (
-          <li key={attachment.id}>
-            <div>
-              <strong>{title}</strong>
-              <span>
-                {attachment.original_filename} / {formatBytes(attachment.content_length_bytes)} /{" "}
-                {scannerStatusLabel(attachment.scanner_status)} /{" "}
-                {formatUiDateTime(attachment.created_at)}
-              </span>
-            </div>
-            <div className="row-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                aria-label={`${uiText.download} файл ${title}`}
-                disabled={downloadingId === attachment.id}
-                onClick={() => onDownload(attachment)}
-              >
-                {uiText.download}
-              </button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function PublicFieldEditor({
   fieldKey,
   blockInstanceId,
@@ -958,40 +773,4 @@ function usesDelayedPublicSave(fieldType: string) {
 function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
   const value = field.options_config_json?.static_text;
   return typeof value === "string" && value.trim() ? value : uiText.empty;
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) {
-    return `${value} Б`;
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} КБ`;
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} МБ`;
-}
-
-function scannerStatusLabel(value: string) {
-  if (value === "deferred") {
-    return uiText.scannerDeferred;
-  }
-  return value;
-}
-
-function triggerBrowserDownload(blob: Blob, filename: string) {
-  if (typeof document === "undefined" || typeof window.URL.createObjectURL !== "function") {
-    return;
-  }
-  const href = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = href;
-  link.download = filename;
-  try {
-    link.click();
-  } catch {
-    // Test and embedded browser environments can block programmatic downloads.
-  } finally {
-    if (typeof window.URL.revokeObjectURL === "function") {
-      window.URL.revokeObjectURL(href);
-    }
-  }
 }

@@ -64,7 +64,6 @@ import {
 import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { errorText, shortId } from "@/components/common/dataUtils";
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
-import { CardAttachmentsPanel } from "./CardAttachmentsPanel";
 import { CardCreationLinksPanel } from "./CardCreationLinksPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
 import { resolveCardPublicFieldAccess } from "./cardPublicAccessDefaults";
@@ -691,16 +690,6 @@ export function CardsWorkspace({
                       requiredMissingCount: 0,
                     },
                   ]}
-                  navigationAfter={[
-                    {
-                      anchorId: "card-attachments-block",
-                      label: "Вложения",
-                      state: "neutral",
-                      filledCount: 0,
-                      totalCount: 0,
-                      requiredMissingCount: 0,
-                    },
-                  ]}
                   beforeContent={
                     selectedCard ? (
                       <CardBaseBlock
@@ -745,16 +734,6 @@ export function CardsWorkspace({
                   }
                   afterContent={
                     <>
-                      <section
-                        id="card-attachments-block"
-                        className="card-workspace-following-block"
-                      >
-                        <CardAttachmentsPanel
-                          cardId={card.id}
-                          token={token}
-                          canManage={card.can_manage}
-                        />
-                      </section>
                       {card.can_manage ? (
                         <CardWorkspaceFooter
                           card={card}

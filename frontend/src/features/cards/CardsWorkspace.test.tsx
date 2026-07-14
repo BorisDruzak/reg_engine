@@ -178,7 +178,6 @@ describe("CardsWorkspace", () => {
     fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
 
     const control = await screen.findByRole("group", { name: "Подразделение организации" });
-    fireEvent.click(within(control).getByRole("combobox", { name: "Подразделение организации" }));
     expect(
       within(control).getByRole("option", { name: "Отдел кадров / Архивировано" }),
     ).toHaveAttribute("aria-selected", "true");
@@ -186,6 +185,22 @@ describe("CardsWorkspace", () => {
     expect(
       within(control).getByRole("option", { name: "Отдел кадров / Архивировано" }),
     ).toBeDisabled();
+  });
+
+  test("does not render the attachments panel while filling a card", async () => {
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+    renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: organizationUnitCard,
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    await screen.findByTestId("filled-field-item-org-unit");
+
+    expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 });
 

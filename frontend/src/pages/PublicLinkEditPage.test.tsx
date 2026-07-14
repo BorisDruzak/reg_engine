@@ -101,14 +101,13 @@ describe("PublicLinkEditPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("public-field-item-status")).toHaveClass("is-filled");
 
-    const attachmentsPanel = screen.getByRole("heading", { name: "Вложения" }).closest("section");
-    expect(attachmentsPanel).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Отправить на проверку/i }),
     ).not.toBeInTheDocument();
   });
 
-  test("renders active public fields and attachments at configured card geometry", async () => {
+  test("renders active public fields without the attachments panel", async () => {
     renderPage();
 
     expect(
@@ -132,9 +131,7 @@ describe("PublicLinkEditPage", () => {
     expect(screen.getByRole("combobox", { name: "Категория" })).toHaveTextContent("Активная");
     expect(screen.queryByRole("textbox", { name: "Файл из карточки" })).not.toBeInTheDocument();
 
-    const attachmentsPanel = screen.getByRole("heading", { name: "Вложения" }).closest("section");
-    expect(attachmentsPanel).not.toBeNull();
-    expect(within(attachmentsPanel!).getByText("Нет файлов")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
   test("renders public fields as one inline label and control row", async () => {
@@ -481,10 +478,7 @@ describe("PublicLinkEditPage", () => {
     expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeUndefined();
   });
 
-  test.each([
-    ["field", "/api/v1/public-links/edit"],
-    ["attachment", "/api/v1/public-links/attachments/upload"],
-  ] as const)(
+  test.each([["field", "/api/v1/public-links/edit"]] as const)(
     "refreshes status and purges card caches when %s action is denied by the lifecycle",
     async (action, denialPath) => {
       lifecycleDenialPath = denialPath;
@@ -492,17 +486,9 @@ describe("PublicLinkEditPage", () => {
       const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
       await waitFor(() => {
         expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeDefined();
-        expect(queryClient.getQueryData(["public-link-attachments", rawToken])).toBeDefined();
       });
 
-      if (action === "field") {
-        fireEvent.change(statusInput, { target: { value: "denied edit" } });
-      } else if (action === "attachment") {
-        fireEvent.change(screen.getByLabelText("Файл"), {
-          target: { files: [new File(["denied"], "denied.txt", { type: "text/plain" })] },
-        });
-        fireEvent.click(screen.getByRole("button", { name: "Загрузить файл" }));
-      }
+      fireEvent.change(statusInput, { target: { value: "denied edit" } });
 
       expect(
         await screen.findByRole("heading", { name: "Доступ к карточке закрыт" }),
