@@ -1581,7 +1581,7 @@ class RegistrySchemaService:
         field_type: str,
         options_config_json: dict[str, object] | None,
     ) -> dict[str, object] | None:
-        if field_type not in {"select", "multi_select", "static_text"}:
+        if field_type not in {"select", "multi_select", "organization_ref", "static_text"}:
             return None
 
         if field_type in {"select", "multi_select"}:
@@ -1604,6 +1604,29 @@ class RegistrySchemaService:
                     raise RegistrySchemaError("Select owner override setting must be boolean.")
                 normalized["allow_owner_override"] = allow_owner_override
             return normalized or None
+
+        if field_type == "organization_ref":
+            if options_config_json is None:
+                return None
+            raw_ids = options_config_json.get("allowed_organization_ids")
+            if raw_ids is None:
+                return None
+            if not isinstance(raw_ids, list):
+                raise RegistrySchemaError("Organization allowlist must be a list.")
+
+            normalized_ids: list[str] = []
+            seen_ids: set[UUID] = set()
+            for raw_id in raw_ids:
+                try:
+                    organization_id = UUID(str(raw_id))
+                except (TypeError, ValueError) as exc:
+                    raise RegistrySchemaError(
+                        "Organization allowlist must contain organization identifiers."
+                    ) from exc
+                if organization_id not in seen_ids:
+                    seen_ids.add(organization_id)
+                    normalized_ids.append(str(organization_id))
+            return {"allowed_organization_ids": normalized_ids}
 
         static_text = ""
         if options_config_json is not None:
