@@ -112,22 +112,24 @@ def upgrade() -> None:
         "actor_type in ('user', 'public_link', 'reference_edit_link', 'system')",
         schema="public",
     )
-    op.drop_constraint("ck_audit_events_source", "audit_events", type_="check", schema="public")
-    op.create_check_constraint(
-        "ck_audit_events_source",
-        "audit_events",
-        "source in ('api', 'public_link', 'reference_edit_link', 'system', 'mcp')",
-        schema="public",
+    op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT ck_audit_events_source")
+    op.execute(
+        """
+        ALTER TABLE public.audit_events
+        ADD CONSTRAINT ck_audit_events_source
+        CHECK (source in ('api', 'public_link', 'reference_edit_link', 'system', 'mcp'))
+        """
     )
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_audit_events_source", "audit_events", type_="check", schema="public")
-    op.create_check_constraint(
-        "ck_audit_events_source",
-        "audit_events",
-        "source in ('api', 'public_link', 'system', 'mcp')",
-        schema="public",
+    op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT ck_audit_events_source")
+    op.execute(
+        """
+        ALTER TABLE public.audit_events
+        ADD CONSTRAINT ck_audit_events_source
+        CHECK (source in ('api', 'public_link', 'system', 'mcp'))
+        """
     )
     op.drop_constraint("actor_type", "audit_events", type_="check", schema="public")
     op.create_check_constraint(
