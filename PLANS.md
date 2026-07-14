@@ -7,20 +7,25 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 single-stage internal card creation is implemented locally and
-  ready for deployment. The create-card workspace keeps organization, template,
+- 2026-07-14 single-stage internal card creation is released at `a74076bb`.
+  The create-card workspace keeps organization, template,
   and optional card name in a static base block; a selected template loads its
   schema fields dynamically without a page refresh. No card is stored before a
   non-empty editable value is entered. The first value is validated and saved
   atomically with the card, and the existing lifecycle synchronizer keeps the
   card as a draft until all required fields are complete, then marks it active.
   File attachments remain available only after the first save. No database
-  migration is needed. Full backend pytest passes (268 passed, 215 skipped);
-  the new focused frontend scenario passes, as do TypeScript and production
-  build. The existing `FilledCardLayout.tsx` hook-dependency warning and Vite
-  chunk-size advisory remain non-blocking. The previously stale model/migration
-  table expectations and retired navigation expectation were updated so the
-  backend suite is green. Commit, deploy, and live browser proof are next.
+  migration is needed. Full backend pytest passes (268 passed, 215 skipped),
+  the full frontend suite and the focused new-card scenario pass, as do
+  TypeScript and the production build. The existing `FilledCardLayout.tsx`
+  hook-dependency warning and Vite chunk-size advisory remain non-blocking.
+  The previously stale model/migration table expectations and retired
+  navigation expectation were updated so the backend suite is green. The
+  server checkout is synchronized, `reg-engine.service` is active, and
+  same-origin frontend/API smoke checks pass. A live HTTPS browser check
+  confirmed the static base block, auto-selection of the sole template, and
+  dynamic schema-field loading without a page refresh; no test card was
+  created during that verification.
 
 - 2026-07-14 global branding refresh is released at `e8914940`. The supplied logo
   is used consistently on the login, administrator, and public-link screens.
