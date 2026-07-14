@@ -5099,3 +5099,28 @@ not part of this isolated frontend slice.
   and `pnpm --dir frontend build`. `pnpm --dir frontend lint` completed with no
   errors and retains the unrelated existing `FilledCardLayout.tsx` hook-
   dependency warning.
+
+#### Normalized card-template layout
+
+Status: implementation complete locally; release verification and Browser proof in progress.
+
+- Web template blocks are normalized in the editor draft to a sequential
+  full-width list (`column=1`, `column_span=12`, one row per block). Opening a
+  legacy crooked layout does not write it; the normal geometry reaches the
+  backend only through the existing revision-aware save flow.
+- Blocks can only move up or down. The canvas has one `Создать блок` action at
+  its bottom; existing-block insertion, free placement, block-size diagnostics,
+  and block resize controls are removed. Field geometry editing remains
+  available.
+- A new field uses the full width of its block and the first wholly available
+  row, appending after existing rows instead of overlapping when a block already
+  has four or more occupied rows.
+- The selected template card contains `Отменить`, `DOCX`, `PDF`, conditional
+  `Скачать`, and `Закрыть`. The studio keeps its save status, while all command
+  handlers and disabled states remain unchanged. A4, existing cards, REST API,
+  database schema, and archive behavior are unchanged.
+- Independent task reviews and a whole-diff review found no Critical,
+  Important, or Minor issues. Fresh focused frontend tests pass (`103` tests),
+  TypeScript passes, ESLint has no errors (one pre-existing
+  `FilledCardLayout.tsx` hook-dependency warning), and the Vite production
+  build passes with the pre-existing main-chunk advisory.
