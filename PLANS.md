@@ -7,17 +7,22 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-14 readable card-list reference values are implemented locally and
-  awaiting release verification. `GET` card summaries preserve each stored
+- 2026-07-14 readable card-list reference values are released at `d7bd35d7`.
+  `GET` card summaries preserve each stored
   `value` and add `display_value`; the latter resolves labels for reference
   lists (single and multiple), organizations, organization units, users,
   cards, and registries. The card-list UI uses that readable value, so UUIDs
   are not exposed in rows when a target label exists. A focused frontend
   regression test first reproduced the UUID rendering and now passes. The
-  matching PostgreSQL API regression scenario is updated but is skipped on
-  this workstation because `TEST_DATABASE_URL` is not configured. Scoped Ruff,
-  mypy (88 source files), frontend TypeScript, and ESLint pass; ESLint retains
-  the existing non-blocking `FilledCardLayout.tsx` hook-dependency warning.
+  matching PostgreSQL API regression scenario passed against the disposable
+  `reg_engine_migration_test` database. Scoped Ruff, mypy (88 source files),
+  frontend TypeScript, the focused frontend regression test, and the Vite
+  production build pass; ESLint retains the existing non-blocking
+  `FilledCardLayout.tsx` hook-dependency warning. The server checkout and
+  frontend assets are deployed, the service and health endpoint are active,
+  and the browser now shows `Территориальное управление №3` and
+  `Управление Образования` instead of their stored UUIDs. No card data was
+  changed during browser verification.
 
 - 2026-07-14 card-entry and XLSX reference-field checkpoint is pushed and
   deployed at `0f58d957`; no migration was required. It replaces empty-card
