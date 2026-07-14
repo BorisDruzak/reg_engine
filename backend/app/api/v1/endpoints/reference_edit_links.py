@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
+from app.models.reference import ReferenceItem, ReferenceList
+from app.models.reference_edit_link import ReferenceEditLink
 from app.schemas.reference_edit_links import (
     PublicReferenceEditTokenRequest,
     PublicReferenceItemCreate,
@@ -233,7 +235,7 @@ def archive_public_reference_item(
     return _public_item_read(item)
 
 
-def _link_read(item, service: ReferenceEditLinkService) -> ReferenceEditLinkRead:
+def _link_read(item: ReferenceEditLink, service: ReferenceEditLinkService) -> ReferenceEditLinkRead:
     return ReferenceEditLinkRead(
         id=item.id,
         registry_id=item.registry_id,
@@ -246,12 +248,12 @@ def _link_read(item, service: ReferenceEditLinkService) -> ReferenceEditLinkRead
 
 
 def _link_token_read(
-    raw_token: str, item, service: ReferenceEditLinkService
+    raw_token: str, item: ReferenceEditLink, service: ReferenceEditLinkService
 ) -> ReferenceEditLinkTokenRead:
     return ReferenceEditLinkTokenRead(raw_token=raw_token, **_link_read(item, service).model_dump())
 
 
-def _public_list_read(item) -> PublicReferenceListRead:
+def _public_list_read(item: ReferenceList) -> PublicReferenceListRead:
     return PublicReferenceListRead(
         id=item.id,
         name=item.name,
@@ -260,7 +262,7 @@ def _public_list_read(item) -> PublicReferenceListRead:
     )
 
 
-def _public_item_read(item) -> PublicReferenceItemRead:
+def _public_item_read(item: ReferenceItem) -> PublicReferenceItemRead:
     return PublicReferenceItemRead(
         id=item.id,
         list_id=item.list_id,
