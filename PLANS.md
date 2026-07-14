@@ -17,7 +17,11 @@ not a hardcoded employee registry.
   disclosed in an inline dropdown. Card-link creation and the link list now
   share `Ссылки на заполнение`. Focused frontend tests (9), TypeScript, and
   the production build pass. The server checkout and frontend bundle are
-  deployed; service and same-origin frontend/API smoke checks pass.
+  deployed; service and same-origin frontend/API smoke checks pass. The full
+  backend test suite currently has two pre-existing metadata-list failures:
+  `test_migrations.py` and `test_models_smoke.py` omit previously added
+  `reference_edit_links` and card-creation-link tables from their expected
+  table sets; this UI-only release does not change models or migrations.
 
 - 2026-07-14 reference filling links are released at `8489037e`, moved from `Схема карточки` to
   `Расширенное → Справочники`, alongside reference-list administration. The
