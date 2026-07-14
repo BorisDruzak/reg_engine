@@ -138,7 +138,7 @@ class UserAccessService:
             organization_ids=organization_ids,
         )
 
-        normalized_email = self._normalize_email(email)
+        normalized_email = self._normalize_login(email)
         self._validate_display_name(display_name)
         self._validate_user_status(status, allow_archived=False)
         if self._user_by_email(normalized_email) is not None:
@@ -196,7 +196,7 @@ class UserAccessService:
         old_data = self._user_audit_data(user)
         old_profile = self._user_role_profile(user)
         if email is not None:
-            normalized_email = self._normalize_email(email)
+            normalized_email = self._normalize_login(email)
             existing = self._user_by_email(normalized_email)
             if existing is not None and existing.id != user.id:
                 raise UserAccessConflictError("User email already exists.")
@@ -796,10 +796,10 @@ class UserAccessService:
             select(User).where(func.lower(User.email) == normalized_email)
         ).one_or_none()
 
-    def _normalize_email(self, email: str) -> str:
-        normalized = email.strip().lower()
-        if not normalized or "@" not in normalized:
-            raise UserAccessError("Valid email is required.")
+    def _normalize_login(self, login: str) -> str:
+        normalized = login.strip().lower()
+        if not normalized or any(character.isspace() for character in normalized):
+            raise UserAccessError("Valid login is required.")
         return normalized
 
     def _validate_display_name(self, display_name: str) -> None:
