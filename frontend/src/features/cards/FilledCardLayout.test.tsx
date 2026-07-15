@@ -112,6 +112,21 @@ function defaultProps(overrides: Partial<FilledCardLayoutProps> = {}): FilledCar
 }
 
 describe("FilledCardLayout", () => {
+  test("forwards the status action into the sticky card navigator", () => {
+    render(
+      <FilledCardLayout
+        {...defaultProps({
+          navigatorAction: <p role="status" aria-label="Статус карточки">Черновик</p>,
+        })}
+      />,
+    );
+
+    const navigator = screen.getByRole("navigation", { name: "Содержание карточки" });
+    expect(within(navigator.parentElement!).getByRole("status", { name: "Статус карточки" })).toHaveTextContent(
+      "Черновик",
+    );
+  });
+
   test("keeps the block navigator sticky and renders the surrounding card sections in it", () => {
     render(
       <FilledCardLayout
@@ -156,7 +171,7 @@ describe("FilledCardLayout", () => {
       "card-block-primary-identity",
     );
     expect(globalStyles).toMatch(
-      /\.card-block-navigator\s*{[^}]*position:\s*sticky[^}]*top:\s*16px/,
+      /\.card-presentation-sidebar\s*{[^}]*position:\s*sticky[^}]*top:\s*16px/,
     );
   });
 

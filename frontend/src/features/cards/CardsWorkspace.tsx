@@ -61,9 +61,11 @@ import {
 } from "@/components/common/AdminMutation";
 import { DataAlert, Panel, SelectableList, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { errorText, shortId } from "@/components/common/dataUtils";
+import { CardBaseBlockSurface } from "./CardBaseBlockSurface";
 import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditorControl";
 import { CardCreationLinksPanel } from "./CardCreationLinksPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
+import { CardDraftActionRail } from "./CardDraftActionRail";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
 import { PublicAccessFieldPicker } from "./PublicAccessFieldPicker";
@@ -314,7 +316,6 @@ export function CardsWorkspace({
         : [],
     [card],
   );
-  const completionLabel = cardCompletionLabel(fieldRows);
   const visibleOpenCardIds = useMemo(
     () => openCardIds.filter((cardId) => cards.some((item) => item.id === cardId)),
     [cards, openCardIds],
@@ -643,10 +644,14 @@ export function CardsWorkspace({
                       <CardBaseBlock
                         card={card}
                         token={token}
-                        completionLabel={completionLabel}
                         organizationName={
                           organizationsById.get(card.organization_id)?.name ??
                           shortId(card.organization_id)
+                        }
+                        templateName={
+                          card.card_template_name ??
+                          selectedCard.card_template_name ??
+                          shortId(card.card_template_id)
                         }
                         fields={presentationFields}
                         canManage={card.can_manage}
@@ -677,6 +682,14 @@ export function CardsWorkspace({
                         onArchiveBlockInstance={(blockInstanceId) =>
                           archiveBlockInstanceMutation.mutate(blockInstanceId)
                         }
+                      />
+                    ) : null
+                  }
+                  navigatorAction={
+                    selectedCard ? (
+                      <CardDraftActionRail
+                        state={selectedCard.lifecycle_status === "active" ? "active" : "draft"}
+                        aria-label="Статус карточки"
                       />
                     ) : null
                   }
@@ -754,8 +767,8 @@ export function CardsWorkspace({
 function CardBaseBlock({
   card,
   token,
-  completionLabel,
   organizationName,
+  templateName,
   fields,
   canManage,
   publicAccess,
@@ -771,8 +784,8 @@ function CardBaseBlock({
 }: {
   card: CardRead;
   token: string;
-  completionLabel: string;
   organizationName: string;
+  templateName: string;
   fields: FormFieldRead[];
   canManage: boolean;
   publicAccess: CardPublicAccessRead | null;
@@ -790,81 +803,62 @@ function CardBaseBlock({
   const publicEditEnabled = publicAccess?.public_edit_enabled ?? false;
 
   return (
-    <section id="card-base-block" className="card-base-block" aria-label="Базовый блок">
-      <header className="card-base-block-header">
-        <div>
-          <strong>Базовый блок</strong>
-          <small>Основная информация и публичный доступ</small>
-        </div>
-      </header>
-      <dl className="metadata-list card-base-block-metadata">
-        <div>
-          <dt>Карточка</dt>
-          <dd>{card.display_name}</dd>
-        </div>
-        <div>
-          <dt>{uiText.organization}</dt>
-          <dd>{organizationName}</dd>
-        </div>
-        <div>
-          <dt>{uiText.status}</dt>
-          <dd>{completionLabel}</dd>
-        </div>
-      </dl>
-      <CardCreationLinkContinuation cardId={card.id} canManage={canManage} token={token} />
-      <div className="card-base-block-public-settings">
-        <div className="card-base-block-public-heading">
-          <strong>Публичный доступ</strong>
-          {canManage ? publicLinkControl : null}
-        </div>
-        <DataAlert error={publicAccessError} />
-        <div className="card-base-toggle-grid">
-          <label className="checkbox-control">
-            <input
-              type="checkbox"
-              checked={publicViewEnabled}
-              disabled={!canManage || isUpdatingPublicAccess || publicEditEnabled}
-              onChange={(event) =>
-                onPublicAccessChange({ public_view_enabled: event.currentTarget.checked })
-              }
-            />
-            <span>{uiText.publicViewCard}</span>
-          </label>
-          <label className="checkbox-control">
-            <input
-              type="checkbox"
-              checked={publicEditEnabled}
-              disabled={!canManage || isUpdatingPublicAccess}
-              onChange={(event) =>
-                onPublicAccessChange({ public_edit_enabled: event.currentTarget.checked })
-              }
-            />
-            <span>{uiText.publicEditCard}</span>
-          </label>
-        </div>
-        {canManage ? (
-          <details className="card-base-field-access">
-            <summary>Настройки полей для публичной ссылки</summary>
+    <CardBaseBlockSurface
+      id="card-base-block"
+      mode="admin"
+      organization={{ label: uiText.organization, value: organizationName }}
+      template={{ label: "Шаблон", value: templateName }}
+      displayName={{ label: uiText.card, value: card.display_name }}
+      publicAccessContent={
+        canManage ? (
+          <div className="card-base-block-public-settings">
+            <DataAlert error={publicAccessError} />
+            <div className="card-base-toggle-grid">
+              <label className="checkbox-control">
+                <input
+                  type="checkbox"
+                  checked={publicViewEnabled}
+                  disabled={isUpdatingPublicAccess || publicEditEnabled}
+                  onChange={(event) =>
+                    onPublicAccessChange({ public_view_enabled: event.currentTarget.checked })
+                  }
+                />
+                <span>{uiText.publicViewCard}</span>
+              </label>
+              <label className="checkbox-control">
+                <input
+                  type="checkbox"
+                  checked={publicEditEnabled}
+                  disabled={isUpdatingPublicAccess}
+                  onChange={(event) =>
+                    onPublicAccessChange({ public_edit_enabled: event.currentTarget.checked })
+                  }
+                />
+                <span>{uiText.publicEditCard}</span>
+              </label>
+            </div>
             <PublicAccessFieldPicker
               fields={fields}
               publicAccess={publicAccess}
               disabled={isUpdatingPublicAccess}
               onChange={onPublicAccessChange}
             />
-          </details>
-        ) : null}
-        {canManage && repeatableBlocks.length > 0 ? (
-          <RepeatableBlockControls
-            blocks={repeatableBlocks}
-            card={card}
-            isCreating={isCreatingBlockInstance}
-            isArchiving={isArchivingBlockInstance}
-            onAdd={onAddBlockInstance}
-            onArchive={onArchiveBlockInstance}
-          />
-        ) : null}
-      </div>
-    </section>
+            {repeatableBlocks.length > 0 ? (
+              <RepeatableBlockControls
+                blocks={repeatableBlocks}
+                card={card}
+                isCreating={isCreatingBlockInstance}
+                isArchiving={isArchivingBlockInstance}
+                onAdd={onAddBlockInstance}
+                onArchive={onArchiveBlockInstance}
+              />
+            ) : null}
+            {publicLinkControl}
+            <CardCreationLinkContinuation cardId={card.id} canManage token={token} />
+          </div>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -1110,26 +1104,6 @@ function loadCardTabs(): { activeTab: CardShellTab; openCardIds: string[] } {
 
 function saveCardTabs(state: { activeTab: CardShellTab; openCardIds: string[] }) {
   localStorage.setItem(cardTabsStorageKey, JSON.stringify(state));
-}
-
-function cardCompletionLabel(fields: EditableCardField[]) {
-  const requiredFields = fields.filter(
-    (field) =>
-      field.schema?.is_active &&
-      ["required", "required_on_publish"].includes(field.schema.required_mode) &&
-      field.field.field_type !== "static_text",
-  );
-  const completed = requiredFields.filter((field) =>
-    isCompletedCardValue(field.field.value),
-  ).length;
-  return `Обязательные поля: ${completed} из ${requiredFields.length} заполнено`;
-}
-
-function isCompletedCardValue(value: unknown) {
-  if (value === null || value === undefined) return false;
-  if (typeof value === "string") return value.trim().length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  return true;
 }
 
 async function invalidateCardQueries(

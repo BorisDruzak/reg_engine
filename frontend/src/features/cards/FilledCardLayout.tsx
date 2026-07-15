@@ -67,6 +67,7 @@ export type FilledCardLayoutProps = {
   renderFileRefControl?: (context: FilledCardFileRefControlContext) => ReactNode;
   navigationBefore?: readonly CardBlockNavigationItem[];
   navigationAfter?: readonly CardBlockNavigationItem[];
+  navigatorAction?: ReactNode;
   beforeContent?: ReactNode;
   afterContent?: ReactNode;
 };
@@ -92,6 +93,7 @@ export function FilledCardLayout({
   renderFileRefControl,
   navigationBefore = [],
   navigationAfter = [],
+  navigatorAction,
   beforeContent,
   afterContent,
 }: FilledCardLayoutProps) {
@@ -178,6 +180,7 @@ export function FilledCardLayout({
       <CardPresentationShell
         items={[...navigationBefore, ...navigationItems, ...navigationAfter]}
         beforeContent={beforeContent}
+        navigatorAction={navigatorAction}
       >
         <div className="filled-card-layout" data-testid="filled-card-layout">
           {surfaces.map((surface) => {

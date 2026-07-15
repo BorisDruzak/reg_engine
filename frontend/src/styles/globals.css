@@ -2195,8 +2195,7 @@ tr:last-child td {
   border-color: #83c7b6;
 }
 
-.card-base-block-header,
-.card-base-block-public-heading {
+.card-base-block-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -2209,7 +2208,6 @@ tr:last-child td {
 }
 
 .card-base-block-header strong,
-.card-base-block-public-heading > strong,
 .card-workspace-footer-panel > strong,
 .card-workspace-archive-panel > strong {
   color: #1f334d;
@@ -2250,12 +2248,6 @@ tr:last-child td {
   cursor: pointer;
   color: #1f334d;
   font-weight: 700;
-}
-
-.card-base-block-metadata {
-  margin: 0;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
 }
 
 .card-base-block-public-settings {

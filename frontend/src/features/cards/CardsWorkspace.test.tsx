@@ -416,6 +416,64 @@ describe("CardsWorkspace", () => {
 
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
+
+  test("uses the shared read-only base and collapsed public access for a saved draft", async () => {
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+    renderWorkspace({
+      cards: [{ ...organizationUnitCardSummary, lifecycle_status: "draft" }],
+      card: organizationUnitCard,
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    const baseBlock = await screen.findByLabelText("Базовый блок");
+    expect(within(baseBlock).getByText("Шаблон", { selector: "output" })).toBeInTheDocument();
+    expect(within(baseBlock).getByText(organizationUnitCard.display_name)).toBeInTheDocument();
+    expect(within(baseBlock).queryByRole("combobox", { name: "Организация карточки" })).not.toBeInTheDocument();
+    expect(baseBlock.querySelector(".metadata-list")).toBeNull();
+
+    expect(screen.getByRole("status", { name: "Статус карточки" })).toHaveTextContent("Черновик");
+
+    const accessSummary = within(baseBlock).getByText("Публичный доступ", { selector: "summary" });
+    const accessDetails = accessSummary.closest("details");
+    expect(accessDetails).not.toBeNull();
+    expect(accessDetails).not.toHaveAttribute("open");
+
+    fireEvent.click(accessSummary);
+
+    expect(accessDetails).toHaveAttribute("open");
+    expect(within(accessDetails!).getByRole("checkbox", { name: "Публичный просмотр карточки" })).toBeInTheDocument();
+    expect(within(accessDetails!).getByText("Показывать поля")).toBeInTheDocument();
+    expect(within(accessDetails!).getByRole("button", { name: "Публичная ссылка" })).toBeInTheDocument();
+  });
+
+  test("hides saved-card public access controls from users without management rights", async () => {
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+    renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: { ...organizationUnitCard, can_manage: false },
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    const baseBlock = await screen.findByLabelText("Базовый блок");
+    expect(within(baseBlock).queryByText("Публичный доступ", { selector: "summary" })).not.toBeInTheDocument();
+    expect(
+      within(baseBlock).queryByRole("checkbox", { name: "Публичный просмотр карточки" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("does not render a public-link action while creating a card", () => {
+    renderWorkspace();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+
+    expect(screen.queryByRole("button", { name: "Публичная ссылка" })).not.toBeInTheDocument();
+  });
 });
 
 function renderWorkspace({
