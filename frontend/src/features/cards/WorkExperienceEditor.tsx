@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type FocusEvent } from "react";
 
 import type { WorkExperienceValue } from "@/api/types";
 
@@ -14,8 +14,9 @@ type WorkExperiencePart = "days" | "months" | "years";
 type RawWorkExperience = Record<WorkExperiencePart, string>;
 
 type WorkExperienceDraft = {
-  baseValue: WorkExperienceValue;
+  emittedValue: WorkExperienceValue;
   rawValue: RawWorkExperience;
+  sourceValue: WorkExperienceValue;
 };
 
 const fieldLabels: Record<WorkExperiencePart, string> = {
@@ -40,27 +41,36 @@ export function WorkExperienceEditor({
   const normalizedValue = workExperienceValueFromUnknown(value) ?? defaultWorkExperienceValue();
   const editorId = useId();
   const [draft, setDraft] = useState<WorkExperienceDraft>(() => ({
-    baseValue: normalizedValue,
+    emittedValue: normalizedValue,
     rawValue: toRawValue(normalizedValue),
+    sourceValue: value,
   }));
-  const rawValue = isSamePayload(draft.baseValue, normalizedValue)
-    ? draft.rawValue
-    : toRawValue(normalizedValue);
+  const rawValue =
+    draft.sourceValue === value || isSamePayload(draft.emittedValue, normalizedValue)
+      ? draft.rawValue
+      : toRawValue(normalizedValue);
 
   const currentValue = toPayload(rawValue);
 
   function updatePart(part: WorkExperiencePart, nextRawValue: string) {
-    if (!/^\d*$/.test(nextRawValue)) {
+    if (!isSafeRawPart(nextRawValue)) {
       return;
     }
     const nextRaw = { ...rawValue, [part]: nextRawValue };
     const nextValue = toPayload(nextRaw);
-    setDraft({ baseValue: normalizedValue, rawValue: nextRaw });
+    setDraft({ emittedValue: nextValue, rawValue: nextRaw, sourceValue: value });
     onChange(workExperiencePayload(nextValue));
   }
 
+  function handleBlur(event: FocusEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    onBlur?.();
+  }
+
   return (
-    <div aria-label={label} className="work-experience-editor" role="group">
+    <div aria-label={label} className="work-experience-editor" onBlur={handleBlur} role="group">
       {(["days", "months", "years"] as const).map((part) => {
         const inputId = `${editorId}-${part}`;
         return (
@@ -71,7 +81,6 @@ export function WorkExperienceEditor({
               disabled={disabled}
               id={inputId}
               inputMode="numeric"
-              onBlur={onBlur}
               onChange={(event) => updatePart(part, event.currentTarget.value)}
               pattern="[0-9]*"
               type="text"
@@ -103,6 +112,10 @@ function toPayload(value: RawWorkExperience) {
 
 function rawPartToNumber(value: string): number {
   return value === "" ? 0 : Number(value);
+}
+
+function isSafeRawPart(value: string): boolean {
+  return /^\d*$/.test(value) && (value === "" || Number.isSafeInteger(Number(value)));
 }
 
 function isSamePayload(
