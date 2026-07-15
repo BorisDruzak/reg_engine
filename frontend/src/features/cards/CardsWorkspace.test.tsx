@@ -378,14 +378,16 @@ describe("CardsWorkspace", () => {
 
     const preview = document.querySelector(".single-stage-card-creation-template");
     expect(
-      [...(preview?.querySelectorAll(".single-stage-card-creation-block > header strong") ?? [])].map(
-        (heading) => heading.textContent,
-      ),
+      [
+        ...(preview?.querySelectorAll(".single-stage-card-creation-block > header strong") ?? []),
+      ].map((heading) => heading.textContent),
     ).toEqual(["ФИО", "Должность"]);
     expect(
-      [...document.querySelectorAll("#creation-card-block-block-person .single-stage-card-creation-field > span")].map(
-        (label) => label.textContent,
-      ),
+      [
+        ...document.querySelectorAll(
+          "#creation-card-block-block-person .single-stage-card-creation-field > span",
+        ),
+      ].map((label) => label.textContent),
     ).toEqual(["ФИО *", "Дата рождения *"]);
   });
 

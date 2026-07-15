@@ -434,13 +434,15 @@ function templatePreviewFromSchema(
 
 function templateLayoutFieldRanks(template: CardTemplateRead) {
   const formLayout = template.field_schema_json.form_layout;
-  if (!isRecord(formLayout) || !Array.isArray(formLayout.sections)) return new Map<string, number>();
+  if (!isRecord(formLayout) || !Array.isArray(formLayout.sections))
+    return new Map<string, number>();
 
   const ranks = new Map<string, number>();
   for (const section of formLayout.sections) {
     if (!isRecord(section) || !Array.isArray(section.items)) continue;
     for (const item of section.items) {
-      if (!isRecord(item) || typeof item.field_id !== "string" || ranks.has(item.field_id)) continue;
+      if (!isRecord(item) || typeof item.field_id !== "string" || ranks.has(item.field_id))
+        continue;
       ranks.set(item.field_id, ranks.size);
     }
   }
