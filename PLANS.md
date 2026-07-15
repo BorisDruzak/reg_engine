@@ -77,6 +77,15 @@ not a hardcoded employee registry.
   canonical value `12 дней 2 месяца 4 года`; no card data was changed during
   this visual verification.
 
+  Follow-up correction: the one-line editor initially displayed formatted
+  Russian text, while its input guard accepted only digits and spaces. A
+  click that placed the caret in that text therefore made the field appear
+  non-editable. On focus and click the editor now selects the current value,
+  so typing replaces it with the accepted three-number draft immediately.
+  The focused regression reproduces the prior formatted-value-to-`16 3 12`
+  interaction and passes, along with 70 related card-editor tests,
+  TypeScript, ESLint, and Prettier checks.
+
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
   affected migration/API/integration suite against a disposable PostgreSQL

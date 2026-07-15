@@ -70,7 +70,11 @@ export function WorkExperienceEditor({
         inputMode="numeric"
         onBlur={handleBlur}
         onChange={(event) => handleChange(event.currentTarget.value)}
-        onFocus={() => setIsFocused(true)}
+        onFocus={(event) => {
+          setIsFocused(true);
+          event.currentTarget.select();
+        }}
+        onClick={(event) => event.currentTarget.select()}
         type="text"
         value={draftValue}
       />

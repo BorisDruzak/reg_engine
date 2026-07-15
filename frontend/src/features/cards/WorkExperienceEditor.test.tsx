@@ -60,6 +60,27 @@ describe("WorkExperienceEditor", () => {
     expect(input).toHaveValue("16 дней 3 месяца 12 лет");
   });
 
+  test("lets typing replace a formatted value without manually clearing it", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="work_experience"
+        label="Стаж работы"
+        options={[]}
+        value={{ days: 12, months: 2, years: 4 } as never}
+        onChange={onChange}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Стаж работы" });
+    await user.click(input);
+    await user.type(input, "16 3 12");
+
+    expect(input).toHaveValue("16 3 12");
+    expect(onChange).toHaveBeenLastCalledWith({ days: 16, months: 3, years: 12 });
+  });
+
   test("does not emit an incomplete duration", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
