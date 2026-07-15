@@ -376,9 +376,29 @@ function templatePreviewFromSchema(
     return null;
   }
   const fieldIdSet = new Set(fieldIds);
+  const blockById = new Map(blocks.map((block) => [block.id, block]));
+  const layoutFieldRanks = templateLayoutFieldRanks(template);
+  const schemaFields = fields
+    .filter((field) => field.is_active && fieldIdSet.has(field.id))
+    .sort((left, right) => {
+      const leftBlock = blockById.get(left.block_id);
+      const rightBlock = blockById.get(right.block_id);
+      return (
+        (leftBlock?.position ?? Number.MAX_SAFE_INTEGER) -
+          (rightBlock?.position ?? Number.MAX_SAFE_INTEGER) ||
+        left.position - right.position ||
+        left.code.localeCompare(right.code)
+      );
+    });
+  const schemaRankByFieldId = new Map(schemaFields.map((field, index) => [field.id, index]));
   const fieldsByBlock = new Map<string, CardCreationPreviewFieldRead[]>();
-  for (const field of [...fields].sort((left, right) => left.position - right.position)) {
-    if (!field.is_active || !fieldIdSet.has(field.id)) continue;
+  for (const field of [...schemaFields].sort((left, right) => {
+    const leftRank =
+      layoutFieldRanks.get(left.id) ?? layoutFieldRanks.size + schemaRankByFieldId.get(left.id)!;
+    const rightRank =
+      layoutFieldRanks.get(right.id) ?? layoutFieldRanks.size + schemaRankByFieldId.get(right.id)!;
+    return leftRank - rightRank;
+  })) {
     const blockFields = fieldsByBlock.get(field.block_id) ?? [];
     blockFields.push({
       field_id: field.id,
@@ -395,23 +415,40 @@ function templatePreviewFromSchema(
     organization_id: "",
     card_template_id: template.id,
     display_name: template.name,
-    blocks: [...blocks]
-      .sort((left, right) => left.position - right.position)
-      .flatMap((block) => {
-        const blockFields = fieldsByBlock.get(block.id);
-        if (!block.is_active || !blockFields?.length) return [];
-        return [
-          {
-            block_id: block.id,
-            code: block.code,
-            title: block.title,
-            description: block.description,
-            is_repeatable: block.is_repeatable,
-            fields: blockFields,
-          },
-        ];
-      }),
+    blocks: [...fieldsByBlock].flatMap(([blockId, blockFields]) => {
+      const block = blockById.get(blockId);
+      if (!block?.is_active) return [];
+      return [
+        {
+          block_id: block.id,
+          code: block.code,
+          title: block.title,
+          description: block.description,
+          is_repeatable: block.is_repeatable,
+          fields: blockFields,
+        },
+      ];
+    }),
   };
+}
+
+function templateLayoutFieldRanks(template: CardTemplateRead) {
+  const formLayout = template.field_schema_json.form_layout;
+  if (!isRecord(formLayout) || !Array.isArray(formLayout.sections)) return new Map<string, number>();
+
+  const ranks = new Map<string, number>();
+  for (const section of formLayout.sections) {
+    if (!isRecord(section) || !Array.isArray(section.items)) continue;
+    for (const item of section.items) {
+      if (!isRecord(item) || typeof item.field_id !== "string" || ranks.has(item.field_id)) continue;
+      ranks.set(item.field_id, ranks.size);
+    }
+  }
+  return ranks;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isRequired(requiredMode: string) {

@@ -7,6 +7,15 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-15 card-creation preview now mirrors the selected template's saved
+  `form_layout` before an organization is selected. The client orders fields by
+  layout item sequence, derives block order from that same sequence, and keeps
+  unplaced template fields after the layout-defined fields using the schema
+  fallback. The creation presentation also uses a consistent 16px gap between
+  the base block and the first template block. Focused frontend tests (14),
+  TypeScript, and the production build pass; ESLint has no errors and retains
+  the existing unrelated `FilledCardLayout.tsx` hook-dependency warning.
+
 - 2026-07-14 card-creation scroll surface is released at `da84b810`. Only the outer `data-panel` that directly contains
   `single-stage-card-creation` is transparent and uses `overflow: visible`;
   the application background therefore remains visible while the independent

@@ -130,6 +130,9 @@ describe("CardsWorkspace", () => {
     expect(globalStyles).toContain(
       ".data-panel:has(> .single-stage-card-creation) {\n  overflow: visible;\n  border-color: transparent;\n  background: transparent;",
     );
+    expect(globalStyles).toContain(
+      ".single-stage-card-creation .card-presentation-content {\n  display: grid;\n  gap: 16px;",
+    );
   });
 
   test("restores scroll-linked template block navigation while creating a card", async () => {
@@ -270,6 +273,120 @@ describe("CardsWorkspace", () => {
     const saveDraftButtons = screen.getAllByRole("button", { name: "Сохранить черновик" });
     expect(saveDraftButtons).toHaveLength(1);
     expect(saveDraftButtons[0].closest(".card-presentation-sidebar")).not.toBeNull();
+  });
+
+  test("uses the template layout sequence before an organization is selected", () => {
+    const schemaWithLayoutOrder: RegistrySchemaRead = {
+      ...schema,
+      blocks: [
+        {
+          id: "block-person",
+          registry_id: "registry-1",
+          code: "person",
+          title: "ФИО",
+          description: null,
+          position: 2,
+          is_repeatable: false,
+          is_active: true,
+          public_visible: true,
+          public_editable: true,
+        },
+        {
+          id: "block-position",
+          registry_id: "registry-1",
+          code: "position",
+          title: "Должность",
+          description: null,
+          position: 1,
+          is_repeatable: false,
+          is_active: true,
+          public_visible: true,
+          public_editable: true,
+        },
+      ],
+      fields: [
+        {
+          id: "field-birth-date",
+          block_id: "block-person",
+          code: "birth_date",
+          label: "Дата рождения",
+          description: null,
+          field_type: "date",
+          position: 1,
+          required_mode: "required",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: true,
+        },
+        {
+          id: "field-name",
+          block_id: "block-person",
+          code: "name",
+          label: "ФИО",
+          description: null,
+          field_type: "text",
+          position: 2,
+          required_mode: "required",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: true,
+        },
+        {
+          id: "field-position-name",
+          block_id: "block-position",
+          code: "position_name",
+          label: "Наименование должности",
+          description: null,
+          field_type: "text",
+          position: 0,
+          required_mode: "optional",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: true,
+        },
+      ],
+      templates: [
+        {
+          ...schema.templates[0],
+          field_schema_json: {
+            field_ids: ["field-birth-date", "field-name", "field-position-name"],
+            form_layout: {
+              sections: [
+                { items: [{ field_id: "field-name" }, { field_id: "field-birth-date" }] },
+                { items: [{ field_id: "field-position-name" }] },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    renderWorkspace({ schema: schemaWithLayoutOrder });
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+
+    const preview = document.querySelector(".single-stage-card-creation-template");
+    expect(
+      [...(preview?.querySelectorAll(".single-stage-card-creation-block > header strong") ?? [])].map(
+        (heading) => heading.textContent,
+      ),
+    ).toEqual(["ФИО", "Должность"]);
+    expect(
+      [...document.querySelectorAll("#creation-card-block-block-person .single-stage-card-creation-field > span")].map(
+        (label) => label.textContent,
+      ),
+    ).toEqual(["ФИО *", "Дата рождения *"]);
   });
 
   test("shows the reference-list label instead of its stored identifier in a card row", async () => {

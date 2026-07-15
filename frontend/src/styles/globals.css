@@ -5453,6 +5453,11 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   gap: 16px;
 }
 
+.single-stage-card-creation .card-presentation-content {
+  display: grid;
+  gap: 16px;
+}
+
 .single-stage-card-creation-block {
   display: grid;
   gap: 14px;
