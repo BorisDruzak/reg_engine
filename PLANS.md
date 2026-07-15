@@ -85,6 +85,12 @@ not a hardcoded employee registry.
   The focused regression reproduces the prior formatted-value-to-`16 3 12`
   interaction and passes, along with 70 related card-editor tests,
   TypeScript, ESLint, and Prettier checks.
+  Release commit `b416c6c5` is pushed to `main`, the server checkout is
+  synchronized, and frontend asset `index-PjdTOjkg.js` is deployed. The API
+  service restarted successfully and its health endpoint passed. A fresh
+  public-card check found exactly one enabled, editable
+  `Стаж муниципальной службы` textbox; no card values were changed during
+  this check.
 
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
