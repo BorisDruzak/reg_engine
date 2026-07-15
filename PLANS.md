@@ -7,6 +7,21 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-15 pre-draft card guidance is released at `66e494af`. Before the
+  first save, template fields use a muted locked state and an accessible field
+  action explains that the draft must be saved first. Selecting a required
+  base-block value changes the action-rail copy to explicitly request a draft
+  save and starts a gentle save-button pulse. Trying to fill a locked template
+  field shakes that field, shows a field-specific hint, and briefly intensifies
+  the save-button animation. Reduced-motion preferences disable the animations.
+  Focused frontend tests (14), TypeScript, and the production build pass;
+  ESLint has no errors and retains the existing unrelated
+  `FilledCardLayout.tsx` hook-dependency warning. Commits `1e56f7bd` and
+  `66e494af` are pushed to `main` and deployed. The published creation screen
+  confirms the ready rail text, nine muted locked fields, pulse animation,
+  field shake, field-specific draft-save hint, save-button attention animation,
+  and no browser-console warnings or errors. No card was created during QA.
+
 - 2026-07-15 card-creation preview now mirrors the selected template's saved
   `form_layout` before an organization is selected. The client orders fields by
   the saved row/column coordinates of sections and items, derives block order
