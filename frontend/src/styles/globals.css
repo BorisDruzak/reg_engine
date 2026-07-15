@@ -2155,6 +2155,30 @@ tr:last-child td {
   min-width: 0;
 }
 
+.card-presentation-sidebar {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+}
+
+.card-draft-action-rail {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d5dfeb;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.card-draft-action-rail > p {
+  margin: 0;
+  color: #40536b;
+}
+
 .card-base-block,
 .card-workspace-footer-panel,
 .card-workspace-archive-panel {
@@ -2194,6 +2218,38 @@ tr:last-child td {
 
 .card-base-block-header small {
   color: #65758a;
+}
+
+.card-base-block-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.card-base-block-row > span {
+  color: #40536b;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.card-base-block-output {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #1f334d;
+  font-weight: 600;
+}
+
+.card-base-public-access {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.card-base-public-access summary {
+  cursor: pointer;
+  color: #1f334d;
+  font-weight: 700;
 }
 
 .card-base-block-metadata {
@@ -2308,8 +2364,6 @@ tr:last-child td {
 }
 
 .card-block-navigator {
-  position: sticky;
-  top: 16px;
   display: grid;
   gap: 10px;
   max-height: calc(100vh - 32px);
@@ -5520,8 +5574,12 @@ button.searchable-choice-picker-option:hover:not(:disabled),
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .card-block-navigator {
+  .card-presentation-sidebar {
     position: static;
+    max-height: none;
+  }
+
+  .card-block-navigator {
     max-height: none;
   }
 
