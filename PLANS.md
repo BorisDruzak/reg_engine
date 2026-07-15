@@ -5320,8 +5320,8 @@ Status: complete, pushed to `main`, deployed, and Browser verified without creat
 
 #### Explicit card draft and unified card presentation
 
-Status: implementation and focused review complete; production deployment and
-Browser acceptance are pending.
+Status: complete; pushed to main, deployed to the production VM, and Browser
+verified on 2026-07-15.
 
 - A new card is created only by the explicit draft-save action: organization
   starts empty, a single available template is selected automatically, and
@@ -5339,3 +5339,11 @@ Browser acceptance are pending.
   database-dependent scenarios skipped when TEST_DATABASE_URL is unset. The
   legacy all-app integration fixture still contains unrelated retired
   interaction assumptions and is tracked separately from this release slice.
+- Release evidence: commit `3a67b627` was pushed to `origin/main`; the server
+  checkout was fast-forwarded, the frontend production artifact was uploaded,
+  and `reg-engine.service` restarted successfully. Same-origin frontend/API
+  smoke checks passed.
+- Browser acceptance: the card-creation page loads over the configured HTTPS
+  hostname with an empty organization selector, the sole template selected,
+  the `Сохранить черновик` action disabled until an organization is chosen,
+  and no browser-console errors. No test card was created during this check.
