@@ -590,6 +590,7 @@ export function CardsWorkspace({
             token={token}
             organizations={organizations}
             templates={activeCardTemplates}
+            schemaBlocks={schema?.blocks ?? []}
             schemaFields={schema?.fields ?? []}
             onCancel={() => handleShellTabChange("list")}
             onCardCreated={openCreatedCardEditor}

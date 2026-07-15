@@ -5384,3 +5384,13 @@ Status: complete, pushed, deployed, and server-checked.
   passes (`10 passed, 12 skipped`); frontend lint, TypeScript, and production
   build pass with the existing `FilledCardLayout.tsx` hook warning and Vite
   chunk-size advisory.
+
+#### Card creation first-template preview
+
+Status: implementation complete locally; release verification in progress.
+
+- Opening `Создать карточку` selects the first available card template and
+  renders its schema blocks immediately, before an organization is selected.
+  The preview controls stay disabled until the explicit draft save flow.
+- The creation action is rendered once: in the sticky block navigator. The
+  duplicate action below the initial base block is removed.

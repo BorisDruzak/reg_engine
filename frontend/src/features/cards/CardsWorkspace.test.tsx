@@ -210,6 +210,68 @@ describe("CardsWorkspace", () => {
     );
   });
 
+  test("shows the first template and its fields immediately with one sidebar draft action", () => {
+    const schemaWithTemplateField: RegistrySchemaRead = {
+      ...schema,
+      blocks: [
+        {
+          id: "block-person",
+          registry_id: "registry-1",
+          code: "person",
+          title: "ФИО",
+          description: null,
+          position: 0,
+          is_repeatable: false,
+          is_active: true,
+          public_visible: true,
+          public_editable: true,
+        },
+      ],
+      fields: [
+        {
+          id: "field-name",
+          block_id: "block-person",
+          code: "name",
+          label: "Фамилия",
+          description: null,
+          field_type: "text",
+          position: 0,
+          required_mode: "required",
+          options_source_type: null,
+          options_source_id: null,
+          options_config_json: null,
+          is_active: true,
+          is_list_display: false,
+          public_visible: true,
+          public_editable: true,
+        },
+      ],
+      templates: [
+        {
+          ...schema.templates[0],
+          field_schema_json: { field_ids: ["field-name"] },
+        },
+        {
+          ...schema.templates[0],
+          id: "template-2",
+          code: "other-template",
+          name: "Другой шаблон",
+          position: 2,
+          field_schema_json: { field_ids: [] },
+        },
+      ],
+    };
+
+    renderWorkspace({ schema: schemaWithTemplateField });
+    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+
+    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
+    expect(screen.getByLabelText("Фамилия")).toBeDisabled();
+    const saveDraftButtons = screen.getAllByRole("button", { name: "Сохранить черновик" });
+    expect(saveDraftButtons).toHaveLength(1);
+    expect(saveDraftButtons[0].closest(".card-presentation-sidebar")).not.toBeNull();
+  });
+
   test("shows the reference-list label instead of its stored identifier in a card row", async () => {
     const referenceItemId = "ffca44e1-85b0-47ad-99b0-cadcc2e757a5";
     const referenceCard: CardSummaryRead = {
@@ -494,12 +556,14 @@ function renderWorkspace({
   cards = [],
   card = null,
   selectedCardId = "",
+  schema: workspaceSchema = schema,
 }: {
   onOpenCreatedCard?: (cardId: string) => Promise<void>;
   onSelectCard?: (cardId: string) => void;
   cards?: CardSummaryRead[];
   card?: CardRead | null;
   selectedCardId?: string;
+  schema?: RegistrySchemaRead;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -509,7 +573,7 @@ function renderWorkspace({
       <CardsWorkspace
         cards={cards}
         card={card}
-        schema={schema}
+        schema={workspaceSchema}
         token="test-token"
         organizations={[organization]}
         selectedCardId={selectedCardId}

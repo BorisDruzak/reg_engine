@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { createOrganizationCardDraft, getCardCreationPreview } from "@/api/client";
 import type {
   CardCreationPreviewFieldRead,
+  CardCreationPreviewRead,
   CardPublicAccessPayload,
   CardPublicAccessRead,
   CardTemplateRead,
+  FormBlockRead,
   FormFieldRead,
   OrganizationRead,
 } from "@/api/types";
@@ -34,6 +36,7 @@ export function SingleStageCardCreation({
   token,
   organizations,
   templates,
+  schemaBlocks,
   schemaFields,
   onCancel,
   onCardCreated,
@@ -41,13 +44,14 @@ export function SingleStageCardCreation({
   token: string;
   organizations: OrganizationRead[];
   templates: CardTemplateRead[];
+  schemaBlocks: readonly FormBlockRead[];
   schemaFields: readonly FormFieldRead[];
   onCancel: () => void;
   onCardCreated: (cardId: string) => Promise<void>;
 }) {
   const [state, setState] = useState<CreationState>({
     organizationId: "",
-    templateId: templates.length === 1 ? templates[0].id : "",
+    templateId: templates[0]?.id ?? "",
     displayName: "",
     values: {},
     publicAccess: {
@@ -59,14 +63,23 @@ export function SingleStageCardCreation({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const templateId = state.templateId || (templates.length === 1 ? templates[0].id : "");
+  const templateId = state.templateId || templates[0]?.id || "";
   const canLoadPreview = Boolean(state.organizationId && templateId);
   const previewQuery = useQuery({
     queryKey: ["card-creation-preview", token, state.organizationId, templateId],
     queryFn: () => getCardCreationPreview(token, state.organizationId, templateId),
     enabled: canLoadPreview,
   });
-  const preview = previewQuery.data ?? null;
+  const localTemplatePreview = useMemo(
+    () =>
+      templatePreviewFromSchema(
+        templates.find((template) => template.id === templateId),
+        schemaBlocks,
+        schemaFields,
+      ),
+    [schemaBlocks, schemaFields, templateId, templates],
+  );
+  const preview = previewQuery.data ?? localTemplatePreview;
   const creationFields = useMemo(
     () => preview?.blocks.flatMap((block) => block.fields) ?? [],
     [preview?.blocks],
@@ -256,7 +269,6 @@ export function SingleStageCardCreation({
 
   return (
     <section className="single-stage-card-creation stack" aria-label="Создание карточки">
-      {preview?.blocks.length ? null : baseBlock}
       <DataAlert
         error={
           error instanceof Error ? error : error ? new Error(errorText(error)) : previewQuery.error
@@ -266,7 +278,7 @@ export function SingleStageCardCreation({
       {canLoadPreview && !previewQuery.isLoading && preview?.blocks.length === 0 ? (
         <p className="data-empty">В выбранном шаблоне нет доступных полей.</p>
       ) : null}
-      {preview?.blocks.length ? (
+      {templateId ? (
         <CardPresentationShell
           items={[
             {
@@ -283,7 +295,7 @@ export function SingleStageCardCreation({
           navigatorAction={draftActionRail}
         >
           <div className="single-stage-card-creation-template">
-            {preview.blocks.map((block) => {
+            {(preview?.blocks ?? []).map((block) => {
               const blockState = completions.blocks.get(block.block_id)?.state ?? "empty";
               return (
                 <section
@@ -335,15 +347,71 @@ export function SingleStageCardCreation({
             })}
           </div>
         </CardPresentationShell>
-      ) : null}
+      ) : (
+        <>
+          {baseBlock}
+          {draftActionRail}
+        </>
+      )}
       {creationFields.length > 0 ? (
         <p className="field-editor-hint">
           Сначала сохраните черновик — после этого можно заполнять поля шаблона.
         </p>
       ) : null}
-      {!preview?.blocks.length ? draftActionRail : null}
     </section>
   );
+}
+
+function templatePreviewFromSchema(
+  template: CardTemplateRead | undefined,
+  blocks: readonly FormBlockRead[],
+  fields: readonly FormFieldRead[],
+): CardCreationPreviewRead | null {
+  const fieldIds = template?.field_schema_json.field_ids;
+  if (
+    !template ||
+    !Array.isArray(fieldIds) ||
+    fieldIds.some((fieldId) => typeof fieldId !== "string")
+  ) {
+    return null;
+  }
+  const fieldIdSet = new Set(fieldIds);
+  const fieldsByBlock = new Map<string, CardCreationPreviewFieldRead[]>();
+  for (const field of [...fields].sort((left, right) => left.position - right.position)) {
+    if (!field.is_active || !fieldIdSet.has(field.id)) continue;
+    const blockFields = fieldsByBlock.get(field.block_id) ?? [];
+    blockFields.push({
+      field_id: field.id,
+      code: field.code,
+      label: field.label,
+      description: field.description,
+      field_type: field.field_type,
+      required_mode: field.required_mode,
+      options: [],
+    });
+    fieldsByBlock.set(field.block_id, blockFields);
+  }
+  return {
+    organization_id: "",
+    card_template_id: template.id,
+    display_name: template.name,
+    blocks: [...blocks]
+      .sort((left, right) => left.position - right.position)
+      .flatMap((block) => {
+        const blockFields = fieldsByBlock.get(block.id);
+        if (!block.is_active || !blockFields?.length) return [];
+        return [
+          {
+            block_id: block.id,
+            code: block.code,
+            title: block.title,
+            description: block.description,
+            is_repeatable: block.is_repeatable,
+            fields: blockFields,
+          },
+        ];
+      }),
+  };
 }
 
 function isRequired(requiredMode: string) {
