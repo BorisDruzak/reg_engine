@@ -26,19 +26,25 @@ export function WorkExperienceEditor({
 }) {
   const normalizedValue = workExperienceValueFromUnknown(value) ?? defaultWorkExperienceValue();
   const formattedValue = formatWorkExperience(normalizedValue);
-  const [previousValue, setPreviousValue] = useState(value);
   const [draftValue, setDraftValue] = useState(formattedValue);
-  const valueChanged = previousValue !== value;
+  const [isFocused, setIsFocused] = useState(false);
+  const [previousValue, setPreviousValue] = useState(value);
 
-  if (valueChanged) {
+  if (previousValue !== value) {
     setPreviousValue(value);
-    if (!isIncompleteDurationDraft(draftValue)) {
+    if (!isFocused) {
       setDraftValue(formattedValue);
     }
   }
 
-  const inputValue =
-    isIncompleteDurationDraft(draftValue) || !valueChanged ? draftValue : formattedValue;
+  function handleBlur() {
+    setIsFocused(false);
+    const parsed = parseDurationDraft(draftValue);
+    if (parsed) {
+      setDraftValue(formatWorkExperience(parsed));
+    }
+    onBlur?.();
+  }
 
   function handleChange(nextValue: string) {
     if (!/^[0-9 ]*$/.test(nextValue)) {
@@ -49,16 +55,11 @@ export function WorkExperienceEditor({
     const parsed = parseDurationDraft(nextValue);
     if (parsed) {
       onChange(workExperiencePayload(parsed));
-      setDraftValue(formatWorkExperience(parsed));
-      return;
-    }
-
-    if (isIncompleteDurationDraft(nextValue)) {
       setDraftValue(nextValue);
       return;
     }
 
-    setDraftValue(formattedValue);
+    setDraftValue(nextValue);
   }
 
   return (
@@ -67,11 +68,11 @@ export function WorkExperienceEditor({
         aria-label={label}
         disabled={disabled}
         inputMode="numeric"
-        onBlur={onBlur}
+        onBlur={handleBlur}
         onChange={(event) => handleChange(event.currentTarget.value)}
-        pattern="[0-9 ]*"
+        onFocus={() => setIsFocused(true)}
         type="text"
-        value={inputValue}
+        value={draftValue}
       />
     </div>
   );
@@ -89,13 +90,4 @@ function parseDurationDraft(value: string): ParsedDuration | null {
   }
 
   return { days, months, years };
-}
-
-function isIncompleteDurationDraft(value: string): boolean {
-  if (!/^[0-9 ]*$/.test(value)) {
-    return false;
-  }
-
-  const numericParts = value.trim().split(/\s+/).filter(Boolean);
-  return numericParts.length < 3;
 }
