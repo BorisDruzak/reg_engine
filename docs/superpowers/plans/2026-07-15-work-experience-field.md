@@ -14,6 +14,7 @@
 - Store only `{ "anchor_date": "YYYY-MM-DD" }` in `value_json`; never expose that date in card/public/API/document/XLSX output.
 - The browser must not calculate the current duration. Server calendar date is authoritative for every persisted-card read and export.
 - Do not schedule daily writes. Recalculation must survive a process restart because it is derived from the anchor at read time.
+- After save, the server immediately returns the canonical calendar decomposition for its anchor. It must not preserve an ambiguous submitted decomposition that maps to the same anchor date.
 - The visible order is always `days → months → years`; omit no unit when its value is zero.
 - Russian unit forms must follow: 11–19 (`N % 100`) plural; otherwise 1 singular; 2–4 paucal; all other values plural.
 - Retain existing typed-value validation, card/public RBAC, lifecycle, audit, soft-delete, and attachment restrictions.
@@ -59,7 +60,7 @@ frontend/src/
   - valid API/editor payload `{"days": 16, "months": 3, "years": 9}` and rejection of missing keys, booleans, negatives, fractions, unknown keys, and string numerals.
   - a strict XLSX text parser accepting only the complete `N day-unit N month-unit N year-unit` order and rejecting reordered, incomplete, or malformed strings.
   - calendar boundary cases (month ends, leap day, and a next-day read) using explicit `today` arguments.
-  - an entered duration that is converted to an anchor and then read on the same date as exactly the entered duration.
+  - an ambiguous month-boundary duration that is converted to an anchor and then read on the same date as the canonical calendar decomposition, rather than the submitted decomposition.
 - [ ] Implement a small dependency-free public API in `work_experience.py`:
 
   ```text
