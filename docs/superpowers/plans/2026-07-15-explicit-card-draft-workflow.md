@@ -132,7 +132,7 @@ git commit -m "feat: save card drafts explicitly"
 **Files:**
 - Modify: frontend/src/api/types.ts lines 360-430.
 - Modify: frontend/src/api/client.ts lines 450-510.
-- Test: frontend/src/features/cards/CardsWorkspace.test.tsx.
+- Create: frontend/src/api/client.test.ts.
 
 **Interfaces:**
 - Consumes: CardDraftCreatePayload.
@@ -141,7 +141,7 @@ git commit -m "feat: save card drafts explicitly"
 
 - [ ] **Step 1: Write the failing browser-client contract test**
 
-Configure the creation mock to click Save Draft; assert the request ends with /organizations/organization-1/cards/draft and its JSON contains:
+Create a direct apiRequest fetch mock for createOrganizationCardDraft. Assert the request ends with /organizations/organization-1/cards/draft and its JSON contains:
 
 ~~~ts
 {
@@ -565,4 +565,3 @@ git push origin main
 ~~~
 
 Expected: git status reports clean main tracking origin/main.
-
