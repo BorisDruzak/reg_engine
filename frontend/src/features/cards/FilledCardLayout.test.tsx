@@ -176,6 +176,35 @@ describe("FilledCardLayout", () => {
     expect(experienceNode.querySelector("a")).toBeNull();
   });
 
+  test("uses the actual saved-card inline edit path to save a structured work experience", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(<EditableWorkExperienceCard saveValues={saveValues} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-experience"));
+    expect(screen.getByRole("group", { name: "Стаж работы" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Дни")).toHaveValue("1");
+    expect(screen.getByLabelText("Месяцы")).toHaveValue("2");
+    expect(screen.getByLabelText("Годы")).toHaveValue("3");
+
+    fireEvent.change(screen.getByLabelText("Дни"), { target: { value: "16" } });
+    fireEvent.change(screen.getByLabelText("Месяцы"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Годы"), { target: { value: "9" } });
+    fireEvent.pointerDown(document.body);
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [
+          {
+            field_id: "experience",
+            block_instance_id: null,
+            value: { days: 16, months: 3, years: 9 },
+          },
+        ],
+      }),
+    );
+  });
+
   test("forwards the status action into the sticky card navigator", () => {
     render(
       <FilledCardLayout
@@ -425,6 +454,66 @@ function EditableFilledCard({
     <FilledCardLayout
       {...defaultProps({
         editableFieldIds: new Set(["first-name", "last-name", "status", "birth-date"]),
+        blockEditor,
+      })}
+    />
+  );
+}
+
+function EditableWorkExperienceCard({
+  saveValues,
+}: {
+  saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
+}) {
+  const experienceField = field({
+    id: "experience",
+    code: "experience",
+    label: "Стаж работы",
+    field_type: "work_experience",
+    position: 4,
+  });
+  const experienceFields = [...fields, experienceField];
+  const experienceLayout = {
+    ...layout,
+    structure: { blocks: [block], fields: experienceFields },
+    form_layout: {
+      ...layout.form_layout,
+      sections: [
+        {
+          ...layout.form_layout.sections[0],
+          items: [...layout.form_layout.sections[0].items, layoutField("experience", 4, 1, 1, 6)],
+        },
+      ],
+    },
+  };
+  const storedExperience = { days: 1, months: 2, years: 3, display: "1 день 2 месяца 3 года" };
+  const experienceInstances: FilledCardBlockInstanceRead[] = [
+    {
+      ...blockInstances[0],
+      fields: {
+        ...blockInstances[0].fields,
+        experience: {
+          field_id: "experience",
+          code: "experience",
+          field_type: "work_experience",
+          value: storedExperience,
+        },
+      },
+    },
+  ];
+  const blockEditor = useBlockEditor({
+    fields: experienceFields,
+    editableFieldIds: new Set(["experience"]),
+    saveValues,
+  });
+  return (
+    <FilledCardLayout
+      {...defaultProps({
+        layout: experienceLayout,
+        fields: experienceFields,
+        values: [...values, value("experience", storedExperience)],
+        blockInstances: experienceInstances,
+        editableFieldIds: new Set(["experience"]),
         blockEditor,
       })}
     />

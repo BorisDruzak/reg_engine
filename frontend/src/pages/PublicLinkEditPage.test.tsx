@@ -190,10 +190,15 @@ describe("PublicLinkEditPage", () => {
     fireEvent.change(screen.getByLabelText("Годы"), { target: { value: "9" } });
 
     await waitFor(() => expect(editCalls()).toHaveLength(2));
-    expect(editCalls().at(-1)?.body).toMatchObject({
+    const lastRequest = editCalls().at(-1);
+    expect(lastRequest?.body).toMatchObject({
       field_id: "field-experience",
       block_instance_id: "instance-main",
-      value: { days: 16, months: 3, years: 9 },
+    });
+    expect((lastRequest?.body as { value: unknown }).value).toEqual({
+      days: 16,
+      months: 3,
+      years: 9,
     });
   });
 

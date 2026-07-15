@@ -2059,6 +2059,59 @@ describe("CardWebLayoutCanvas", () => {
 });
 
 describe("CardLayoutRenderer", () => {
+  test("renders stored work-experience display text in the generic readonly layout node", () => {
+    const experienceField: FormFieldRead = {
+      ...fields[0],
+      id: "field-experience",
+      code: "experience",
+      label: "Стаж работы",
+      field_type: "work_experience",
+    };
+    const experienceLayout: CardTemplateLayoutRead = {
+      ...layout,
+      structure: { blocks: [block], fields: [experienceField] },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            items: [
+              {
+                ...layout.form_layout.sections[0].items[0],
+                id: "field-experience",
+                field_id: "field-experience",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    render(
+      <CardLayoutRenderer
+        {...canvasProps({
+          layout: experienceLayout,
+          blocks: [block],
+          fields: [experienceField],
+          mode: "readonly",
+          fieldValues: {
+            "field-experience": {
+              days: 16,
+              months: 3,
+              years: 9,
+              display: "16 дней 3 месяца 9 лет",
+            },
+          },
+        })}
+      />,
+    );
+
+    const node = screen.getByTestId("layout-field-field-experience");
+    expect(node).toHaveTextContent("16 дней 3 месяца 9 лет");
+    expect(node).not.toHaveTextContent('"days"');
+    expect(node.querySelector("a")).toBeNull();
+  });
+
   test("renders completion presentation metadata without changing the layout", () => {
     render(
       <CardLayoutRenderer
