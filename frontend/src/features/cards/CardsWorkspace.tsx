@@ -147,6 +147,7 @@ export function CardsWorkspace({
     activeCardIdRef.current = activeShellCardId;
   }, [activeShellCardId]);
   const [archiveTarget, setArchiveTarget] = useState<CardSummaryRead | null>(null);
+  const [pendingCardTabClose, setPendingCardTabClose] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
@@ -514,20 +515,29 @@ export function CardsWorkspace({
     }
   }
 
+  function closeCardTab(cardId: string) {
+    setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
+    setArchiveTarget(null);
+    setPendingCardTabClose(null);
+    setSuccessMessage(null);
+    resetSelectedCardMutationState();
+    if (activeShellTab === `card:${cardId}`) {
+      setActiveShellTab("list");
+      activeCardIdRef.current = null;
+      onSelectCard(cards.find((item) => item.id !== cardId)?.id ?? "");
+    }
+  }
+
   function handleShellTabClose(tabId: CardShellTab) {
     if (!tabId.startsWith("card:")) {
       return;
     }
     const cardId = tabId.slice("card:".length);
-    setOpenCardIds((current) => current.filter((openCardId) => openCardId !== cardId));
-    setArchiveTarget(null);
-    setSuccessMessage(null);
-    resetSelectedCardMutationState();
-    if (activeShellTab === tabId) {
-      setActiveShellTab("list");
-      activeCardIdRef.current = null;
-      onSelectCard(cards.find((item) => item.id !== cardId)?.id ?? "");
+    if (activeShellTab === tabId && blockEditor.dirty) {
+      setPendingCardTabClose(cardId);
+      return;
     }
+    closeCardTab(cardId);
   }
 
   function cardListDetail(item: CardSummaryRead) {
@@ -759,6 +769,35 @@ export function CardsWorkspace({
             onCancel={() => setArchiveTarget(null)}
             onConfirm={() => archiveCardMutation.mutate(archiveTarget)}
           />
+        </AdminMutationDialog>
+      )}
+      {pendingCardTabClose && (
+        <AdminMutationDialog
+          title={uiText.unsavedCardChangesTitle}
+          onCancel={() => setPendingCardTabClose(null)}
+        >
+          <div className="archive-confirmation">
+            <p>{uiText.closeDirtyCardTabConfirmation}</p>
+            <div className="admin-mutation-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setPendingCardTabClose(null)}
+              >
+                Продолжить редактирование
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => {
+                  blockEditor.cancel();
+                  setPendingCardTabClose(null);
+                }}
+              >
+                Не сохранять
+              </button>
+            </div>
+          </div>
         </AdminMutationDialog>
       )}
     </div>

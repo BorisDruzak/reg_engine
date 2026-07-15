@@ -5471,3 +5471,26 @@ Status: implementation complete locally; release verification in progress.
   creation tab selected `Муниципальный Служащий`, rendered its three schema
   blocks and disabled fields immediately, and exposed exactly one disabled
   `Сохранить черновик` button in the navigator before organization selection.
+
+#### Work-experience field and release-gate recovery
+
+Status: local verification complete; commit, production migration, deployment,
+and live server verification are in progress.
+
+- Added schema-driven `work_experience` field support. Values are entered as
+  days, months, and years, normalized to a server-date anchor, and rendered as
+  a Russian duration with correct declension in cards and exports. No scheduled
+  daily database writes are required.
+- The current card workspace now asks before closing an active tab with
+  unsaved inline changes. The dialog either keeps editing or discards only the
+  local draft before the tab is closed.
+- Recovered the stale frontend integration gate after the single-workspace card
+  refactor. The current suite covers draft creation, unified presentation,
+  public-link, organization, lifecycle, reference-field, and unsaved-tab paths;
+  retired attachment/document tab assertions remain explicitly excluded while
+  those panels are not present in the current workspace.
+- Fresh local verification: backend `pytest` passed (`339 passed, 231 skipped`);
+  frontend Vitest passed (`363` tests across `69` files); TypeScript, ESLint
+  (one existing hook-dependency warning only), production Vite build, and
+  `scripts/project-map.ps1 -Check` passed. The production build retains the
+  existing Vite chunk-size advisory.

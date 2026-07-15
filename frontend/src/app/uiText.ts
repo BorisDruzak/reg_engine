@@ -275,6 +275,7 @@ export const uiText = {
   saveAllFields: "Сохранить все поля",
   cardFieldsSaved: "Поля карточки сохранены",
   unsavedCardChanges: "Есть несохраненные изменения",
+  unsavedCardChangesTitle: "Несохранённые изменения",
   cardEditorFooter: "Состояние редактора карточки",
   repeatableBlocks: "Повторяемые блоки",
   addBlockInstance: "Добавить экземпляр блока",

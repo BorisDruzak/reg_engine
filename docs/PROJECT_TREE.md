@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-14 07:43:15 +05:00
+- Generated: 2026-07-15 20:36:10 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -26,6 +26,11 @@
 - `.gitignore`
 - `.pre-commit-config.yaml`
 - `.superpowers/sdd/2026-07-14-embedded-actions-report.md`
+- `.superpowers/sdd/2026-07-14-inline-card-template-name-edit-report.md`
+- `.superpowers/sdd/2026-07-14-management-department-action-fix-report.md`
+- `.superpowers/sdd/normalized-template-layout-task-1-report.md`
+- `.superpowers/sdd/normalized-template-layout-task-2-report.md`
+- `.superpowers/sdd/normalized-template-layout-task-3-report.md`
 - `AGENTS.md`
 - `backend/alembic.ini`
 - `backend/app/__init__.py`
@@ -46,6 +51,7 @@
 - `backend/app/api/v1/endpoints/import_export.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/public_links.py`
+- `backend/app/api/v1/endpoints/reference_edit_links.py`
 - `backend/app/api/v1/endpoints/registries.py`
 - `backend/app/api/v1/endpoints/reports.py`
 - `backend/app/api/v1/router.py`
@@ -58,6 +64,7 @@
 - `backend/app/core/logging.py`
 - `backend/app/domain/__init__.py`
 - `backend/app/domain/constants.py`
+- `backend/app/domain/work_experience.py`
 - `backend/app/frontend.py`
 - `backend/app/main.py`
 - `backend/app/mcp/__init__.py`
@@ -75,6 +82,7 @@
 - `backend/app/models/organization.py`
 - `backend/app/models/public_link.py`
 - `backend/app/models/reference.py`
+- `backend/app/models/reference_edit_link.py`
 - `backend/app/models/registry_schema.py`
 - `backend/app/models/report.py`
 - `backend/app/repositories/__init__.py`
@@ -90,6 +98,7 @@
 - `backend/app/schemas/import_export.py`
 - `backend/app/schemas/organizations.py`
 - `backend/app/schemas/public_links.py`
+- `backend/app/schemas/reference_edit_links.py`
 - `backend/app/schemas/registries.py`
 - `backend/app/schemas/reports.py`
 - `backend/app/services/__init__.py`
@@ -108,6 +117,7 @@
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
 - `backend/app/services/public_links.py`
+- `backend/app/services/reference_edit_links.py`
 - `backend/app/services/references.py`
 - `backend/app/services/registry_schema.py`
 - `backend/app/services/reports.py`
@@ -142,6 +152,8 @@
 - `backend/migrations/versions/0026_reuse_archived_form_field_codes.py`
 - `backend/migrations/versions/0027_card_creation_links.py`
 - `backend/migrations/versions/0028_org_unit_hierarchy.py`
+- `backend/migrations/versions/0029_public_reference_edit_links.py`
+- `backend/migrations/versions/0030_work_experience_field.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -185,6 +197,8 @@
 - `backend/tests/test_schema_constraints.py`
 - `backend/tests/test_tabular_xlsx_exchange.py`
 - `backend/tests/test_three_role_access_migration.py`
+- `backend/tests/test_user_access_login.py`
+- `backend/tests/test_work_experience.py`
 - `docs/ADR/0001-project-foundation.md`
 - `docs/ADR/0002-browser-session-storage.md`
 - `docs/ADR/0003-repository-visibility.md`
@@ -240,7 +254,21 @@
 - `docs/superpowers/plans/2026-07-13-organization-cards-and-unit-picker.md`
 - `docs/superpowers/plans/2026-07-13-organization-unit-hierarchy.md`
 - `docs/superpowers/plans/2026-07-13-searchable-choice-fields-and-unit-tree.md`
+- `docs/superpowers/plans/2026-07-14-card-creation-block-navigation.md`
+- `docs/superpowers/plans/2026-07-14-card-creation-scroll-surface.md`
+- `docs/superpowers/plans/2026-07-14-card-input-organization-and-public-reference-links.md`
 - `docs/superpowers/plans/2026-07-14-embedded-unit-actions-and-inline-edit.md`
+- `docs/superpowers/plans/2026-07-14-global-brand-assets.md`
+- `docs/superpowers/plans/2026-07-14-inline-card-template-name-edit.md`
+- `docs/superpowers/plans/2026-07-14-login-and-xlsx-workflow.md`
+- `docs/superpowers/plans/2026-07-14-management-department-action-fix.md`
+- `docs/superpowers/plans/2026-07-14-normalized-card-template-layout.md`
+- `docs/superpowers/plans/2026-07-14-organization-pickers-login-and-link-workflows.md`
+- `docs/superpowers/plans/2026-07-14-single-stage-card-creation.md`
+- `docs/superpowers/plans/2026-07-14-unified-card-presentation.md`
+- `docs/superpowers/plans/2026-07-15-card-draft-guidance.md`
+- `docs/superpowers/plans/2026-07-15-explicit-card-draft-workflow.md`
+- `docs/superpowers/plans/2026-07-15-work-experience-field.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -265,7 +293,21 @@
 - `docs/superpowers/specs/2026-07-13-organization-cards-and-unit-picker-design.md`
 - `docs/superpowers/specs/2026-07-13-organization-unit-hierarchy-design.md`
 - `docs/superpowers/specs/2026-07-13-searchable-choice-fields-and-unit-tree-design.md`
+- `docs/superpowers/specs/2026-07-14-card-creation-block-navigation-design.md`
+- `docs/superpowers/specs/2026-07-14-card-creation-scroll-surface-design.md`
+- `docs/superpowers/specs/2026-07-14-card-entry-and-xlsx-reference-fields-design.md`
+- `docs/superpowers/specs/2026-07-14-card-input-and-public-reference-links-design.md`
 - `docs/superpowers/specs/2026-07-14-embedded-unit-actions-and-inline-edit-design.md`
+- `docs/superpowers/specs/2026-07-14-global-brand-assets-design.md`
+- `docs/superpowers/specs/2026-07-14-inline-card-template-name-edit-design.md`
+- `docs/superpowers/specs/2026-07-14-login-and-xlsx-workflow-design.md`
+- `docs/superpowers/specs/2026-07-14-normalized-card-template-layout-design.md`
+- `docs/superpowers/specs/2026-07-14-organization-pickers-login-and-link-workflows-design.md`
+- `docs/superpowers/specs/2026-07-14-single-stage-card-creation-design.md`
+- `docs/superpowers/specs/2026-07-14-unified-card-presentation-design.md`
+- `docs/superpowers/specs/2026-07-15-card-draft-guidance-design.md`
+- `docs/superpowers/specs/2026-07-15-explicit-card-draft-design.md`
+- `docs/superpowers/specs/2026-07-15-work-experience-field-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -273,6 +315,7 @@
 - `frontend/package.json`
 - `frontend/playwright.config.ts`
 - `frontend/src/api/adminMutations.test.ts`
+- `frontend/src/api/client.test.ts`
 - `frontend/src/api/client.ts`
 - `frontend/src/api/types.ts`
 - `frontend/src/App.test.tsx`
@@ -284,10 +327,14 @@
 - `frontend/src/app/uiText.test.ts`
 - `frontend/src/app/uiText.ts`
 - `frontend/src/app/uiTextUnicode.test.ts`
+- `frontend/src/assets/branding/registry-background.png`
+- `frontend/src/assets/branding/registry-logo.png`
 - `frontend/src/components/common/.gitkeep`
 - `frontend/src/components/common/AdminMutation.test.tsx`
 - `frontend/src/components/common/AdminMutation.tsx`
 - `frontend/src/components/common/AdminMutationUtils.ts`
+- `frontend/src/components/common/BrandMark.test.tsx`
+- `frontend/src/components/common/BrandMark.tsx`
 - `frontend/src/components/common/clipboard.test.ts`
 - `frontend/src/components/common/clipboard.ts`
 - `frontend/src/components/common/DataSurfaces.tsx`
@@ -295,7 +342,9 @@
 - `frontend/src/components/layout/.gitkeep`
 - `frontend/src/features/access/AccessGrantsTable.tsx`
 - `frontend/src/features/audit/AuditTable.tsx`
+- `frontend/src/features/auth/LoginScreen.test.tsx`
 - `frontend/src/features/auth/LoginScreen.tsx`
+- `frontend/src/features/auth/session.test.ts`
 - `frontend/src/features/auth/session.ts`
 - `frontend/src/features/cardLayout/A4LinkedCardCanvas.tsx`
 - `frontend/src/features/cardLayout/a4LinkedCardLayout.ts`
@@ -317,12 +366,16 @@
 - `frontend/src/features/cards/.gitkeep`
 - `frontend/src/features/cards/BlockFieldControl.tsx`
 - `frontend/src/features/cards/CardAttachmentsPanel.tsx`
+- `frontend/src/features/cards/CardBaseBlockSurface.test.tsx`
+- `frontend/src/features/cards/CardBaseBlockSurface.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.test.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.tsx`
 - `frontend/src/features/cards/cardCompletion.test.ts`
 - `frontend/src/features/cards/cardCompletion.ts`
 - `frontend/src/features/cards/CardCreationLinksPanel.test.tsx`
 - `frontend/src/features/cards/CardCreationLinksPanel.tsx`
+- `frontend/src/features/cards/CardDraftActionRail.test.tsx`
+- `frontend/src/features/cards/CardDraftActionRail.tsx`
 - `frontend/src/features/cards/CardOrganizationFilter.tsx`
 - `frontend/src/features/cards/CardPresentationShell.tsx`
 - `frontend/src/features/cards/cardPublicAccessDefaults.test.ts`
@@ -337,13 +390,21 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/PublicAccessFieldPicker.test.tsx`
+- `frontend/src/features/cards/PublicAccessFieldPicker.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.test.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.test.tsx`
 - `frontend/src/features/cards/PublicLinkReviewPanel.tsx`
 - `frontend/src/features/cards/publicLinkSchema.ts`
 - `frontend/src/features/cards/SearchableChoicePicker.tsx`
+- `frontend/src/features/cards/SingleStageCardCreation.test.tsx`
+- `frontend/src/features/cards/SingleStageCardCreation.tsx`
 - `frontend/src/features/cards/useBlockEditor.ts`
+- `frontend/src/features/cards/workExperience.test.ts`
+- `frontend/src/features/cards/workExperience.ts`
+- `frontend/src/features/cards/WorkExperienceEditor.test.tsx`
+- `frontend/src/features/cards/WorkExperienceEditor.tsx`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.test.tsx`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
@@ -386,6 +447,7 @@
 - `frontend/src/pages/PublicCardCreationPage.tsx`
 - `frontend/src/pages/PublicLinkEditPage.test.tsx`
 - `frontend/src/pages/PublicLinkEditPage.tsx`
+- `frontend/src/pages/PublicReferenceEditPage.tsx`
 - `frontend/src/styles/globals.css`
 - `frontend/src/test/setup.ts`
 - `frontend/src/vite-env.d.ts`
