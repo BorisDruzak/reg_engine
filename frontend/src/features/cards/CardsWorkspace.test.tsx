@@ -431,7 +431,9 @@ describe("CardsWorkspace", () => {
     const baseBlock = await screen.findByLabelText("Базовый блок");
     expect(within(baseBlock).getByText("Шаблон", { selector: "output" })).toBeInTheDocument();
     expect(within(baseBlock).getByText(organizationUnitCard.display_name)).toBeInTheDocument();
-    expect(within(baseBlock).queryByRole("combobox", { name: "Организация карточки" })).not.toBeInTheDocument();
+    expect(
+      within(baseBlock).queryByRole("combobox", { name: "Организация карточки" }),
+    ).not.toBeInTheDocument();
     expect(baseBlock.querySelector(".metadata-list")).toBeNull();
 
     expect(screen.getByRole("status", { name: "Статус карточки" })).toHaveTextContent("Черновик");
@@ -444,9 +446,13 @@ describe("CardsWorkspace", () => {
     fireEvent.click(accessSummary);
 
     expect(accessDetails).toHaveAttribute("open");
-    expect(within(accessDetails!).getByRole("checkbox", { name: "Публичный просмотр карточки" })).toBeInTheDocument();
+    expect(
+      within(accessDetails!).getByRole("checkbox", { name: "Публичный просмотр карточки" }),
+    ).toBeInTheDocument();
     expect(within(accessDetails!).getByText("Показывать поля")).toBeInTheDocument();
-    expect(within(accessDetails!).getByRole("button", { name: "Публичная ссылка" })).toBeInTheDocument();
+    expect(
+      within(accessDetails!).getByRole("button", { name: "Публичная ссылка" }),
+    ).toBeInTheDocument();
   });
 
   test("hides saved-card public access controls from users without management rights", async () => {
@@ -461,7 +467,9 @@ describe("CardsWorkspace", () => {
     });
 
     const baseBlock = await screen.findByLabelText("Базовый блок");
-    expect(within(baseBlock).queryByText("Публичный доступ", { selector: "summary" })).not.toBeInTheDocument();
+    expect(
+      within(baseBlock).queryByText("Публичный доступ", { selector: "summary" }),
+    ).not.toBeInTheDocument();
     expect(
       within(baseBlock).queryByRole("checkbox", { name: "Публичный просмотр карточки" }),
     ).not.toBeInTheDocument();

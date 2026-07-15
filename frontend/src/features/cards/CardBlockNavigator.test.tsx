@@ -64,10 +64,21 @@ describe("CardBlockNavigator", () => {
     render(<CardBlockNavigator items={items} />);
 
     act(() => {
-      observerCallback?.([
-        { boundingClientRect: { top: -180 }, isIntersecting: true, target: firstBlock } as unknown as IntersectionObserverEntry,
-        { boundingClientRect: { top: 110 }, isIntersecting: true, target: secondBlock } as unknown as IntersectionObserverEntry,
-      ], {} as IntersectionObserver);
+      observerCallback?.(
+        [
+          {
+            boundingClientRect: { top: -180 },
+            isIntersecting: true,
+            target: firstBlock,
+          } as unknown as IntersectionObserverEntry,
+          {
+            boundingClientRect: { top: 110 },
+            isIntersecting: true,
+            target: secondBlock,
+          } as unknown as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      );
     });
 
     expect(screen.getByRole("button", { name: "Контакты: заполнено 3 из 3" })).toHaveAttribute(

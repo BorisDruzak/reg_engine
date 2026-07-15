@@ -154,7 +154,7 @@ export function useBlockEditor({
       await saveValues({ values: changedValues });
       setSession((current) =>
         current?.id === session.id
-          ? current.pendingOpen ??
+          ? (current.pendingOpen ??
             (current.closeAfterSave
               ? null
               : {
@@ -164,7 +164,7 @@ export function useBlockEditor({
                   pending: false,
                   errors: {},
                   autoSaveDelayMs: null,
-                })
+                }))
           : current,
       );
       return true;

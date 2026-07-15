@@ -249,11 +249,7 @@ function CardWebLayoutCanvasSession({
       </div>
       {designMode && !geometryActive && onCreateBlock ? (
         <div className="card-layout-create-block-footer">
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => onCreateBlock()}
-          >
+          <button type="button" className="ghost-button" onClick={() => onCreateBlock()}>
             Создать блок
           </button>
         </div>

@@ -1045,7 +1045,11 @@ function createEditorFetchMock(
       ...layout,
       form_layout: {
         ...layout.form_layout,
-        sections: layout.form_layout.sections.map((section) => ({ ...section, row: 3, row_span: 2 })),
+        sections: layout.form_layout.sections.map((section) => ({
+          ...section,
+          row: 3,
+          row_span: 2,
+        })),
       },
     };
   }

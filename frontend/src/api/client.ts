@@ -471,14 +471,11 @@ export async function firstSaveOrganizationCard(
   organizationId: string,
   payload: CardFirstSavePayload,
 ) {
-  return apiRequest<CardSummaryRead>(
-    `/api/v1/organizations/${organizationId}/cards/first-save`,
-    {
-      method: "POST",
-      token,
-      body: payload,
-    },
-  );
+  return apiRequest<CardSummaryRead>(`/api/v1/organizations/${organizationId}/cards/first-save`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
 
 export async function createOrganizationCardDraft(

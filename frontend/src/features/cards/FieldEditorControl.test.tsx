@@ -47,22 +47,22 @@ describe("FieldEditorControl hints", () => {
   test.each(["select", "multi_select", "organization_ref", "org_unit_ref"] as const)(
     "opens %s choices immediately without saving an empty value",
     (fieldType) => {
-    const onChange = vi.fn();
-    render(
-      <FieldEditorControl
-        fieldType={fieldType}
-        label={`Поле ${fieldType}`}
-        hint="Выберите значение"
-        options={options}
-        value={fieldType === "multi_select" ? [] : ""}
-        autoOpenChoice
-        onChange={onChange}
-      />,
-    );
+      const onChange = vi.fn();
+      render(
+        <FieldEditorControl
+          fieldType={fieldType}
+          label={`Поле ${fieldType}`}
+          hint="Выберите значение"
+          options={options}
+          value={fieldType === "multi_select" ? [] : ""}
+          autoOpenChoice
+          onChange={onChange}
+        />,
+      );
 
-    expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
-    expect(screen.getByTestId("searchable-choice-options")).toBeVisible();
-    expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
+      expect(screen.getByTestId("searchable-choice-options")).toBeVisible();
+      expect(onChange).not.toHaveBeenCalled();
     },
   );
 

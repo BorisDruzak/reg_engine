@@ -9,7 +9,9 @@ describe("CardDraftActionRail", () => {
     render(<CardDraftActionRail state="setup" setupComplete={false} onSaveDraft={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
-    expect(screen.getByText("Выберите организацию и шаблон, затем сохраните черновик.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Выберите организацию и шаблон, затем сохраните черновик."),
+    ).toBeInTheDocument();
   });
 
   test("saves once when setup is complete and reports the result", async () => {

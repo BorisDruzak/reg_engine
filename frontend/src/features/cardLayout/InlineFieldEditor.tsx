@@ -258,7 +258,9 @@ export function InlineFieldEditor({
       {draft.field_type === "organization_ref" ? (
         <fieldset className="inline-reference-field-settings">
           <legend>Организации для публичного выбора</legend>
-          {organizations.length === 0 ? <p className="data-empty">Нет доступных организаций</p> : null}
+          {organizations.length === 0 ? (
+            <p className="data-empty">Нет доступных организаций</p>
+          ) : null}
           {organizations.map((organization) => {
             const checked = allowedOrganizationIds.includes(organization.id);
             return (

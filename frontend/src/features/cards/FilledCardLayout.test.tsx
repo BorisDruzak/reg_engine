@@ -39,7 +39,13 @@ const fields: FormFieldRead[] = [
   field({ id: "first-name", code: "first_name", label: "Имя", position: 0 }),
   field({ id: "last-name", code: "last_name", label: "Фамилия", position: 1 }),
   field({ id: "status", code: "status", label: "Статус", field_type: "select", position: 2 }),
-  field({ id: "birth-date", code: "birth_date", label: "Дата рождения", field_type: "date", position: 3 }),
+  field({
+    id: "birth-date",
+    code: "birth_date",
+    label: "Дата рождения",
+    field_type: "date",
+    position: 3,
+  }),
 ];
 
 const layout: CardTemplateLayoutRead = {
@@ -88,7 +94,12 @@ const blockInstances: FilledCardBlockInstanceRead[] = [
       first_name: { field_id: "first-name", code: "first_name", field_type: "text", value: "Иван" },
       last_name: { field_id: "last-name", code: "last_name", field_type: "text", value: "Иванов" },
       status: { field_id: "status", code: "status", field_type: "select", value: "approved" },
-      birth_date: { field_id: "birth-date", code: "birth_date", field_type: "date", value: "2000-01-01" },
+      birth_date: {
+        field_id: "birth-date",
+        code: "birth_date",
+        field_type: "date",
+        value: "2000-01-01",
+      },
     },
   },
 ];
@@ -116,15 +127,19 @@ describe("FilledCardLayout", () => {
     render(
       <FilledCardLayout
         {...defaultProps({
-          navigatorAction: <p role="status" aria-label="Статус карточки">Черновик</p>,
+          navigatorAction: (
+            <p role="status" aria-label="Статус карточки">
+              Черновик
+            </p>
+          ),
         })}
       />,
     );
 
     const navigator = screen.getByRole("navigation", { name: "Содержание карточки" });
-    expect(within(navigator.parentElement!).getByRole("status", { name: "Статус карточки" })).toHaveTextContent(
-      "Черновик",
-    );
+    expect(
+      within(navigator.parentElement!).getByRole("status", { name: "Статус карточки" }),
+    ).toHaveTextContent("Черновик");
   });
 
   test("keeps the block navigator sticky and renders the surrounding card sections in it", () => {
@@ -207,7 +222,9 @@ describe("FilledCardLayout", () => {
     render(
       <FilledCardLayout
         {...defaultProps({
-          fields: fields.map((candidate) => (candidate.id === hintedStatus.id ? hintedStatus : candidate)),
+          fields: fields.map((candidate) =>
+            candidate.id === hintedStatus.id ? hintedStatus : candidate,
+          ),
           values: values.filter((candidate) => candidate.field_id !== hintedStatus.id),
           blockInstances: [
             {

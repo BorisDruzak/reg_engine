@@ -16,8 +16,12 @@ describe("CardBaseBlockSurface", () => {
     );
 
     expect(screen.getByText("Администрация")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Организация карточки" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Наименование карточки" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Организация карточки" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Наименование карточки" }),
+    ).not.toBeInTheDocument();
   });
 
   test("keeps public access collapsed until it is opened", () => {
