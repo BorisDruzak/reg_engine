@@ -15,7 +15,11 @@ not a hardcoded employee registry.
   also uses a consistent 16px gap between the base block and the first template
   block. Focused frontend tests (14), TypeScript, and the production build
   pass; ESLint has no errors and retains the existing unrelated
-  `FilledCardLayout.tsx` hook-dependency warning.
+  `FilledCardLayout.tsx` hook-dependency warning. Commits `803745ce`,
+  `4eb1bafb`, and `8aaa9d62` are pushed to `main` and deployed; the published
+  creation screen confirms the `ФИО → Должность → Иное` block sequence,
+  `ФИО → Дата рождения` field sequence, a 16px base-to-template gap, and no
+  browser-console warnings or errors.
 
 - 2026-07-14 card-creation scroll surface is released at `da84b810`. Only the outer `data-panel` that directly contains
   `single-stage-card-creation` is transparent and uses `overflow: visible`;
