@@ -5368,7 +5368,7 @@ Status: deployed; direct Browser visual acceptance remains pending.
 
 #### Authentication session lifetime and expiry handling
 
-Status: implementation and release verification in progress.
+Status: complete, pushed, deployed, and server-checked.
 
 - Set new bearer-token lifetime to 24 hours. The client persists the API expiry
   timestamp, clears an expired session before rendering the workspace, and
@@ -5376,3 +5376,11 @@ Status: implementation and release verification in progress.
 - A protected request that receives `401` clears the saved session and all
   cached workspace data immediately. Public-link requests and failed login
   attempts do not trigger this global sign-out behavior.
+- Release evidence: commit `11dfca83` is on `origin/main`; the server checkout
+  and frontend artifact are deployed, and the restarted service reports an
+  effective `auth_access_token_minutes=1440` with a passing healthcheck.
+- Focused frontend tests prove both automatic expiry and a protected-request
+  `401` return to the authorization form. The backend authentication suite
+  passes (`10 passed, 12 skipped`); frontend lint, TypeScript, and production
+  build pass with the existing `FilledCardLayout.tsx` hook warning and Vite
+  chunk-size advisory.
