@@ -5616,3 +5616,25 @@ Status: complete, pushed to `main`, deployed, and verified in the live public ca
   passed. Browser proof confirmed borderless transparent numeric inputs inside
   the one shared border, correct focus movement, unchanged values, and zero
   console errors.
+
+#### Work-experience activation and public-save follow-up
+
+Status: complete, pushed to `main`, deployed, and Browser-verified on 2026-07-15.
+
+- Activating the empty area of the shared work-experience field now sends focus
+  directly to its days segment. Clicking an existing numeric segment keeps its
+  own focus behavior unchanged.
+- Public work-experience editing now uses the same delayed-save path as other
+  free-form values: intermediate digits stay local, then one complete payload
+  is sent after the typing pause or when focus leaves the field. This prevents
+  partial server writes while the three-part mask is being completed.
+- Regression tests cover both behaviors. Focused frontend verification passed
+  (`81` tests across five files), together with TypeScript, ESLint, Prettier,
+  and the production Vite build. Commit `c7560bd4` is pushed to `origin/main`;
+  frontend asset `/assets/index-CgwN6j1z.js` is deployed and server health and
+  same-origin smoke checks passed. Browser verification confirmed days focus,
+  unchanged values, and zero console errors.
+- Calendar canonicalization remains intentionally unchanged pending a product
+  decision: an input such as `50 days, 1 month` resolves to an anchor date and
+  reads back as the canonical calendar duration for that date. This behavior is
+  not a frontend focus or autosave defect.
