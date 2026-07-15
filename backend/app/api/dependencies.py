@@ -178,10 +178,11 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(
             status_code=400, detail="Операция со ссылкой на справочники недоступна."
         ) from exc
+    if isinstance(exc, CardServiceError):
+        raise HTTPException(status_code=400, detail="Операция с карточкой недоступна.") from exc
     if isinstance(
         exc,
         (
-            CardServiceError,
             AttachmentServiceError,
             DocumentServiceError,
             InvalidFieldValueError,

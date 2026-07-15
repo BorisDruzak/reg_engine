@@ -28,6 +28,7 @@ from app.models import (
     User,
     role_permissions,
 )
+from app.services.cards import CardService, CardServiceError
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -293,6 +294,40 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
 
     assert expected_paths <= paths
     assert "get" in openapi_paths["/api/v1/organizations/{organization_id}/cards"]
+
+
+def test_explicit_draft_endpoint_maps_card_domain_errors_to_russian_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
+    app = create_app()
+
+    def override_session() -> Iterator[None]:
+        yield None
+
+    def raise_card_error(_self: CardService, **_kwargs: Any) -> None:
+        raise CardServiceError("Card template was not found.")
+
+    app.dependency_overrides[get_db_session] = override_session
+    monkeypatch.setattr(CardService, "create_card_draft_for_actor", raise_card_error)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/v1/organizations/{uuid4()}/cards/draft",
+                json={"card_template_id": str(uuid4())},
+                headers=_actor_headers(uuid4()),
+            )
+    finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Операция с карточкой недоступна."
 
 
 def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(

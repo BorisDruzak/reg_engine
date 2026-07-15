@@ -1801,10 +1801,25 @@ def test_draft_creation_rolls_back_after_public_access_failure(
         name="Explicit draft rollback template",
         field_schema_json={"field_ids": []},
     )
+    original_create_card = CardService.create_card_for_organization_for_actor
+    created_card_ids: list[UUID] = []
+
+    def create_card_and_capture(
+        service: CardService,
+        **payload: object,
+    ) -> Card:
+        card = original_create_card(service, **payload)  # type: ignore[arg-type]
+        created_card_ids.append(card.id)
+        return card
 
     def fail_public_access_update(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("forced public-access update failure")
 
+    monkeypatch.setattr(
+        CardService,
+        "create_card_for_organization_for_actor",
+        create_card_and_capture,
+    )
     monkeypatch.setattr(
         CardPublicAccessService,
         "update_for_actor",
@@ -1827,6 +1842,13 @@ def test_draft_creation_rolls_back_after_public_access_failure(
         == 0
     )
     assert db_session.scalar(select(func.count(CardPublicFieldSetting.id))) == 0
+    assert len(created_card_ids) == 1
+    assert not db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.object_id == created_card_ids[0],
+            AuditEvent.object_type.in_(("card", "card_public_access")),
+        )
+    ).all()
 
 
 def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
