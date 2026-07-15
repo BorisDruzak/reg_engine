@@ -37,8 +37,14 @@ export function BlockFieldControl({
 
   useEffect(() => {
     if (!autoFocus || autoOpenChoice) return;
-    controlRef.current?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
-  }, [autoFocus, autoOpenChoice]);
+    const initialControl = controlRef.current?.querySelector<HTMLElement>(
+      "input, select, textarea, button",
+    );
+    initialControl?.focus();
+    if (field.field_type === "work_experience" && initialControl instanceof HTMLInputElement) {
+      initialControl.select();
+    }
+  }, [autoFocus, autoOpenChoice, field.field_type]);
 
   if (field.field_type === "file_ref") {
     if (fileRefControl) {

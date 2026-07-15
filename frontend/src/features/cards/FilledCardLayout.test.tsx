@@ -183,9 +183,13 @@ describe("FilledCardLayout", () => {
 
     await user.click(screen.getByTestId("filled-field-layout-experience"));
     const experienceControl = screen.getByRole("group", { name: "Стаж работы" });
-    expect(
-      within(experienceControl).getByRole("textbox", { name: "Стаж работы, дни" }),
-    ).toHaveValue("1");
+    const daysInput = within(experienceControl).getByRole("textbox", {
+      name: "Стаж работы, дни",
+    }) as HTMLInputElement;
+    expect(daysInput).toHaveValue("1");
+    expect(daysInput).toHaveFocus();
+    expect(daysInput.selectionStart).toBe(0);
+    expect(daysInput.selectionEnd).toBe(1);
     setWorkExperiencePart(experienceControl, "days", "16");
     setWorkExperiencePart(experienceControl, "months", "3");
     setWorkExperiencePart(experienceControl, "years", "9");
