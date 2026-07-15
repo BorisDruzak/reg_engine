@@ -426,6 +426,9 @@ def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPrevie
     return PublicLinkPreviewRead(
         card_id=preview.card_id,
         display_name=preview.display_name,
+        organization_name=preview.organization_name,
+        card_template_name=preview.card_template_name,
+        lifecycle_status=preview.lifecycle_status,
         expires_at=preview.expires_at,
         can_edit=preview.can_edit,
         form_layout=CardTemplateFormLayoutRead.model_validate(preview.form_layout),

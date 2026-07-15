@@ -59,7 +59,7 @@ describe("PublicLinkEditPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Копировать ссылку" }));
 
     expect(clipboardWrite).toHaveBeenCalledWith(window.location.href);
-    expect(await screen.findByRole("status")).toHaveTextContent("Ссылка скопирована");
+    expect(await screen.findByText("Ссылка скопирована")).toHaveAttribute("role", "status");
   });
 
   test("shows public completion navigation and updates it after a confirmed field save", async () => {
@@ -158,12 +158,32 @@ describe("PublicLinkEditPage", () => {
       "Значение, которое нельзя изменить",
     );
     expect(screen.queryByRole("textbox", { name: "Только для просмотра" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Публичный доступ")).not.toBeInTheDocument();
+    expect(screen.getByText("Публичный доступ").closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByText("Архивировать карточку")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Организация карточки")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
     expect(fetchCalls.some((call) => call.path === "/api/v1/public-links/attachments")).toBe(false);
+  });
+
+  test("renders a read-only public card base with status and no metadata actions", async () => {
+    renderPage();
+
+    const baseBlock = await screen.findByLabelText("Базовый блок");
+    expect(within(baseBlock).getByText("Организация")).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Шаблон")).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Карточка")).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Администрация публичной карточки")).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Шаблон публичной карточки")).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Публичная карточка")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Статус карточки" })).toHaveTextContent("Черновик");
+    expect(screen.getByText("Публичный доступ").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByRole("combobox", { name: "Организация" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Шаблон" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Создать публичную ссылку" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Публичный просмотр карточки")).not.toBeInTheDocument();
   });
 
   test("does not block public completion for a required server-read-only field", async () => {
@@ -677,6 +697,9 @@ function publicPreview(): PublicLinkPreviewRead & { form_layout: PublicFormLayou
   return {
     card_id: "card-public",
     display_name: "Публичная карточка",
+    organization_name: "Администрация публичной карточки",
+    card_template_name: "Шаблон публичной карточки",
+    lifecycle_status: "draft",
     expires_at: "2099-07-17T10:00:00Z",
     can_edit: true,
     form_layout: {

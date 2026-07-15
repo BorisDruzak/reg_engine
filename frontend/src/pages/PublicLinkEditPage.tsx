@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import {
@@ -23,6 +23,8 @@ import { BrandMark } from "@/components/common/BrandMark";
 import { copyTextToClipboard } from "@/components/common/clipboard";
 import { errorText } from "@/components/common/dataUtils";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
+import { CardBaseBlockSurface } from "@/features/cards/CardBaseBlockSurface";
+import { CardDraftActionRail } from "@/features/cards/CardDraftActionRail";
 import { CardPresentationShell } from "@/features/cards/CardPresentationShell";
 import type { CardBlockNavigationItem } from "@/features/cards/CardBlockNavigator";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
@@ -187,6 +189,24 @@ function PublicEditableCard({
   );
   const saveFieldValue: PublicFieldValueSaver = ({ fieldId, value, blockInstanceId }) =>
     updatePublicLinkFieldValue(rawToken, fieldId, value, blockInstanceId);
+  const baseBlock = (
+    <CardBaseBlockSurface
+      id="public-card-base-block"
+      mode="public"
+      organization={{ label: "Организация", value: preview.organization_name }}
+      template={{ label: "Шаблон", value: preview.card_template_name }}
+      displayName={{ label: "Карточка", value: preview.display_name }}
+      publicAccessContent={
+        <p className="public-muted">Параметры публичного доступа определяет администратор.</p>
+      }
+    />
+  );
+  const navigatorAction = (
+    <CardDraftActionRail
+      state={preview.lifecycle_status === "active" ? "active" : "draft"}
+      aria-label="Статус карточки"
+    />
+  );
 
   return (
     <div className="stack">
@@ -209,6 +229,8 @@ function PublicEditableCard({
           preview={preview}
           onFieldSaveStateChange={() => undefined}
           saveFieldValue={saveFieldValue}
+          beforeContent={baseBlock}
+          navigatorAction={navigatorAction}
         />
       )}
     </div>
@@ -273,6 +295,8 @@ export function PublicCardLayout({
   confirmedFieldValues,
   onFieldValueConfirmed,
   saveFieldValue,
+  beforeContent,
+  navigatorAction,
 }: {
   preview: PublicCardPreview;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
@@ -280,6 +304,8 @@ export function PublicCardLayout({
   confirmedFieldValues: Readonly<Record<string, unknown>>;
   onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
   saveFieldValue: PublicFieldValueSaver;
+  beforeContent?: ReactNode;
+  navigatorAction?: ReactNode;
 }) {
   const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
   const surfaces = useMemo(() => publicCardSurfaces(preview, layout), [layout, preview]);
@@ -332,7 +358,11 @@ export function PublicCardLayout({
     [completionBySurface, surfaces],
   );
   return (
-    <CardPresentationShell items={navigationItems}>
+    <CardPresentationShell
+      items={navigationItems}
+      beforeContent={beforeContent}
+      navigatorAction={navigatorAction}
+    >
       <div className="stack public-card-layout-surfaces">
         {surfaces.map((surface) => (
           <PublicCardLayoutSurface

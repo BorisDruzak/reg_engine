@@ -758,6 +758,9 @@ export type PublicLinkPreviewBlockRead = {
 export type PublicLinkPreviewRead = {
   card_id: string;
   display_name: string;
+  organization_name: string;
+  card_template_name: string;
+  lifecycle_status: string;
   expires_at: string | null;
   can_edit: boolean;
   form_layout: CardTemplateFormLayoutRead;

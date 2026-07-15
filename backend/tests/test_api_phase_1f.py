@@ -787,6 +787,9 @@ def test_api_public_link_preview_returns_public_edit_schema(
     payload = preview.json()
     assert payload["card_id"] == str(card.id)
     assert payload["display_name"] == "Public Preview Card"
+    assert payload["organization_name"] == "API Public Preview Root"
+    assert payload["card_template_name"] == "Базовый шаблон"
+    assert payload["lifecycle_status"] == card.lifecycle_status
     assert "raw_token" not in payload
     assert "token_hash" not in payload
     blocks_by_code = {block["code"]: block for block in payload["blocks"]}

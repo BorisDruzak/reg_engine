@@ -121,6 +121,9 @@ class PublicLinkPreviewBlockRead(BaseModel):
 class PublicLinkPreviewRead(BaseModel):
     card_id: UUID
     display_name: str
+    organization_name: str
+    card_template_name: str
+    lifecycle_status: str
     expires_at: datetime | None
     can_edit: bool
     form_layout: CardTemplateFormLayoutRead

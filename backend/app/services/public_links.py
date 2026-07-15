@@ -112,6 +112,9 @@ class PublicPreviewBlock:
 class PublicLinkPreview:
     card_id: UUID
     display_name: str
+    organization_name: str
+    card_template_name: str
+    lifecycle_status: str
     expires_at: datetime | None
     can_edit: bool
     form_layout: dict[str, Any]
@@ -517,6 +520,10 @@ class PublicLinkService:
         card = self._get_active_card(public_link.card_id)
         if not card.public_view_enabled:
             raise PermissionDeniedError("Public viewing is disabled for this card.")
+        organization = self.session.get(Organization, card.organization_id)
+        card_template = self.session.get(CardTemplate, card.card_template_id)
+        if organization is None or card_template is None:
+            raise PublicLinkError("Public card metadata was not found.")
 
         public_access = CardPublicAccessService(self.session)
         schema_rows = public_access.public_schema_rows_for_card(card)
@@ -578,6 +585,9 @@ class PublicLinkService:
         return PublicLinkPreview(
             card_id=card.id,
             display_name=card.display_name,
+            organization_name=organization.name,
+            card_template_name=card_template.name,
+            lifecycle_status=card.lifecycle_status,
             expires_at=public_link.expires_at,
             can_edit=(
                 public_link.status in EDITABLE_PUBLIC_LINK_STATUSES

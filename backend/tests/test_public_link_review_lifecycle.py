@@ -1348,6 +1348,9 @@ def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inp
         assert card_before is not None
         organization_id = card_before.organization_id
         card_template_id = card_before.card_template_id
+        display_name = card_before.display_name
+        public_view_enabled = card_before.public_view_enabled
+        public_edit_enabled = card_before.public_edit_enabled
 
     field_update = transactional_api_client.post(
         "/api/v1/public-links/edit",
@@ -1364,6 +1367,9 @@ def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inp
         assert card_after_field_update is not None
         assert card_after_field_update.organization_id == organization_id
         assert card_after_field_update.card_template_id == card_template_id
+        assert card_after_field_update.display_name == display_name
+        assert card_after_field_update.public_view_enabled == public_view_enabled
+        assert card_after_field_update.public_edit_enabled == public_edit_enabled
 
     metadata_update = transactional_api_client.post(
         "/api/v1/public-links/edit",
@@ -1382,6 +1388,9 @@ def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inp
         assert card_after_rejection is not None
         assert card_after_rejection.organization_id == organization_id
         assert card_after_rejection.card_template_id == card_template_id
+        assert card_after_rejection.display_name == display_name
+        assert card_after_rejection.public_view_enabled == public_view_enabled
+        assert card_after_rejection.public_edit_enabled == public_edit_enabled
 
 
 def test_public_link_create_api_uses_card_settings_not_allowlists(
