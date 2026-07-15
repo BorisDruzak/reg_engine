@@ -14,7 +14,7 @@
 - Preserve the exact outbound `WorkExperiencePayload` shape: `{ days, months, years }`.
 - Keep server-owned `anchor_date` private and preserve all document/XLSX display behavior.
 - UI copy and accessible labels are Russian-first.
-- A space moves focus only from days to months and months to years; a space in years has no effect.
+- A space moves focus only from days to months and months to years; a space in years is explicitly suppressed and has no effect.
 - Use TDD: add each test, observe its expected failure, then write the smallest implementation that passes.
 
 ---
@@ -133,7 +133,7 @@ function parseDurationDraft(draft: DurationDraft): WorkExperienceValue | null {
 }
 ```
 
-Reset drafts from a new external value only while no child input is focused. An incomplete draft remains visible and never emits a payload.
+Reset drafts from a new external value only while no child input is focused. An incomplete draft remains visible and never emits a payload. Derive each visible unit word from its own current digit draft whenever that draft is a safe non-negative integer; otherwise fall back to the last normalized value for that one part.
 
 - [ ] **Step 2: Reuse the existing declension logic through an explicit helper**
 
@@ -168,7 +168,7 @@ function handleKeyDown(part: DurationPart, event: KeyboardEvent<HTMLInputElement
 }
 ```
 
-Use refs for months/years. Do not prevent default for Space in years. Use a group blur handler which calls the existing `onBlur` only when `relatedTarget` is not inside the group.
+Use refs for months/years. In the years branch call `event.preventDefault()` without moving focus, so a space is neither inserted nor navigates away. Use a group blur handler which calls the existing `onBlur` only when `relatedTarget` is not inside the group.
 
 - [ ] **Step 4: Verify GREEN**
 
