@@ -169,7 +169,7 @@ node node_modules/vite/bin/vite.js build
 
 Expected: all commands exit 0; only the existing Vite chunk-size advisory is permitted.
 
-- [ ] **Step 3: Commit, deploy, and live-check**
+- [x] **Step 3: Commit, deploy, and live-check**
 
 ```powershell
 git add PLANS.md frontend/src/features/cards/WorkExperienceEditor.tsx frontend/src/features/cards/WorkExperienceEditor.test.tsx frontend/src/features/cards/FieldEditorControl.test.tsx frontend/src/features/cards/FilledCardLayout.test.tsx frontend/src/pages/PublicLinkEditPage.test.tsx frontend/src/styles/globals.css
@@ -180,3 +180,10 @@ powershell -ExecutionPolicy Bypass -File scripts/deploy-frontend.ps1
 ```
 
 Reload the open public card without saving data. Verify one visual border, digits-only segments, day-to-month and month-to-year automatic focus movement, and no browser console errors.
+
+Completed on 2026-07-15. The controlled date-mask implementation was released
+in `8267f516`; its final one-border CSS correction was released in `6376c540`.
+The deployed public card has one outer field border, transparent borderless
+numeric segments, stable `days -> months -> years` space navigation, and no
+browser console errors. The focused suite passed 80 tests, followed by
+TypeScript, ESLint, Prettier, and the production Vite build.

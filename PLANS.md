@@ -5594,3 +5594,25 @@ Status: complete, pushed to `main`, migrated, deployed, and server verified.
   same-origin application/API smoke check. The final server check confirms the
   active service, PostgreSQL TCP role login, attachment storage configuration,
   synchronized checkout, and healthy API.
+
+#### Stable single-line work-experience mask
+
+Status: complete, pushed to `main`, deployed, and verified in the live public card on 2026-07-15.
+
+- Replaced the unstable contenteditable implementation with a controlled native
+  date-style mask: days and months accept up to two digits, years up to four,
+  only digits are retained, full segments advance focus automatically, and
+  Space moves days to months to years without changing the last segment.
+- The three numeric segments remain inside one visual field. Their individual
+  padding, border, radius, and background are neutralized so only the shared
+  outer container is visible; blur preserves the numbers already entered.
+- Focused frontend verification passed (`80` tests across five files), as did
+  TypeScript, ESLint, Prettier, and the production Vite build. The only build
+  notice remains the existing main-chunk size advisory.
+- Release commits `8267f516` and `6376c540` are pushed to `origin/main`. The
+  server checkout is synchronized to `6376c540`; frontend assets
+  `/assets/index-BuS8WW9x.js` and `/assets/index-cXIYAlw5.css` are deployed,
+  `reg-engine.service` is active, and same-origin frontend/API smoke checks
+  passed. Browser proof confirmed borderless transparent numeric inputs inside
+  the one shared border, correct focus movement, unchanged values, and zero
+  console errors.
