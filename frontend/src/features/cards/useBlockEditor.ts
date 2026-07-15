@@ -276,6 +276,7 @@ function sameEditorValue(left: FieldEditorState, right: FieldEditorState) {
 function isEmptyEditorValue(value: FieldEditorState) {
   if (typeof value === "boolean") return false;
   if (Array.isArray(value)) return value.length === 0;
+  if (typeof value !== "string") return false;
   return value.trim() === "";
 }
 

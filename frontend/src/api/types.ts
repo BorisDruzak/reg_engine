@@ -209,6 +209,13 @@ export type FormFieldRead = {
   public_editable: boolean;
 };
 
+export type WorkExperienceValue = {
+  days: number;
+  months: number;
+  years: number;
+  display?: string;
+};
+
 export type FormFieldCreatePayload = {
   code: string;
   label: string;

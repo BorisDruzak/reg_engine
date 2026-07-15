@@ -1,6 +1,14 @@
 import { booleanLabel, uiText } from "@/app/uiText";
+import type { WorkExperienceValue } from "@/api/types";
 
-export type FieldEditorState = string | boolean | string[];
+import {
+  defaultWorkExperienceValue,
+  formatStoredWorkExperience,
+  workExperiencePayload,
+  workExperienceValueFromUnknown,
+} from "./workExperience";
+
+export type FieldEditorState = string | boolean | string[] | WorkExperienceValue;
 
 export type EditableFieldValue = {
   field_type: string;
@@ -39,6 +47,9 @@ export function initialEditorValue(field: EditableFieldValue): FieldEditorState 
     }
     return typeof field.value === "string" ? field.value : "";
   }
+  if (field.field_type === "work_experience") {
+    return workExperienceValueFromUnknown(field.value) ?? defaultWorkExperienceValue();
+  }
   if (field.field_type === "multi_select") {
     return Array.isArray(field.value) ? field.value.map(String) : [];
   }
@@ -63,6 +74,13 @@ export function coerceEditorValue(fieldType: string, value: FieldEditorState): u
   }
   if (fieldType === "file_ref") {
     return typeof value === "string" && value.trim() ? value : null;
+  }
+  if (fieldType === "work_experience") {
+    const workExperienceValue = workExperienceValueFromUnknown(value);
+    if (!workExperienceValue) {
+      throw new Error("Укажите стаж работы как три неотрицательных целых числа.");
+    }
+    return workExperiencePayload(workExperienceValue);
   }
   if (nullableSingleReferenceTypes.has(fieldType)) {
     return typeof value === "string" && value.trim() ? value : null;
@@ -117,6 +135,10 @@ export function formatValue(value: unknown): string {
     const title = fileRefValue.title || fileRefValue.original_filename;
     const archiveLabel = fileRefValue.archived_at ? `, ${uiText.fileArchived}` : "";
     return `${title} (${fileRefValue.original_filename})${archiveLabel}`;
+  }
+  const workExperienceValue = workExperienceValueFromUnknown(value);
+  if (workExperienceValue) {
+    return formatStoredWorkExperience(workExperienceValue);
   }
   if (Array.isArray(value)) {
     return value.map(formatValue).join(", ");

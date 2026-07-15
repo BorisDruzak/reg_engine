@@ -5,6 +5,8 @@ import { uiText } from "@/app/uiText";
 import type { FieldEditorOption, FieldEditorState } from "./fieldEditorUtils";
 import { inputTypeForField } from "./fieldEditorUtils";
 import { SearchableChoicePicker } from "./SearchableChoicePicker";
+import { WorkExperienceEditor } from "./WorkExperienceEditor";
+import { defaultWorkExperienceValue, workExperienceValueFromUnknown } from "./workExperience";
 
 export function FieldEditorControl({
   fieldType,
@@ -142,6 +144,22 @@ export function FieldEditorControl({
         {selectedOption?.archived && <small>{uiText.fileArchived}</small>}
         {hint ? <small className="field-editor-hint">{hint}</small> : null}
       </div>
+    );
+  }
+
+  if (fieldType === "work_experience") {
+    const workExperienceValue =
+      workExperienceValueFromUnknown(value) ?? defaultWorkExperienceValue();
+    return (
+      <ControlWithHint hint={hint}>
+        <WorkExperienceEditor
+          label={label}
+          value={workExperienceValue}
+          disabled={disabled}
+          onBlur={onBlur}
+          onChange={onChange}
+        />
+      </ControlWithHint>
     );
   }
 

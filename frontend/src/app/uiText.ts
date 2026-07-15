@@ -555,6 +555,7 @@ export const FIELD_TYPES = [
   "org_unit_ref",
   "registry_ref",
   "file_ref",
+  "work_experience",
   "static_text",
 ] as const;
 
@@ -576,6 +577,7 @@ const fieldTypeLabels: Record<FieldType, string> = {
   select: "Выбор",
   text: "Текст",
   user_ref: "Ссылка на пользователя",
+  work_experience: "Стаж работы",
 };
 
 export function fieldTypeLabel(value: string) {
