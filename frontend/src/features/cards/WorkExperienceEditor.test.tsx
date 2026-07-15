@@ -6,18 +6,18 @@ import { describe, expect, test, vi } from "vitest";
 import { FieldEditorControl } from "./FieldEditorControl";
 
 describe("WorkExperienceEditor", () => {
-  test("keeps an empty in-progress part after a controlled parent rerender", async () => {
+  test("keeps an incomplete draft visible in a controlled editor", async () => {
     const user = userEvent.setup();
     render(<ControlledWorkExperienceHost />);
 
-    const days = screen.getByLabelText("Дни");
-    await user.clear(days);
+    const input = screen.getByRole("textbox", { name: "Стаж работы" });
+    await user.clear(input);
 
-    expect(days).toHaveValue("");
-    expect(screen.getByText("0 дней 2 месяца 3 года")).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(screen.getAllByRole("textbox", { name: "Стаж работы" })).toHaveLength(1);
   });
 
-  test("updates the Russian summary immediately and emits only numeric duration fields", async () => {
+  test("accepts a complete duration through one input", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -26,50 +26,68 @@ describe("WorkExperienceEditor", () => {
         label="Стаж работы"
         hint="Укажите длительность"
         options={[]}
-        value={{ days: 0, months: 3, years: 9 } as never}
+        value={{ days: 0, months: 0, years: 0 } as never}
         onChange={onChange}
       />,
     );
 
-    const days = screen.getByLabelText("Дни");
-    await user.clear(days);
-    expect(days).toHaveValue("");
-    expect(screen.getByText("0 дней 3 месяца 9 лет")).toBeInTheDocument();
-    await user.type(days, "16");
+    const input = screen.getByRole("textbox", { name: "Стаж работы" });
+    await user.clear(input);
+    await user.type(input, "16 3 9");
 
-    expect(days).toHaveValue("16");
-    expect(screen.getByText("16 дней 3 месяца 9 лет")).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox", { name: "Стаж работы" })).toHaveLength(1);
+    expect(input).toHaveValue("16 дней 3 месяца 9 лет");
     expect(onChange).toHaveBeenLastCalledWith({ days: 16, months: 3, years: 9 });
     expect(onChange).not.toHaveBeenLastCalledWith(
       expect.objectContaining({ display: expect.anything() }),
     );
   });
 
-  test("rejects invalid input and preserves disabled, hint, and one-field accessibility", async () => {
+  test("does not emit an incomplete duration", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const { rerender } = render(
+    render(
       <FieldEditorControl
         fieldType="work_experience"
         label="Стаж работы"
-        hint="Укажите длительность"
         options={[]}
         value={{ days: 1, months: 2, years: 3 } as never}
         onChange={onChange}
       />,
     );
 
-    const days = screen.getByLabelText("Дни");
-    await user.type(days, "-abc");
+    const input = screen.getByRole("textbox", { name: "Стаж работы" });
+    await user.clear(input);
+    await user.type(input, "16 3");
 
-    expect(days).toHaveValue("1");
+    expect(input).toHaveValue("16 3");
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText("Укажите длительность", { selector: "small" })).toHaveClass(
-      "field-editor-hint",
-    );
-    expect(screen.getByRole("group", { name: "Стаж работы" })).toBeInTheDocument();
+  });
 
-    rerender(
+  test("rejects words in a duration input", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="work_experience"
+        label="Стаж работы"
+        options={[]}
+        value={{ days: 1, months: 2, years: 3 } as never}
+        onChange={onChange}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Стаж работы" });
+    await user.clear(input);
+    await user.type(input, "16 days 3 9");
+
+    expect(input).toHaveValue("1 день 2 месяца 3 года");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("exposes one disabled textbox", () => {
+    const onChange = vi.fn();
+    render(
       <FieldEditorControl
         fieldType="work_experience"
         label="Стаж работы"
@@ -81,9 +99,12 @@ describe("WorkExperienceEditor", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Дни")).toBeDisabled();
-    expect(screen.getByLabelText("Месяцы")).toBeDisabled();
-    expect(screen.getByLabelText("Годы")).toBeDisabled();
+    const inputs = screen.getAllByRole("textbox", { name: "Стаж работы" });
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toBeDisabled();
+    expect(screen.getByText("Укажите длительность", { selector: "small" })).toHaveClass(
+      "field-editor-hint",
+    );
   });
 
   test("calls blur only when focus exits the field group", async () => {
@@ -103,12 +124,7 @@ describe("WorkExperienceEditor", () => {
       </>,
     );
 
-    await user.click(screen.getByLabelText("Дни"));
-    await user.tab();
-    await user.tab();
-
-    expect(onBlur).not.toHaveBeenCalled();
-
+    await user.click(screen.getByRole("textbox", { name: "Стаж работы" }));
     await user.tab();
 
     expect(screen.getByRole("button", { name: "После стажа" })).toHaveFocus();
@@ -129,10 +145,10 @@ describe("WorkExperienceEditor", () => {
         />,
       );
 
-      const days = screen.getByLabelText("Дни");
-      fireEvent.change(days, { target: { value: unsafeValue } });
+      const input = screen.getByRole("textbox", { name: "Стаж работы" });
+      fireEvent.change(input, { target: { value: `${unsafeValue} 2 3` } });
 
-      expect(days).toHaveValue("1");
+      expect(input).toHaveValue("1 день 2 месяца 3 года");
       expect(onChange).not.toHaveBeenCalled();
     },
   );
