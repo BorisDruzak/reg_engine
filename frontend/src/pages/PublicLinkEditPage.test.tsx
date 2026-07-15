@@ -168,7 +168,7 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
-  test("saves a public work-experience field from three segments", async () => {
+  test("saves a public work-experience field from one inline control", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-experience", "field-experience", 3, 1, 1, 6),
     );
@@ -183,16 +183,11 @@ describe("PublicLinkEditPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("group", { name: "Стаж работы" })).toBeEnabled();
-    const daysInput = screen.getByRole("textbox", { name: "Стаж работы, дни" });
-    const monthsInput = screen.getByRole("textbox", { name: "Стаж работы, месяцы" });
-    const yearsInput = screen.getByRole("textbox", { name: "Стаж работы, годы" });
-    expect(daysInput).toHaveValue("0");
-    expect(monthsInput).toHaveValue("0");
-    expect(yearsInput).toHaveValue("0");
-    fireEvent.change(daysInput, { target: { value: "16" } });
-    fireEvent.change(monthsInput, { target: { value: "3" } });
-    fireEvent.change(yearsInput, { target: { value: "9" } });
+    const experienceControl = await screen.findByRole("textbox", { name: "Стаж работы" });
+    expect(experienceControl).toHaveTextContent("0 дней 0 месяцев 0 лет");
+    setWorkExperiencePart(experienceControl, "days", "16");
+    setWorkExperiencePart(experienceControl, "months", "3");
+    setWorkExperiencePart(experienceControl, "years", "9");
 
     await waitFor(() => expect(editCalls()).toHaveLength(1));
     const lastRequest = editCalls().at(-1);
@@ -885,6 +880,19 @@ function jsonResponse(body: unknown, statusCode = 200) {
     status: statusCode,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function setWorkExperiencePart(
+  control: HTMLElement,
+  part: "days" | "months" | "years",
+  value: string,
+) {
+  const fragment = control.querySelector<HTMLElement>(`[data-work-experience-part="${part}"]`);
+  if (!fragment) {
+    throw new Error(`Missing ${part} work-experience fragment`);
+  }
+  fragment.textContent = value;
+  fireEvent.input(control);
 }
 
 type PublicFormLayout = {

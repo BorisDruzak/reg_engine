@@ -182,17 +182,11 @@ describe("FilledCardLayout", () => {
     render(<EditableWorkExperienceCard saveValues={saveValues} />);
 
     await user.click(screen.getByTestId("filled-field-layout-experience"));
-    expect(screen.getByRole("group", { name: "Стаж работы" })).toBeInTheDocument();
-    const daysInput = screen.getByRole("textbox", { name: "Стаж работы, дни" });
-    const monthsInput = screen.getByRole("textbox", { name: "Стаж работы, месяцы" });
-    const yearsInput = screen.getByRole("textbox", { name: "Стаж работы, годы" });
-    expect(daysInput).toHaveValue("1");
-    expect(monthsInput).toHaveValue("2");
-    expect(yearsInput).toHaveValue("3");
-
-    fireEvent.change(daysInput, { target: { value: "16" } });
-    fireEvent.change(monthsInput, { target: { value: "3" } });
-    fireEvent.change(yearsInput, { target: { value: "9" } });
+    const experienceControl = screen.getByRole("textbox", { name: "Стаж работы" });
+    expect(experienceControl).toHaveTextContent("1 день 2 месяца 3 года");
+    setWorkExperiencePart(experienceControl, "days", "16");
+    setWorkExperiencePart(experienceControl, "months", "3");
+    setWorkExperiencePart(experienceControl, "years", "9");
     fireEvent.pointerDown(document.body);
 
     await waitFor(() =>
@@ -572,4 +566,17 @@ function value(fieldId: string, fieldValue: unknown): FieldValueRead {
     block_instance_id: null,
     value: fieldValue,
   };
+}
+
+function setWorkExperiencePart(
+  control: HTMLElement,
+  part: "days" | "months" | "years",
+  value: string,
+) {
+  const fragment = control.querySelector<HTMLElement>(`[data-work-experience-part="${part}"]`);
+  if (!fragment) {
+    throw new Error(`Missing ${part} work-experience fragment`);
+  }
+  fragment.textContent = value;
+  fireEvent.input(control);
 }
