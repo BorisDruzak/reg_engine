@@ -13,6 +13,7 @@ import type {
   CardCreationLinkPublicPreviewRead,
   CardCreationLinkRead,
   CardCreationPreviewRead,
+  CardDraftCreatePayload,
   CardDraftPublicLinkRead,
   CardFirstSavePayload,
   CardPrintTemplateCreatePayload,
@@ -478,6 +479,18 @@ export async function firstSaveOrganizationCard(
       body: payload,
     },
   );
+}
+
+export async function createOrganizationCardDraft(
+  token: string,
+  organizationId: string,
+  payload: CardDraftCreatePayload,
+) {
+  return apiRequest<CardSummaryRead>("/api/v1/organizations/" + organizationId + "/cards/draft", {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
 
 export async function createOrganizationCardDraftPublicLink(

@@ -458,6 +458,12 @@ export type CardFirstSavePayload = {
   block_instance_id?: string | null;
 };
 
+export type CardDraftCreatePayload = {
+  display_name?: string | null;
+  card_template_id: string;
+  public_access: CardPublicAccessPayload;
+};
+
 export type CardDraftPublicLinkRead = {
   card: CardSummaryRead;
   raw_token: string;
