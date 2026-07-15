@@ -67,8 +67,12 @@ not a hardcoded employee registry.
   full frontend Vitest run completed successfully, backend pytest reports
   `339 passed, 231 skipped`, TypeScript and production Vite build pass, and
   ESLint has zero errors with only the existing `FilledCardLayout.tsx`
-  hook-dependency warning. Push, frontend deployment, and final server smoke
-  verification remain pending for this editor correction.
+  hook-dependency warning. Release commit `49f0c6db` is pushed to `main` and
+  the server checkout is synchronized to it. Frontend deployment published
+  `/assets/index-D8jDFYHt.js`, restarted `reg-engine.service`, and passed the
+  same-origin frontend/API smoke check; the post-deploy server verification is
+  recorded with the active service, PostgreSQL role login, and attachment
+  storage configuration.
 
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
