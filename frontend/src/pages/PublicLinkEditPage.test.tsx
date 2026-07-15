@@ -168,26 +168,31 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
-  test("saves a public work-experience field from one formatted input", async () => {
+  test("saves a public work-experience field from three segments", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-experience", "field-experience", 3, 1, 1, 6),
     );
     preview.blocks[0].instances[0].fields.push(
-      previewField(
-        "field-experience",
-        "experience",
-        "Стаж работы",
-        "work_experience",
-        { days: 0, months: 0, years: 0, display: "0 дней 0 месяцев 0 лет" },
-      ),
+      previewField("field-experience", "experience", "Стаж работы", "work_experience", {
+        days: 0,
+        months: 0,
+        years: 0,
+        display: "0 дней 0 месяцев 0 лет",
+      }),
     );
 
     renderPage();
 
     expect(await screen.findByRole("group", { name: "Стаж работы" })).toBeEnabled();
-    const experienceInput = screen.getByRole("textbox", { name: "Стаж работы" });
-    expect(experienceInput).toHaveValue("0 дней 0 месяцев 0 лет");
-    fireEvent.change(experienceInput, { target: { value: "16 3 9" } });
+    const daysInput = screen.getByRole("textbox", { name: "Стаж работы, дни" });
+    const monthsInput = screen.getByRole("textbox", { name: "Стаж работы, месяцы" });
+    const yearsInput = screen.getByRole("textbox", { name: "Стаж работы, годы" });
+    expect(daysInput).toHaveValue("0");
+    expect(monthsInput).toHaveValue("0");
+    expect(yearsInput).toHaveValue("0");
+    fireEvent.change(daysInput, { target: { value: "16" } });
+    fireEvent.change(monthsInput, { target: { value: "3" } });
+    fireEvent.change(yearsInput, { target: { value: "9" } });
 
     await waitFor(() => expect(editCalls()).toHaveLength(1));
     const lastRequest = editCalls().at(-1);

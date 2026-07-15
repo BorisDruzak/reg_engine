@@ -92,6 +92,14 @@ not a hardcoded employee registry.
   `Стаж муниципальной службы` textbox; no card values were changed during
   this check.
 
+  The editor now uses three numeric segments in one visual row: days, months,
+  and years remain separated by their always-visible Russian unit words. Each
+  word changes immediately from its segment's current value. `Space` moves
+  focus only from days to months and months to years; in the years segment it
+  is suppressed without changing the value or focus. The same shared editor
+  retains the existing `{ days, months, years }` payload and is covered in
+  creation, saved-card, and public-link tests.
+
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
   affected migration/API/integration suite against a disposable PostgreSQL

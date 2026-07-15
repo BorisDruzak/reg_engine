@@ -6,125 +6,99 @@ import { describe, expect, test, vi } from "vitest";
 import { FieldEditorControl } from "./FieldEditorControl";
 
 describe("WorkExperienceEditor", () => {
+  test("renders three numeric segments with visible unit words", () => {
+    renderEditor({ days: 1, months: 2, years: 5 });
+
+    const { days, months, years } = segmentedInputs();
+    expect(days).toHaveValue("1");
+    expect(months).toHaveValue("2");
+    expect(years).toHaveValue("5");
+    expect(screen.getByText("день")).toBeVisible();
+    expect(screen.getByText("месяца")).toBeVisible();
+    expect(screen.getByText("лет")).toBeVisible();
+  });
+
+  test("updates a unit word immediately from the current segment", async () => {
+    const user = userEvent.setup();
+    renderEditor({ days: 1, months: 2, years: 5 });
+
+    const { days } = segmentedInputs();
+    await user.clear(days);
+    await user.type(days, "5");
+
+    expect(screen.getByText("дней")).toBeVisible();
+  });
+
+  test("moves through duration segments with Space and keeps the year segment focused", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderEditor({ days: 0, months: 0, years: 0 }, onChange);
+
+    const { days, months, years } = segmentedInputs();
+    await user.clear(days);
+    await user.type(days, "16");
+    await user.keyboard(" ");
+    expect(months).toHaveFocus();
+    await user.clear(months);
+    await user.type(months, "3");
+    await user.keyboard(" ");
+    expect(years).toHaveFocus();
+    await user.clear(years);
+    await user.type(years, "9");
+    await user.keyboard(" ");
+
+    expect(years).toHaveFocus();
+    expect(onChange).toHaveBeenLastCalledWith({ days: 16, months: 3, years: 9 });
+  });
+
   test("submits a form after entering a valid duration", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(<WorkExperienceFormHost onSubmit={onSubmit} />);
 
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.clear(input);
-    await user.type(input, "16 3 12");
+    const { days, months, years } = segmentedInputs();
+    await replaceDuration(user, days, months, years, ["16", "3", "12"]);
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  test("keeps an incomplete draft visible in a controlled editor", async () => {
-    const user = userEvent.setup();
-    render(<ControlledWorkExperienceHost />);
-
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.clear(input);
-
-    expect(input).toHaveValue("");
-    expect(screen.getAllByRole("textbox", { name: "Стаж работы" })).toHaveLength(1);
-  });
-
-  test("keeps a complete numeric draft focused until blur", async () => {
+  test("keeps an incomplete segment visible without emitting a payload", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <FieldEditorControl
-        fieldType="work_experience"
-        label="Стаж работы"
-        hint="Укажите длительность"
-        options={[]}
-        value={{ days: 0, months: 0, years: 0 } as never}
-        onChange={onChange}
-      />,
-    );
+    renderEditor({ days: 1, months: 2, years: 3 }, onChange);
 
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.clear(input);
-    await user.type(input, "16 3 12");
+    const { days } = segmentedInputs();
+    await user.clear(days);
 
-    expect(screen.getAllByRole("textbox", { name: "Стаж работы" })).toHaveLength(1);
-    expect(input).toHaveValue("16 3 12");
-    expect(onChange).toHaveBeenLastCalledWith({ days: 16, months: 3, years: 12 });
-    expect(onChange).not.toHaveBeenLastCalledWith(
-      expect.objectContaining({ display: expect.anything() }),
-    );
-
-    await user.tab();
-
-    expect(input).toHaveValue("16 дней 3 месяца 12 лет");
-  });
-
-  test("lets typing replace a formatted value without manually clearing it", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(
-      <FieldEditorControl
-        fieldType="work_experience"
-        label="Стаж работы"
-        options={[]}
-        value={{ days: 12, months: 2, years: 4 } as never}
-        onChange={onChange}
-      />,
-    );
-
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.click(input);
-    await user.type(input, "16 3 12");
-
-    expect(input).toHaveValue("16 3 12");
-    expect(onChange).toHaveBeenLastCalledWith({ days: 16, months: 3, years: 12 });
-  });
-
-  test("does not emit an incomplete duration", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(
-      <FieldEditorControl
-        fieldType="work_experience"
-        label="Стаж работы"
-        options={[]}
-        value={{ days: 1, months: 2, years: 3 } as never}
-        onChange={onChange}
-      />,
-    );
-
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.clear(input);
-    await user.type(input, "16 3");
-
-    expect(input).toHaveValue("16 3");
+    expect(days).toHaveValue("");
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  test("rejects words in a duration input", async () => {
-    const user = userEvent.setup();
+  test("does not emit an unsafe numeric segment", () => {
     const onChange = vi.fn();
-    render(
-      <FieldEditorControl
-        fieldType="work_experience"
-        label="Стаж работы"
-        options={[]}
-        value={{ days: 1, months: 2, years: 3 } as never}
-        onChange={onChange}
-      />,
-    );
+    renderEditor({ days: 1, months: 2, years: 3 }, onChange);
 
-    const input = screen.getByRole("textbox", { name: "Стаж работы" });
-    await user.clear(input);
-    await user.type(input, "16 days 3 9");
+    const { days } = segmentedInputs();
+    fireEvent.change(days, { target: { value: "9007199254740992" } });
 
-    expect(input).toHaveValue("1 день 2 месяца 3 года");
+    expect(days).toHaveValue("9007199254740992");
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  test("exposes one disabled textbox", () => {
+  test("rejects words inside a numeric segment", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
+    renderEditor({ days: 1, months: 2, years: 3 }, onChange);
+
+    const { days } = segmentedInputs();
+    await user.type(days, "дней");
+
+    expect(days).toHaveValue("1");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("disables all three segments and keeps the hint", () => {
     render(
       <FieldEditorControl
         fieldType="work_experience"
@@ -133,13 +107,14 @@ describe("WorkExperienceEditor", () => {
         options={[]}
         value={{ days: 1, months: 2, years: 3 } as never}
         disabled
-        onChange={onChange}
+        onChange={vi.fn()}
       />,
     );
 
-    const inputs = screen.getAllByRole("textbox", { name: "Стаж работы" });
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0]).toBeDisabled();
+    const { days, months, years } = segmentedInputs();
+    expect(days).toBeDisabled();
+    expect(months).toBeDisabled();
+    expect(years).toBeDisabled();
     expect(screen.getByText("Укажите длительность", { selector: "small" })).toHaveClass(
       "field-editor-hint",
     );
@@ -162,47 +137,54 @@ describe("WorkExperienceEditor", () => {
       </>,
     );
 
-    await user.click(screen.getByRole("textbox", { name: "Стаж работы" }));
+    const { days, months, years } = segmentedInputs();
+    await user.click(days);
+    await user.tab();
+    expect(months).toHaveFocus();
+    expect(onBlur).not.toHaveBeenCalled();
+    await user.tab();
+    expect(years).toHaveFocus();
+    expect(onBlur).not.toHaveBeenCalled();
     await user.tab();
 
     expect(screen.getByRole("button", { name: "После стажа" })).toHaveFocus();
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
-
-  test.each(["9007199254740992", "999999999999999999999999999999999999999999999999999"])(
-    "rejects unsafe numeric input %s before it emits a payload",
-    (unsafeValue) => {
-      const onChange = vi.fn();
-      render(
-        <FieldEditorControl
-          fieldType="work_experience"
-          label="Стаж работы"
-          options={[]}
-          value={{ days: 1, months: 2, years: 3 } as never}
-          onChange={onChange}
-        />,
-      );
-
-      const input = screen.getByRole("textbox", { name: "Стаж работы" });
-      fireEvent.change(input, { target: { value: `${unsafeValue} 2 3` } });
-
-      expect(input).toHaveValue(`${unsafeValue} 2 3`);
-      expect(onChange).not.toHaveBeenCalled();
-    },
-  );
 });
 
-function ControlledWorkExperienceHost() {
-  const [value, setValue] = useState({ days: 1, months: 2, years: 3 });
-  return (
+function segmentedInputs(label = "Стаж работы") {
+  return {
+    days: screen.getByRole("textbox", { name: label + ", дни" }),
+    months: screen.getByRole("textbox", { name: label + ", месяцы" }),
+    years: screen.getByRole("textbox", { name: label + ", годы" }),
+  };
+}
+
+function renderEditor(value: { days: number; months: number; years: number }, onChange = vi.fn()) {
+  return render(
     <FieldEditorControl
       fieldType="work_experience"
       label="Стаж работы"
       options={[]}
-      value={value}
-      onChange={(nextValue) => setValue(nextValue as typeof value)}
-    />
+      value={value as never}
+      onChange={onChange}
+    />,
   );
+}
+
+async function replaceDuration(
+  user: ReturnType<typeof userEvent.setup>,
+  days: HTMLElement,
+  months: HTMLElement,
+  years: HTMLElement,
+  values: [string, string, string],
+) {
+  await user.clear(days);
+  await user.type(days, values[0]);
+  await user.clear(months);
+  await user.type(months, values[1]);
+  await user.clear(years);
+  await user.type(years, values[2]);
 }
 
 function WorkExperienceFormHost({ onSubmit }: { onSubmit: () => void }) {

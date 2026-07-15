@@ -2645,12 +2645,43 @@ tr:last-child td {
   line-height: 1.45;
 }
 
+.work-experience-editor {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.work-experience-editor-segment {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.work-experience-editor input {
+  flex: 1 1 4ch;
+  width: 4ch;
+  min-width: 3ch;
+  padding-inline: 8px;
+  text-align: center;
+}
+
+.work-experience-editor-unit {
+  flex: 0 0 auto;
+  color: #344054;
+  white-space: nowrap;
+}
+
 .field-editor-autosize-text:focus-visible,
 .filled-card-block-field-control input:focus-visible,
 .filled-card-block-field-control select:focus-visible,
 .public-inline-field-control input:focus-visible,
 .public-inline-field-control select:focus-visible,
-.public-inline-field-control textarea:focus-visible {
+.public-inline-field-control textarea:focus-visible,
+.work-experience-editor input:focus-visible {
   outline: 3px solid rgba(15, 118, 110, 0.16);
   border-color: #0f766e;
 }

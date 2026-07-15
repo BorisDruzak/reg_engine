@@ -1,6 +1,7 @@
 import type { WorkExperienceValue } from "@/api/types";
 
 export type WorkExperiencePayload = Pick<WorkExperienceValue, "days" | "months" | "years">;
+export type WorkExperiencePart = "days" | "months" | "years";
 
 const zeroWorkExperience: WorkExperiencePayload = { days: 0, months: 0, years: 0 };
 
@@ -33,7 +34,17 @@ export function workExperiencePayload(value: WorkExperienceValue): WorkExperienc
 }
 
 export function formatWorkExperience(value: WorkExperiencePayload): string {
-  return `${value.days} ${declension(value.days, "день", "дня", "дней")} ${value.months} ${declension(value.months, "месяц", "месяца", "месяцев")} ${value.years} ${declension(value.years, "год", "года", "лет")}`;
+  return `${value.days} ${workExperienceUnitWord(value.days, "days")} ${value.months} ${workExperienceUnitWord(value.months, "months")} ${value.years} ${workExperienceUnitWord(value.years, "years")}`;
+}
+
+export function workExperienceUnitWord(value: number, part: WorkExperiencePart): string {
+  const forms = {
+    days: ["день", "дня", "дней"],
+    months: ["месяц", "месяца", "месяцев"],
+    years: ["год", "года", "лет"],
+  } as const;
+  const [singular, paucal, plural] = forms[part];
+  return declension(value, singular, paucal, plural);
 }
 
 export function formatStoredWorkExperience(value: WorkExperienceValue): string {
