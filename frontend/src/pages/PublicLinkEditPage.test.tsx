@@ -168,6 +168,35 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
+  test("saves a public work-experience field as the three-number payload", async () => {
+    preview.form_layout.sections[0].items.push(
+      layoutItem("item-experience", "field-experience", 3, 1, 1, 6),
+    );
+    preview.blocks[0].instances[0].fields.push(
+      previewField(
+        "field-experience",
+        "experience",
+        "Стаж работы",
+        "work_experience",
+        { days: 0, months: 0, years: 0, display: "0 дней 0 месяцев 0 лет" },
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByRole("group", { name: "Стаж работы" })).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Дни"), { target: { value: "16" } });
+    fireEvent.change(screen.getByLabelText("Месяцы"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Годы"), { target: { value: "9" } });
+
+    await waitFor(() => expect(editCalls()).toHaveLength(2));
+    expect(editCalls().at(-1)?.body).toMatchObject({
+      field_id: "field-experience",
+      block_instance_id: "instance-main",
+      value: { days: 16, months: 3, years: 9 },
+    });
+  });
+
   test("keeps the public card surface limited to safe fields and read-only metadata", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-readonly", "field-readonly", 3, 1, 1, 6),

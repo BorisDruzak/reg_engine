@@ -17,6 +17,16 @@ describe("isValueFilled", () => {
     expect(isValueFilled(undefined, "file_ref")).toBe(false);
     expect(isValueFilled(null, "text")).toBe(false);
   });
+
+  test("treats stored work experience as filled but an absent editor default as empty", () => {
+    expect(
+      isValueFilled(
+        { days: 16, months: 3, years: 9, display: "16 дней 3 месяца 9 лет" },
+        "work_experience",
+      ),
+    ).toBe(true);
+    expect(isValueFilled(undefined, "work_experience")).toBe(false);
+  });
 });
 
 describe("buildBlockCompletions", () => {
@@ -111,5 +121,23 @@ describe("buildBlockCompletions", () => {
     expect(secondInstance.fields.get("phone")?.state).toBe("required-missing");
     expect(secondInstance.fields.get("files")?.state).toBe("empty");
     expect(secondInstance.blocks.get("contacts")?.state).toBe("attention");
+  });
+
+  test("keeps a required absent work-experience field incomplete", () => {
+    const result = buildBlockCompletions({
+      blocks: [{ id: "employment", title: "Опыт" }],
+      fields: [
+        {
+          id: "experience",
+          block_id: "employment",
+          field_type: "work_experience",
+          required_mode: "required",
+        },
+      ],
+      valueForField: () => undefined,
+    });
+
+    expect(result.fields.get("experience")?.state).toBe("required-missing");
+    expect(result.blocks.get("employment")?.state).toBe("attention");
   });
 });

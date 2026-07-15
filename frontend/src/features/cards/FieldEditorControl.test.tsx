@@ -23,6 +23,24 @@ function renderControl(fieldType: string, hint: string | null = "Заполни�
 }
 
 describe("FieldEditorControl hints", () => {
+  test("renders the structured work-experience editor used by card creation and saved edits", () => {
+    render(
+      <FieldEditorControl
+        fieldType="work_experience"
+        label="Стаж работы"
+        options={[]}
+        value={{ days: 16, months: 3, years: 9, display: "16 дней 3 месяца 9 лет" }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const control = screen.getByRole("group", { name: "Стаж работы" });
+    expect(within(control).getByLabelText("Дни")).toHaveValue("16");
+    expect(within(control).getByLabelText("Месяцы")).toHaveValue("3");
+    expect(within(control).getByLabelText("Годы")).toHaveValue("9");
+    expect(within(control).getByText("16 дней 3 месяца 9 лет")).toBeInTheDocument();
+  });
+
   test("uses the hint as a text placeholder", () => {
     renderControl("text");
     expect(screen.getByLabelText("Поле text")).toHaveAttribute("placeholder", "Заполните значение");

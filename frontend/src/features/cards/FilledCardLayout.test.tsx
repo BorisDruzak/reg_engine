@@ -123,6 +123,59 @@ function defaultProps(overrides: Partial<FilledCardLayoutProps> = {}): FilledCar
 }
 
 describe("FilledCardLayout", () => {
+  test("renders a stored work experience display in the saved read-only card", () => {
+    const experienceField = field({
+      id: "experience",
+      code: "experience",
+      label: "Стаж работы",
+      field_type: "work_experience",
+      position: 4,
+    });
+    const experienceLayout = {
+      ...layout,
+      structure: { blocks: [block], fields: [...fields, experienceField] },
+      form_layout: {
+        ...layout.form_layout,
+        sections: [
+          {
+            ...layout.form_layout.sections[0],
+            items: [...layout.form_layout.sections[0].items, layoutField("experience", 4, 1, 1, 6)],
+          },
+        ],
+      },
+    };
+    const storedExperience = { days: 16, months: 3, years: 9, display: "16 дней 3 месяца 9 лет" };
+
+    render(
+      <FilledCardLayout
+        {...defaultProps({
+          layout: experienceLayout,
+          fields: [...fields, experienceField],
+          values: [...values, value("experience", storedExperience)],
+          blockInstances: [
+            {
+              ...blockInstances[0],
+              fields: {
+                ...blockInstances[0].fields,
+                experience: {
+                  field_id: "experience",
+                  code: "experience",
+                  field_type: "work_experience",
+                  value: storedExperience,
+                },
+              },
+            },
+          ],
+        })}
+      />,
+    );
+
+    const experienceNode = screen.getByTestId("filled-field-layout-experience");
+    expect(experienceNode).toHaveTextContent("16 дней 3 месяца 9 лет");
+    expect(experienceNode).not.toHaveTextContent('"days"');
+    expect(experienceNode.querySelector("a")).toBeNull();
+  });
+
   test("forwards the status action into the sticky card navigator", () => {
     render(
       <FilledCardLayout
