@@ -19,6 +19,8 @@ reconciliation.
 - Backspace on an empty month or year segment moves to the prior segment.
 - Blur preserves the exact entered numeric values. No formatted-text parser,
   selection reset, or post-blur value replacement is used.
+- Each segment accepts digits only. Letters, spaces, punctuation, signs, and
+  non-numeric pasted text are discarded before they can enter the draft.
 
 ## Implementation
 
