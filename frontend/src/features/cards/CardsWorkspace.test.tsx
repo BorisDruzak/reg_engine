@@ -133,6 +133,11 @@ describe("CardsWorkspace", () => {
     expect(globalStyles).toContain(
       ".single-stage-card-creation .card-presentation-content {\n  display: grid;\n  gap: 16px;",
     );
+    expect(globalStyles).toContain(".single-stage-card-creation-field.is-locked {");
+    expect(globalStyles).toContain(".single-stage-card-creation-field.is-locked-attention {");
+    expect(globalStyles).toContain(".card-draft-save-button.is-ready:not(:disabled) {");
+    expect(globalStyles).toContain("@keyframes card-draft-save-pulse {");
+    expect(globalStyles).toContain("@media (prefers-reduced-motion: reduce) {");
   });
 
   test("restores scroll-linked template block navigation while creating a card", async () => {
@@ -530,6 +535,18 @@ describe("CardsWorkspace", () => {
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled();
     const field = await screen.findByLabelText("Наименование");
     expect(field).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Заполнить поле Наименование" }));
+    expect(
+      screen.getByText("Сначала сохраните черновик, чтобы заполнить поле «Наименование»."),
+    ).toBeInTheDocument();
+    expect(field.closest(".single-stage-card-creation-field")).toHaveClass(
+      "is-locked",
+      "is-locked-attention",
+    );
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toHaveClass("is-attention");
+    expect(
+      screen.getByText("Базовый блок заполнен. Сохраните черновик, чтобы перейти к полям шаблона."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Сначала сохраните черновик — после этого можно заполнять поля шаблона."),
     ).toBeInTheDocument();

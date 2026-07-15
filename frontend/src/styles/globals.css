@@ -2181,6 +2181,42 @@ tr:last-child td {
   color: #40536b;
 }
 
+.card-draft-save-button.is-ready:not(:disabled) {
+  animation: card-draft-save-pulse 2.2s ease-in-out infinite;
+}
+
+.card-draft-save-button.is-attention:not(:disabled) {
+  animation: card-draft-save-attention 620ms ease-in-out;
+}
+
+@keyframes card-draft-save-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+    transform: translateY(0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.16);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes card-draft-save-attention {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+
+  30% {
+    transform: translateX(-3px) scale(1.02);
+  }
+
+  70% {
+    transform: translateX(3px) scale(1.02);
+  }
+}
+
 .card-base-block,
 .card-workspace-footer-panel,
 .card-workspace-archive-panel {
@@ -5478,12 +5514,77 @@ button.searchable-choice-picker-option:hover:not(:disabled),
 }
 
 .single-stage-card-creation-field {
+  position: relative;
   display: grid;
   gap: 7px;
   padding: 12px;
   border: 1px solid #d5dfeb;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.single-stage-card-creation-field > span {
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.single-stage-card-creation-field.is-locked {
+  border-color: #b8c6d8;
+  background: #f3f6fa;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+.single-stage-card-creation-field.is-locked :is(input, select, textarea, button) {
+  opacity: 0.62;
+}
+
+.single-stage-card-creation-field-lock {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  min-height: 100%;
+  border: 0;
+  border-radius: inherit;
+  padding: 0;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.single-stage-card-creation-field-lock:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.32);
+  outline-offset: -3px;
+}
+
+.single-stage-card-creation-field.is-locked-attention {
+  animation: card-draft-field-shake 360ms ease-in-out;
+}
+
+.single-stage-card-creation-field-guidance {
+  position: relative;
+  z-index: 3;
+  margin: 0;
+  color: #8a4b08;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+@keyframes card-draft-field-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px);
+  }
+
+  75% {
+    transform: translateX(4px);
+  }
 }
 
 .single-stage-card-creation-field.is-required-missing {
@@ -5494,6 +5595,19 @@ button.searchable-choice-picker-option:hover:not(:disabled),
 .single-stage-card-creation-field.is-filled {
   border-color: #b9ddd1;
   background: #f5fcf8;
+}
+
+.single-stage-card-creation-field.is-locked.is-required-missing {
+  border-color: #b8c6d8;
+  background: #f3f6fa;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-draft-save-button.is-ready:not(:disabled),
+  .card-draft-save-button.is-attention:not(:disabled),
+  .single-stage-card-creation-field.is-locked-attention {
+    animation: none;
+  }
 }
 
 .admin-mutation-body input:focus,

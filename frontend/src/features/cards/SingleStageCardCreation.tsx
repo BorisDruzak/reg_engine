@@ -62,6 +62,7 @@ export function SingleStageCardCreation({
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [lockedFieldId, setLockedFieldId] = useState<string | null>(null);
 
   const templateId = state.templateId || templates[0]?.id || "";
   const canLoadPreview = Boolean(state.organizationId && templateId);
@@ -160,6 +161,10 @@ export function SingleStageCardCreation({
         fields: payload.fields ?? current.publicAccess.fields,
       },
     }));
+  }
+
+  function explainDraftRequirement(fieldId: string) {
+    setLockedFieldId(fieldId);
   }
 
   function publicAccessPayload(): CardPublicAccessPayload {
@@ -262,6 +267,7 @@ export function SingleStageCardCreation({
     <CardDraftActionRail
       state="setup"
       setupComplete={canLoadPreview}
+      attention={lockedFieldId !== null}
       isSaving={isSaving}
       onSaveDraft={() => void saveDraft()}
     />
@@ -313,10 +319,11 @@ export function SingleStageCardCreation({
                     {block.fields.map((field) => {
                       const isFile = field.field_type === "file_ref";
                       const fieldState = completions.fields.get(field.field_id)?.state ?? "empty";
+                      const isLockedAttention = lockedFieldId === field.field_id;
                       return (
-                        <label
+                        <div
                           key={field.field_id}
-                          className={`single-stage-card-creation-field is-${fieldState}`}
+                          className={`single-stage-card-creation-field is-${fieldState} is-locked${isLockedAttention ? " is-locked-attention" : ""}`}
                         >
                           <span>
                             {field.label}
@@ -338,7 +345,20 @@ export function SingleStageCardCreation({
                             disabled
                             onChange={() => undefined}
                           />
-                        </label>
+                          <button
+                            type="button"
+                            className="single-stage-card-creation-field-lock"
+                            aria-label={`Заполнить поле ${field.label}`}
+                            onClick={() => explainDraftRequirement(field.field_id)}
+                          />
+                          {isLockedAttention ? (
+                            <p className="single-stage-card-creation-field-guidance" role="status">
+                              {canLoadPreview
+                                ? `Сначала сохраните черновик, чтобы заполнить поле «${field.label}».`
+                                : "Сначала выберите организацию и сохраните черновик, чтобы заполнить это поле."}
+                            </p>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
