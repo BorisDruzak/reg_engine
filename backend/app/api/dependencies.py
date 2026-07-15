@@ -180,6 +180,11 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         ) from exc
     if isinstance(exc, CardServiceError):
         raise HTTPException(status_code=400, detail="Операция с карточкой недоступна.") from exc
+    if isinstance(exc, RegistrySchemaError):
+        raise HTTPException(
+            status_code=400,
+            detail="Операция со схемой реестра недоступна.",
+        ) from exc
     if isinstance(
         exc,
         (
@@ -189,7 +194,6 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
             ImportExportServiceError,
             OrganizationTopologyError,
             ReferenceListError,
-            RegistrySchemaError,
             ReportServiceError,
             UserAccessError,
         ),

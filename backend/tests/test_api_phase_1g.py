@@ -29,7 +29,7 @@ from app.models import (
     role_permissions,
 )
 from app.services.cards import CardService, CardServiceError
-from app.services.registry_schema import RegistrySchemaService
+from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
 
 def _require_test_database_url() -> str:
@@ -296,8 +296,20 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
     assert "get" in openapi_paths["/api/v1/organizations/{organization_id}/cards"]
 
 
-def test_explicit_draft_endpoint_maps_card_domain_errors_to_russian_without_database(
+@pytest.mark.parametrize(
+    ("service_error", "expected_detail"),
+    [
+        (CardServiceError("Card template was not found."), "Операция с карточкой недоступна."),
+        (
+            RegistrySchemaError("Default card registry is not configured for this organization."),
+            "Операция со схемой реестра недоступна.",
+        ),
+    ],
+)
+def test_explicit_draft_endpoint_maps_domain_errors_to_russian_without_database(
     monkeypatch: pytest.MonkeyPatch,
+    service_error: Exception,
+    expected_detail: str,
 ) -> None:
     previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
     os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
@@ -307,11 +319,11 @@ def test_explicit_draft_endpoint_maps_card_domain_errors_to_russian_without_data
     def override_session() -> Iterator[None]:
         yield None
 
-    def raise_card_error(_self: CardService, **_kwargs: Any) -> None:
-        raise CardServiceError("Card template was not found.")
+    def raise_service_error(_self: CardService, **_kwargs: Any) -> None:
+        raise service_error
 
     app.dependency_overrides[get_db_session] = override_session
-    monkeypatch.setattr(CardService, "create_card_draft_for_actor", raise_card_error)
+    monkeypatch.setattr(CardService, "create_card_draft_for_actor", raise_service_error)
     try:
         with TestClient(app) as client:
             response = client.post(
@@ -327,7 +339,7 @@ def test_explicit_draft_endpoint_maps_card_domain_errors_to_russian_without_data
         get_settings.cache_clear()
 
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "Операция с карточкой недоступна."
+    assert response.json()["detail"] == expected_detail
 
 
 def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
@@ -483,6 +495,10 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
     card_id = UUID(created["id"])
     assert created["lifecycle_status"] == "draft"
     assert created["display_name"] == "Explicit draft card"
+    public_links = db_session.scalars(
+        select(CardPublicLink).where(CardPublicLink.card_id == card_id)
+    ).all()
+    assert public_links == []
     assert db_session.scalar(
         select(CardPublicFieldSetting).where(CardPublicFieldSetting.card_id == card_id)
     ) is not None
@@ -493,12 +509,14 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
             AuditEvent.action == "create",
         )
     ).all()
-    assert not db_session.scalars(
-        select(AuditEvent).where(
-            AuditEvent.object_id == card_id,
-            AuditEvent.object_type == "card_public_link",
-        )
+    public_link_audits = db_session.scalars(
+        select(AuditEvent).where(AuditEvent.object_type == "card_public_link")
     ).all()
+    assert not [
+        event
+        for event in public_link_audits
+        if event.new_data_json is not None and event.new_data_json.get("card_id") == str(card_id)
+    ]
 
     denied = api_client.post(
         f"/api/v1/organizations/{organization['id']}/cards/draft",
