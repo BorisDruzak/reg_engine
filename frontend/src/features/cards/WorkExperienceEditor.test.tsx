@@ -20,6 +20,15 @@ describe("WorkExperienceEditor", () => {
     expect(control).toHaveTextContent("лет");
   });
 
+  test("starts editing days when the shared field is activated", async () => {
+    const user = userEvent.setup();
+    renderEditor({ days: 16, months: 3, years: 9 });
+
+    await user.click(experienceControl());
+
+    expect(segmentedInputs().days).toHaveFocus();
+  });
+
   test("moves through 2/2/4 segments while entering a duration", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

@@ -111,6 +111,11 @@ export function WorkExperienceEditor({
       aria-label={label}
       className="work-experience-editor"
       onBlur={(event) => handleGroupBlur(event)}
+      onClick={(event) => {
+        if (!disabled && event.target === event.currentTarget) {
+          focusInput(daysRef.current);
+        }
+      }}
       onFocus={() => setIsFocused(true)}
       role="group"
     >

@@ -168,7 +168,7 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
-  test("saves a public work-experience field from one inline control", async () => {
+  test("debounces a public work-experience mask and flushes its complete value on blur", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-experience", "field-experience", 3, 1, 1, 6),
     );
@@ -187,21 +187,34 @@ describe("PublicLinkEditPage", () => {
     expect(
       within(experienceControl).getByRole("textbox", { name: "Стаж работы, дни" }),
     ).toHaveValue("0");
-    setWorkExperiencePart(experienceControl, "days", "16");
-    setWorkExperiencePart(experienceControl, "months", "3");
-    setWorkExperiencePart(experienceControl, "years", "9");
+    vi.useFakeTimers();
+    try {
+      setWorkExperiencePart(experienceControl, "days", "16");
+      setWorkExperiencePart(experienceControl, "months", "3");
+      setWorkExperiencePart(experienceControl, "years", "9");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(599);
+      });
+      expect(editCalls()).toHaveLength(0);
 
-    await waitFor(() => expect(editCalls()).toHaveLength(1));
-    const lastRequest = editCalls().at(-1);
-    expect(lastRequest?.body).toMatchObject({
-      field_id: "field-experience",
-      block_instance_id: "instance-main",
-    });
-    expect((lastRequest?.body as { value: unknown }).value).toEqual({
-      days: 16,
-      months: 3,
-      years: 9,
-    });
+      fireEvent.blur(within(experienceControl).getAllByRole("textbox")[0]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(editCalls()).toHaveLength(1);
+      const lastRequest = editCalls().at(-1);
+      expect(lastRequest?.body).toMatchObject({
+        field_id: "field-experience",
+        block_instance_id: "instance-main",
+      });
+      expect((lastRequest?.body as { value: unknown }).value).toEqual({
+        days: 16,
+        months: 3,
+        years: 9,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("keeps the public card surface limited to safe fields and read-only metadata", async () => {

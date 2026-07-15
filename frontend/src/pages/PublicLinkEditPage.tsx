@@ -820,7 +820,7 @@ function PublicFieldEditor({
 }
 
 function usesDelayedPublicSave(fieldType: string) {
-  return ["text", "number", "date", "datetime", "json"].includes(fieldType);
+  return ["text", "number", "date", "datetime", "json", "work_experience"].includes(fieldType);
 }
 
 function publicStaticTextContent(field: PublicLinkPreviewFieldRead) {
