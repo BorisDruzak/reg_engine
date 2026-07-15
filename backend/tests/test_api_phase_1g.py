@@ -16,7 +16,9 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+import app.api.v1.endpoints._field_values as field_values_module
 import app.services.cards as cards_module
+import app.services.public_links as public_links_module
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
@@ -1295,6 +1297,8 @@ def test_work_experience_field_persists_private_anchor_and_projects_api_reads(
             return cls(2026, 6, 28)
 
     monkeypatch.setattr(cards_module, "date", ServerDate)
+    monkeypatch.setattr(field_values_module, "date", ServerDate)
+    monkeypatch.setattr(public_links_module, "date", ServerDate)
     system_admin = _create_user(db_session, "experience-system@example.test", is_superuser=True)
     outsider = _create_user(db_session, "experience-outsider@example.test")
     root = _post_json(
