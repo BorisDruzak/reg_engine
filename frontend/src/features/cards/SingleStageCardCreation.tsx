@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import {
-  createOrganizationCardDraftPublicLink,
-  firstSaveOrganizationCard,
-  getCardCreationPreview,
-} from "@/api/client";
+import { createOrganizationCardDraft, getCardCreationPreview } from "@/api/client";
 import type {
   CardCreationPreviewFieldRead,
   CardPublicAccessPayload,
@@ -19,6 +15,8 @@ import { errorText } from "@/components/common/dataUtils";
 
 import { FieldEditorControl } from "./FieldEditorControl";
 import type { CardBlockNavigationItem } from "./CardBlockNavigator";
+import { CardBaseBlockSurface } from "./CardBaseBlockSurface";
+import { CardDraftActionRail } from "./CardDraftActionRail";
 import { CardPresentationShell } from "./CardPresentationShell";
 import { PublicAccessFieldPicker } from "./PublicAccessFieldPicker";
 import { buildBlockCompletions } from "./cardCompletion";
@@ -47,9 +45,9 @@ export function SingleStageCardCreation({
   onCancel: () => void;
   onCardCreated: (cardId: string) => Promise<void>;
 }) {
-  const [state, setState] = useState<CreationState>(() => ({
-    organizationId: organizations[0]?.id ?? "",
-    templateId: "",
+  const [state, setState] = useState<CreationState>({
+    organizationId: "",
+    templateId: templates.length === 1 ? templates[0].id : "",
     displayName: "",
     values: {},
     publicAccess: {
@@ -57,7 +55,7 @@ export function SingleStageCardCreation({
       public_edit_enabled: true,
       fields: [],
     },
-  }));
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -159,51 +157,17 @@ export function SingleStageCardCreation({
     };
   }
 
-  async function createDraftPublicLink() {
+  async function saveDraft() {
     if (!canLoadPreview) return;
     setError(null);
     setIsSaving(true);
     try {
-      const created = await createOrganizationCardDraftPublicLink(token, state.organizationId, {
+      const card = await createOrganizationCardDraft(token, state.organizationId, {
         display_name: state.displayName.trim() || undefined,
         card_template_id: templateId,
         public_access: publicAccessPayload(),
       });
-      await onCardCreated(created.card.id);
-    } catch (nextError) {
-      setError(nextError);
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function saveFirstValue(field: CardCreationPreviewFieldRead, nextValue: FieldEditorState) {
-    let value: unknown;
-    try {
-      value = coerceEditorValue(field.field_type, nextValue);
-    } catch (nextError) {
-      setError(nextError);
-      return;
-    }
-    setState((current) => ({
-      ...current,
-      values: { ...current.values, [field.field_id]: nextValue },
-    }));
-    if (isEmptyFirstValue(value)) return;
-
-    setError(null);
-    setIsSaving(true);
-    try {
-      const created = await firstSaveOrganizationCard(token, state.organizationId, {
-        display_name: state.displayName.trim() || undefined,
-        card_template_id: templateId,
-        field_id: field.field_id,
-        value,
-        public_view_enabled: state.publicAccess.public_view_enabled ?? true,
-        public_edit_enabled: state.publicAccess.public_edit_enabled ?? true,
-        public_access: publicAccessPayload(),
-      });
-      await onCardCreated(created.id);
+      await onCardCreated(card.id);
     } catch (nextError) {
       setError(nextError);
     } finally {
@@ -212,121 +176,82 @@ export function SingleStageCardCreation({
   }
 
   const baseBlock = (
-    <section
+    <CardBaseBlockSurface
       id="creation-card-base-block"
-      className="data-panel card-base-block single-stage-card-creation-base"
-      aria-label="Базовый блок"
-    >
-      <header className="card-base-block-header">
-        <div>
-          <strong>Базовый блок</strong>
-          <small>
-            Выберите организацию и шаблон. Карточка будет создана после первого заполненного поля.
-          </small>
-        </div>
-      </header>
-      <div className="admin-mutation-body">
-        <label>
-          <span>Организация карточки</span>
-          <select
-            aria-label="Организация карточки"
+      mode="creation"
+      disabled={isSaving}
+      organization={{
+        label: "Организация карточки",
+        value: state.organizationId,
+        options: organizations.map((organization) => ({
+          id: organization.id,
+          label: organization.name,
+        })),
+        placeholder: "Нет данных",
+        onChange: (organizationId) => resetTemplateValues({ organizationId, templateId }),
+      }}
+      template={{
+        label: "Шаблон карточки",
+        value: templateId,
+        options: templates.map((template) => ({ id: template.id, label: template.name })),
+        placeholder: templates.length === 1 ? undefined : "Выберите шаблон карточки",
+        onChange: (nextTemplateId) =>
+          resetTemplateValues({ organizationId: state.organizationId, templateId: nextTemplateId }),
+      }}
+      displayName={{
+        label: "Наименование карточки",
+        value: state.displayName,
+        placeholder: preview?.display_name || "Необязательно",
+        onChange: (displayName) => setState((current) => ({ ...current, displayName })),
+      }}
+      publicAccessContent={
+        <div className="card-base-block-public-settings">
+          <div className="card-base-toggle-grid">
+            <label className="checkbox-control">
+              <input
+                type="checkbox"
+                checked={publicAccess.public_view_enabled}
+                disabled={isSaving || publicAccess.public_edit_enabled}
+                onChange={(event) =>
+                  updatePublicAccess({ public_view_enabled: event.currentTarget.checked })
+                }
+              />
+              <span>Публичный просмотр карточки</span>
+            </label>
+            <label className="checkbox-control">
+              <input
+                type="checkbox"
+                checked={publicAccess.public_edit_enabled}
+                disabled={isSaving}
+                onChange={(event) =>
+                  updatePublicAccess({ public_edit_enabled: event.currentTarget.checked })
+                }
+              />
+              <span>Публичное редактирование карточки</span>
+            </label>
+          </div>
+          <PublicAccessFieldPicker
+            fields={publicAccessFields}
+            publicAccess={publicAccess}
             disabled={isSaving}
-            value={state.organizationId}
-            onChange={(event) =>
-              resetTemplateValues({ organizationId: event.currentTarget.value, templateId })
-            }
-          >
-            <option value="">Нет данных</option>
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Шаблон карточки</span>
-          <select
-            aria-label="Шаблон карточки"
-            disabled={isSaving || templates.length === 0}
-            value={templateId}
-            onChange={(event) =>
-              resetTemplateValues({
-                organizationId: state.organizationId,
-                templateId: event.currentTarget.value,
-              })
-            }
-          >
-            {templates.length !== 1 && <option value="">Выберите шаблон карточки</option>}
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Наименование карточки</span>
-          <input
-            aria-label="Наименование карточки"
-            disabled={isSaving}
-            placeholder={preview?.display_name || "Необязательно"}
-            value={state.displayName}
-            onChange={(event) =>
-              setState((current) => ({ ...current, displayName: event.currentTarget.value }))
-            }
+            onChange={updatePublicAccess}
           />
-        </label>
-      </div>
-      <div className="card-base-block-public-settings">
-        <div className="card-base-block-public-heading">
-          <strong>Публичный доступ</strong>
         </div>
-        <div className="card-base-toggle-grid">
-          <label className="checkbox-control">
-            <input
-              type="checkbox"
-              checked={publicAccess.public_view_enabled}
-              disabled={isSaving || publicAccess.public_edit_enabled}
-              onChange={(event) =>
-                updatePublicAccess({ public_view_enabled: event.currentTarget.checked })
-              }
-            />
-            <span>Публичный просмотр карточки</span>
-          </label>
-          <label className="checkbox-control">
-            <input
-              type="checkbox"
-              checked={publicAccess.public_edit_enabled}
-              disabled={isSaving}
-              onChange={(event) =>
-                updatePublicAccess({ public_edit_enabled: event.currentTarget.checked })
-              }
-            />
-            <span>Публичное редактирование карточки</span>
-          </label>
-        </div>
-        <PublicAccessFieldPicker
-          fields={publicAccessFields}
-          publicAccess={publicAccess}
-          disabled={isSaving}
-          onChange={updatePublicAccess}
-        />
-      </div>
-      <footer className="admin-mutation-actions">
-        <button
-          type="button"
-          className="primary-button"
-          disabled={isSaving || !canLoadPreview}
-          onClick={() => void createDraftPublicLink()}
-        >
-          Создать публичную ссылку
-        </button>
+      }
+      footer={
         <button type="button" className="ghost-button" disabled={isSaving} onClick={onCancel}>
           Отмена
         </button>
-      </footer>
-    </section>
+      }
+    />
+  );
+  const draftActionRail = (
+    <CardDraftActionRail
+      state="setup"
+      setupComplete={canLoadPreview}
+      isSaving={isSaving}
+      onSaveDraft={() => void saveDraft()}
+    />
   );
 
   return (
@@ -355,6 +280,7 @@ export function SingleStageCardCreation({
             ...navigationItems,
           ]}
           beforeContent={baseBlock}
+          navigatorAction={draftActionRail}
         >
           <div className="single-stage-card-creation-template">
             {preview.blocks.map((block) => {
@@ -397,8 +323,8 @@ export function SingleStageCardCreation({
                               state.values[field.field_id] ??
                               initialEditorValue({ field_type: field.field_type, value: null })
                             }
-                            disabled={isSaving || isFile}
-                            onChange={(nextValue) => void saveFirstValue(field, nextValue)}
+                            disabled
+                            onChange={() => undefined}
                           />
                         </label>
                       );
@@ -412,21 +338,16 @@ export function SingleStageCardCreation({
       ) : null}
       {creationFields.length > 0 ? (
         <p className="field-editor-hint">
-          После первого заполненного поля карточка сохранится автоматически.
+          Сначала сохраните черновик — после этого можно заполнять поля шаблона.
         </p>
       ) : null}
+      {!preview?.blocks.length ? draftActionRail : null}
     </section>
   );
 }
 
 function isRequired(requiredMode: string) {
   return requiredMode === "required" || requiredMode === "required_on_publish";
-}
-
-function isEmptyFirstValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return true;
-  if (Array.isArray(value)) return value.length === 0;
-  return false;
 }
 
 function creationValueForCompletion(

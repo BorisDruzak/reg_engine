@@ -187,8 +187,12 @@ describe("CardsWorkspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
 
     expect(await screen.findByLabelText("Базовый блок")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Организация карточки"), {
+      target: { value: organization.id },
+    });
     expect(await screen.findByLabelText("Фамилия")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Создать публичную ссылку" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled();
     const navigator = screen.getByRole("navigation", { name: "Содержание карточки" });
     expect(within(navigator).getByRole("button", { name: /Базовый блок/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ФИО: нужно заполнить 1 из 1/ })).toBeInTheDocument();
@@ -261,7 +265,7 @@ describe("CardsWorkspace", () => {
     );
   });
 
-  test("creates a card only after the first non-empty dynamic field value", async () => {
+  test("requires an explicit draft save before opening the created card", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = input instanceof Request ? input.url : String(input);
@@ -292,15 +296,15 @@ describe("CardsWorkspace", () => {
           ],
         });
       }
-      if (url.endsWith("/cards/first-save")) {
+      if (url.endsWith("/cards/draft")) {
         return Response.json({
-          id: "new-card-1",
+          id: "draft-card-1",
           registry_id: "registry-1",
           card_template_id: "template-1",
           organization_id: organization.id,
           org_unit_id: null,
           display_name: "Шаблон",
-          lifecycle_status: "active",
+          lifecycle_status: "draft",
           public_view_enabled: true,
           public_edit_enabled: true,
           list_fields: [],
@@ -313,78 +317,33 @@ describe("CardsWorkspace", () => {
     renderWorkspace({ onOpenCreatedCard });
 
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
+    expect(screen.getByLabelText("Организация карточки")).toHaveValue("");
+    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Организация карточки"), {
+      target: { value: organization.id },
+    });
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled();
     const field = await screen.findByLabelText("Наименование");
+    expect(field).toBeDisabled();
+    expect(
+      screen.getByText("Сначала сохраните черновик — после этого можно заполнять поля шаблона."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+
+    await waitFor(() => expect(onOpenCreatedCard).toHaveBeenCalledWith("draft-card-1"));
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/cards/draft")),
+    ).toHaveLength(1);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(
       false,
     );
-
-    fireEvent.change(field, { target: { value: "Первое значение" } });
-
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/first-save"))).toBe(
-        true,
-      );
-    });
-    expect(onOpenCreatedCard).toHaveBeenCalledWith("new-card-1");
-    const [, init] = fetchMock.mock.calls.find(([url]) =>
-      String(url).endsWith("/cards/first-save"),
-    )!;
-    expect(JSON.parse(String(init?.body))).toMatchObject({
-      card_template_id: "template-1",
-      field_id: "field-1",
-      value: "Первое значение",
-    });
-  });
-
-  test("creates a draft and public link from the creation base block", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      void init;
-      const url = input instanceof Request ? input.url : String(input);
-      if (url.includes("/creation-preview")) {
-        return Response.json({
-          organization_id: organization.id,
-          card_template_id: "template-1",
-          display_name: "Шаблон",
-          blocks: [],
-        });
-      }
-      if (url.endsWith("/cards/draft-public-link")) {
-        return Response.json({
-          card: {
-            id: "draft-card-1",
-            registry_id: "registry-1",
-            card_template_id: "template-1",
-            organization_id: organization.id,
-            org_unit_id: null,
-            display_name: "Шаблон",
-            lifecycle_status: "draft",
-            public_view_enabled: true,
-            public_edit_enabled: true,
-            list_fields: [],
-          },
-          raw_token: "public-token",
-          public_link_id: "public-link-1",
-        });
-      }
-      return Response.json({ items: [] });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const onOpenCreatedCard = vi.fn().mockResolvedValue(undefined);
-    renderWorkspace({ onOpenCreatedCard });
-
-    fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
-    const createLink = await screen.findByRole("button", { name: "Создать публичную ссылку" });
-    fireEvent.click(createLink);
-
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/draft-public-link")),
-      ).toBe(true);
-    });
-    expect(onOpenCreatedCard).toHaveBeenCalledWith("draft-card-1");
-    const [, init] = fetchMock.mock.calls.find(([url]) =>
-      String(url).endsWith("/cards/draft-public-link"),
-    )!;
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/draft-public-link")),
+    ).toBe(false);
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cards/draft"))!;
     expect(JSON.parse(String(init?.body))).toMatchObject({
       card_template_id: "template-1",
       public_access: {
