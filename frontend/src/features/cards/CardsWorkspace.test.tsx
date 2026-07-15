@@ -364,8 +364,26 @@ describe("CardsWorkspace", () => {
             field_ids: ["field-birth-date", "field-name", "field-position-name"],
             form_layout: {
               sections: [
-                { items: [{ field_id: "field-name" }, { field_id: "field-birth-date" }] },
-                { items: [{ field_id: "field-position-name" }] },
+                {
+                  row: 2,
+                  column: 1,
+                  items: [
+                    {
+                      kind: "field",
+                      field_id: "field-position-name",
+                      row: 1,
+                      column: 1,
+                    },
+                  ],
+                },
+                {
+                  row: 1,
+                  column: 1,
+                  items: [
+                    { kind: "field", field_id: "field-birth-date", row: 2, column: 1 },
+                    { kind: "field", field_id: "field-name", row: 1, column: 1 },
+                  ],
+                },
               ],
             },
           },
