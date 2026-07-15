@@ -7,9 +7,11 @@ from fastapi import HTTPException
 
 import app.api.v1.endpoints._field_values as field_values_module
 import app.services.cards as cards_module
+import app.services.public_links as public_links_module
 from app.api.v1.endpoints._field_values import coerce_api_field_value
 from app.models import FieldValue, FormField
 from app.services.cards import CardFieldOptionRead, CardService, InvalidFieldValueError
+from app.services.public_links import PublicLinkError, PublicLinkService
 
 
 class _FieldSession:
@@ -148,6 +150,52 @@ def test_work_experience_service_rejects_noncanonical_private_anchor(
 
     with pytest.raises(InvalidFieldValueError, match="Work experience value is invalid"):
         service._read_field_value(field, field_value, {})
+
+
+def test_public_link_reader_projects_private_work_experience_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 28)
+
+    monkeypatch.setattr(public_links_module, "date", ServerDate)
+    field = _field("work_experience")
+    field_value = FieldValue(
+        card_id=uuid4(),
+        block_instance_id=uuid4(),
+        field_id=field.id,
+        value_json={"anchor_date": "2017-03-12"},
+    )
+
+    assert PublicLinkService(session=None)._read_field_value(field, field_value, {}) == {
+        "days": 16,
+        "months": 3,
+        "years": 9,
+        "display": "16 дней 3 месяца 9 лет",
+    }
+
+
+def test_public_link_reader_rejects_malformed_work_experience_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 28)
+
+    monkeypatch.setattr(public_links_module, "date", ServerDate)
+    field = _field("work_experience")
+    field_value = FieldValue(
+        card_id=uuid4(),
+        block_instance_id=uuid4(),
+        field_id=field.id,
+        value_json={"anchor_date": "20170312"},
+    )
+
+    with pytest.raises(PublicLinkError, match="Work experience value is invalid"):
+        PublicLinkService(session=None)._read_field_value(field, field_value, {})
 
 
 def test_legacy_field_value_helpers_use_work_experience_domain_rules(

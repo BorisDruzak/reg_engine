@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import PUBLIC_LINK_STATUSES
+from app.domain.work_experience import experience_for_anchor, serialize_experience
 from app.models import (
     AuditEvent,
     Card,
@@ -1363,6 +1364,22 @@ class PublicLinkService:
             return field_value.value_bool
         if field_model.field_type == "json":
             return field_value.value_json
+        if field_model.field_type == "work_experience":
+            try:
+                value_json = field_value.value_json
+                if (
+                    not isinstance(value_json, dict)
+                    or set(value_json) != {"anchor_date"}
+                    or not isinstance(value_json["anchor_date"], str)
+                ):
+                    raise ValueError("Work experience anchor is invalid.")
+                raw_anchor_date = value_json["anchor_date"]
+                anchor_date = date.fromisoformat(raw_anchor_date)
+                if anchor_date.isoformat() != raw_anchor_date:
+                    raise ValueError("Work experience anchor is invalid.")
+                return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+            except (TypeError, ValueError) as exc:
+                raise PublicLinkError("Work experience value is invalid.") from exc
         if field_model.field_type == "select":
             return field_value.value_reference_item_id
         if field_model.field_type == "multi_select":
