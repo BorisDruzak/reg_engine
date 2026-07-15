@@ -499,9 +499,12 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
         select(CardPublicLink).where(CardPublicLink.card_id == card_id)
     ).all()
     assert public_links == []
-    assert db_session.scalar(
-        select(CardPublicFieldSetting).where(CardPublicFieldSetting.card_id == card_id)
-    ) is not None
+    assert (
+        db_session.scalar(
+            select(CardPublicFieldSetting).where(CardPublicFieldSetting.card_id == card_id)
+        )
+        is not None
+    )
     assert db_session.scalars(
         select(AuditEvent).where(
             AuditEvent.object_id == card_id,
@@ -1111,9 +1114,7 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
     assert text_query_response.status_code == 200, text_query_response.text
     assert {item["id"] for item in text_query_response.json()["items"]} == {matching_card["id"]}
     matching_summary = text_query_response.json()["items"][0]
-    list_fields_by_code = {
-        item["code"]: item for item in matching_summary["list_fields"]
-    }
+    list_fields_by_code = {item["code"]: item for item in matching_summary["list_fields"]}
     assert list_fields_by_code["person"]["value"]
     assert list_fields_by_code["person"]["display_value"] == list_fields_by_code["person"]["value"]
     assert list_fields_by_code["state"]["value"] == ready_item["id"]
