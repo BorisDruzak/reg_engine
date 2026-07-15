@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.domain.work_experience import parse_work_experience_display
 from app.models import (
     Card,
     CardTemplate,
@@ -39,6 +40,7 @@ TABULAR_XLSX_SUPPORTED_FIELD_TYPES = {
     "multi_select",
     "organization_ref",
     "org_unit_ref",
+    "work_experience",
 }
 TABULAR_XLSX_FORMAT_VERSION = "tabular_card_xlsx_v1"
 TABULAR_XLSX_SHEET_TITLE = "Карточки"
@@ -922,6 +924,9 @@ class TabularCardExchangeService:
             return labels_by_id.get(value, "")
         if field.field_type == "multi_select" and isinstance(value, list):
             return "; ".join(labels_by_id.get(item, "") for item in value if item in labels_by_id)
+        if field.field_type == "work_experience" and isinstance(value, dict):
+            display = value.get("display")
+            return display if isinstance(display, str) else None
         return value
 
     def preview_import_xlsx_for_actor(
@@ -1277,6 +1282,18 @@ class TabularCardExchangeService:
             ):
                 raise ImportExportServiceError("подразделение недоступно выбранной организации.")
             return org_unit_id
+        if field.field_type == "work_experience":
+            try:
+                experience = parse_work_experience_display(str(raw_value))
+            except ValueError as exc:
+                raise ImportExportServiceError(
+                    "укажите стаж строго в формате «16 дней 3 месяца 9 лет»."
+                ) from exc
+            return {
+                "days": experience.days,
+                "months": experience.months,
+                "years": experience.years,
+            }
         raise ImportExportServiceError("тип поля не поддерживается в XLSX.")
 
     def _parse_date_text(self, value: str) -> date:

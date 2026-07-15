@@ -33,7 +33,7 @@ from app.models import (
     role_permissions,
 )
 from app.services.attachments import LocalFilesystemAttachmentStorage
-from app.services.cards import CardService
+from app.services.cards import CardFieldRead, CardRead, CardService
 from app.services.organizations import OrganizationService
 from app.services.registry_schema import RegistrySchemaService
 from app.services.reports import ReportService, ReportServiceError, _RenderedReport
@@ -363,6 +363,33 @@ def _assert_report_run_rejected(
 def _extract_pdf_text(content: bytes) -> str:
     reader = PdfReader(BytesIO(content))
     return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def test_card_detail_report_uses_work_experience_display_from_card_read() -> None:
+    field_id = uuid4()
+    display = "16 дней 3 месяца 9 лет"
+    card_read = CardRead(
+        card_id=uuid4(),
+        registry_id=uuid4(),
+        card_template_id=uuid4(),
+        organization_id=uuid4(),
+        display_name="Карточка отчёта",
+        fields={
+            "main.work_experience": CardFieldRead(
+                field_id=field_id,
+                code="work_experience",
+                field_type="work_experience",
+                value={"days": 16, "months": 3, "years": 9, "display": display},
+            )
+        },
+    )
+
+    assert (
+        object.__new__(ReportService)._field_to_report(card_read.fields["main.work_experience"])[
+            "value"
+        ]
+        == display
+    )
 
 
 def test_xlsx_report_output_renderer_creates_workbook_bytes() -> None:

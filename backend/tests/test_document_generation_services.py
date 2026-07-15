@@ -493,6 +493,40 @@ def test_card_print_layout_renderers_use_structured_layout_and_card_values() -> 
     assert "Текстовое поле: Значение для печати" in extracted_text
 
 
+def test_document_renderers_use_work_experience_display_from_card_read() -> None:
+    field_id = uuid4()
+    display = "16 дней 3 месяца 9 лет"
+    card = CardRead(
+        card_id=uuid4(),
+        registry_id=uuid4(),
+        card_template_id=uuid4(),
+        organization_id=uuid4(),
+        display_name="Печатная карточка",
+        fields={
+            "main.work_experience": CardFieldRead(
+                field_id=field_id,
+                code="work_experience",
+                field_type="work_experience",
+                value={"days": 16, "months": 3, "years": 9, "display": display},
+            )
+        },
+    )
+    service = object.__new__(DocumentService)
+
+    placeholder_xml = _render_docx_xml_from_card("Стаж: {{ fields.main.work_experience }}", card)
+    print_content = service._build_docx_from_card_print_layout(
+        _card_print_layout(field_id),
+        _RenderContext(card=card),
+    )
+    with ZipFile(BytesIO(print_content)) as docx:
+        print_xml = docx.read("word/document.xml").decode("utf-8")
+
+    assert f"Стаж: {display}" in placeholder_xml
+    assert f"Текстовое поле: {display}" in print_xml
+    assert '"days"' not in placeholder_xml
+    assert '"days"' not in print_xml
+
+
 def test_card_print_layout_docx_renders_sections_as_editable_word_tables() -> None:
     field_id = uuid4()
     card = _card_read_for_print_layout(field_id)

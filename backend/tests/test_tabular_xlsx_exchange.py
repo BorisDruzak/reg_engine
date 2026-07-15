@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -28,6 +29,7 @@ def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -
         "multi_select",
         "organization_ref",
         "org_unit_ref",
+        "work_experience",
     }
 
 
@@ -316,6 +318,183 @@ def test_tabular_xlsx_exports_readable_organization_and_unit_values(
     assert sheet["D2"].value == "Администрация → Управление → Отдел"
     assert str(card_organization_id) not in {sheet["C2"].value, sheet["D2"].value}
     assert str(department_id) not in {sheet["C2"].value, sheet["D2"].value}
+
+
+def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Стаж", field_type="work_experience")
+    organization = SimpleNamespace(id=organization_id, name="Администрация", code="admin")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Стаж",
+            ),
+        ),
+        organizations=(organization,),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    card = SimpleNamespace(id=uuid4(), organization_id=organization_id)
+    display = "16 дней 3 месяца 9 лет"
+
+    class ExportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, *, actor_user_id: object, card_id: object) -> object:
+            assert (actor_user_id, card_id) == (actor_user_id, card.id)
+            return SimpleNamespace(
+                blocks={
+                    "main": SimpleNamespace(
+                        instances=[
+                            SimpleNamespace(
+                                fields={
+                                    "work_experience": SimpleNamespace(
+                                        field_id=field.id,
+                                        value={
+                                            "days": 16,
+                                            "months": 3,
+                                            "years": 9,
+                                            "display": display,
+                                        },
+                                    )
+                                }
+                            )
+                        ]
+                    )
+                }
+            )
+
+    monkeypatch.setattr(import_export, "CardService", ExportCardService)
+    service = import_export.TabularCardExchangeService(MagicMock())
+    content = service._build_workbook(
+        actor_user_id=actor_user_id,
+        configuration=configuration,
+        cards=[card],
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=True)
+    sheet = workbook["Карточки"]
+    values = [
+        cell.value
+        for worksheet in workbook.worksheets
+        for row in worksheet.iter_rows()
+        for cell in row
+        if isinstance(cell.value, str)
+    ]
+    assert sheet["B2"].value == display
+    assert sheet["B2"].number_format == "General"
+    assert not any("anchor_date" in value or "2016-04-29" in value for value in values)
+
+    class ImportSession:
+        def begin_nested(self) -> object:
+            return nullcontext()
+
+    written_values: list[object] = []
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def create_card_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(id=uuid4())
+
+        def set_field_value_for_actor(self, *, value: object, **_kwargs: object) -> None:
+            written_values.append(value)
+
+    class AuditService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
+    monkeypatch.setattr(import_export, "AuditService", AuditService)
+    import_service = import_export.TabularCardExchangeService(ImportSession())
+    monkeypatch.setattr(
+        import_service,
+        "_configuration_from_metadata",
+        lambda **_kwargs: configuration,
+    )
+
+    preview = import_service.preview_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=content,
+    )
+    committed = import_service.commit_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=content,
+    )
+
+    assert preview["rows"][0]["values"] == {field.id: {"days": 16, "months": 3, "years": 9}}
+    assert committed["summary"] == {"created_cards": 1, "field_values_written": 1}
+    assert written_values == [{"days": 16, "months": 3, "years": 9}]
+
+
+def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Стаж", field_type="work_experience")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Стаж",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Стаж"])
+    sheet.append([1, "9 лет 3 месяца 16 дней"])
+    metadata_sheet = workbook.create_sheet("_registry_engine")
+    metadata_sheet["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(
+        service,
+        "_configuration_from_metadata",
+        lambda **_kwargs: configuration,
+    )
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=uuid4(),
+        registry_id=registry_id,
+        xlsx_content=content.getvalue(),
+    )
+
+    assert preview["rows"][0]["status"] == "invalid"
+    assert preview["rows"][0]["errors"] == [
+        "Стаж: укажите стаж строго в формате «16 дней 3 месяца 9 лет»."
+    ]
 
 
 def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_foreign_unit(

@@ -1245,8 +1245,16 @@ class DocumentService:
             field_read: CardFieldRead | None = context.card.fields.get(field_key)
             if field_read is None:
                 raise DocumentServiceError(f"Unknown document template placeholder: {placeholder}")
+            if field_read.field_type == "work_experience":
+                return self._work_experience_display(field_read.value)
             return field_read.value
         raise DocumentServiceError(f"Unknown document template placeholder: {placeholder}")
+
+    def _work_experience_display(self, value: object | None) -> str:
+        if not isinstance(value, dict):
+            return ""
+        display = value.get("display")
+        return display if isinstance(display, str) else ""
 
     def _format_render_value(self, value: object | None) -> str:
         if value is None:
@@ -1880,7 +1888,13 @@ class DocumentService:
         except (TypeError, ValueError):
             return ""
         field_read = self._card_print_field_reads_by_id(context).get(field_id)
-        value = self._format_render_value(field_read.value if field_read is not None else None)
+        value = self._format_render_value(
+            self._work_experience_display(field_read.value)
+            if field_read is not None and field_read.field_type == "work_experience"
+            else field_read.value
+            if field_read is not None
+            else None
+        )
         label = str(item.get("label") or "").strip()
         if not label:
             field = self.session.get(FormField, field_id)

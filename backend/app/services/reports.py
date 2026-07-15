@@ -930,11 +930,14 @@ class ReportService:
         }
 
     def _field_to_report(self, field: CardFieldRead) -> dict[str, Any]:
+        value = field.value
+        if field.field_type == "work_experience":
+            value = value.get("display") if isinstance(value, dict) else None
         return {
             "field_id": field.field_id,
             "code": field.code,
             "field_type": field.field_type,
-            "value": field.value,
+            "value": value,
         }
 
     def _output_filename(self, template: ReportTemplate) -> str:
