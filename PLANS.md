@@ -5638,3 +5638,10 @@ Status: complete, pushed to `main`, deployed, and Browser-verified on 2026-07-15
   decision: an input such as `50 days, 1 month` resolves to an anchor date and
   reads back as the canonical calendar duration for that date. This behavior is
   not a frontend focus or autosave defect.
+- Follow-up commit `23e7e7b1` makes the first saved-card activation select the
+  entire days segment after focus, rather than placing the caret at its end.
+  Direct clicks on months and years continue to select their entire segment.
+  The release is deployed with frontend asset `/assets/index-BUrd85Ic.js`.
+  Browser proof on an existing administrative card confirmed `19` selected as
+  range `0..2`, then month `2` selected as `0..1`, with no console errors and
+  no value saved during the check.
