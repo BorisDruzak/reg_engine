@@ -57,6 +57,19 @@ not a hardcoded employee registry.
   consumer-only repair changes no production code, backend/API endpoint, or
   stored `work_experience` contract.
 
+  Final local editor correction keeps the complete numeric draft editable
+  while the one input has focus, so values such as `16 3 12` can be entered
+  without losing a digit. It emits the existing structured payload when all
+  three safe integer parts are present and automatically replaces it with the
+  Russian formatted string on blur. The native numeric pattern was removed so
+  a formatted value cannot prevent a containing card form from submitting.
+  Focused regression and card-consumer tests pass (`41` tests); a fresh local
+  full frontend Vitest run completed successfully, backend pytest reports
+  `339 passed, 231 skipped`, TypeScript and production Vite build pass, and
+  ESLint has zero errors with only the existing `FilledCardLayout.tsx`
+  hook-dependency warning. Push, frontend deployment, and final server smoke
+  verification remain pending for this editor correction.
+
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
   affected migration/API/integration suite against a disposable PostgreSQL
