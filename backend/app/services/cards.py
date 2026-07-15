@@ -252,6 +252,32 @@ class CardService:
             public_edit_enabled=public_edit_enabled,
         )
 
+    def create_card_draft_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        organization_id: UUID,
+        display_name: str | None,
+        card_template_id: UUID,
+        public_access: "CardPublicAccessUpdate",
+    ) -> Card:
+        from app.services.card_public_access import CardPublicAccessService
+
+        with self.session.begin_nested():
+            card = self.create_card_for_organization_for_actor(
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                display_name=display_name,
+                card_template_id=card_template_id,
+            )
+            self._preserve_draft_lifecycle(card, actor_user_id=actor_user_id)
+            CardPublicAccessService(self.session).update_for_actor(
+                actor_user_id=actor_user_id,
+                card_id=card.id,
+                payload=public_access,
+            )
+        return card
+
     def create_card_draft_with_public_link_for_actor(
         self,
         *,
@@ -271,7 +297,7 @@ class CardService:
                 display_name=display_name,
                 card_template_id=card_template_id,
             )
-            self._preserve_draft_lifecycle_for_public_link_creation(
+            self._preserve_draft_lifecycle(
                 card,
                 actor_user_id=actor_user_id,
             )
@@ -288,7 +314,7 @@ class CardService:
             )
         return CardDraftPublicLink(card=card, public_link=public_link)
 
-    def _preserve_draft_lifecycle_for_public_link_creation(
+    def _preserve_draft_lifecycle(
         self,
         card: Card,
         *,

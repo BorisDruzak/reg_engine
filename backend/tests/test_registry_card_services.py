@@ -1677,6 +1677,158 @@ def test_create_draft_card_and_public_link_denies_actor_without_card_management(
     assert db_session.scalar(select(func.count(Card.id))) == 0
 
 
+def test_explicit_draft_creation_saves_draft_without_public_link(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="explicit-draft-template",
+        name="Explicit draft template",
+        field_schema_json={"field_ids": []},
+    )
+
+    created = CardService(db_session).create_card_draft_for_actor(
+        actor_user_id=context["system_admin"].id,
+        organization_id=context["child"].id,
+        display_name="Новая карточка",
+        card_template_id=template.id,
+        public_access=CardPublicAccessUpdate(
+            public_view_enabled=True,
+            public_edit_enabled=False,
+        ),
+    )
+
+    assert created.lifecycle_status == "draft"
+    assert created.display_name == "Новая карточка"
+    assert PublicLinkService(db_session).list_for_card(created.id) == []
+    assert CardPublicAccessService(db_session).read_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=created.id,
+    ).model_dump() == {
+        "card_id": created.id,
+        "public_view_enabled": True,
+        "public_edit_enabled": False,
+        "fields": [],
+    }
+
+
+def test_explicit_draft_creation_preserves_draft_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NestedTransaction:
+        def __enter__(self) -> "_NestedTransaction":
+            return self
+
+        def __exit__(self, *_args: object) -> bool:
+            return False
+
+    class _NestedSession:
+        def begin_nested(self) -> _NestedTransaction:
+            return _NestedTransaction()
+
+        def flush(self) -> None:
+            pass
+
+    card = SimpleNamespace(id=uuid4(), lifecycle_status="active", updated_by=None)
+    service = CardService(cast(Session, _NestedSession()))
+    monkeypatch.setattr(
+        service,
+        "create_card_for_organization_for_actor",
+        lambda **_payload: card,
+    )
+    monkeypatch.setattr(service, "_record_lifecycle_transition", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CardPublicAccessService,
+        "update_for_actor",
+        lambda _self, **_payload: None,
+    )
+
+    created = service.create_card_draft_for_actor(
+        actor_user_id=uuid4(),
+        organization_id=uuid4(),
+        display_name=None,
+        card_template_id=uuid4(),
+        public_access=CardPublicAccessUpdate(),
+    )
+
+    assert created.lifecycle_status == "draft"
+
+
+def test_explicit_draft_creation_denies_actor_without_card_management(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="explicit-draft-denied-template",
+        name="Explicit draft denied template",
+        field_schema_json={"field_ids": []},
+    )
+
+    with pytest.raises(PermissionDeniedError):
+        CardService(db_session).create_card_draft_for_actor(
+            actor_user_id=context["registry_admin"].id,
+            organization_id=context["child"].id,
+            display_name=None,
+            card_template_id=template.id,
+            public_access=CardPublicAccessUpdate(),
+        )
+
+    assert db_session.scalar(select(func.count(Card.id))) == 0
+
+
+def test_draft_creation_rolls_back_after_public_access_failure(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=registry.id,
+        code="explicit-draft-rollback-template",
+        name="Explicit draft rollback template",
+        field_schema_json={"field_ids": []},
+    )
+
+    def fail_public_access_update(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("forced public-access update failure")
+
+    monkeypatch.setattr(
+        CardPublicAccessService,
+        "update_for_actor",
+        fail_public_access_update,
+    )
+
+    with pytest.raises(RuntimeError, match="forced public-access update failure"):
+        CardService(db_session).create_card_draft_for_actor(
+            actor_user_id=context["system_admin"].id,
+            organization_id=context["child"].id,
+            display_name="Rollback draft",
+            card_template_id=template.id,
+            public_access=CardPublicAccessUpdate(),
+        )
+
+    assert (
+        db_session.scalar(
+            select(func.count(Card.id)).where(Card.organization_id == context["child"].id)
+        )
+        == 0
+    )
+    assert db_session.scalar(select(func.count(CardPublicFieldSetting.id))) == 0
+
+
 def test_card_update_keeps_public_view_enabled_when_public_edit_is_enabled(
     db_session: Session,
 ) -> None:

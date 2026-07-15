@@ -110,6 +110,12 @@ class CardFirstSaveRequest(BaseModel):
     block_instance_id: UUID | None = None
 
 
+class CardDraftCreateRequest(BaseModel):
+    display_name: str | None = None
+    card_template_id: UUID
+    public_access: CardPublicAccessUpdate = Field(default_factory=CardPublicAccessUpdate)
+
+
 class CardDraftPublicLinkRequest(BaseModel):
     display_name: str | None = None
     card_template_id: UUID

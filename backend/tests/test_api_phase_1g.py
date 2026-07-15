@@ -21,6 +21,7 @@ from app.main import create_app
 from app.models import (
     AccessGrant,
     AuditEvent,
+    CardPublicFieldSetting,
     CardPublicLink,
     Permission,
     Role,
@@ -281,6 +282,7 @@ def test_phase_1g_routes_are_registered_without_database() -> None:
         "/api/v1/reference-items/{item_id}",
         "/api/v1/registries/{registry_id}/cards",
         "/api/v1/organizations/{organization_id}/cards",
+        "/api/v1/organizations/{organization_id}/cards/draft",
         "/api/v1/organizations/{organization_id}/cards/draft-public-link",
         "/api/v1/cards/{card_id}",
         "/api/v1/cards/{card_id}/blocks/{block_id}/instances",
@@ -374,6 +376,97 @@ def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
 
     denied = api_client.post(
         f"/api/v1/organizations/{organization['id']}/cards/draft-public-link",
+        json=payload,
+        headers=_actor_headers(outsider.id),
+    )
+
+    assert denied.status_code == 403, denied.text
+
+
+def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase1g-explicit-draft-system@example.test",
+        is_superuser=True,
+    )
+    outsider = _create_user(db_session, "phase1g-explicit-draft-outsider@example.test")
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase1g-explicit-draft", "name": "Explicit draft organization"},
+        actor_id=system_admin.id,
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        UUID(organization["id"])
+    )
+    block = RegistrySchemaService(db_session).create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-explicit-draft-block",
+        title="Explicit draft block",
+    )
+    field = RegistrySchemaService(db_session).create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="explicit_draft_value",
+        label="Explicit draft value",
+        field_type="text",
+    )
+    template = RegistrySchemaService(db_session).create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-explicit-draft-template",
+        name="Explicit draft template",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+    payload = {
+        "display_name": "Explicit draft card",
+        "card_template_id": str(template.id),
+        "public_access": {
+            "public_view_enabled": True,
+            "public_edit_enabled": False,
+            "fields": [
+                {
+                    "field_id": str(field.id),
+                    "public_visible": False,
+                    "public_editable": False,
+                }
+            ],
+        },
+    }
+
+    created = _post_json(
+        api_client,
+        f"/api/v1/organizations/{organization['id']}/cards/draft",
+        payload,
+        actor_id=system_admin.id,
+    )
+
+    card_id = UUID(created["id"])
+    assert created["lifecycle_status"] == "draft"
+    assert created["display_name"] == "Explicit draft card"
+    assert db_session.scalar(
+        select(CardPublicFieldSetting).where(CardPublicFieldSetting.card_id == card_id)
+    ) is not None
+    assert db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.object_id == card_id,
+            AuditEvent.object_type == "card",
+            AuditEvent.action == "create",
+        )
+    ).all()
+    assert not db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.object_id == card_id,
+            AuditEvent.object_type == "card_public_link",
+        )
+    ).all()
+
+    denied = api_client.post(
+        f"/api/v1/organizations/{organization['id']}/cards/draft",
         json=payload,
         headers=_actor_headers(outsider.id),
     )

@@ -17,6 +17,7 @@ from app.schemas.cards import (
     CardCreationPreviewFieldRead,
     CardCreationPreviewOptionRead,
     CardCreationPreviewRead,
+    CardDraftCreateRequest,
     CardDraftPublicLinkRead,
     CardDraftPublicLinkRequest,
     CardFieldOptionListRead,
@@ -106,6 +107,31 @@ def read_organization_card_creation_preview(
             for block in preview.blocks
         ],
     )
+
+
+@router.post(
+    "/organizations/{organization_id}/cards/draft",
+    response_model=CardSummaryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_organization_card_draft(
+    organization_id: UUID,
+    payload: CardDraftCreateRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card_service = CardService(session)
+        card = card_service.create_card_draft_for_actor(
+            actor_user_id=actor_user_id,
+            organization_id=organization_id,
+            display_name=payload.display_name,
+            card_template_id=payload.card_template_id,
+            public_access=payload.public_access,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card, card_service)
 
 
 @router.post(
