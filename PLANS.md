@@ -5243,7 +5243,7 @@ Status: implementation complete locally; deployment and Browser acceptance pendi
 
 #### Searchable controlled fields and simplified unit actions
 
-Status: implementation complete locally; release verification in progress.
+Status: complete, pushed, deployed, and Browser-verified.
 
 - All controlled card choices use a searchable popup; single selects close on
   selection and multi-select choices remain checkable with chips. Free text
@@ -5394,3 +5394,7 @@ Status: implementation complete locally; release verification in progress.
   The preview controls stay disabled until the explicit draft save flow.
 - The creation action is rendered once: in the sticky block navigator. The
   duplicate action below the initial base block is removed.
+- Release evidence: commit `ad3ed063` is deployed. The live authenticated
+  creation tab selected `Муниципальный Служащий`, rendered its three schema
+  blocks and disabled fields immediately, and exposed exactly one disabled
+  `Сохранить черновик` button in the navigator before organization selection.
