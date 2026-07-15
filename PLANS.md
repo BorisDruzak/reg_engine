@@ -108,6 +108,23 @@ not a hardcoded employee registry.
   the focus path days → months → years → years after consecutive `Space`
   presses, with all visible values left unchanged at `0`.
 
+  Follow-up inline-control release: the three bordered native inputs are now
+  replaced by one inline `contenteditable` textbox with one external border.
+  The three numeric spans stay in the same row, while the Russian unit words
+  are immutable spans inside that single control. `Space` moves the selection
+  from days to months and from months to years, and remains suppressed in the
+  years span. The existing `{ days, months, years }` payload, server-side date
+  calculation, and export rendering are unchanged.
+  Focused frontend verification passed 80 tests across the editor, creation,
+  saved-card, and public-link surfaces, alongside TypeScript, ESLint, Prettier,
+  and the production Vite build (only the existing chunk-size advisory
+  remains). Commit `42b23d77` is pushed and deployed with assets
+  `index-_XXFG70b.js` and `index-BsYUycjw.css`; the API health check and
+  same-origin frontend smoke check passed. A refreshed public card confirms
+  one editable `РЎС‚Р°Р¶ РјСѓРЅРёС†РёРїР°Р»СЊРЅРѕР№ СЃР»СѓР¶Р±С‹` textbox, zero
+  segmented textboxes, the unmodified value
+  `0 РґРЅРµР№ 0 РјРµСЃСЏС†РµРІ 0 Р»РµС‚`, and no browser console errors or warnings.
+
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
   affected migration/API/integration suite against a disposable PostgreSQL

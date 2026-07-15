@@ -154,7 +154,7 @@ node node_modules/vite/bin/vite.js build
 
 Expected: all commands exit 0, with only the known Vite chunk-size advisory permitted.
 
-- [ ] **Step 4: Commit, deploy, and prove the published control**
+- [x] **Step 4: Commit, deploy, and prove the published control**
 
 ```powershell
 git add PLANS.md frontend/src/features/cards/WorkExperienceEditor.tsx frontend/src/features/cards/WorkExperienceEditor.test.tsx frontend/src/features/cards/FieldEditorControl.test.tsx frontend/src/features/cards/FilledCardLayout.test.tsx frontend/src/pages/PublicLinkEditPage.test.tsx frontend/src/styles/globals.css
