@@ -127,6 +127,13 @@ def test_anchor_for_experience_subtracts_calendar_months_and_years_with_clamping
     ) == date(2023, 2, 28)
 
 
+def test_calendar_edge_dates_do_not_overflow_duration_conversion() -> None:
+    zero = WorkExperience(days=0, months=0, years=0)
+
+    assert anchor_for_experience(zero, today=date.max) == date.max
+    assert experience_for_anchor(date.max, today=date.max) == zero
+
+
 def test_experience_for_anchor_uses_matching_whole_calendar_subtractions() -> None:
     assert experience_for_anchor(date(2025, 2, 28), today=date(2025, 3, 31)) == WorkExperience(
         days=0,

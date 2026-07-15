@@ -236,6 +236,49 @@ def test_legacy_field_value_helpers_use_work_experience_domain_rules(
     assert exc_info.value.detail == "Work experience value is invalid."
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"days": 1_000_000_000, "months": 0, "years": 0},
+        {"days": 0, "months": 1_000_000_000, "years": 0},
+        {"days": 0, "months": 0, "years": 1_000_000_000},
+    ],
+)
+def test_work_experience_service_maps_oversized_calendar_components_to_invalid_values(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, int],
+) -> None:
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 28)
+
+    monkeypatch.setattr(cards_module, "date", ServerDate)
+    service = CardService(session=None)  # type: ignore[arg-type]
+
+    with pytest.raises(InvalidFieldValueError, match="supported calendar range"):
+        service._coerce_field_assignment(_field("work_experience"), payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"days": 1_000_000_000, "months": 0, "years": 0},
+        {"days": 0, "months": 1_000_000_000, "years": 0},
+        {"days": 0, "months": 0, "years": 1_000_000_000},
+    ],
+)
+def test_legacy_api_coercion_maps_oversized_calendar_components_to_http_422(
+    payload: dict[str, int],
+) -> None:
+    field = _field("work_experience")
+
+    with pytest.raises(HTTPException, match="supported calendar range") as exc_info:
+        coerce_api_field_value(_FieldSession(field), field.id, payload)  # type: ignore[arg-type]
+
+    assert exc_info.value.status_code == 422
+
+
 def test_org_unit_reference_coercion_receives_card_organization(
     monkeypatch: object,
 ) -> None:

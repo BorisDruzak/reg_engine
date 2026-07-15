@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from calendar import monthrange
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -11,6 +12,12 @@ _COMPONENT_NAMES = frozenset({"days", "months", "years"})
 _DISPLAY_PATTERN = re.compile(
     r"^([0-9]+) (день|дня|дней) ([0-9]+) (месяц|месяца|месяцев) ([0-9]+) (год|года|лет)$"
 )
+_CALENDAR_RANGE_ERROR = "Work experience duration is outside the supported calendar range."
+_MAX_COMPONENT_VALUES = {
+    "days": (date.max - date.min).days,
+    "months": (date.max.year - date.min.year) * 12 + date.max.month - date.min.month,
+    "years": date.max.year - date.min.year,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,9 +71,12 @@ def parse_work_experience_display(text: object) -> WorkExperience:
 def anchor_for_experience(value: WorkExperience, today: date) -> date:
     """Derive a calendar anchor by subtracting whole years, months, then days."""
     _validate_date("today", today)
-    after_years = _subtract_years(today, value.years)
-    after_months = _subtract_months(after_years, value.months)
-    return after_months - timedelta(days=value.days)
+    try:
+        after_years = _subtract_years(today, value.years)
+        after_months = _subtract_months(after_years, value.months)
+        return after_months - timedelta(days=value.days)
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(_CALENDAR_RANGE_ERROR) from exc
 
 
 def experience_for_anchor(anchor_date: date, today: date) -> WorkExperience:
@@ -76,21 +86,24 @@ def experience_for_anchor(anchor_date: date, today: date) -> WorkExperience:
     if anchor_date > today:
         raise ValueError("Work experience anchor cannot be in the future.")
 
-    years = today.year - anchor_date.year
-    while years and _subtract_years(today, years) < anchor_date:
-        years -= 1
-    after_years = _subtract_years(today, years)
+    try:
+        years = today.year - anchor_date.year
+        while years and _subtract_years(today, years) < anchor_date:
+            years -= 1
+        after_years = _subtract_years(today, years)
 
-    months = (after_years.year - anchor_date.year) * 12 + after_years.month - anchor_date.month
-    while months and _subtract_months(after_years, months) < anchor_date:
-        months -= 1
-    after_months = _subtract_months(after_years, months)
+        months = (after_years.year - anchor_date.year) * 12 + after_years.month - anchor_date.month
+        while months and _subtract_months(after_years, months) < anchor_date:
+            months -= 1
+        after_months = _subtract_months(after_years, months)
 
-    return WorkExperience(
-        days=(after_months - anchor_date).days,
-        months=months,
-        years=years,
-    )
+        return WorkExperience(
+            days=(after_months - anchor_date).days,
+            months=months,
+            years=years,
+        )
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(_CALENDAR_RANGE_ERROR) from exc
 
 
 def serialize_experience(value: WorkExperience) -> dict[str, int | str]:
@@ -117,6 +130,8 @@ def format_work_experience(value: WorkExperience) -> str:
 def _validate_component(name: str, value: object) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"Work experience {name} must be a non-negative integer.")
+    if value > _MAX_COMPONENT_VALUES[name]:
+        raise ValueError(_CALENDAR_RANGE_ERROR)
 
 
 def _validate_date(name: str, value: object) -> None:
@@ -155,6 +170,4 @@ def _subtract_months(source: date, months: int) -> date:
 
 
 def _days_in_month(year: int, month: int) -> int:
-    if month == 12:
-        return (date(year + 1, 1, 1) - date(year, month, 1)).days
-    return (date(year, month + 1, 1) - date(year, month, 1)).days
+    return monthrange(year, month)[1]
