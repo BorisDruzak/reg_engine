@@ -9,6 +9,12 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.domain.work_experience import (
+    anchor_for_experience,
+    experience_for_anchor,
+    parse_work_experience,
+    serialize_experience,
+)
 from app.models import (
     Card,
     CardAttachment,
@@ -2161,6 +2167,14 @@ class CardService:
                 raise InvalidFieldValueError("JSON fields require an object value.")
             return _FieldAssignment(value_json=value)
 
+        if field_model.field_type == "work_experience":
+            try:
+                experience = parse_work_experience(value)
+                anchor_date = anchor_for_experience(experience, date.today())
+            except ValueError as exc:
+                raise InvalidFieldValueError(str(exc)) from exc
+            return _FieldAssignment(value_json={"anchor_date": anchor_date.isoformat()})
+
         if field_model.field_type == "select":
             if value is None:
                 return _FieldAssignment()
@@ -2813,6 +2827,22 @@ class CardService:
             return field_value.value_bool
         if field_model.field_type == "json":
             return field_value.value_json
+        if field_model.field_type == "work_experience":
+            try:
+                value_json = field_value.value_json
+                if (
+                    not isinstance(value_json, dict)
+                    or set(value_json) != {"anchor_date"}
+                    or not isinstance(value_json["anchor_date"], str)
+                ):
+                    raise ValueError("Work experience anchor is invalid.")
+                raw_anchor_date = value_json["anchor_date"]
+                anchor_date = date.fromisoformat(raw_anchor_date)
+                if anchor_date.isoformat() != raw_anchor_date:
+                    raise ValueError("Work experience anchor is invalid.")
+                return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+            except (TypeError, ValueError) as exc:
+                raise InvalidFieldValueError("Work experience value is invalid.") from exc
         if field_model.field_type == "select":
             return field_value.value_reference_item_id
         if field_model.field_type == "multi_select":

@@ -93,6 +93,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0019_base_card_templates" in sql
     assert "0020_schema_layout_static_text" in sql
     assert "0022_card_print_layout_templates" in sql
+    assert "0030_work_experience_field" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -123,6 +124,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "ix_field_values_field_attachment" in sql
     assert "'file_ref'" in sql
     assert "'static_text'" in sql
+    assert "'work_experience'" in sql
     assert "layout_columns INTEGER DEFAULT '1' NOT NULL" in sql
     assert "display_config_json JSONB" in sql
     assert "ALTER TABLE public.form_blocks ADD COLUMN display_config_json JSONB" in sql
@@ -234,3 +236,15 @@ def test_public_link_review_migration_downgrade_maps_new_statuses_before_constra
         "review_enabled",
     }:
         assert f"DROP COLUMN {column_name}" in sql
+
+
+def test_work_experience_field_migration_replaces_constraint_and_guards_downgrade() -> None:
+    upgrade_sql = _render_upgrade_sql("0030_work_experience_field")
+    downgrade_sql = _render_downgrade_sql(
+        "0030_work_experience_field",
+        "0029_public_reference_edit_links",
+    )
+
+    assert "DROP CONSTRAINT IF EXISTS ck_form_fields_field_type" in upgrade_sql
+    assert "'work_experience'" in upgrade_sql
+    assert "Cannot downgrade while work_experience form fields exist" in downgrade_sql

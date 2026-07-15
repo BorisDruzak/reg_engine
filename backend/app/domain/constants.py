@@ -17,6 +17,7 @@ FIELD_TYPES = (
     "registry_ref",
     "file_ref",
     "static_text",
+    "work_experience",
 )
 REQUIRED_MODES = ("not_required", "required", "required_on_publish")
 PUBLIC_LINK_STATUSES = (

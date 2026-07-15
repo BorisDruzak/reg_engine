@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import Iterator
+from datetime import date
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+import app.services.cards as cards_module
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
@@ -23,6 +25,7 @@ from app.models import (
     AuditEvent,
     CardPublicFieldSetting,
     CardPublicLink,
+    FieldValue,
     Permission,
     Role,
     User,
@@ -1279,6 +1282,154 @@ def test_public_link_api_hardening(
         json={"raw_token": public_link["raw_token"], "field_id": field["id"], "value": "second"},
     )
     assert second_edit.status_code == 403, second_edit.text
+
+
+def test_work_experience_field_persists_private_anchor_and_projects_api_reads(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 28)
+
+    monkeypatch.setattr(cards_module, "date", ServerDate)
+    system_admin = _create_user(db_session, "experience-system@example.test", is_superuser=True)
+    outsider = _create_user(db_session, "experience-outsider@example.test")
+    root = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "experience-root", "name": "Experience Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "experience-registry", "name": "Experience Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "experience", "title": "Experience", "public_editable": True},
+        actor_id=system_admin.id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {
+            "code": "work_experience",
+            "label": "Work experience",
+            "field_type": "work_experience",
+            "required_mode": "required",
+            "public_editable": True,
+        },
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {
+            "organization_id": root["id"],
+            "display_name": "Experience card",
+            "public_edit_enabled": True,
+        },
+        actor_id=system_admin.id,
+    )
+
+    saved = api_client.patch(
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}",
+        json={"value": {"days": 16, "months": 3, "years": 9}},
+        headers=_actor_headers(system_admin.id),
+    )
+    assert saved.status_code == 200, saved.text
+    expected_value = {
+        "days": 16,
+        "months": 3,
+        "years": 9,
+        "display": "16 дней 3 месяца 9 лет",
+    }
+    assert saved.json()["value"] == expected_value
+
+    stored_value = db_session.scalar(
+        select(FieldValue).where(
+            FieldValue.card_id == UUID(card["id"]),
+            FieldValue.field_id == UUID(field["id"]),
+        )
+    )
+    assert stored_value is not None
+    assert stored_value.value_json == {"anchor_date": "2017-03-12"}
+    assert stored_value.value_text is None
+    assert stored_value.value_number is None
+    assert stored_value.value_date is None
+    assert stored_value.value_datetime is None
+    assert stored_value.value_bool is None
+    assert stored_value.value_reference_item_id is None
+    assert stored_value.value_card_id is None
+    assert stored_value.value_user_id is None
+    assert stored_value.value_organization_id is None
+    assert stored_value.value_org_unit_id is None
+    assert stored_value.value_registry_id is None
+    assert stored_value.value_attachment_id is None
+
+    admin_read = api_client.get(
+        f"/api/v1/cards/{card['id']}", headers=_actor_headers(system_admin.id)
+    )
+    assert admin_read.status_code == 200, admin_read.text
+    assert admin_read.json()["fields"]["work_experience"]["value"] == expected_value
+    assert "anchor_date" not in admin_read.text
+
+    denied_read = api_client.get(f"/api/v1/cards/{card['id']}", headers=_actor_headers(outsider.id))
+    assert denied_read.status_code == 403, denied_read.text
+    denied_write = api_client.patch(
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}",
+        json={"value": {"days": 0, "months": 0, "years": 0}},
+        headers=_actor_headers(outsider.id),
+    )
+    assert denied_write.status_code == 403, denied_write.text
+
+    public_link = _post_json(
+        api_client,
+        f"/api/v1/cards/{card['id']}/public-links",
+        {},
+        actor_id=system_admin.id,
+    )
+    public_preview = api_client.post(
+        "/api/v1/public-links/preview",
+        json={"raw_token": public_link["raw_token"]},
+    )
+    assert public_preview.status_code == 200, public_preview.text
+    public_field = public_preview.json()["blocks"][0]["instances"][0]["fields"][0]
+    assert public_field["value"] == expected_value
+    assert "anchor_date" not in public_preview.text
+
+    class NextServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 29)
+
+    monkeypatch.setattr(cards_module, "date", NextServerDate)
+    next_day_read = api_client.get(
+        f"/api/v1/cards/{card['id']}", headers=_actor_headers(system_admin.id)
+    )
+    assert next_day_read.status_code == 200, next_day_read.text
+    assert next_day_read.json()["fields"]["work_experience"]["value"] == {
+        "days": 17,
+        "months": 3,
+        "years": 9,
+        "display": "17 дней 3 месяца 9 лет",
+    }
+    assert stored_value.value_json == {"anchor_date": "2017-03-12"}
+
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "field_value",
+            AuditEvent.object_id == stored_value.id,
+            AuditEvent.action == "update",
+        )
+    )
+    assert audit_event is not None
 
 
 def test_reference_field_validation_returns_controlled_4xx(

@@ -7,6 +7,11 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.work_experience import (
+    experience_for_anchor,
+    parse_work_experience,
+    serialize_experience,
+)
 from app.models import CardAttachment, FieldValue, FieldValueItem, FormField, StoredFile
 from app.schemas.cards import FieldValueRead
 
@@ -59,6 +64,16 @@ def coerce_api_field_value(session: Session, field_id: UUID, value: Any) -> obje
         if not isinstance(value, dict):
             raise HTTPException(status_code=422, detail="JSON fields require an object value.")
         return value
+    if field.field_type == "work_experience":
+        try:
+            experience = parse_work_experience(value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "days": experience.days,
+            "months": experience.months,
+            "years": experience.years,
+        }
     if field.field_type in {
         "select",
         "card_ref",
@@ -128,6 +143,25 @@ def _read_field_value(session: Session, field: FormField, field_value: FieldValu
         return field_value.value_bool
     if field.field_type == "json":
         return field_value.value_json
+    if field.field_type == "work_experience":
+        try:
+            value_json = field_value.value_json
+            if (
+                not isinstance(value_json, dict)
+                or set(value_json) != {"anchor_date"}
+                or not isinstance(value_json["anchor_date"], str)
+            ):
+                raise ValueError("Work experience anchor is invalid.")
+            raw_anchor_date = value_json["anchor_date"]
+            anchor_date = date.fromisoformat(raw_anchor_date)
+            if anchor_date.isoformat() != raw_anchor_date:
+                raise ValueError("Work experience anchor is invalid.")
+            return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Work experience value is invalid.",
+            ) from exc
     if field.field_type == "select":
         return field_value.value_reference_item_id
     if field.field_type == "multi_select":

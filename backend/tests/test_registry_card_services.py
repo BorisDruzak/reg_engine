@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+import app.services.cards as cards_module
 from app.models import (
     AccessGrant,
     AuditEvent,
@@ -2581,6 +2582,94 @@ def test_dynamic_typed_values_are_saved_to_typed_columns(db_session: Session) ->
     assert values[fields["datetime"].id].value_datetime == value_datetime
     assert values[fields["bool"].id].value_bool is True
     assert values[fields["json"].id].value_json == {"key": "value"}
+
+
+def test_work_experience_field_is_required_reads_as_duration_and_copies_its_anchor(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 28)
+
+    monkeypatch.setattr(cards_module, "date", ServerDate)
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="experience",
+        title="Experience",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="work_experience",
+        label="Work experience",
+        field_type="work_experience",
+        required_mode="required",
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Experience card",
+    )
+
+    assert card.lifecycle_status == "draft"
+    field_value = card_service.set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value={"days": 16, "months": 3, "years": 9},
+    )
+
+    assert field_value.value_json == {"anchor_date": "2017-03-12"}
+    assert card.lifecycle_status == "active"
+    card_read = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+    )
+    assert card_read.fields["work_experience"].value == {
+        "days": 16,
+        "months": 3,
+        "years": 9,
+        "display": "16 дней 3 месяца 9 лет",
+    }
+
+    class NextServerDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return cls(2026, 6, 29)
+
+    monkeypatch.setattr(cards_module, "date", NextServerDate)
+    next_day_read = card_service.read_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+    )
+    assert next_day_read.fields["work_experience"].value == {
+        "days": 17,
+        "months": 3,
+        "years": 9,
+        "display": "17 дней 3 месяца 9 лет",
+    }
+    assert field_value.value_json == {"anchor_date": "2017-03-12"}
+
+    copied_card = card_service.transfer_card_for_actor(
+        actor_user_id=context["system_admin"].id,
+        card_id=card.id,
+        target_organization_id=context["sibling"].id,
+    )
+    copied_value = db_session.scalar(
+        select(FieldValue).where(
+            FieldValue.card_id == copied_card.id,
+            FieldValue.field_id == field.id,
+        )
+    )
+    assert copied_value is not None
+    assert copied_value.value_json == {"anchor_date": "2017-03-12"}
 
 
 def test_select_and_multi_select_use_reference_items_and_validate_list_scope(
