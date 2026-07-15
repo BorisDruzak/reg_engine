@@ -157,6 +157,7 @@ export function PublicLinkEditPage() {
 
             <PublicEditableCard
               onLifecycleDenial={handleLifecycleDenial}
+              onPreviewRefresh={() => void previewQuery.refetch()}
               preview={previewQuery.data}
               rawToken={rawToken}
               status={statusQuery.data}
@@ -178,11 +179,13 @@ function PublicEditableCard({
   rawToken,
   status,
   onLifecycleDenial,
+  onPreviewRefresh,
 }: {
   preview: PublicLinkPreviewRead;
   rawToken: string;
   status: PublicLinkSafeStatusRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
+  onPreviewRefresh: () => void;
 }) {
   const [confirmedFieldValues, setConfirmedFieldValues] = useState(() =>
     publicConfirmedFieldValues(preview),
@@ -218,14 +221,21 @@ function PublicEditableCard({
         </section>
       )}
       {preview.blocks.length === 0 ? (
-        <p className="data-alert">{uiText.noEditablePublicFields}</p>
+        <CardPresentationShell
+          items={[]}
+          beforeContent={baseBlock}
+          navigatorAction={navigatorAction}
+        >
+          <p className="data-alert">{uiText.noEditablePublicFields}</p>
+        </CardPresentationShell>
       ) : (
         <PublicCardLayout
           confirmedFieldValues={confirmedFieldValues}
           onLifecycleDenial={onLifecycleDenial}
-          onFieldValueConfirmed={(fieldKey, value) =>
-            setConfirmedFieldValues((current) => ({ ...current, [fieldKey]: value }))
-          }
+          onFieldValueConfirmed={(fieldKey, value) => {
+            setConfirmedFieldValues((current) => ({ ...current, [fieldKey]: value }));
+            onPreviewRefresh();
+          }}
           preview={preview}
           onFieldSaveStateChange={() => undefined}
           saveFieldValue={saveFieldValue}

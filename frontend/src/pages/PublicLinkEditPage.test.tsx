@@ -107,6 +107,34 @@ describe("PublicLinkEditPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("refreshes the public lifecycle status after the final required field is saved", async () => {
+    editResponseMode = "deferred";
+    preview.blocks[0].instances[0].fields[0] = {
+      ...preview.blocks[0].instances[0].fields[0],
+      required_mode: "required",
+      value: "",
+    };
+    renderPage();
+
+    expect(await screen.findByRole("status", { name: "Статус карточки" })).toHaveTextContent(
+      "Черновик",
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Публичный статус" }), {
+      target: { value: "Подтверждено" },
+    });
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
+
+    preview = { ...preview, lifecycle_status: "active" };
+    resolveNextEdit("Подтверждено");
+
+    await waitFor(() => expect(previewCalls()).toHaveLength(2));
+    expect(await screen.findByRole("status", { name: "Статус карточки" })).toHaveTextContent(
+      "Активна",
+    );
+    expect(screen.getByRole("textbox", { name: "Публичный статус" })).toHaveValue("Подтверждено");
+  });
+
   test("renders active public fields without the attachments panel", async () => {
     renderPage();
 
@@ -184,6 +212,22 @@ describe("PublicLinkEditPage", () => {
       screen.queryByRole("button", { name: "Создать публичную ссылку" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Публичный просмотр карточки")).not.toBeInTheDocument();
+  });
+
+  test("keeps the base and lifecycle status visible when no public fields are available", async () => {
+    preview = {
+      ...preview,
+      blocks: [],
+      form_layout: { ...preview.form_layout, sections: [] },
+    };
+    renderPage();
+
+    const baseBlock = await screen.findByLabelText("Базовый блок");
+    expect(within(baseBlock).getByText("Администрация публичной карточки")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Статус карточки" })).toHaveTextContent("Черновик");
+    expect(
+      screen.getByText("В этой публичной ссылке нет редактируемых полей."),
+    ).toBeInTheDocument();
   });
 
   test("does not block public completion for a required server-read-only field", async () => {
@@ -647,6 +691,10 @@ function editCalls() {
 
 function statusCalls() {
   return fetchCalls.filter((call) => call.path === "/api/v1/public-links/status");
+}
+
+function previewCalls() {
+  return fetchCalls.filter((call) => call.path === "/api/v1/public-links/preview");
 }
 
 function resolveNextEdit(value: unknown) {
