@@ -1,4 +1,4 @@
-import { useId, useState, type FocusEvent } from "react";
+import { useState } from "react";
 
 import type { WorkExperienceValue } from "@/api/types";
 
@@ -9,21 +9,7 @@ import {
   workExperienceValueFromUnknown,
 } from "./workExperience";
 
-type WorkExperiencePart = "days" | "months" | "years";
-
-type RawWorkExperience = Record<WorkExperiencePart, string>;
-
-type WorkExperienceDraft = {
-  emittedValue: WorkExperienceValue;
-  rawValue: RawWorkExperience;
-  sourceValue: WorkExperienceValue;
-};
-
-const fieldLabels: Record<WorkExperiencePart, string> = {
-  days: "Дни",
-  months: "Месяцы",
-  years: "Годы",
-};
+type ParsedDuration = { days: number; months: number; years: number };
 
 export function WorkExperienceEditor({
   label,
@@ -39,88 +25,77 @@ export function WorkExperienceEditor({
   onChange: (value: WorkExperienceValue) => void;
 }) {
   const normalizedValue = workExperienceValueFromUnknown(value) ?? defaultWorkExperienceValue();
-  const editorId = useId();
-  const [draft, setDraft] = useState<WorkExperienceDraft>(() => ({
-    emittedValue: normalizedValue,
-    rawValue: toRawValue(normalizedValue),
-    sourceValue: value,
-  }));
-  const rawValue =
-    draft.sourceValue === value || isSamePayload(draft.emittedValue, normalizedValue)
-      ? draft.rawValue
-      : toRawValue(normalizedValue);
+  const formattedValue = formatWorkExperience(normalizedValue);
+  const [previousValue, setPreviousValue] = useState(value);
+  const [draftValue, setDraftValue] = useState(formattedValue);
+  const valueChanged = previousValue !== value;
 
-  const currentValue = toPayload(rawValue);
-
-  function updatePart(part: WorkExperiencePart, nextRawValue: string) {
-    if (!isSafeRawPart(nextRawValue)) {
-      return;
+  if (valueChanged) {
+    setPreviousValue(value);
+    if (!isIncompleteDurationDraft(draftValue)) {
+      setDraftValue(formattedValue);
     }
-    const nextRaw = { ...rawValue, [part]: nextRawValue };
-    const nextValue = toPayload(nextRaw);
-    setDraft({ emittedValue: nextValue, rawValue: nextRaw, sourceValue: value });
-    onChange(workExperiencePayload(nextValue));
   }
 
-  function handleBlur(event: FocusEvent<HTMLDivElement>) {
-    if (event.currentTarget.contains(event.relatedTarget)) {
+  const inputValue =
+    isIncompleteDurationDraft(draftValue) || !valueChanged ? draftValue : formattedValue;
+
+  function handleChange(nextValue: string) {
+    if (!/^[0-9 ]*$/.test(nextValue)) {
+      setDraftValue(formattedValue);
       return;
     }
-    onBlur?.();
+
+    const parsed = parseDurationDraft(nextValue);
+    if (parsed) {
+      onChange(workExperiencePayload(parsed));
+      setDraftValue(formatWorkExperience(parsed));
+      return;
+    }
+
+    if (isIncompleteDurationDraft(nextValue)) {
+      setDraftValue(nextValue);
+      return;
+    }
+
+    setDraftValue(formattedValue);
   }
 
   return (
-    <div aria-label={label} className="work-experience-editor" onBlur={handleBlur} role="group">
-      {(["days", "months", "years"] as const).map((part) => {
-        const inputId = `${editorId}-${part}`;
-        return (
-          <div className="work-experience-editor-part" key={part}>
-            <label htmlFor={inputId}>{fieldLabels[part]}</label>
-            <input
-              aria-label={fieldLabels[part]}
-              disabled={disabled}
-              id={inputId}
-              inputMode="numeric"
-              onChange={(event) => updatePart(part, event.currentTarget.value)}
-              pattern="[0-9]*"
-              type="text"
-              value={rawValue[part]}
-            />
-          </div>
-        );
-      })}
-      <output aria-live="polite">{formatWorkExperience(currentValue)}</output>
+    <div aria-label={label} className="work-experience-editor" role="group">
+      <input
+        aria-label={label}
+        disabled={disabled}
+        inputMode="numeric"
+        onBlur={onBlur}
+        onChange={(event) => handleChange(event.currentTarget.value)}
+        pattern="[0-9 ]*"
+        type="text"
+        value={inputValue}
+      />
     </div>
   );
 }
 
-function toRawValue(value: WorkExperienceValue): RawWorkExperience {
-  return {
-    days: String(value.days),
-    months: String(value.months),
-    years: String(value.years),
-  };
+function parseDurationDraft(value: string): ParsedDuration | null {
+  const parts = value.trim().split(/\s+/);
+  if (parts.length !== 3 || parts.some((part) => !/^\d+$/.test(part))) {
+    return null;
+  }
+
+  const [days, months, years] = parts.map(Number);
+  if (![days, months, years].every(Number.isSafeInteger)) {
+    return null;
+  }
+
+  return { days, months, years };
 }
 
-function toPayload(value: RawWorkExperience) {
-  return {
-    days: rawPartToNumber(value.days),
-    months: rawPartToNumber(value.months),
-    years: rawPartToNumber(value.years),
-  };
-}
+function isIncompleteDurationDraft(value: string): boolean {
+  if (!/^[0-9 ]*$/.test(value)) {
+    return false;
+  }
 
-function rawPartToNumber(value: string): number {
-  return value === "" ? 0 : Number(value);
-}
-
-function isSafeRawPart(value: string): boolean {
-  return /^\d*$/.test(value) && (value === "" || Number.isSafeInteger(Number(value)));
-}
-
-function isSamePayload(
-  left: ReturnType<typeof toPayload>,
-  right: ReturnType<typeof toPayload>,
-): boolean {
-  return left.days === right.days && left.months === right.months && left.years === right.years;
+  const numericParts = value.trim().split(/\s+/).filter(Boolean);
+  return numericParts.length < 3;
 }
