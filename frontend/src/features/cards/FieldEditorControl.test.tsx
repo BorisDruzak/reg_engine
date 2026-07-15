@@ -23,7 +23,7 @@ function renderControl(fieldType: string, hint: string | null = "Заполни�
 }
 
 describe("FieldEditorControl hints", () => {
-  test("renders the structured work-experience editor used by card creation and saved edits", () => {
+  test("renders one formatted work-experience textbox used by card creation and saved edits", () => {
     render(
       <FieldEditorControl
         fieldType="work_experience"
@@ -35,10 +35,9 @@ describe("FieldEditorControl hints", () => {
     );
 
     const control = screen.getByRole("group", { name: "Стаж работы" });
-    expect(within(control).getByLabelText("Дни")).toHaveValue("16");
-    expect(within(control).getByLabelText("Месяцы")).toHaveValue("3");
-    expect(within(control).getByLabelText("Годы")).toHaveValue("9");
-    expect(within(control).getByText("16 дней 3 месяца 9 лет")).toBeInTheDocument();
+    expect(within(control).getByRole("textbox", { name: "Стаж работы" })).toHaveValue(
+      "16 дней 3 месяца 9 лет",
+    );
   });
 
   test("uses the hint as a text placeholder", () => {
