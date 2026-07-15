@@ -183,13 +183,10 @@ describe("FilledCardLayout", () => {
 
     await user.click(screen.getByTestId("filled-field-layout-experience"));
     expect(screen.getByRole("group", { name: "Стаж работы" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Дни")).toHaveValue("1");
-    expect(screen.getByLabelText("Месяцы")).toHaveValue("2");
-    expect(screen.getByLabelText("Годы")).toHaveValue("3");
+    const experienceInput = screen.getByRole("textbox", { name: "Стаж работы" });
+    expect(experienceInput).toHaveValue("1 день 2 месяца 3 года");
 
-    fireEvent.change(screen.getByLabelText("Дни"), { target: { value: "16" } });
-    fireEvent.change(screen.getByLabelText("Месяцы"), { target: { value: "3" } });
-    fireEvent.change(screen.getByLabelText("Годы"), { target: { value: "9" } });
+    fireEvent.change(experienceInput, { target: { value: "16 3 9" } });
     fireEvent.pointerDown(document.body);
 
     await waitFor(() =>

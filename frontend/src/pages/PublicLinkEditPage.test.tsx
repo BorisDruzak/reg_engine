@@ -168,7 +168,7 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
-  test("saves a public work-experience field as the three-number payload", async () => {
+  test("saves a public work-experience field from one formatted input", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-experience", "field-experience", 3, 1, 1, 6),
     );
@@ -185,11 +185,11 @@ describe("PublicLinkEditPage", () => {
     renderPage();
 
     expect(await screen.findByRole("group", { name: "Стаж работы" })).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("Дни"), { target: { value: "16" } });
-    fireEvent.change(screen.getByLabelText("Месяцы"), { target: { value: "3" } });
-    fireEvent.change(screen.getByLabelText("Годы"), { target: { value: "9" } });
+    const experienceInput = screen.getByRole("textbox", { name: "Стаж работы" });
+    expect(experienceInput).toHaveValue("0 дней 0 месяцев 0 лет");
+    fireEvent.change(experienceInput, { target: { value: "16 3 9" } });
 
-    await waitFor(() => expect(editCalls()).toHaveLength(2));
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
     const lastRequest = editCalls().at(-1);
     expect(lastRequest?.body).toMatchObject({
       field_id: "field-experience",

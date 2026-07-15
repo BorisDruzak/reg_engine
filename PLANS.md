@@ -39,6 +39,24 @@ not a hardcoded employee registry.
   work-experience range does not modify `App.test.tsx`, so this documentation
   checkpoint does not alter that unrelated fixture/expectation drift.
 
+  Single-line consumer verification on 2026-07-15 confirms that card creation,
+  saved-card inline editing, and public-link editing consume one textbox named
+  `Стаж работы`: zero defaults render as `0 дней 0 месяцев 0 лет`, existing
+  values render as Russian-formatted duration text, and `16 3 9` still saves
+  the structured `{ days: 16, months: 3, years: 9 }` payload. The focused
+  command `pnpm --dir=frontend exec vitest run
+  src/features/cards/WorkExperienceEditor.test.tsx
+  src/features/cards/FieldEditorControl.test.tsx
+  src/features/cards/SingleStageCardCreation.test.tsx
+  src/features/cards/FilledCardLayout.test.tsx
+  src/pages/PublicLinkEditPage.test.tsx` passed `69` tests in `5` files.
+  `pnpm --dir=frontend typecheck` and `pnpm --dir=frontend build` passed;
+  `pnpm --dir=frontend lint` had zero errors and retains only the existing
+  `FilledCardLayout.tsx` Hook-dependency warning. The build retains the
+  existing Vite main-chunk advisory (`616.56 kB`, `175.14 kB` gzip). This
+  consumer-only repair changes no production code, backend/API endpoint, or
+  stored `work_experience` contract.
+
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
   affected migration/API/integration suite against a disposable PostgreSQL

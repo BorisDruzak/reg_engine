@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-15 20:42:22 +05:00
+- Generated: 2026-07-15 21:19:59 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -269,6 +269,7 @@
 - `docs/superpowers/plans/2026-07-15-card-draft-guidance.md`
 - `docs/superpowers/plans/2026-07-15-explicit-card-draft-workflow.md`
 - `docs/superpowers/plans/2026-07-15-work-experience-field.md`
+- `docs/superpowers/plans/2026-07-15-work-experience-single-line-editor.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -308,6 +309,7 @@
 - `docs/superpowers/specs/2026-07-15-card-draft-guidance-design.md`
 - `docs/superpowers/specs/2026-07-15-explicit-card-draft-design.md`
 - `docs/superpowers/specs/2026-07-15-work-experience-field-design.md`
+- `docs/superpowers/specs/2026-07-15-work-experience-single-line-editor-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
