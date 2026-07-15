@@ -5474,8 +5474,7 @@ Status: implementation complete locally; release verification in progress.
 
 #### Work-experience field and release-gate recovery
 
-Status: local verification complete; commit, production migration, deployment,
-and live server verification are in progress.
+Status: complete, pushed to `main`, migrated, deployed, and server verified.
 
 - Added schema-driven `work_experience` field support. Values are entered as
   days, months, and years, normalized to a server-date anchor, and rendered as
@@ -5494,3 +5493,18 @@ and live server verification are in progress.
   (one existing hook-dependency warning only), production Vite build, and
   `scripts/project-map.ps1 -Check` passed. The production build retains the
   existing Vite chunk-size advisory.
+- Release commit `69b2e32b` is pushed to `main`; the server checkout was
+  fast-forwarded to that commit before the migration.
+- Production preflight found revision `0029_public_reference_edit_links` and
+  zero `work_experience` fields. A fresh backup was written outside Git to
+  `/var/backups/reg_engine/reg_engine_before_0030_20260715_154148.dump`
+  (`190832` bytes; SHA-256
+  `989ce6a7c22e7952655487adc1ce2d2f6e59b50d945bb93a65f22475d5f63db8`).
+  Alembic then applied `0030_work_experience_field`; production reports that
+  revision as `head`, and the `form_fields` type constraint includes
+  `work_experience`.
+- Frontend artifact deployment published `/assets/index-CiVHg17u.js` and
+  `/assets/index-BCu_aDLw.css`, restarted `reg-engine.service`, and passed the
+  same-origin application/API smoke check. The final server check confirms the
+  active service, PostgreSQL TCP role login, attachment storage configuration,
+  synchronized checkout, and healthy API.
