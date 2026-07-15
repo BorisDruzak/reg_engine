@@ -72,7 +72,10 @@ not a hardcoded employee registry.
   `/assets/index-D8jDFYHt.js`, restarted `reg-engine.service`, and passed the
   same-origin frontend/API smoke check; the post-deploy server verification is
   recorded with the active service, PostgreSQL role login, and attachment
-  storage configuration.
+  storage configuration. A refreshed live administrator card then opened the
+  `Стаж муниципальной службы` editor and exposed exactly one input with the
+  canonical value `12 дней 2 месяца 4 года`; no card data was changed during
+  this visual verification.
 
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
