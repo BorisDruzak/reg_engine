@@ -23,7 +23,7 @@ function renderControl(fieldType: string, hint: string | null = "Заполни�
 }
 
 describe("FieldEditorControl hints", () => {
-  test("renders one work-experience control used by card creation and saved edits", () => {
+  test("renders one visual work-experience mask used by card creation and saved edits", () => {
     render(
       <FieldEditorControl
         fieldType="work_experience"
@@ -34,10 +34,11 @@ describe("FieldEditorControl hints", () => {
       />,
     );
 
-    const control = screen.getByRole("textbox", { name: "Стаж работы" });
-    expect(screen.getAllByRole("textbox", { name: "Стаж работы" })).toHaveLength(1);
-    expect(control).toHaveAttribute("contenteditable", "true");
-    expect(control.querySelectorAll("[data-work-experience-part]")).toHaveLength(3);
+    const control = screen.getByRole("group", { name: "Стаж работы" });
+    expect(within(control).getAllByRole("textbox")).toHaveLength(3);
+    expect(within(control).getByRole("textbox", { name: "Стаж работы, дни" })).toHaveValue("16");
+    expect(within(control).getByRole("textbox", { name: "Стаж работы, месяцы" })).toHaveValue("3");
+    expect(within(control).getByRole("textbox", { name: "Стаж работы, годы" })).toHaveValue("9");
     expect(control).toHaveTextContent("дней");
     expect(control).toHaveTextContent("месяца");
     expect(control).toHaveTextContent("лет");

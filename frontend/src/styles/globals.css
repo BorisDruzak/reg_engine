@@ -668,7 +668,7 @@ tr:last-child td {
 .organization-inline-name-actions,
 .organization-inline-card-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
@@ -2667,13 +2667,27 @@ tr:last-child td {
 }
 
 .work-experience-editor-fragment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   white-space: nowrap;
 }
 
-.work-experience-editor [data-work-experience-part] {
-  display: inline-block;
-  min-width: 1ch;
-  outline: none;
+.work-experience-editor input {
+  width: 2.5ch;
+  min-width: 2.5ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: 0;
+  text-align: center;
+}
+
+.work-experience-editor input[data-work-experience-part="years"] {
+  width: 4.5ch;
+  min-width: 4.5ch;
 }
 
 .work-experience-editor-unit {

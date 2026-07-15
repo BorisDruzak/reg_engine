@@ -31,7 +31,7 @@
 - Consumes: `FieldEditorControl` with `fieldType="work_experience"`.
 - Produces: controlled text inputs named `label, дни`, `label, месяцы`, and `label, годы` inside one `.work-experience-editor` wrapper.
 
-- [ ] **Step 1: Write failing automatic-transition tests**
+- [x] **Step 1: Write failing automatic-transition tests**
 
 ```tsx
 await user.click(days);
@@ -43,7 +43,7 @@ await user.type(years, "2026");
 expect(years).toHaveValue("2026");
 ```
 
-- [ ] **Step 2: Write failing numeric-only and stable-blur tests**
+- [x] **Step 2: Write failing numeric-only and stable-blur tests**
 
 ```tsx
 fireEvent.change(days, { target: { value: "1a -2" } });
@@ -53,7 +53,7 @@ expect(days).toHaveValue("12");
 expect(onChange).toHaveBeenLastCalledWith({ days: 12, months: 3, years: 2026 });
 ```
 
-- [ ] **Step 3: Write failing keyboard regression tests**
+- [x] **Step 3: Write failing keyboard regression tests**
 
 ```tsx
 await user.keyboard(" ");
@@ -63,7 +63,7 @@ await user.keyboard("{Backspace}");
 expect(days).toHaveFocus();
 ```
 
-- [ ] **Step 4: Verify RED**
+- [x] **Step 4: Verify RED**
 
 ```powershell
 node node_modules/vitest/vitest.mjs run src/features/cards/WorkExperienceEditor.test.tsx src/features/cards/FieldEditorControl.test.tsx --reporter=dot
@@ -83,7 +83,7 @@ Expected: FAIL because the editor currently has one contenteditable textbox rath
 - Consumes: `WorkExperiencePart`, `workExperiencePayload`, and `workExperienceUnitWord`.
 - Produces: a `.work-experience-editor` wrapper with controlled `HTMLInputElement` refs for days, months, and years.
 
-- [ ] **Step 1: Restore three controlled input segments**
+- [x] **Step 1: Restore three controlled input segments**
 
 ```tsx
 <input
@@ -98,7 +98,7 @@ Expected: FAIL because the editor currently has one contenteditable textbox rath
 />
 ```
 
-- [ ] **Step 2: Filter and cap each draft before state update**
+- [x] **Step 2: Filter and cap each draft before state update**
 
 ```tsx
 const maxLength = part === "years" ? 4 : 2;
@@ -109,7 +109,7 @@ const parsed = parseDurationDraft(nextDraft);
 if (parsed) onChange(workExperiencePayload(parsed));
 ```
 
-- [ ] **Step 3: Move focus only after an actual segment reaches its limit**
+- [x] **Step 3: Move focus only after an actual segment reaches its limit**
 
 ```tsx
 if (digits.length === maxLength && part === "days") monthsRef.current?.focus();
@@ -118,7 +118,7 @@ if (digits.length === maxLength && part === "months") yearsRef.current?.focus();
 
 `Space` calls the same next-segment helper. `Backspace` on an empty month or year focuses the prior segment. The years segment never advances.
 
-- [ ] **Step 4: Render a single visual border**
+- [x] **Step 4: Render a single visual border**
 
 ```css
 .work-experience-editor { border: 1px solid #cbd5df; }
@@ -126,7 +126,7 @@ if (digits.length === maxLength && part === "months") yearsRef.current?.focus();
 .work-experience-editor:focus-within { border-color: #0f766e; }
 ```
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 ```powershell
 node node_modules/vitest/vitest.mjs run src/features/cards/WorkExperienceEditor.test.tsx src/features/cards/FieldEditorControl.test.tsx --reporter=dot
@@ -147,7 +147,7 @@ Expected: PASS with deterministic 2/2/4 focus movement, numeric filtering, and s
 - Consumes: the shared date-mask `WorkExperienceEditor`.
 - Produces: unchanged structured payloads for creation, saved-card, and public-link edits.
 
-- [ ] **Step 1: Update consumer assertions**
+- [x] **Step 1: Update consumer assertions**
 
 ```tsx
 const days = screen.getByRole("textbox", { name: "Стаж работы, дни" });
@@ -157,7 +157,7 @@ expect(screen.getByRole("textbox", { name: "Стаж работы, месяцы"
 
 Retain each test's assertion that the emitted save request carries `{ days: 16, months: 3, years: 9 }`.
 
-- [ ] **Step 2: Run focused verification**
+- [x] **Step 2: Run focused verification**
 
 ```powershell
 node node_modules/vitest/vitest.mjs run src/features/cards/WorkExperienceEditor.test.tsx src/features/cards/workExperience.test.ts src/features/cards/FieldEditorControl.test.tsx src/features/cards/FilledCardLayout.test.tsx src/pages/PublicLinkEditPage.test.tsx --reporter=dot

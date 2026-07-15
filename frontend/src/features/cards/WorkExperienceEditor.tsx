@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 
 import type { WorkExperienceValue } from "@/api/types";
 
@@ -13,6 +13,18 @@ import {
 type DurationDraft = Record<WorkExperiencePart, string>;
 
 const parts: WorkExperiencePart[] = ["days", "months", "years"];
+
+const partLabels: Record<WorkExperiencePart, string> = {
+  days: "дни",
+  months: "месяцы",
+  years: "годы",
+};
+
+const partLength: Record<WorkExperiencePart, number> = {
+  days: 2,
+  months: 2,
+  years: 4,
+};
 
 export function WorkExperienceEditor({
   label,
@@ -29,10 +41,11 @@ export function WorkExperienceEditor({
 }) {
   const normalizedValue = workExperienceValueFromUnknown(value) ?? defaultWorkExperienceValue();
   const [draft, setDraft] = useState(() => durationDraft(normalizedValue));
-  const [revision, setRevision] = useState(0);
   const [isFocused, setIsFocused] = useState(false);
   const [previousValue, setPreviousValue] = useState(value);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const daysRef = useRef<HTMLInputElement>(null);
+  const monthsRef = useRef<HTMLInputElement>(null);
+  const yearsRef = useRef<HTMLInputElement>(null);
 
   if (previousValue !== value) {
     setPreviousValue(value);
@@ -41,90 +54,104 @@ export function WorkExperienceEditor({
     }
   }
 
-  function handleInput(event: FormEvent<HTMLDivElement>) {
+  function handleChange(part: WorkExperiencePart, nextPartValue: string) {
     if (disabled) {
       return;
     }
 
-    const nextDraft = draftFromEditor(event.currentTarget, draft);
+    const digits = nextPartValue.replace(/\D/g, "").slice(0, partLength[part]);
+    const nextDraft = { ...draft, [part]: digits };
     setDraft(nextDraft);
-    setRevision((currentRevision) => currentRevision + 1);
     const parsed = parseDurationDraft(nextDraft);
     if (parsed) {
       onChange(workExperiencePayload(parsed));
     }
-  }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (disabled || event.key !== " ") {
-      return;
-    }
-
-    const activePart = selectionPart(event.currentTarget);
-    if (!activePart) {
-      return;
-    }
-
-    event.preventDefault();
-    if (activePart === "days") {
-      focusPart("months");
-    }
-    if (activePart === "months") {
-      focusPart("years");
+    if (digits.length === partLength[part]) {
+      focusNext(part);
     }
   }
 
-  function focusPart(part: WorkExperiencePart) {
-    const editor = editorRef.current;
-    const partElement = editor?.querySelector<HTMLElement>(`[data-work-experience-part="${part}"]`);
-    if (!editor || !partElement) {
+  function handleKeyDown(part: WorkExperiencePart, event: KeyboardEvent<HTMLInputElement>) {
+    if (disabled) {
       return;
     }
 
-    editor.focus();
-    const range = document.createRange();
-    range.selectNodeContents(partElement);
-    range.collapse(false);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    if (event.key === " ") {
+      event.preventDefault();
+      focusNext(part);
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      event.currentTarget.value === "" &&
+      (part === "months" || part === "years")
+    ) {
+      event.preventDefault();
+      focusPrevious(part);
+    }
+  }
+
+  function focusNext(part: WorkExperiencePart) {
+    if (part === "days") {
+      focusInput(monthsRef.current);
+    }
+    if (part === "months") {
+      focusInput(yearsRef.current);
+    }
+  }
+
+  function focusPrevious(part: "months" | "years") {
+    focusInput(part === "months" ? daysRef.current : monthsRef.current);
   }
 
   return (
     <div
-      ref={editorRef}
-      aria-disabled={disabled || undefined}
       aria-label={label}
-      aria-multiline="false"
       className="work-experience-editor"
-      contentEditable={!disabled}
-      onBlur={() => {
-        setIsFocused(false);
-        onBlur?.();
-      }}
+      onBlur={(event) => handleGroupBlur(event)}
       onFocus={() => setIsFocused(true)}
-      onInput={handleInput}
-      onKeyDown={handleKeyDown}
-      role="textbox"
-      suppressContentEditableWarning
+      role="group"
     >
       {parts.map((part) => {
         const currentValue = draftPartValue(draft[part], normalizedValue[part]);
         return (
           <span className="work-experience-editor-fragment" key={part}>
-            <span data-work-experience-part={part}>{draft[part]}</span>
-            <span
-              className="work-experience-editor-unit"
-              contentEditable={false}
-              key={`${part}-${currentValue}-${revision}`}
-            >
-              {` ${workExperienceUnitWord(currentValue, part)} `}
+            <input
+              ref={part === "days" ? daysRef : part === "months" ? monthsRef : yearsRef}
+              aria-label={`${label}, ${partLabels[part]}`}
+              data-work-experience-part={part}
+              disabled={disabled}
+              inputMode="numeric"
+              maxLength={partLength[part]}
+              onClick={(event) => event.currentTarget.select()}
+              onChange={(event) => handleChange(part, event.currentTarget.value)}
+              onKeyDown={(event) => handleKeyDown(part, event)}
+              type="text"
+              value={draft[part]}
+            />
+            <span className="work-experience-editor-unit">
+              {workExperienceUnitWord(currentValue, part)}
             </span>
           </span>
         );
       })}
     </div>
   );
+
+  function handleGroupBlur(event: FocusEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    setIsFocused(false);
+    onBlur?.();
+  }
+}
+
+function focusInput(input: HTMLInputElement | null) {
+  input?.focus();
+  input?.select();
 }
 
 function durationDraft(value: WorkExperienceValue): DurationDraft {
@@ -133,26 +160,6 @@ function durationDraft(value: WorkExperienceValue): DurationDraft {
     months: String(value.months),
     years: String(value.years),
   };
-}
-
-function draftFromEditor(editor: HTMLElement, fallback: DurationDraft): DurationDraft {
-  return parts.reduce<DurationDraft>((nextDraft, part) => {
-    const partElement = editor.querySelector<HTMLElement>(`[data-work-experience-part="${part}"]`);
-    const text = partElement?.textContent ?? fallback[part];
-    return { ...nextDraft, [part]: text.replace(/\D/g, "") };
-  }, fallback);
-}
-
-function selectionPart(editor: HTMLElement): WorkExperiencePart | null {
-  const selection = window.getSelection();
-  const selectionNode = selection?.anchorNode;
-  const selectionElement =
-    selectionNode instanceof Element ? selectionNode : selectionNode?.parentElement;
-  const part = selectionElement?.closest<HTMLElement>("[data-work-experience-part]")?.dataset
-    .workExperiencePart;
-  return parts.includes(part as WorkExperiencePart) && editor.contains(selectionElement ?? null)
-    ? (part as WorkExperiencePart)
-    : null;
 }
 
 function parseDurationDraft(draft: DurationDraft): WorkExperienceValue | null {

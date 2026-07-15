@@ -183,8 +183,10 @@ describe("PublicLinkEditPage", () => {
 
     renderPage();
 
-    const experienceControl = await screen.findByRole("textbox", { name: "Стаж работы" });
-    expect(experienceControl).toHaveTextContent("0 дней 0 месяцев 0 лет");
+    const experienceControl = await screen.findByRole("group", { name: "Стаж работы" });
+    expect(
+      within(experienceControl).getByRole("textbox", { name: "Стаж работы, дни" }),
+    ).toHaveValue("0");
     setWorkExperiencePart(experienceControl, "days", "16");
     setWorkExperiencePart(experienceControl, "months", "3");
     setWorkExperiencePart(experienceControl, "years", "9");
@@ -887,12 +889,13 @@ function setWorkExperiencePart(
   part: "days" | "months" | "years",
   value: string,
 ) {
-  const fragment = control.querySelector<HTMLElement>(`[data-work-experience-part="${part}"]`);
-  if (!fragment) {
+  const input = control.querySelector<HTMLInputElement>(
+    `input[data-work-experience-part="${part}"]`,
+  );
+  if (!input) {
     throw new Error(`Missing ${part} work-experience fragment`);
   }
-  fragment.textContent = value;
-  fireEvent.input(control);
+  fireEvent.change(input, { target: { value } });
 }
 
 type PublicFormLayout = {
