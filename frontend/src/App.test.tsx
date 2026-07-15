@@ -53,7 +53,7 @@ const apiPayloads = {
   login: {
     access_token: "test-token",
     token_type: "bearer",
-    expires_at: "2026-06-28T12:00:00Z",
+    expires_at: "2099-06-28T12:00:00Z",
     user: {
       id: "11111111-1111-4111-8111-111111111111",
       email: "admin@example.test",
@@ -575,6 +575,7 @@ let denyNextUserUpdate = false;
 let grantItems: AccessGrantRead[];
 let denyNextGrantCreate = false;
 let denyAdminReadQueries = false;
+let denyCurrentUser = false;
 let denyRegistryPresentationApis = false;
 let cardItems: CardSummaryRead[];
 type TestFileRefValue = {
@@ -634,6 +635,7 @@ beforeEach(() => {
   grantItems = [...apiPayloads.grants.items];
   denyNextGrantCreate = false;
   denyAdminReadQueries = false;
+  denyCurrentUser = false;
   denyRegistryPresentationApis = false;
   cardItems = [...apiPayloads.cards.items];
   cardValueStateById = {
@@ -741,6 +743,9 @@ beforeEach(() => {
         return jsonResponse(apiPayloads.login);
       }
       if (url.endsWith("/api/v1/auth/me")) {
+        if (denyCurrentUser) {
+          return jsonResponse({ detail: "Bearer token has expired." }, { status: 401 });
+        }
         return jsonResponse(apiPayloads.login.user);
       }
       if (url.endsWith("/api/v1/organizations/tree")) {
@@ -2764,6 +2769,47 @@ test("renders login screen before authentication", () => {
   expect(screen.getByLabelText(/электронная почта/i)).toBeInTheDocument();
   expect(screen.getByLabelText(/пароль/i)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Войти" })).toBeInTheDocument();
+});
+
+test("returns to the login screen and clears a session rejected with 401", async () => {
+  denyCurrentUser = true;
+  localStorage.setItem(
+    "reg_engine.session.v1",
+    JSON.stringify({
+      token: "expired-token",
+      user: apiPayloads.login.user,
+      expiresAt: "2099-06-28T12:00:00Z",
+    }),
+  );
+
+  render(<App />);
+
+  expect(await screen.findByLabelText(/электронная почта/i)).toBeInTheDocument();
+  expect(localStorage.getItem("reg_engine.session.v1")).toBeNull();
+});
+
+test("returns to the login screen when an active session reaches its expiry", async () => {
+  vi.useFakeTimers();
+  try {
+    localStorage.setItem(
+      "reg_engine.session.v1",
+      JSON.stringify({
+        token: "active-token",
+        user: apiPayloads.login.user,
+        expiresAt: new Date(Date.now() + 1_000).toISOString(),
+      }),
+    );
+
+    render(<App />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(document.querySelector(".login-shell")).toBeInTheDocument();
+    expect(localStorage.getItem("reg_engine.session.v1")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("allows test login without email format", async () => {

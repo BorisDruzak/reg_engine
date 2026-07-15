@@ -5365,3 +5365,14 @@ Status: deployed; direct Browser visual acceptance remains pending.
   active and the same-origin frontend/API smoke check passed. Direct Browser
   visual acceptance is pending because the local in-app Browser plugin module
   became unavailable after the deployment.
+
+#### Authentication session lifetime and expiry handling
+
+Status: implementation and release verification in progress.
+
+- Set new bearer-token lifetime to 24 hours. The client persists the API expiry
+  timestamp, clears an expired session before rendering the workspace, and
+  schedules automatic return to the authorization screen at expiry.
+- A protected request that receives `401` clears the saved session and all
+  cached workspace data immediately. Public-link requests and failed login
+  attempts do not trigger this global sign-out behavior.

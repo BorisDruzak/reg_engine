@@ -1627,8 +1627,7 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   });
 
   if (!response.ok) {
-    const message = await errorMessage(response);
-    throw new ApiError(message, response.status);
+    throw await responseApiError(response, options.token);
   }
 
   return (await response.json()) as T;
@@ -1643,8 +1642,7 @@ async function downloadFile(path: string, token: string, filenameHeader: string)
   });
 
   if (!response.ok) {
-    const message = await errorMessage(response);
-    throw new ApiError(message, response.status);
+    throw await responseApiError(response, token);
   }
 
   return {
@@ -1670,8 +1668,7 @@ async function downloadJsonFile(
   });
 
   if (!response.ok) {
-    const message = await errorMessage(response);
-    throw new ApiError(message, response.status);
+    throw await responseApiError(response, token);
   }
 
   return {
@@ -1708,4 +1705,13 @@ async function errorMessage(response: Response) {
   } catch {
     return `${uiText.requestFailed}: ${response.status}`;
   }
+}
+
+export const authenticationRequiredEvent = "reg_engine.authentication-required";
+
+async function responseApiError(response: Response, token?: string) {
+  if (response.status === 401 && token && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(authenticationRequiredEvent));
+  }
+  return new ApiError(await errorMessage(response), response.status);
 }

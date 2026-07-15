@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
+  authenticationRequiredEvent,
   getCurrentUser,
   getRegistrySchema,
   listAuditEvents,
@@ -25,7 +26,13 @@ import { BrandMark } from "@/components/common/BrandMark";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
 import { AuditTable } from "@/features/audit/AuditTable";
 import { LoginScreen } from "@/features/auth/LoginScreen";
-import { clearSession, loadSession, saveSession, type SessionState } from "@/features/auth/session";
+import {
+  clearSession,
+  loadSession,
+  saveSession,
+  sessionExpiryTimestamp,
+  type SessionState,
+} from "@/features/auth/session";
 import { CardsWorkspace } from "@/features/cards/CardsWorkspace";
 import { OrganizationsTable } from "@/features/organizations/OrganizationsTable";
 import { Overview } from "@/features/overview/Overview";
@@ -182,6 +189,48 @@ export function HomePage() {
     saveWorkspaceUiState(workspaceUiState);
   }, [workspaceUiState]);
 
+  const clearAuthenticatedSession = useCallback(() => {
+    clearSession();
+    queryClient.clear();
+    setSession(null);
+    const nextState = defaultWorkspaceUiState();
+    localStorage.removeItem(workspaceUiStateKey);
+    setWorkspaceUiState(nextState);
+  }, [queryClient]);
+
+  const sessionExpiry = session ? sessionExpiryTimestamp(session) : null;
+
+  useEffect(() => {
+    if (sessionExpiry === null) {
+      return;
+    }
+    let timeoutId: number | undefined;
+    const scheduleExpiryCheck = () => {
+      const remainingMilliseconds = sessionExpiry - Date.now();
+      if (remainingMilliseconds <= 0) {
+        clearAuthenticatedSession();
+        return;
+      }
+      timeoutId = window.setTimeout(
+        scheduleExpiryCheck,
+        Math.min(remainingMilliseconds, 2_147_483_647),
+      );
+    };
+    scheduleExpiryCheck();
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [clearAuthenticatedSession, sessionExpiry]);
+
+  useEffect(() => {
+    const handleAuthenticationRequired = () => clearAuthenticatedSession();
+    window.addEventListener(authenticationRequiredEvent, handleAuthenticationRequired);
+    return () =>
+      window.removeEventListener(authenticationRequiredEvent, handleAuthenticationRequired);
+  }, [clearAuthenticatedSession]);
+
   function setActiveSection(value: VisibleSection) {
     setWorkspaceUiState((current) => ({
       ...current,
@@ -241,12 +290,7 @@ export function HomePage() {
   }
 
   function handleLogout() {
-    clearSession();
-    queryClient.clear();
-    setSession(null);
-    const nextState = defaultWorkspaceUiState();
-    localStorage.removeItem(workspaceUiStateKey);
-    setWorkspaceUiState(nextState);
+    clearAuthenticatedSession();
   }
 
   function handleCardSearchChange(value: string) {

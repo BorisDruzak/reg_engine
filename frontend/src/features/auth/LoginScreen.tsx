@@ -14,7 +14,11 @@ export function LoginScreen({ onLogin }: { onLogin: (session: SessionState) => v
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
     onSuccess: (response) => {
-      onLogin({ token: response.access_token, user: response.user });
+      onLogin({
+        token: response.access_token,
+        user: response.user,
+        expiresAt: response.expires_at,
+      });
     },
   });
 

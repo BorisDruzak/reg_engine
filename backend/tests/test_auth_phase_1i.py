@@ -141,6 +141,10 @@ def test_password_hashing_uses_non_plaintext_verifiable_hash() -> None:
     assert password_hash.startswith("pbkdf2_sha256$")
 
 
+def test_default_access_token_lasts_24_hours() -> None:
+    assert Settings(_env_file=None).auth_access_token_minutes == 24 * 60
+
+
 class _FakeSession:
     def __init__(self, user: User | None) -> None:
         self.user = user

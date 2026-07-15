@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     allow_dev_actor_header: bool = False
     auth_token_secret: str = DEVELOPMENT_AUTH_TOKEN_SECRET
-    auth_access_token_minutes: int = 480
+    auth_access_token_minutes: int = 24 * 60
     public_link_token_encryption_key: str | None = Field(
         default=None,
         validation_alias="REG_ENGINE_PUBLIC_LINK_TOKEN_ENCRYPTION_KEY",
