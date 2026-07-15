@@ -99,6 +99,14 @@ not a hardcoded employee registry.
   is suppressed without changing the value or focus. The same shared editor
   retains the existing `{ days, months, years }` payload and is covered in
   creation, saved-card, and public-link tests.
+  Focused frontend verification passed 80 tests across those surfaces, along
+  with TypeScript, ESLint, Prettier, and the production Vite build (only the
+  existing chunk-size advisory remains). Commit `1f7d1ceb` is pushed and
+  deployed with assets `index-DsOdwWLO.js` and `index-DipBpFb_.css`; the API
+  health check and same-origin frontend smoke check passed. Live public-card
+  verification found exactly one enabled segment for each unit and confirmed
+  the focus path days → months → years → years after consecutive `Space`
+  presses, with all visible values left unchanged at `0`.
 
   **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
   Before any push/deploy or migration `0030_work_experience_field`, run the
