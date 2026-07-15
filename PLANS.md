@@ -7,6 +7,50 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-15 `work_experience` is implemented locally only in commits
+  `338e1983`, `d130b115`, `dbbaf94e`, `10efb5e1`, `0408a1c6`, `4b5d0d09`,
+  `1aecbed7`, `37fd905c`, `4d8e1668`, and `f66a0561`; Tasks 1-5 and their
+  follow-up reviews were accepted with no unresolved P0-P3 findings. This is a
+  schema-driven field type, not a fixed card column. Its sole stored
+  `value_json` representation is the private exact object
+  `{"anchor_date":"YYYY-MM-DD"}`. On a card write the backend derives that
+  anchor from the authoritative server date. On every read it derives the
+  canonical duration and Russian display from the server date without a
+  scheduler, background job, or daily database write. The frontend sends only
+  non-negative integer `days`, `months`, and `years`, in that order, and never
+  handles an anchor. Admin/public card reads, the legacy field-value read,
+  documents, reports, and XLSX project display-safe duration data only and must
+  never expose `anchor_date`.
+
+  Focused local evidence recorded by Tasks 1-5 includes backend domain,
+  persistence/projection, XLSX/document/report, shared-editor, and mounted
+  consumer coverage; the final mounted consumer run passed 134 tests, and the
+  affected frontend typecheck and production build passed. Known pre-existing
+  local advisories are the `FilledCardLayout.tsx` Hook-dependency lint warning
+  and Vite's main-chunk-size advisory; neither is introduced by this work.
+  Fresh 2026-07-15 local evidence: backend Ruff, Ruff-format, and mypy pass;
+  backend pytest reports `332 passed, 231 skipped` with the existing
+  Starlette/httpx deprecation warning; frontend lint has zero errors and the
+  same one Hook-dependency warning; frontend typecheck and production build
+  pass (the build retains the existing 616.33 kB minified-chunk advisory); and
+  `git diff --check` is clean. Both `scripts/check.ps1 -SkipRemote` and
+  `scripts/test.ps1` stop at the full frontend Vitest suite: `src/App.test.tsx`
+  has 30 failing tests (`38` files pass; `336` tests pass; `29` skip). This
+  work-experience range does not modify `App.test.tsx`, so this documentation
+  checkpoint does not alter that unrelated fixture/expectation drift.
+
+  **Release and live-proof gate remains blocked:** `TEST_DATABASE_URL` is unset.
+  Before any push/deploy or migration `0030_work_experience_field`, run the
+  affected migration/API/integration suite against a disposable PostgreSQL
+  database whose name ends in `_test`; then commit/push `main`, synchronize the
+  configured server checkout, take a fresh production backup, complete relevant
+  preflight checks, intentionally migrate production, and record post-migration
+  schema/status checks. Only then use a disposable non-personal template/card
+  to live-check `16 / 3 / 9`, reload/server-date calculation without a visible
+  anchor, any enabled public edit link, XLSX export wording, and a next-day
+  server-date unit/integration proof. No production migration, deployment,
+  production test card, or live-release claim has been made in this checkpoint.
+
 - 2026-07-15 pre-draft card guidance is released at `66e494af`. Before the
   first save, template fields use a muted locked state and an accessible field
   action explains that the draft must be saved first. Selecting a required
