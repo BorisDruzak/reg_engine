@@ -5350,7 +5350,7 @@ verified on 2026-07-15.
 
 #### Shared card workspace alignment
 
-Status: release verification in progress.
+Status: deployed; direct Browser visual acceptance remains pending.
 
 - The card-creation tab no longer repeats its name in a panel header; the tab
   remains the single visible command label.
@@ -5360,3 +5360,8 @@ Status: release verification in progress.
   canvas stays within the working area.
 - The change is presentation-only: card data, field autosave, lifecycle,
   public permissions, and API contracts remain unchanged.
+- Release evidence: commit `8730b839` is on `origin/main`; the server checkout
+  was fast-forwarded and the frontend artifact was deployed. The service is
+  active and the same-origin frontend/API smoke check passed. Direct Browser
+  visual acceptance is pending because the local in-app Browser plugin module
+  became unavailable after the deployment.
