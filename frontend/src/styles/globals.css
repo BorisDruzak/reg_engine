@@ -330,7 +330,7 @@ button {
 }
 
 .public-main {
-  width: min(940px, 100%);
+  width: min(72rem, 100%);
   margin: 0 auto;
   padding: 24px;
 }
@@ -2144,6 +2144,8 @@ tr:last-child td {
 }
 
 .card-presentation-shell {
+  width: min(100%, 72rem);
+  margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
   align-items: start;

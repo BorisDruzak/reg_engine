@@ -4,12 +4,14 @@ import { uiText } from "@/app/uiText";
 
 import { errorText } from "./dataUtils";
 
-export function Panel({ title, children }: { title: string; children: ReactNode }) {
+export function Panel({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section className="data-panel">
-      <header>
-        <h3>{title}</h3>
-      </header>
+      {title && (
+        <header>
+          <h3>{title}</h3>
+        </header>
+      )}
       {children}
     </section>
   );

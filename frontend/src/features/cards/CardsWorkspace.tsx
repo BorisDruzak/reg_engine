@@ -585,7 +585,7 @@ export function CardsWorkspace({
           <MutationFeedback error={archiveCardMutation.error} successMessage={successMessage} />
         </Panel>
       ) : activeShellTab === "create-card" ? (
-        <Panel title={cardUtilityTabLabels["create-card"]}>
+        <Panel>
           <SingleStageCardCreation
             token={token}
             organizations={organizations}

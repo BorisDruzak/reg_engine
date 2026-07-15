@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -12,6 +13,7 @@ import type {
 
 import { PublicLinkEditPage } from "./PublicLinkEditPage";
 
+const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 const rawToken = "public-review-token";
 
 let status: PublicLinkSafeStatusRead;
@@ -53,6 +55,10 @@ afterEach(() => {
 });
 
 describe("PublicLinkEditPage", () => {
+  test("uses the shared card workspace width so the public canvas stays within it", () => {
+    expect(globalStyles).toContain(".public-main {\n  width: min(72rem, 100%);");
+  });
+
   test("copies the current public URL from the page title", async () => {
     renderPage();
 

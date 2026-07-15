@@ -121,6 +121,9 @@ describe("CardsWorkspace", () => {
       ".single-stage-card-creation .admin-mutation-header small {\n  display: block;",
     );
     expect(globalStyles).toContain(".single-stage-card-creation {\n  width: min(100%, 72rem);");
+    expect(globalStyles).toContain(
+      ".card-presentation-shell {\n  width: min(100%, 72rem);\n  margin: 0 auto;",
+    );
     expect(globalStyles).toContain(".single-stage-card-creation-block.is-attention {");
     expect(globalStyles).toContain(".single-stage-card-creation-field.is-filled {");
     expect(globalStyles).toContain(".data-panel:has(> .single-stage-card-creation) {");
@@ -253,6 +256,7 @@ describe("CardsWorkspace", () => {
     expect(organizationControl.closest(".admin-mutation-body")).not.toBeNull();
     expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
     expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Создать карточку" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Ссылки на заполнение" }));
     expect(screen.getByRole("region", { name: "Ссылки на создание карточек" })).toBeInTheDocument();

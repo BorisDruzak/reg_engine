@@ -5347,3 +5347,16 @@ verified on 2026-07-15.
   hostname with an empty organization selector, the sole template selected,
   the `Сохранить черновик` action disabled until an organization is chosen,
   and no browser-console errors. No test card was created during this check.
+
+#### Shared card workspace alignment
+
+Status: release verification in progress.
+
+- The card-creation tab no longer repeats its name in a panel header; the tab
+  remains the single visible command label.
+- Saved administrator cards and public edit cards use the same centered
+  `72rem` presentation workspace as card creation. The public container now
+  leaves room for the navigator and the 720px responsive card canvas, so the
+  canvas stays within the working area.
+- The change is presentation-only: card data, field autosave, lifecycle,
+  public permissions, and API contracts remain unchanged.
