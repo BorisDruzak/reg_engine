@@ -153,6 +153,23 @@ def test_experience_for_anchor_adds_a_day_when_read_on_the_next_day() -> None:
     )
 
 
+def test_month_boundary_anchor_read_normalizes_ambiguous_submitted_duration() -> None:
+    submitted = parse_work_experience({"days": 28, "months": 1, "years": 0})
+    today = date(2025, 3, 31)
+
+    anchor = anchor_for_experience(submitted, today=today)
+    canonical = experience_for_anchor(anchor, today=today)
+
+    assert anchor == date(2025, 1, 31)
+    assert canonical == WorkExperience(days=0, months=2, years=0)
+    assert serialize_experience(canonical) == {
+        "days": 0,
+        "months": 2,
+        "years": 0,
+        "display": "0 дней 2 месяца 0 лет",
+    }
+
+
 def test_experience_round_trip_on_the_same_date_preserves_entered_duration() -> None:
     entered = WorkExperience(days=16, months=3, years=9)
     today = date(2025, 7, 15)
