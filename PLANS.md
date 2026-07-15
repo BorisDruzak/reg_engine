@@ -5317,3 +5317,25 @@ Status: complete, pushed to `main`, deployed, and Browser verified without creat
   state. No template or card was created for visual QA; the browser console had
   zero errors and warnings. Interactive template behavior is covered by the
   focused component suites.
+
+#### Explicit card draft and unified card presentation
+
+Status: implementation and focused review complete; production deployment and
+Browser acceptance are pending.
+
+- A new card is created only by the explicit draft-save action: organization
+  starts empty, a single available template is selected automatically, and
+  template fields remain locked before the draft exists.
+- Creation, saved administrator cards, and public editing share the same base
+  presentation. The navigation rail is sticky and shows draft or active
+  lifecycle state; public base metadata and public-access settings are
+  read-only and collapsed.
+- The public preview projects only safe display metadata. Public field writes
+  cannot alter organization, template, card name, or access settings; a
+  successful final required-field save refreshes lifecycle status without a
+  page reload.
+- Independent task reviews and the final re-review found no remaining P0-P3
+  findings. Focused frontend suites pass (55 tests); backend suite passes with
+  database-dependent scenarios skipped when TEST_DATABASE_URL is unset. The
+  legacy all-app integration fixture still contains unrelated retired
+  interaction assumptions and is tracked separately from this release slice.
