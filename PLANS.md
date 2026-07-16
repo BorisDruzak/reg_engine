@@ -5700,3 +5700,7 @@ Status: complete, pushed, deployed, and server verified.
   passed on the updated server code against the disposable `reg_engine_test`
   database. `reg-engine.service` was restarted and the healthcheck and server
   checks passed after deployment.
+- Failed saved-card field writes now stop their autosave timer and render the
+  safe error message beside the field that was being edited. The regression
+  test confirms that a rejected write is attempted once rather than retried in
+  a tight loop.

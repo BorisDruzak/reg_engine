@@ -357,6 +357,33 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
+  test("shows a failed field save and does not retry it automatically", async () => {
+    vi.useFakeTimers();
+    const saveValues = vi.fn().mockRejectedValue(new Error("Server rejected the value."));
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    try {
+      fireEvent.click(screen.getByTestId("filled-field-layout-first-name"));
+      const input = screen.getByLabelText("Имя");
+      fireEvent.change(input, { target: { value: "Пётр" } });
+      fireEvent.blur(input);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(saveValues).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("alert")).toHaveTextContent("Запрос не выполнен");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(saveValues).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("keeps a text draft unsaved until its field loses focus", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

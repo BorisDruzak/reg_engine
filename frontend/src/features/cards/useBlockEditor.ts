@@ -91,22 +91,25 @@ export function useBlockEditor({
     [editableFieldIds, fieldsById],
   );
 
-  const updateAndSave = useCallback((fieldId: string, value: FieldEditorState, delayMs: number | null) => {
-    setSession((current) => {
-      if (!current || current.pending || !(fieldId in current.values)) return current;
-      const values = { ...current.values, [fieldId]: value };
-      const errors = { ...current.errors };
-      delete errors[fieldId];
-      delete errors._form;
-      return {
-        ...current,
-        values,
-        errors,
-        dirty: isDirty(current.initialValues, values),
-        autoSaveDelayMs: delayMs,
-      };
-    });
-  }, []);
+  const updateAndSave = useCallback(
+    (fieldId: string, value: FieldEditorState, delayMs: number | null) => {
+      setSession((current) => {
+        if (!current || current.pending || !(fieldId in current.values)) return current;
+        const values = { ...current.values, [fieldId]: value };
+        const errors = { ...current.errors };
+        delete errors[fieldId];
+        delete errors._form;
+        return {
+          ...current,
+          values,
+          errors,
+          dirty: isDirty(current.initialValues, values),
+          autoSaveDelayMs: delayMs,
+        };
+      });
+    },
+    [],
+  );
 
   const flushPendingSave = useCallback(() => {
     setSession((current) => {
@@ -179,7 +182,14 @@ export function useBlockEditor({
     } catch (error) {
       setSession((current) =>
         current?.id === session.id
-          ? { ...current, pending: false, errors: { _form: runtimeError(error) } }
+          ? {
+              ...current,
+              pending: false,
+              autoSaveDelayMs: null,
+              errors: {
+                [Object.keys(current.values)[0] ?? "_form"]: runtimeError(error),
+              },
+            }
           : current,
       );
       return false;
