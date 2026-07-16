@@ -45,7 +45,14 @@ function invalid(message: string): TextDraftValidationResult {
 type Quantifier = {
   end: number;
   repeats: boolean;
+  canBeEmpty: boolean;
 };
+
+type CharacterRange = readonly [number, number];
+type AtomSignature =
+  | { kind: "literal"; codeUnit: number }
+  | { kind: "class"; ranges: CharacterRange[] }
+  | null;
 
 /**
  * The server protects its broader portable regex grammar with a timeout.
@@ -59,12 +66,12 @@ function isSafeClientRegexPattern(pattern: string) {
 
 function isSafeRegexSequence(pattern: string, start: number, end: number) {
   let index = start;
-  let previousRepeatingSignature: string | null | undefined;
+  let possibleRepeatedSignatures: AtomSignature[] | undefined;
 
   while (index < end) {
     const character = pattern[index];
     if (character === "|") {
-      previousRepeatingSignature = undefined;
+      possibleRepeatedSignatures = undefined;
       index += 1;
       continue;
     }
@@ -76,16 +83,17 @@ function isSafeRegexSequence(pattern: string, start: number, end: number) {
     const atomStart = index;
     let groupBodyStart: number | undefined;
     let groupBodyEnd: number | undefined;
-    let signature: string | null;
+    let signature: AtomSignature;
 
     if (character === "\\") {
       index = consumeEscape(pattern, index, end);
       if (index === -1) return false;
       signature = null;
     } else if (character === "[") {
-      index = consumeCharacterClass(pattern, index, end);
-      if (index === -1) return false;
-      signature = null;
+      const classEnd = consumeCharacterClass(pattern, index, end);
+      if (classEnd === -1) return false;
+      signature = characterClassSignature(pattern, index, classEnd);
+      index = classEnd;
     } else if (character === "(") {
       const closeIndex = findClosingGroup(pattern, index, end);
       if (closeIndex === -1) return false;
@@ -98,7 +106,7 @@ function isSafeRegexSequence(pattern: string, start: number, end: number) {
       return false;
     } else {
       index += 1;
-      signature = pattern.slice(atomStart, index);
+      signature = { kind: "literal", codeUnit: pattern.charCodeAt(atomStart) };
     }
 
     const quantifier = consumeQuantifier(pattern, index, end);
@@ -113,16 +121,20 @@ function isSafeRegexSequence(pattern: string, start: number, end: number) {
     ) {
       return false;
     }
-    if (quantifier.repeats && previousRepeatingSignature !== undefined) {
+    if (quantifier.repeats && possibleRepeatedSignatures !== undefined) {
       if (
-        signature === null ||
-        previousRepeatingSignature === null ||
-        signature === previousRepeatingSignature
+        possibleRepeatedSignatures.some((previous) => !areSignaturesDisjoint(previous, signature))
       ) {
         return false;
       }
     }
-    previousRepeatingSignature = quantifier.repeats ? signature : undefined;
+    if (quantifier.repeats) {
+      possibleRepeatedSignatures = quantifier.canBeEmpty
+        ? [...(possibleRepeatedSignatures ?? []), signature]
+        : [signature];
+    } else if (!quantifier.canBeEmpty) {
+      possibleRepeatedSignatures = undefined;
+    }
     index = quantifier.end;
   }
   return true;
@@ -176,9 +188,10 @@ function findClosingGroup(pattern: string, start: number, end: number) {
 
 function consumeQuantifier(pattern: string, index: number, end: number): Quantifier | null {
   const character = pattern[index];
-  if (character === "*" || character === "+") return { end: index + 1, repeats: true };
-  if (character === "?") return { end: index + 1, repeats: false };
-  if (character !== "{") return { end: index, repeats: false };
+  if (character === "*") return { end: index + 1, repeats: true, canBeEmpty: true };
+  if (character === "+") return { end: index + 1, repeats: true, canBeEmpty: false };
+  if (character === "?") return { end: index + 1, repeats: false, canBeEmpty: true };
+  if (character !== "{") return { end: index, repeats: false, canBeEmpty: false };
 
   let cursor = index + 1;
   const minimumStart = cursor;
@@ -196,7 +209,7 @@ function consumeQuantifier(pattern: string, index: number, end: number): Quantif
         : Number(pattern.slice(maximumStart, cursor));
   }
   if (pattern[cursor] !== "}") return null;
-  return { end: cursor + 1, repeats: maximum > 1 };
+  return { end: cursor + 1, repeats: maximum > 1, canBeEmpty: minimum === 0 };
 }
 
 function containsQuantifier(pattern: string, start: number, end: number) {
@@ -270,6 +283,79 @@ function firstLiteral(pattern: string, start: number, end: number) {
   return pattern[index];
 }
 
+function characterClassSignature(pattern: string, start: number, end: number): AtomSignature {
+  let index = start + 1;
+  if (pattern[index] === "^") return null;
+  const ranges: CharacterRange[] = [];
+
+  while (index < end - 1) {
+    const first = readCharacterClassCodeUnit(pattern, index, end);
+    if (first === null) return null;
+    index = first.end;
+    let lastCodeUnit = first.codeUnit;
+    if (pattern[index] === "-" && index + 1 < end - 1) {
+      const last = readCharacterClassCodeUnit(pattern, index + 1, end);
+      if (last === null) return null;
+      index = last.end;
+      lastCodeUnit = last.codeUnit;
+    }
+    ranges.push([Math.min(first.codeUnit, lastCodeUnit), Math.max(first.codeUnit, lastCodeUnit)]);
+  }
+  return { kind: "class", ranges };
+}
+
+function readCharacterClassCodeUnit(pattern: string, index: number, end: number) {
+  const character = pattern[index];
+  if (character !== "\\") return { codeUnit: character.charCodeAt(0), end: index + 1 };
+  const escape = pattern[index + 1];
+  if (escape === undefined) return null;
+  if (escape === "x") {
+    const value = pattern.slice(index + 2, index + 4);
+    return value.length === 2 && isHex(value)
+      ? { codeUnit: Number.parseInt(value, 16), end: index + 4 }
+      : null;
+  }
+  if (escape === "u") {
+    const value = pattern.slice(index + 2, index + 6);
+    return value.length === 4 && isHex(value)
+      ? { codeUnit: Number.parseInt(value, 16), end: index + 6 }
+      : null;
+  }
+  if (index + 2 > end) return null;
+  const escapedCodeUnits: Record<string, number> = {
+    f: 0x0c,
+    n: 0x0a,
+    r: 0x0d,
+    t: 0x09,
+    v: 0x0b,
+  };
+  return { codeUnit: escapedCodeUnits[escape] ?? escape.charCodeAt(0), end: index + 2 };
+}
+
+function areSignaturesDisjoint(first: AtomSignature, second: AtomSignature) {
+  if (first === null || second === null) return false;
+  if (first.kind === "literal") {
+    if (second.kind === "literal") return first.codeUnit !== second.codeUnit;
+    return !second.ranges.some(([start, end]) => first.codeUnit >= start && first.codeUnit <= end);
+  }
+  if (second.kind === "literal")
+    return !first.ranges.some(([start, end]) => second.codeUnit >= start && second.codeUnit <= end);
+  return !first.ranges.some(([firstStart, firstEnd]) =>
+    second.ranges.some(
+      ([secondStart, secondEnd]) => firstStart <= secondEnd && secondStart <= firstEnd,
+    ),
+  );
+}
+
 function isDigit(value: string | undefined) {
   return value !== undefined && value >= "0" && value <= "9";
+}
+
+function isHex(value: string) {
+  return [...value].every(
+    (character) =>
+      (character >= "0" && character <= "9") ||
+      (character >= "a" && character <= "f") ||
+      (character >= "A" && character <= "F"),
+  );
 }
