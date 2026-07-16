@@ -527,6 +527,24 @@ button {
   padding: 12px 14px;
 }
 
+.audit-history-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.audit-history-card-group {
+  display: grid;
+  gap: 8px;
+}
+
+.audit-history-card-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .audit-diff-json {
   max-width: 100%;
   margin: 0;

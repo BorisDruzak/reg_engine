@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import type { AuditEventRead, CardSummaryRead } from "@/api/types";
+import type { AuditEventRead, CardSummaryRead, UserRead } from "@/api/types";
 
 import { AuditPanel } from "./AuditPanel";
 
@@ -67,67 +67,96 @@ const historyEvent: AuditEventRead = {
   created_at: "2026-07-16T11:00:00Z",
 };
 
+const users: UserRead[] = [
+  {
+    id: "user-1",
+    email: "auditor@example.test",
+    display_name: "Аудитор",
+    status: "active",
+    is_superuser: true,
+    role_code: "administrator",
+    organization_ids: [],
+    can_manage_access: true,
+    archived_at: null,
+  },
+];
+
 afterEach(() => vi.unstubAllGlobals());
 
-test("shows a selected card's field change as values rather than JSON", async () => {
+test("groups the default active history and applies card, actor, status, and reset filters", async () => {
   const user = userEvent.setup();
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (
-      url.endsWith(
-        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50&card_id=card-1",
-      )
-    ) {
-      return Response.json({ items: [historyEvent] });
-    }
-    if (
-      url.endsWith(
-        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50",
-      )
-    ) {
-      return Response.json({ items: [] });
-    }
-    return Response.json({ detail: "Not Found" }, { status: 404 });
-  });
+  const fetchMock = vi.fn(async () => Response.json({ items: [historyEvent] }));
   vi.stubGlobal("fetch", fetchMock);
 
   renderAuditPanel();
 
-  expect(screen.getByRole("tab", { name: "Технический аудит" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  expect(screen.getByRole("tab", { name: "История карточек" })).toHaveAttribute(
-    "aria-selected",
-    "false",
-  );
-  expect(screen.getByText("Создание")).toBeVisible();
-
-  await user.click(screen.getByRole("tab", { name: "История карточек" }));
+  expect(screen.getByRole("tab", { name: "История карточек" })).toHaveAttribute("aria-selected", "true");
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("scope=card_history&card_status=active&limit=50"),
       expect.anything(),
     );
   });
-  await user.selectOptions(screen.getByLabelText("Карточка"), card.id);
-
-  expect(await screen.findByText(/Системный администратор/)).toBeVisible();
-  expect(screen.getAllByText("Публичная ссылка")).toHaveLength(2);
+  expect(await screen.findByRole("button", { name: "Карточка для аудита" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Карточка для аудита" }));
+  expect(screen.getByLabelText("Карточка")).toHaveValue(card.id);
   expect(screen.getByText(/Группа должностей/)).toBeVisible();
-  expect(screen.getAllByText("Предыдущая группа")).toHaveLength(1);
-  expect(screen.getAllByText("Новая группа")).toHaveLength(1);
+  expect(screen.getByText("Предыдущая группа")).toBeVisible();
+  expect(screen.getByText("Новая группа")).toBeVisible();
   expect(screen.queryByText("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
   expect(screen.queryByText("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
-  expect(screen.queryByText(/"value"/)).not.toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("Изменение выполнил"), "user-1");
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50&card_id=card-1",
-      ),
-      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer test-token" }) }),
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("actor_user_id=user-1"),
+      expect.anything(),
     );
   });
+  await user.selectOptions(screen.getByLabelText("Статус карточки"), "archived");
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("card_status=archived"),
+      expect.anything(),
+    );
+  });
+  await user.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+  expect(screen.getByLabelText("Статус карточки")).toHaveValue("active");
+  expect(screen.getByLabelText("Карточка")).toHaveValue("");
+  expect(screen.getByLabelText("Изменение выполнил")).toHaveValue("");
+});
+
+test("renders composite changes as concrete values rather than JSON or a generic placeholder", async () => {
+  const compositeEvent: AuditEventRead = {
+    ...historyEvent,
+    id: "audit-card-composite-1",
+    old_data_json: {
+      changes: [
+        {
+          label: "Публичное редактирование",
+          old: "Отключено",
+          new: "Включено",
+        },
+      ],
+    },
+    new_data_json: {
+      changes: [
+        {
+          label: "Публичное редактирование",
+          old: "Отключено",
+          new: "Включено",
+        },
+      ],
+    },
+  };
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ items: [compositeEvent] })));
+
+  renderAuditPanel();
+
+  expect(await screen.findByText(/Включено/)).toBeVisible();
+  expect(screen.getAllByText(/Отключено/)).not.toHaveLength(0);
+  expect(screen.queryByText(/"changes"/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Изменено")).not.toBeInTheDocument();
 });
 
 function renderAuditPanel() {
@@ -136,7 +165,7 @@ function renderAuditPanel() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AuditPanel auditEvents={[technicalEvent]} cards={[card]} token="test-token" users={[]} />
+      <AuditPanel auditEvents={[technicalEvent]} cards={[card]} token="test-token" users={users} />
     </QueryClientProvider>,
   );
 }
