@@ -1,8 +1,12 @@
+import os
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import Engine, make_url
 
 from app.models import Base
 
@@ -29,6 +33,36 @@ def _render_downgrade_sql(start_revision: str, end_revision: str) -> str:
         sql=True,
     )
     return stdout.getvalue()
+
+
+def _require_test_database_url() -> str:
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("TEST_DATABASE_URL is required for disposable PostgreSQL migration tests.")
+
+    database_name = make_url(database_url).database or ""
+    if database_name == "reg_engine" or not database_name.endswith("_test"):
+        pytest.fail("TEST_DATABASE_URL must point to a disposable database ending with '_test'.")
+
+    return database_url
+
+
+def _run_online_upgrade(database_url: str, revision: str) -> None:
+    previous_url = os.environ.get("TEST_DATABASE_URL")
+    os.environ["TEST_DATABASE_URL"] = database_url
+    try:
+        command.upgrade(_alembic_config(StringIO()), revision)
+    finally:
+        if previous_url is None:
+            os.environ.pop("TEST_DATABASE_URL", None)
+        else:
+            os.environ["TEST_DATABASE_URL"] = previous_url
+
+
+def _reset_public_schema(engine: Engine) -> None:
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        connection.execute(text("CREATE SCHEMA public"))
 
 
 EXPECTED_TABLES = {
@@ -295,3 +329,43 @@ def test_card_change_notifications_migration_creates_subscription_and_inbox_tabl
         "CREATE INDEX ix_card_change_notifications_inbox ON public.card_change_notifications "
         "(user_id, read_at, created_at)"
     ) in sql
+
+
+def test_card_change_notifications_migration_upgrades_empty_disposable_database() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0032_card_change_notifications")
+
+        inspector = inspect(engine)
+        actual_tables = set(inspector.get_table_names(schema="public"))
+        expected_foreign_keys = {
+            "card_change_notification_subscriptions": {
+                ("users", ("user_id",)),
+                ("cards", ("card_id",)),
+            },
+            "public_link_change_notification_subscriptions": {
+                ("users", ("user_id",)),
+                ("card_public_links", ("public_link_id",)),
+            },
+            "card_change_notifications": {
+                ("users", ("user_id",)),
+                ("cards", ("card_id",)),
+            },
+        }
+
+        assert set(expected_foreign_keys) <= actual_tables
+        for table_name, expected_keys in expected_foreign_keys.items():
+            foreign_keys = inspector.get_foreign_keys(table_name, schema="public")
+            assert {
+                (foreign_key["referred_table"], tuple(foreign_key["constrained_columns"]))
+                for foreign_key in foreign_keys
+            } == expected_keys
+            assert all(
+                foreign_key.get("options", {}).get("ondelete") is None
+                for foreign_key in foreign_keys
+            )
+    finally:
+        engine.dispose()

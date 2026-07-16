@@ -409,6 +409,18 @@ def test_card_change_notification_metadata_is_registered() -> None:
         for foreign_key in notifications.c.card_id.foreign_keys
     } == {("cards", "id")}
 
+    notification_foreign_keys = {
+        "card_change_notification_subscriptions": {"user_id", "card_id"},
+        "public_link_change_notification_subscriptions": {"user_id", "public_link_id"},
+        "card_change_notifications": {"user_id", "card_id"},
+    }
+    for table_name, column_names in notification_foreign_keys.items():
+        table = Base.metadata.tables[table_name]
+        for column_name in column_names:
+            assert all(
+                foreign_key.ondelete is None for foreign_key in table.c[column_name].foreign_keys
+            )
+
 
 def test_registry_default_owner_metadata_is_registered() -> None:
     registries = Base.metadata.tables["registries"]
