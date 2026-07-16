@@ -12,4 +12,4 @@ def test_audit_retention_timer_script_installs_a_persistent_daily_oneshot_timer(
     assert "WantedBy=timers.target" in script
     assert "systemctl enable --now '$timerUnitName'" in script
     assert "systemctl status '$serviceUnitName' --no-pager || true" in script
-    assert "systemctl show '$serviceUnitName' -p Result --value" in script
+    assert "systemctl is-failed --quiet '$serviceUnitName'" in script

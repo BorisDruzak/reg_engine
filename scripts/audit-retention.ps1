@@ -124,7 +124,7 @@ switch ($Command) {
         Get-AuditRetentionTimerStatus
     }
     "run" {
-        Invoke-RegEngineServerScript -Script "set -euo pipefail`nsystemctl start '$serviceUnitName'`nsystemctl status '$serviceUnitName' --no-pager || true`ntest \`$(systemctl show '$serviceUnitName' -p Result --value) = success"
+        Invoke-RegEngineServerScript -Script "set -euo pipefail`nsystemctl start '$serviceUnitName'`nsystemctl status '$serviceUnitName' --no-pager || true`nif systemctl is-failed --quiet '$serviceUnitName'; then echo 'Audit retention service failed.' >&2; exit 1; fi"
     }
     "status" {
         Get-AuditRetentionTimerStatus
