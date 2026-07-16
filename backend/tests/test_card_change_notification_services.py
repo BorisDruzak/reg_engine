@@ -324,6 +324,46 @@ def test_inbox_counts_only_visible_cards_paginates_and_keeps_archived_cards(
     assert inaccessible_notification.id not in {item.id for item in visible_notifications}
 
 
+def test_inbox_excludes_cards_in_inactive_or_archived_organizations(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    notification_context: dict[str, object],
+) -> None:
+    service = CardChangeNotificationService(db_session)
+    reader = notification_context["reader"]
+    organization = notification_context["organization"]
+    reader_grant = notification_context["reader_grant"]
+
+    assert isinstance(reader, User)
+    assert isinstance(organization, Organization)
+    assert isinstance(reader_grant, AccessGrant)
+    assert reader_grant.organization_id == organization.id
+
+    def include_granted_organization(
+        _permissions: PermissionService,
+        _actor_user_id: UUID,
+        *,
+        registry_id: UUID | None = None,
+    ) -> set[UUID]:
+        assert registry_id is not None
+        return {organization.id}
+
+    monkeypatch.setattr(
+        PermissionService,
+        "get_organization_scope_ids",
+        include_granted_organization,
+    )
+
+    organization.is_active = False
+    db_session.flush()
+    assert service.list_for_actor(actor_user_id=reader.id, limit=20) == (0, [])
+
+    organization.is_active = True
+    organization.archived_at = datetime.now(UTC)
+    db_session.flush()
+    assert service.list_for_actor(actor_user_id=reader.id, limit=20) == (0, [])
+
+
 def test_inbox_calculates_one_visibility_scope_per_registry(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,

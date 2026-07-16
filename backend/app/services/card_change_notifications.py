@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from app.models import (
     CardChangeNotification,
     CardChangeNotificationSubscription,
     CardPublicLink,
+    Organization,
     PublicLinkChangeNotificationSubscription,
 )
 from app.services.audit import AuditService
@@ -151,7 +153,12 @@ class CardChangeNotificationService:
                 select(func.count())
                 .select_from(CardChangeNotification)
                 .join(Card, Card.id == CardChangeNotification.card_id)
+                .join(Organization, Organization.id == Card.organization_id)
                 .where(*criteria, CardChangeNotification.read_at.is_(None))
+                .where(
+                    Organization.archived_at.is_(None),
+                    Organization.is_active.is_(True),
+                )
             )
             or 0
         )
@@ -159,8 +166,13 @@ class CardChangeNotificationService:
             self.session.scalars(
                 select(CardChangeNotification)
                 .join(Card, Card.id == CardChangeNotification.card_id)
+                .join(Organization, Organization.id == Card.organization_id)
                 .where(CardChangeNotification.user_id == actor_user_id)
                 .where(visible_criteria)
+                .where(
+                    Organization.archived_at.is_(None),
+                    Organization.is_active.is_(True),
+                )
                 .order_by(
                     CardChangeNotification.created_at.desc(),
                     CardChangeNotification.id.desc(),
@@ -169,6 +181,35 @@ class CardChangeNotificationService:
             ).all()
         )
         return unread_count, notifications
+
+    def get_visible_cards_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_ids: set[UUID],
+    ) -> dict[UUID, Card]:
+        if not card_ids:
+            return {}
+        registry_ids = self.session.scalars(
+            select(Card.registry_id).where(Card.id.in_(card_ids)).distinct()
+        ).all()
+        visible_criteria = self._visible_card_criteria(
+            actor_user_id=actor_user_id,
+            registry_ids=registry_ids,
+        )
+        if visible_criteria is None:
+            return {}
+        cards = self.session.scalars(
+            select(Card)
+            .join(Organization, Organization.id == Card.organization_id)
+            .where(Card.id.in_(card_ids))
+            .where(visible_criteria)
+            .where(
+                Organization.archived_at.is_(None),
+                Organization.is_active.is_(True),
+            )
+        ).all()
+        return {card.id: card for card in cards}
 
     def mark_read_for_actor(
         self,
@@ -261,6 +302,17 @@ class CardChangeNotificationService:
             .where(CardChangeNotification.user_id == actor_user_id)
             .distinct()
         ).all()
+        return self._visible_card_criteria(
+            actor_user_id=actor_user_id,
+            registry_ids=registry_ids,
+        )
+
+    def _visible_card_criteria(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_ids: Sequence[UUID],
+    ) -> ColumnElement[bool] | None:
         permissions = PermissionService(self.session)
         criteria = []
         for registry_id in registry_ids:

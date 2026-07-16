@@ -1,8 +1,8 @@
+from collections.abc import Mapping
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
@@ -17,6 +17,7 @@ from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.permissions import PermissionDeniedError
 
 router = APIRouter(tags=["card-change-notifications"])
+_UNAVAILABLE_CHANGE_VALUE = "Недоступное значение"
 
 
 @router.get("/card-change-notifications", response_model=CardChangeNotificationListRead)
@@ -26,16 +27,21 @@ def list_card_change_notifications(
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> CardChangeNotificationListRead:
     try:
-        unread_count, notifications = CardChangeNotificationService(session).list_for_actor(
+        service = CardChangeNotificationService(session)
+        unread_count, notifications = service.list_for_actor(
             actor_user_id=actor_user_id,
             limit=limit,
         )
-        cards_by_id = _cards_by_id(session, notifications)
+        cards_by_id = service.get_visible_cards_for_actor(
+            actor_user_id=actor_user_id,
+            card_ids={notification.card_id for notification in notifications},
+        )
         return CardChangeNotificationListRead(
             unread_count=unread_count,
             items=[
                 _notification_to_read(item, card=cards_by_id[item.card_id])
                 for item in notifications
+                if item.card_id in cards_by_id
             ],
         )
     except Exception as exc:
@@ -52,11 +58,15 @@ def mark_card_change_notification_read(
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
 ) -> CardChangeNotificationRead:
     try:
-        notification = CardChangeNotificationService(session).mark_read_for_actor(
+        service = CardChangeNotificationService(session)
+        notification = service.mark_read_for_actor(
             actor_user_id=actor_user_id,
             notification_id=notification_id,
         )
-        card = session.get(Card, notification.card_id)
+        card = service.get_visible_cards_for_actor(
+            actor_user_id=actor_user_id,
+            card_ids={notification.card_id},
+        ).get(notification.card_id)
         if card is None:
             raise PermissionDeniedError("Notification is not available to this actor.")
         return _notification_to_read(notification, card=card)
@@ -91,22 +101,33 @@ def _notification_to_read(
         card_id=notification.card_id,
         card_display_name=card.display_name,
         actor_display_name=notification.actor_display_name,
-        changes=[
-            CardChangeNotificationChangeRead.model_validate(change)
-            for change in notification.changes_json
-        ],
+        changes=[_notification_change_to_read(change) for change in notification.changes_json],
         read_at=notification.read_at,
         created_at=notification.created_at,
     )
 
 
-def _cards_by_id(
-    session: Session,
-    notifications: list[CardChangeNotification],
-) -> dict[UUID, Card]:
-    if not notifications:
-        return {}
-    cards = session.scalars(
-        select(Card).where(Card.id.in_({notification.card_id for notification in notifications}))
-    ).all()
-    return {card.id: card for card in cards}
+def _notification_change_to_read(change: object) -> CardChangeNotificationChangeRead:
+    persisted_change = CardChangeNotificationChangeRead.model_validate(change)
+    return CardChangeNotificationChangeRead(
+        label=persisted_change.label,
+        before=_safe_change_value(persisted_change.before),
+        after=_safe_change_value(persisted_change.after),
+        description=persisted_change.description,
+    )
+
+
+def _safe_change_value(value: object) -> object:
+    if value is None or isinstance(value, bool | int | float):
+        return value
+    if isinstance(value, str):
+        try:
+            UUID(value)
+        except ValueError:
+            return value
+        return _UNAVAILABLE_CHANGE_VALUE
+    if isinstance(value, list):
+        return [_safe_change_value(item) for item in value]
+    if isinstance(value, Mapping):
+        return _UNAVAILABLE_CHANGE_VALUE
+    return _UNAVAILABLE_CHANGE_VALUE

@@ -1,7 +1,7 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -349,3 +349,60 @@ def test_inbox_dto_ignores_extra_persisted_audit_like_change_keys(
             "description": "Безопасное описание",
         }
     ]
+
+
+def test_inbox_dto_redacts_nested_persisted_change_values(
+    api_client: TestClient,
+    db_session: Session,
+    notification_api_context: dict[str, object],
+) -> None:
+    creator = notification_api_context["creator"]
+    creator_notification = notification_api_context["creator_notification"]
+    nested_audit_event_id = str(uuid4())
+    nested_public_link_id = str(uuid4())
+
+    assert isinstance(creator, User)
+    assert isinstance(creator_notification, CardChangeNotification)
+    creator_notification.changes_json = [
+        {
+            "label": "Безопасное поле",
+            "before": {
+                "token_hash": "secret-token-hash-must-not-leak",
+                "audit_event_id": nested_audit_event_id,
+            },
+            "after": [
+                "Допустимое значение",
+                nested_public_link_id,
+                {
+                    "token_hash": "nested-secret-must-not-leak",
+                    "audit_event_id": nested_audit_event_id,
+                },
+                [nested_audit_event_id],
+            ],
+        }
+    ]
+    db_session.flush()
+
+    response = api_client.get(
+        "/api/v1/card-change-notifications?limit=20",
+        headers=_headers(creator.id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["changes"] == [
+        {
+            "label": "Безопасное поле",
+            "before": "Недоступное значение",
+            "after": [
+                "Допустимое значение",
+                "Недоступное значение",
+                "Недоступное значение",
+                ["Недоступное значение"],
+            ],
+            "description": None,
+        }
+    ]
+    assert "secret-token-hash-must-not-leak" not in response.text
+    assert "nested-secret-must-not-leak" not in response.text
+    assert nested_audit_event_id not in response.text
+    assert nested_public_link_id not in response.text
