@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 RUSSIAN_TEXT_PATTERN = re.compile(r"[А-Яа-яЁё -]+")
 _MAX_REGEX_PATTERN_LENGTH = 512
-_PYTHON_ONLY_ESCAPES = frozenset({"A", "N", "Z", "a"})
+_PYTHON_ONLY_ESCAPES = frozenset({"A", "N", "U", "Z", "a"})
 
 
 class TextValidationError(ValueError):
@@ -65,6 +65,8 @@ def _require_string(value: Mapping[object, object], key: str) -> str:
 
 
 def _validate_portable_regex(pattern: str) -> None:
+    if not pattern:
+        raise TextValidationError("Text validation pattern must not be empty.")
     if len(pattern) > _MAX_REGEX_PATTERN_LENGTH:
         raise TextValidationError("Text validation pattern is too long.")
     if _contains_nonportable_regex_syntax(pattern):

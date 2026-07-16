@@ -61,6 +61,16 @@ def test_normalize_rejects_oversized_regex() -> None:
         normalize_text_validation({"kind": "regex", "pattern": "А" * 513, "message": "Ошибка"})
 
 
+def test_normalize_rejects_empty_regex_pattern() -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": "", "message": "Ошибка"})
+
+
+def test_normalize_rejects_python_only_unicode_escape() -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": r"\U00000041", "message": "Ошибка"})
+
+
 @pytest.mark.parametrize(
     "rule",
     [
