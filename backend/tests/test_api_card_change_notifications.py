@@ -8,7 +8,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import Request
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
@@ -137,8 +137,11 @@ def notification_api_context(db_session: Session) -> dict[str, object]:
     )
 
     role = Role(code="notification-api-card-manager", name="Управление карточками")
-    permission = Permission(code="cards.manage", description="Управление карточками")
-    db_session.add_all([role, permission])
+    permission = db_session.scalar(select(Permission).where(Permission.code == "cards.manage"))
+    if permission is None:
+        permission = Permission(code="cards.manage", description="Управление карточками")
+        db_session.add(permission)
+    db_session.add(role)
     db_session.flush()
     db_session.execute(
         role_permissions.insert().values(role_id=role.id, permission_id=permission.id)
