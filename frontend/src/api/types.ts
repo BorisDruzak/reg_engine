@@ -958,6 +958,8 @@ export type AuditEventRead = {
   object_id: string | null;
   old_data_json?: unknown | null;
   new_data_json?: unknown | null;
+  history_display?: "field_diff" | "standalone" | null;
+  history_description?: string | null;
   source: string;
   ip_address: string | null;
   user_agent: string | null;

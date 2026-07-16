@@ -231,6 +231,7 @@ function HistoryEventRow({
 }) {
   const actor = event.actor_display_name || actorTypeLabel(event.actor_type);
   const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
+  const isStandalone = event.history_display === "standalone" && Boolean(event.history_description);
 
   return (
     <tr>
@@ -255,8 +256,14 @@ function HistoryEventRow({
       </td>
       <td>{auditSourceLabel(event.source)}</td>
       <td>{formatDate(event.created_at)}</td>
-      <td>{formatHistoryValue(event.old_data_json, "old")}</td>
-      <td>{formatHistoryValue(event.new_data_json, "new")}</td>
+      {isStandalone ? (
+        <td colSpan={2}>{event.history_description}</td>
+      ) : (
+        <>
+          <td>{formatHistoryValue(event.old_data_json, "old")}</td>
+          <td>{formatHistoryValue(event.new_data_json, "new")}</td>
+        </>
+      )}
     </tr>
   );
 }

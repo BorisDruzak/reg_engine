@@ -126,37 +126,30 @@ test("groups the default active history and applies card, actor, status, and res
   expect(screen.getByLabelText("Изменение выполнил")).toHaveValue("");
 });
 
-test("renders composite changes as concrete values rather than JSON or a generic placeholder", async () => {
-  const compositeEvent: AuditEventRead = {
+test("renders create and archive as standalone history events without a fabricated value diff", async () => {
+  const createEvent: AuditEventRead = {
     ...historyEvent,
-    id: "audit-card-composite-1",
-    old_data_json: {
-      changes: [
-        {
-          label: "Публичное редактирование",
-          old: "Отключено",
-          new: "Включено",
-        },
-      ],
-    },
-    new_data_json: {
-      changes: [
-        {
-          label: "Публичное редактирование",
-          old: "Отключено",
-          new: "Включено",
-        },
-      ],
-    },
+    id: "audit-card-create-1",
+    action: "create",
+    object_type: "card",
+    history_display: "standalone",
+    history_description: "Карточка создана",
+    old_data_json: null,
+    new_data_json: null,
   };
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ items: [compositeEvent] })));
+  const archiveEvent: AuditEventRead = {
+    ...createEvent,
+    id: "audit-card-archive-1",
+    action: "archive",
+    history_description: "Карточка архивирована",
+  };
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ items: [createEvent, archiveEvent] })));
 
   renderAuditPanel();
 
-  expect(await screen.findByText(/Включено/)).toBeVisible();
-  expect(screen.getAllByText(/Отключено/)).not.toHaveLength(0);
-  expect(screen.queryByText(/"changes"/)).not.toBeInTheDocument();
-  expect(screen.queryByText("Изменено")).not.toBeInTheDocument();
+  expect(await screen.findByText("Карточка создана")).toBeVisible();
+  expect(screen.getByText("Карточка архивирована")).toBeVisible();
+  expect(screen.queryByText("Нет значения → Изменено")).not.toBeInTheDocument();
 });
 
 function renderAuditPanel() {

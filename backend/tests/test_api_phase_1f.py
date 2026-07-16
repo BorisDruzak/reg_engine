@@ -363,8 +363,15 @@ def test_api_card_history_is_superuser_only_and_isolated_by_card(
     assert items[0]["attributed_user_id"] == str(public_link_creator.id)
     assert items[0]["attributed_user_display_name"] == public_link_creator.display_name
     assert items[1]["actor_display_name"] == system_admin.display_name
-    assert items[1]["old_data_json"] == older_event.old_data_json
-    assert items[1]["new_data_json"] == older_event.new_data_json
+    assert items[1]["history_display"] == "field_diff"
+    assert items[1]["old_data_json"] == {
+        "field": {"code": "title", "label": None, "type": None},
+        "value": "before",
+    }
+    assert items[1]["new_data_json"] == {
+        "field": {"code": "title", "label": None, "type": None},
+        "value": "after",
+    }
 
     technical_response = api_client.get(
         "/api/v1/audit-events?limit=50",
@@ -487,6 +494,17 @@ def test_api_card_history_status_filter_returns_archived_cards(
     assert response.status_code == 200, response.text
     assert [item["id"] for item in response.json()["items"]] == [str(archived_event.id)]
 
+    all_response = api_client.get(
+        "/api/v1/audit-events?scope=card_history&card_status=all&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert all_response.status_code == 200, all_response.text
+    assert {item["id"] for item in all_response.json()["items"]} == {
+        str(active_event.id),
+        str(archived_event.id),
+    }
+
 
 def test_api_card_history_actor_filter_includes_public_link_attribution(
     api_client: TestClient,
@@ -606,13 +624,23 @@ def test_api_card_history_resolves_reference_labels_for_existing_snapshots(
 
     assert response.status_code == 200, response.text
     item = response.json()["items"][0]
-    assert item["old_data_json"]["value"] == str(previous_group.id)
-    assert item["new_data_json"]["value"] == str(next_group.id)
-    assert item["old_data_json"]["display_value"] == previous_group.label
-    assert item["new_data_json"]["display_value"] == next_group.label
+    assert item["history_display"] == "field_diff"
+    assert item["old_data_json"] == {
+        "field": {"code": "position_group", "label": "Position group", "type": "select"},
+        "value": previous_group.label,
+    }
+    assert item["new_data_json"] == {
+        "field": {"code": "position_group", "label": "Position group", "type": "select"},
+        "value": next_group.label,
+    }
+    snapshots = json.dumps(
+        {"old": item["old_data_json"], "new": item["new_data_json"]}, ensure_ascii=False
+    )
+    assert str(previous_group.id) not in snapshots
+    assert str(next_group.id) not in snapshots
 
 
-def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redaction(
+def test_api_card_history_returns_only_field_diffs_and_keeps_field_redaction(
     api_client: TestClient,
     db_session: Session,
 ) -> None:
@@ -799,55 +827,133 @@ def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redac
     )
 
     assert response.status_code == 200, response.text
-    item = response.json()["items"][0]
-    assert item["old_data_json"] == {
-        "changes": [
-            {
-                "label": "Публичное редактирование",
-                "old": "Отключено",
-                "new": "Включено",
-            }
-        ]
-    }
-    assert item["new_data_json"] == item["old_data_json"]
-    assert "secret-before" not in json.dumps(item, ensure_ascii=False)
     items_by_id = {item["id"]: item for item in response.json()["items"]}
-    card_item = items_by_id[str(card_event.id)]
-    assert card_item["old_data_json"] == {
-        "changes": [
-            {
-                "label": "Название карточки",
-                "old": "Прежнее название",
-                "new": "Новое название",
-            }
-        ]
-    }
-    assert card_item["new_data_json"] == card_item["old_data_json"]
-    assert str(card.organization_id) not in json.dumps(card_item, ensure_ascii=False)
-
-    public_field_access_item = items_by_id[str(public_field_access_event.id)]
-    assert public_field_access_item["old_data_json"] == {
-        "changes": [
-            {
-                "label": "Публичное поле: публичное редактирование",
-                "old": "Отключено",
-                "new": "Включено",
-            }
-        ]
-    }
-    assert public_field_access_item["new_data_json"] == public_field_access_item["old_data_json"]
-    assert str(public_field.id) not in json.dumps(public_field_access_item, ensure_ascii=False)
-
-    legacy_item = items_by_id[str(legacy_event.id)]
-    assert legacy_item["old_data_json"] == {
-        "changes": [{"label": "Изменение карточки", "old": None, "new": "Изменено"}]
-    }
-    assert legacy_item["new_data_json"] == legacy_item["old_data_json"]
-    assert "secret-before" not in json.dumps(legacy_item, ensure_ascii=False)
+    for event in (card_event, public_field_access_event, legacy_event, public_access_event):
+        item = items_by_id[str(event.id)]
+        assert item["history_display"] == "standalone"
+        assert item["history_description"]
+        assert item["old_data_json"] is None
+        assert item["new_data_json"] is None
+    assert "secret-before" not in json.dumps(items_by_id, ensure_ascii=False)
+    assert str(card.organization_id) not in json.dumps(
+        items_by_id[str(card_event.id)], ensure_ascii=False
+    )
+    assert str(public_field.id) not in json.dumps(
+        items_by_id[str(public_field_access_event.id)], ensure_ascii=False
+    )
 
     sensitive_item = items_by_id[str(sensitive_event.id)]
-    assert sensitive_item["old_data_json"] == sensitive_event.old_data_json
-    assert sensitive_item["new_data_json"] == sensitive_event.new_data_json
+    assert sensitive_item["history_display"] == "field_diff"
+    assert sensitive_item["old_data_json"] == {
+        "field": {
+            "code": sensitive_field.code,
+            "label": sensitive_field.label,
+            "type": sensitive_field.field_type,
+        },
+        "value": {"redacted": True},
+    }
+    assert sensitive_item["new_data_json"] == sensitive_item["old_data_json"]
+    assert str(sensitive_field.id) not in json.dumps(sensitive_item, ensure_ascii=False)
+
+
+def test_api_card_history_redacts_non_field_snapshots_and_marks_lifecycle_events_standalone(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-safe-events-admin@example.test",
+        is_superuser=True,
+    )
+    card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="safe-events",
+    )
+    public_link_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+    block_instance_id = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+    create_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="create",
+        object_type="card",
+        object_id=card.id,
+        card_id=card.id,
+        retention_class="card_history",
+        new_data_json={"id": str(card.id), "display_name": card.display_name},
+        source="api",
+    )
+    archive_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="archive",
+        object_type="card",
+        object_id=card.id,
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={"id": str(card.id), "archived_at": "2026-07-16T12:00:00Z"},
+        source="api",
+    )
+    public_link_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="card_public_link",
+        object_id=public_link_id,
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "id": str(public_link_id),
+            "review_comment": "Не показывать замечание",
+        },
+        new_data_json={
+            "id": str(public_link_id),
+            "review_comment": "И это замечание не показывать",
+        },
+        source="api",
+    )
+    block_instance_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="archive",
+        object_type="card_block_instance",
+        object_id=block_instance_id,
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={"id": str(block_instance_id), "ordinal": 4},
+        source="api",
+    )
+    db_session.add_all([create_event, archive_event, public_link_event, block_instance_event])
+    db_session.flush()
+
+    response = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&card_id={card.id}&card_status=all&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 200, response.text
+    items_by_id = {item["id"]: item for item in response.json()["items"]}
+    for event in (public_link_event, block_instance_event):
+        item = items_by_id[str(event.id)]
+        assert item["history_display"] == "standalone"
+        assert item["old_data_json"] is None
+        assert item["new_data_json"] is None
+        assert item["history_description"]
+        serialized = json.dumps(item, ensure_ascii=False)
+        assert str(event.object_id) not in serialized
+    assert "Не показывать замечание" not in json.dumps(
+        items_by_id[str(public_link_event.id)], ensure_ascii=False
+    )
+
+    for event, description in (
+        (create_event, "Карточка создана"),
+        (archive_event, "Карточка архивирована"),
+    ):
+        item = items_by_id[str(event.id)]
+        assert item["history_display"] == "standalone"
+        assert item["history_description"] == description
+        assert item["old_data_json"] is None
+        assert item["new_data_json"] is None
 
 
 def test_api_healthcheck_remains_independent_from_database() -> None:

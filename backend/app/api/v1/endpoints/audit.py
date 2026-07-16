@@ -42,8 +42,11 @@ def list_audit_events(
                 attributed_user_display_name=item.attributed_user_display_name,
                 card_display_name=item.card_display_name,
                 card_lifecycle_status=item.card_lifecycle_status,
+                object_id=item.object_id,
                 old_data_json=item.old_data_json,
                 new_data_json=item.new_data_json,
+                history_display=item.history_display,
+                history_description=item.history_description,
             )
             for item in events
         ]
