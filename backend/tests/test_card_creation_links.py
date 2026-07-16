@@ -361,6 +361,19 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     assert child_link is not None
     assert child_link.expires_at is None
     assert child_link.review_enabled is False
+    assert child_link.created_by == admin.id
+    field_events = list(
+        db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.card_id == created.card.id,
+                AuditEvent.object_type == "field_value",
+                AuditEvent.action == "public_link.update",
+            )
+        ).all()
+    )
+    assert len(field_events) == 1
+    assert field_events[0].attributed_user_id == admin.id
+    assert field_events[0].retention_class == "card_history"
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1
     relation = db_session.scalar(
         select(CardCreationLinkCard).where(CardCreationLinkCard.card_id == created.card.id)

@@ -429,14 +429,15 @@ class CardCreationLinkService:
                 can_view=True,
                 can_edit=True,
                 review_enabled=False,
+                created_by=creation_link.created_by,
             )
             self.session.add(child_public_link)
             self.session.flush()
-            field_value = None
             if initial_field is not None:
                 field_model, value, block_instance_id = initial_field
-                field_value = card_service.set_field_value_from_public_link(
+                card_service.set_field_value_from_public_link(
                     actor_public_link_id=child_public_link.id,
+                    attributed_user_id=creation_link.created_by,
                     card_id=card.id,
                     field_id=field_model.id,
                     value=value,
@@ -456,6 +457,9 @@ class CardCreationLinkService:
                 action="public_creation_link.create_card",
                 object_type="card",
                 object_id=card.id,
+                card_id=card.id,
+                attributed_user_id=creation_link.created_by,
+                retention_class="card_history",
                 new_data_json={
                     "creation_link_id": str(creation_link.id),
                     "organization_id": str(organization.id),
@@ -466,24 +470,15 @@ class CardCreationLinkService:
                 action="public_creation_link.create_child_link",
                 object_type="card_public_link",
                 object_id=child_public_link.id,
+                card_id=card.id,
+                attributed_user_id=creation_link.created_by,
+                retention_class="card_history",
                 new_data_json={
                     "card_id": str(card.id),
                     "creation_link_id": str(creation_link.id),
                     "expires_at": None,
                 },
             )
-            if field_value is not None and initial_field is not None:
-                audit_service.record_public_link_event(
-                    actor_public_link_id=child_public_link.id,
-                    action="public_link.update",
-                    object_type="field_value",
-                    object_id=field_value.id,
-                    new_data_json={
-                        "card_id": str(card.id),
-                        "field_id": str(initial_field[0].id),
-                    },
-                )
-
         return CardCreationLinkPublicCardValue(
             card=card,
             child_public_link=child_public_link,
