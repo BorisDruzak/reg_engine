@@ -680,6 +680,72 @@ def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redac
         source="api",
         created_at=base_time,
     )
+    card_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="card",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "display_name": "Прежнее название",
+            "organization_id": str(card.organization_id),
+            "public_edit_enabled": False,
+        },
+        new_data_json={
+            "display_name": "Новое название",
+            "organization_id": str(card.organization_id),
+            "public_edit_enabled": False,
+        },
+        source="api",
+        created_at=base_time + timedelta(minutes=1),
+    )
+    public_field_access_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="card_public_access",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "card_id": str(card.id),
+            "public_view_enabled": True,
+            "public_edit_enabled": True,
+            "fields": [
+                {
+                    "field_id": str(public_field.id),
+                    "public_visible": True,
+                    "public_editable": False,
+                }
+            ],
+        },
+        new_data_json={
+            "card_id": str(card.id),
+            "public_view_enabled": True,
+            "public_edit_enabled": True,
+            "fields": [
+                {
+                    "field_id": str(public_field.id),
+                    "public_visible": True,
+                    "public_editable": True,
+                }
+            ],
+        },
+        source="api",
+        created_at=base_time + timedelta(minutes=2),
+    )
+    legacy_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="card",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={"legacy_payload": {"value": "secret-before"}},
+        new_data_json={"legacy_payload": {"value": "secret-after"}},
+        source="api",
+        created_at=base_time + timedelta(minutes=3),
+    )
     public_access_event = AuditEvent(
         actor_type="user",
         actor_user_id=system_admin.id,
@@ -714,9 +780,17 @@ def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redac
             "sensitive_snapshot": "secret-after",
         },
         source="api",
-        created_at=base_time + timedelta(minutes=1),
+        created_at=base_time + timedelta(minutes=4),
     )
-    db_session.add_all([sensitive_event, public_access_event])
+    db_session.add_all(
+        [
+            sensitive_event,
+            card_event,
+            public_field_access_event,
+            legacy_event,
+            public_access_event,
+        ]
+    )
     db_session.flush()
 
     response = api_client.get(
@@ -737,8 +811,43 @@ def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redac
     }
     assert item["new_data_json"] == item["old_data_json"]
     assert "secret-before" not in json.dumps(item, ensure_ascii=False)
-    assert response.json()["items"][1]["old_data_json"] == sensitive_event.old_data_json
-    assert response.json()["items"][1]["new_data_json"] == sensitive_event.new_data_json
+    items_by_id = {item["id"]: item for item in response.json()["items"]}
+    card_item = items_by_id[str(card_event.id)]
+    assert card_item["old_data_json"] == {
+        "changes": [
+            {
+                "label": "Название карточки",
+                "old": "Прежнее название",
+                "new": "Новое название",
+            }
+        ]
+    }
+    assert card_item["new_data_json"] == card_item["old_data_json"]
+    assert str(card.organization_id) not in json.dumps(card_item, ensure_ascii=False)
+
+    public_field_access_item = items_by_id[str(public_field_access_event.id)]
+    assert public_field_access_item["old_data_json"] == {
+        "changes": [
+            {
+                "label": "Публичное поле: публичное редактирование",
+                "old": "Отключено",
+                "new": "Включено",
+            }
+        ]
+    }
+    assert public_field_access_item["new_data_json"] == public_field_access_item["old_data_json"]
+    assert str(public_field.id) not in json.dumps(public_field_access_item, ensure_ascii=False)
+
+    legacy_item = items_by_id[str(legacy_event.id)]
+    assert legacy_item["old_data_json"] == {
+        "changes": [{"label": "Изменение карточки", "old": None, "new": "Изменено"}]
+    }
+    assert legacy_item["new_data_json"] == legacy_item["old_data_json"]
+    assert "secret-before" not in json.dumps(legacy_item, ensure_ascii=False)
+
+    sensitive_item = items_by_id[str(sensitive_event.id)]
+    assert sensitive_item["old_data_json"] == sensitive_event.old_data_json
+    assert sensitive_item["new_data_json"] == sensitive_event.new_data_json
 
 
 def test_api_healthcheck_remains_independent_from_database() -> None:
