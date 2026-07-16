@@ -416,7 +416,11 @@ not a hardcoded employee registry.
   frontend asset passed the same-origin smoke check, and the enabled timer is
   scheduled daily with `Persistent=true`. A manual oneshot completed
   successfully with `deleted_events=0`; normal inactive state after a
-  successful oneshot is explicitly handled by the installer command.
+  successful oneshot is explicitly handled by the installer command. Follow-up
+  history rendering excludes automatic `lifecycle_sync` events, so one field
+  write is not paired with a technical lifecycle row; it displays the field
+  label and direct `Было` / `Стало` values instead of JSON. Distinct sequential
+  field writes remain separate, preserving their real before/after chain.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.

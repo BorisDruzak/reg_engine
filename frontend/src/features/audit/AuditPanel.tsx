@@ -10,8 +10,6 @@ import { formatDate } from "@/components/common/dataUtils";
 import { AuditTable } from "./AuditTable";
 
 type AuditTab = "technical" | "card_history";
-type DiffSide = "old" | "new";
-
 export function AuditPanel({
   auditEvents,
   cards,
@@ -23,7 +21,6 @@ export function AuditPanel({
 }) {
   const [activeTab, setActiveTab] = useState<AuditTab>("technical");
   const [selectedCardId, setSelectedCardId] = useState("");
-  const [openDiff, setOpenDiff] = useState<{ eventId: string; side: DiffSide } | null>(null);
   const historyQuery = useQuery({
     queryKey: ["card-history-events", token, selectedCardId],
     queryFn: () => listCardHistoryEvents(token, selectedCardId),
@@ -51,10 +48,7 @@ export function AuditPanel({
               <select
                 aria-label={uiText.selectCard}
                 value={selectedCardId}
-                onChange={(event) => {
-                  setSelectedCardId(event.target.value);
-                  setOpenDiff(null);
-                }}
+                onChange={(event) => setSelectedCardId(event.target.value)}
               >
                 <option value="">{uiText.selectCardForHistory}</option>
                 {cards.map((card) => (
@@ -74,12 +68,6 @@ export function AuditPanel({
                 ) : (
                   <CardHistoryTable
                     events={historyQuery.data?.items ?? []}
-                    openDiff={openDiff}
-                    onToggleDiff={(eventId, side) =>
-                      setOpenDiff((current) =>
-                        current?.eventId === eventId && current.side === side ? null : { eventId, side },
-                      )
-                    }
                   />
                 )}
               </>
@@ -93,12 +81,8 @@ export function AuditPanel({
 
 function CardHistoryTable({
   events,
-  openDiff,
-  onToggleDiff,
 }: {
   events: AuditEventRead[];
-  openDiff: { eventId: string; side: DiffSide } | null;
-  onToggleDiff: (eventId: string, side: DiffSide) => void;
 }) {
   if (events.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;
@@ -123,8 +107,6 @@ function CardHistoryTable({
             <HistoryEventRow
               event={event}
               key={event.id}
-              openDiff={openDiff}
-              onToggleDiff={onToggleDiff}
             />
           ))}
         </tbody>
@@ -135,62 +117,38 @@ function CardHistoryTable({
 
 function HistoryEventRow({
   event,
-  openDiff,
-  onToggleDiff,
 }: {
   event: AuditEventRead;
-  openDiff: { eventId: string; side: DiffSide } | null;
-  onToggleDiff: (eventId: string, side: DiffSide) => void;
 }) {
-  const openSide = openDiff?.eventId === event.id ? openDiff.side : null;
   const actor = event.actor_display_name || actorTypeLabel(event.actor_type);
+  const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
 
   return (
-    <>
-      <tr>
-        <td>{auditActionLabel(event.action)}</td>
-        <td>{auditObjectTypeLabel(event.object_type)}</td>
-        <td>
-          <div>{actor}</div>
-          {event.attributed_user_display_name && (
-            <small>
-              {uiText.publicLinkCreator}: {event.attributed_user_display_name}
-            </small>
-          )}
-        </td>
-        <td>{auditSourceLabel(event.source)}</td>
-        <td>{formatDate(event.created_at)}</td>
-        <td>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-expanded={openSide === "old"}
-            onClick={() => onToggleDiff(event.id, "old")}
-          >
-            {uiText.before}
-          </button>
-        </td>
-        <td>
-          <button
-            type="button"
-            className="ghost-button"
-            aria-expanded={openSide === "new"}
-            onClick={() => onToggleDiff(event.id, "new")}
-          >
-            {uiText.after}
-          </button>
-        </td>
-      </tr>
-      {openSide && (
-        <tr>
-          <td colSpan={7}>
-            <pre className="audit-diff-json">
-              {formatAuditDiff(openSide === "old" ? event.old_data_json : event.new_data_json)}
-            </pre>
-          </td>
-        </tr>
-      )}
-    </>
+    <tr>
+      <td>{auditActionLabel(event.action)}</td>
+      <td>
+        {field ? (
+          <>
+            <div>{field.field.label || field.field.code}</div>
+            <small>{auditObjectTypeLabel(event.object_type)}</small>
+          </>
+        ) : (
+          auditObjectTypeLabel(event.object_type)
+        )}
+      </td>
+      <td>
+        <div>{actor}</div>
+        {event.attributed_user_display_name && (
+          <small>
+            {uiText.publicLinkCreator}: {event.attributed_user_display_name}
+          </small>
+        )}
+      </td>
+      <td>{auditSourceLabel(event.source)}</td>
+      <td>{formatDate(event.created_at)}</td>
+      <td>{formatHistoryValue(event.old_data_json)}</td>
+      <td>{formatHistoryValue(event.new_data_json)}</td>
+    </tr>
   );
 }
 
@@ -198,6 +156,41 @@ function actorTypeLabel(actorType: string) {
   return actorType === "public_link" ? uiText.publicLink : actorType;
 }
 
-function formatAuditDiff(value: unknown) {
-  return value === null || value === undefined ? uiText.none : JSON.stringify(value, null, 2);
+type FieldSnapshot = {
+  field: { code: string; label: string | null };
+  value: unknown;
+};
+
+function fieldSnapshot(value: unknown): FieldSnapshot | null {
+  if (!value || typeof value !== "object" || !("field" in value) || !("value" in value)) {
+    return null;
+  }
+  const field = value.field;
+  if (!field || typeof field !== "object" || !("code" in field)) {
+    return null;
+  }
+  return value as FieldSnapshot;
+}
+
+function formatHistoryValue(value: unknown): string {
+  const snapshot = fieldSnapshot(value);
+  const actualValue = snapshot ? snapshot.value : value;
+  if (actualValue === null || actualValue === undefined || actualValue === "") {
+    return uiText.noValue;
+  }
+  if (
+    typeof actualValue === "object" &&
+    actualValue !== null &&
+    "redacted" in actualValue &&
+    actualValue.redacted === true
+  ) {
+    return uiText.redactedValue;
+  }
+  if (Array.isArray(actualValue)) {
+    return actualValue.map(formatHistoryValue).join(", ");
+  }
+  if (typeof actualValue === "object") {
+    return uiText.changed;
+  }
+  return String(actualValue);
 }

@@ -59,7 +59,7 @@ const historyEvent: AuditEventRead = {
 
 afterEach(() => vi.unstubAllGlobals());
 
-test("shows technical and card-history tabs, then loads a selected card's safe diff", async () => {
+test("shows a selected card's field change as values rather than JSON", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     if (
@@ -90,13 +90,11 @@ test("shows technical and card-history tabs, then loads a selected card's safe d
 
   expect(await screen.findByText(/Системный администратор/)).toBeVisible();
   expect(screen.getAllByText("Публичная ссылка")).toHaveLength(2);
-  await user.click(screen.getByRole("button", { name: "Было" }));
   expect(screen.getByText(/Наименование/)).toBeVisible();
-  expect(screen.getByText(/"value": "Было"/)).toBeVisible();
-  expect(screen.queryByText(/"value": "Стало"/)).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Стало" }));
-  expect(screen.getByText(/"value": "Стало"/)).toBeVisible();
+  expect(screen.getAllByText("Было")).toHaveLength(2);
+  expect(screen.getAllByText("Стало")).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "Было" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/"value"/)).not.toBeInTheDocument();
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/audit-events?scope=card_history&card_id=card-1&limit=50"),

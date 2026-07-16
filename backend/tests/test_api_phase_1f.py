@@ -295,6 +295,19 @@ def test_api_card_history_is_superuser_only_and_isolated_by_card(
         source="public_link",
         created_at=base_time + timedelta(minutes=1),
     )
+    lifecycle_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="lifecycle_sync",
+        object_type="card",
+        card_id=target_card.id,
+        object_id=target_card.id,
+        retention_class="card_history",
+        old_data_json={"lifecycle_status": "draft"},
+        new_data_json={"lifecycle_status": "active"},
+        source="api",
+        created_at=base_time + timedelta(minutes=2),
+    )
     other_card_event = AuditEvent(
         actor_type="user",
         actor_user_id=system_admin.id,
@@ -316,7 +329,15 @@ def test_api_card_history_is_superuser_only_and_isolated_by_card(
         source="api",
         created_at=base_time + timedelta(minutes=3),
     )
-    db_session.add_all([older_event, newer_public_event, other_card_event, technical_event])
+    db_session.add_all(
+        [
+            older_event,
+            newer_public_event,
+            lifecycle_event,
+            other_card_event,
+            technical_event,
+        ]
+    )
     db_session.flush()
 
     forbidden = api_client.get(

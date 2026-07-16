@@ -203,6 +203,7 @@ class AuditService:
             if card_id is None:
                 raise ValueError("A card id is required for card history.")
             criteria.append(AuditEvent.card_id == card_id)
+            criteria.append(AuditEvent.action != "lifecycle_sync")
         elif scope != "technical":
             raise ValueError(f"Unsupported audit scope: {scope}")
         if object_type is not None:
