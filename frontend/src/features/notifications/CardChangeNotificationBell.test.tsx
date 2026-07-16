@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -63,6 +63,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  focusManager.setEventListener((onFocus) => {
+    const listener = () => onFocus();
+    window.addEventListener("visibilitychange", listener, false);
+    return () => window.removeEventListener("visibilitychange", listener);
+  });
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -120,17 +126,76 @@ describe("CardChangeNotificationBell", () => {
     await user.click(await screen.findByRole("button", { name: "Уведомления: новых нет" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Запрос не выполнен");
   });
+
+  test("polls quietly after ten seconds without taking focus or refetching when the window regains focus", async () => {
+    vi.useFakeTimers();
+    listenForWindowFocusEvents();
+    const { queryClient } = renderBellWithFocusedInput();
+    const input = screen.getByRole("textbox", { name: "Проверяемое поле" });
+    input.focus();
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(notificationInboxRequestCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(notificationInboxRequestCount()).toBe(2);
+    expect(document.activeElement).toBe(input);
+
+    queryClient
+      .getQueryCache()
+      .find({ queryKey: ["card-change-notifications", token] })
+      ?.invalidate();
+    window.dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(notificationInboxRequestCount()).toBe(2);
+  });
 });
 
 function renderBell(onOpenCard = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <CardChangeNotificationBell token={token} onOpenCard={onOpenCard} />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <CardChangeNotificationBell token={token} onOpenCard={onOpenCard} />
+      </QueryClientProvider>,
+    ),
+  };
+}
+
+function renderBellWithFocusedInput() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <label>
+          Проверяемое поле
+          <input type="text" />
+        </label>
+        <CardChangeNotificationBell token={token} onOpenCard={vi.fn()} />
+      </QueryClientProvider>,
+    ),
+  };
+}
+
+function listenForWindowFocusEvents() {
+  focusManager.setEventListener((onFocus) => {
+    const listener = () => onFocus();
+    window.addEventListener("focus", listener, false);
+    return () => window.removeEventListener("focus", listener);
+  });
+}
+
+function notificationInboxRequestCount() {
+  return fetchCalls.filter(
+    ({ method, path }) => method === "GET" && path === "/api/v1/card-change-notifications?limit=20",
+  ).length;
 }
 
 async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {

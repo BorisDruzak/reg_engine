@@ -26,7 +26,8 @@ export function CardChangeNotificationBell({
     queryKey,
     queryFn: () => listCardChangeNotifications(token),
     enabled: Boolean(token),
-    refetchInterval: 60_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: false,
     staleTime: 15_000,
   });
   const markReadMutation = useMutation({
