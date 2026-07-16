@@ -40,13 +40,32 @@ def test_audit_retention_cli_runs_cleanup_once_and_reports_deleted_count(
             received["runs"] = int(received.get("runs", 0)) + 1
             return 7
 
+    class FakeCardChangeNotificationService:
+        def __init__(self, service_session: _FakeSession) -> None:
+            received["notification_session"] = service_session
+
+        def delete_expired_notifications(self) -> int:
+            received["notification_runs"] = int(received.get("notification_runs", 0)) + 1
+            return 3
+
     monkeypatch.setattr(audit_retention, "create_database_engine", fake_create_database_engine)
     monkeypatch.setattr(audit_retention, "create_session_factory", fake_create_session_factory)
     monkeypatch.setattr(audit_retention, "AuditRetentionService", FakeAuditRetentionService)
+    monkeypatch.setattr(
+        audit_retention,
+        "CardChangeNotificationService",
+        FakeCardChangeNotificationService,
+        raising=False,
+    )
 
     assert audit_retention.main(["--database-url", "postgresql+psycopg://example/audit_test"]) == 0
     assert received["database_url"] == "postgresql+psycopg://example/audit_test"
     assert received["session"] is session
     assert received["runs"] == 1
+    assert received["notification_session"] is session
+    assert received["notification_runs"] == 1
     assert session.committed is True
-    assert capsys.readouterr().out == "Audit retention completed: deleted_events=7\n"
+    assert (
+        capsys.readouterr().out
+        == "Audit retention completed: deleted_events=7 deleted_notifications=3\n"
+    )

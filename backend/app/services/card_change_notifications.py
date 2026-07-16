@@ -1,8 +1,10 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -16,7 +18,7 @@ from app.models import (
     PublicLinkChangeNotificationSubscription,
     User,
 )
-from app.services.audit import AuditService
+from app.services.audit import CARD_HISTORY_RETENTION, AuditService
 from app.services.cards import CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.public_links import PublicLinkError
@@ -25,6 +27,19 @@ from app.services.public_links import PublicLinkError
 class CardChangeNotificationService:
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def delete_expired_notifications(self, *, now: datetime | None = None) -> int:
+        evaluated_at = now or datetime.now(UTC)
+        if evaluated_at.tzinfo is None:
+            raise ValueError("Notification retention time must include a timezone.")
+
+        result = self.session.execute(
+            delete(CardChangeNotification).where(
+                CardChangeNotification.created_at < evaluated_at - CARD_HISTORY_RETENTION
+            )
+        )
+        self.session.flush()
+        return int(cast(CursorResult[Any], result).rowcount or 0)
 
     def get_card_subscription_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> bool:
         self._require_card_visibility(actor_user_id=actor_user_id, card_id=card_id)

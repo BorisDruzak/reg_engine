@@ -3,6 +3,7 @@ from collections.abc import Sequence
 
 from app.core.database import create_database_engine, create_session_factory
 from app.services.audit import AuditRetentionService
+from app.services.card_change_notifications import CardChangeNotificationService
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,9 +18,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     session_factory = create_session_factory(engine)
     with session_factory() as session:
         deleted_events = AuditRetentionService(session).delete_expired_events()
+        deleted_notifications = CardChangeNotificationService(
+            session
+        ).delete_expired_notifications()
         session.commit()
 
-    print(f"Audit retention completed: deleted_events={deleted_events}")
+    print(
+        "Audit retention completed: "
+        f"deleted_events={deleted_events} deleted_notifications={deleted_notifications}"
+    )
     return 0
 
 
