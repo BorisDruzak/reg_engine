@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 RUSSIAN_TEXT_PATTERN = re.compile(r"[А-Яа-яЁё -]+")
 _MAX_REGEX_PATTERN_LENGTH = 512
-_PORTABLE_ESCAPE_CODES = frozenset("dDsSwWbBfnrtv")
+_PORTABLE_CONTROL_ESCAPE_CODES = frozenset("fnrtv")
 _ESCAPABLE_LITERAL_CHARACTERS = frozenset(r"\\^$.*+?()[]{}|/-")
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 _REGEX_METACHARACTERS = frozenset(r"\\^$.*+?()[]{}|")
@@ -156,7 +156,10 @@ def _consume_braced_quantifier(pattern: str, index: int) -> int | None:
 
 def _consume_portable_escape(pattern: str, index: int) -> int | None:
     escape_code = pattern[index + 1 : index + 2]
-    if escape_code in _PORTABLE_ESCAPE_CODES or escape_code in _ESCAPABLE_LITERAL_CHARACTERS:
+    if (
+        escape_code in _PORTABLE_CONTROL_ESCAPE_CODES
+        or escape_code in _ESCAPABLE_LITERAL_CHARACTERS
+    ):
         return index + 2
     if escape_code == "0" and not pattern[index + 2 : index + 3].isdigit():
         return index + 2
