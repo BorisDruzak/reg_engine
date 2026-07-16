@@ -10,17 +10,22 @@ from uuid import UUID, uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 import app.services.audit as audit_module
 import app.services.cards as cards_module
+from app.api.dependencies import get_db_session
+from app.core.config import get_settings
+from app.main import create_app
 from app.models import (
     AccessGrant,
     AuditEvent,
     Card,
     CardBlockInstance,
+    CardChangeNotification,
     CardPublicFieldSetting,
     CardPublicLink,
     CardTemplate,
@@ -36,6 +41,7 @@ from app.models import (
     role_permissions,
 )
 from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
+from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import (
     BulkFieldValueInput,
@@ -181,6 +187,28 @@ def db_session(migrated_test_engine: Engine) -> Iterator[Session]:
         session.close()
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture()
+def api_client(db_session: Session) -> Iterator[TestClient]:
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
+    app = create_app()
+
+    def override_session() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_session
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
 
 
 def _create_user(
@@ -1318,6 +1346,84 @@ def test_field_value_audit_records_safe_before_and_after_snapshots(db_session: S
         },
         "value": "new serial",
     }
+
+
+def test_bulk_field_values_api_creates_two_history_events_and_one_notification(
+    db_session: Session,
+    api_client: TestClient,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="notification-bulk-api",
+        title="Пакет API уведомлений",
+    )
+    first = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="first_api_value",
+        label="Первое API поле",
+        field_type="text",
+    )
+    second = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="second_api_value",
+        label="Второе API поле",
+        field_type="text",
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Карточка пакетного API",
+    )
+    subscriber = _create_user(
+        db_session,
+        "notification-bulk-api-subscriber@example.test",
+        display_name="Подписчик API",
+        is_superuser=True,
+    )
+    CardChangeNotificationService(db_session).set_card_subscription_for_actor(
+        actor_user_id=subscriber.id,
+        card_id=card.id,
+        enabled=True,
+    )
+
+    response = api_client.patch(
+        f"/api/v1/cards/{card.id}/values",
+        headers={"X-Actor-User-Id": str(context["org_admin"].id)},
+        json={
+            "values": [
+                {"field_id": str(first.id), "value": "Раз"},
+                {"field_id": str(second.id), "value": "Два"},
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = list(
+        db_session.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.card_id == card.id)
+            .where(AuditEvent.object_type == "field_value")
+            .where(AuditEvent.retention_class == "card_history")
+            .order_by(AuditEvent.created_at, AuditEvent.id)
+        ).all()
+    )
+    assert len(events) == 2
+    notifications = list(
+        db_session.scalars(
+            select(CardChangeNotification).where(CardChangeNotification.user_id == subscriber.id)
+        ).all()
+    )
+    assert len(notifications) == 1
+    assert notifications[0].changes_json == [
+        {"label": "Первое API поле", "before": None, "after": "Раз"},
+        {"label": "Второе API поле", "before": None, "after": "Два"},
+    ]
 
 
 def test_sensitive_field_value_audit_redacts_before_and_after_values(db_session: Session) -> None:

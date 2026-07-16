@@ -22,7 +22,16 @@ import app.api.dependencies as api_dependencies
 from app.api.dependencies import get_db_session, raise_service_http_error
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, FormBlock, User
+from app.models import (
+    AuditEvent,
+    Card,
+    CardPublicLink,
+    CardTemplate,
+    FieldValue,
+    FormBlock,
+    PublicLinkChangeNotificationSubscription,
+    User,
+)
 from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.card_change_notifications import CardChangeNotificationService
@@ -285,6 +294,71 @@ def test_public_link_autosave_excludes_its_attributed_creator_from_notifications
     assert event is not None
     assert event.attributed_user_id == review_fixture.admin_id
     assert notifications.list_for_actor(actor_user_id=review_fixture.admin_id, limit=20)[1] == []
+
+
+def test_public_token_edit_dispatches_one_notification_to_overlapping_subscriber(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    creator = db_session.get(User, review_fixture.admin_id)
+    assert creator is not None
+    recipient = User(
+        email="public-token-notification-recipient@example.test",
+        display_name="Получатель публичного уведомления",
+        is_superuser=True,
+    )
+    db_session.add(recipient)
+    db_session.flush()
+    public_links = PublicLinkService(db_session)
+    token = public_links.create_public_link_for_actor(
+        actor_user_id=creator.id,
+        card_id=review_fixture.card_id,
+    )
+    notifications = CardChangeNotificationService(db_session)
+    notifications.set_card_subscription_for_actor(
+        actor_user_id=recipient.id,
+        card_id=review_fixture.card_id,
+        enabled=True,
+    )
+    notifications.set_public_link_subscription_for_creator(
+        actor_user_id=creator.id,
+        public_link_id=token.public_link.id,
+        enabled=True,
+    )
+    db_session.add(
+        PublicLinkChangeNotificationSubscription(
+            user_id=recipient.id,
+            public_link_id=token.public_link.id,
+        )
+    )
+    db_session.flush()
+
+    public_links.edit_card_field_with_token(
+        raw_token=token.raw_token,
+        field_id=review_fixture.text_field_id,
+        value="Новое значение по токену",
+    )
+
+    event = db_session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.actor_public_link_id == token.public_link.id)
+        .where(AuditEvent.object_type == "field_value")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    ).first()
+    assert event is not None
+    assert event.actor_user_id is None
+    assert event.attributed_user_id == creator.id
+    assert notifications.list_for_actor(actor_user_id=creator.id, limit=20)[1] == []
+    recipient_notifications = notifications.list_for_actor(actor_user_id=recipient.id, limit=20)[1]
+    assert len(recipient_notifications) == 1
+    assert recipient_notifications[0].actor_display_name == creator.display_name
+    assert recipient_notifications[0].changes_json == [
+        {
+            "label": "Наименование",
+            "before": "Исходное значение",
+            "after": "Новое значение по токену",
+        }
+    ]
 
 
 def test_active_public_link_uses_current_card_access_settings(
