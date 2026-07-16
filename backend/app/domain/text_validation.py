@@ -72,6 +72,8 @@ def _validate_portable_regex(pattern: str) -> None:
         raise TextValidationError("Text validation pattern must not be empty.")
     if len(pattern) > _MAX_REGEX_PATTERN_LENGTH:
         raise TextValidationError("Text validation pattern is too long.")
+    if any(ord(character) > 0xFFFF for character in pattern):
+        raise TextValidationError("Text validation pattern must use BMP Unicode only.")
     if not _is_portable_regex(pattern):
         raise TextValidationError("Text validation pattern is not portable.")
     try:
@@ -166,7 +168,9 @@ def _consume_portable_escape(pattern: str, index: int) -> int | None:
     if escape_code == "x" and _has_hex_digits(pattern, index + 2, 2):
         return index + 4
     if escape_code == "u" and _has_hex_digits(pattern, index + 2, 4):
-        return index + 6
+        code_unit = int(pattern[index + 2 : index + 6], 16)
+        if not 0xD800 <= code_unit <= 0xDFFF:
+            return index + 6
     return None
 
 

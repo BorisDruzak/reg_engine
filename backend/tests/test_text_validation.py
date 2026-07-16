@@ -91,6 +91,12 @@ def test_normalize_rejects_unicode_semantic_divergence_escapes(pattern: str) -> 
         normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
 
 
+@pytest.mark.parametrize("pattern", ["😀", "[😀-😁]", r"\uD83D\uDE00"])
+def test_normalize_rejects_non_bmp_unicode_patterns(pattern: str) -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+
 def test_normalize_allows_the_agreed_portable_regex_grammar() -> None:
     rule = normalize_text_validation(
         {
