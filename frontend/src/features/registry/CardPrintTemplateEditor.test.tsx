@@ -206,6 +206,30 @@ test("creates a field inline with a real canonical type and persists the layout"
   );
 });
 
+test("sends a configured text validation rule when creating a field in the layout studio", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(
+    await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
+  );
+  await user.click(screen.getByText("Проверка значения"));
+  await user.selectOptions(screen.getByLabelText("Тип проверки"), "russian_text");
+  await user.clear(screen.getByLabelText("Подсказка при ошибке"));
+  await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите текст русскими буквами");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
+  expect(api.createdFieldPayloads[0]).toMatchObject({
+    validation_json: {
+      kind: "russian_text",
+      message: "Введите текст русскими буквами",
+    },
+  });
+});
+
 test("appends a full-width field after occupied rows", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock({ occupiedFieldRows: 4 });
@@ -786,6 +810,39 @@ test("existing field edits send type reference list and static-text controls wit
       options_config_json: null,
     }),
   );
+});
+
+test("sends and clears text validation in existing field update payloads", async () => {
+  const user = userEvent.setup();
+  const api = createEditorFetchMock();
+  vi.stubGlobal("fetch", api.fetchMock);
+  renderEditor();
+
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
+  await user.click(screen.getByText("Проверка значения"));
+  await user.selectOptions(screen.getByLabelText("Тип проверки"), "regex");
+  await user.clear(screen.getByLabelText("Подсказка при ошибке"));
+  await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите нужный формат");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
+  expect(api.updatedFieldPayloads[0]).toMatchObject({
+    validation_json: {
+      kind: "regex",
+      pattern: ".*",
+      message: "Введите нужный формат",
+    },
+  });
+
+  await user.click(await screen.findByTestId("layout-field-field-field-1"));
+  await user.selectOptions(screen.getByLabelText("Тип поля"), "date");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(2));
+  expect(api.updatedFieldPayloads[1]).toMatchObject({
+    field_type: "date",
+    validation_json: null,
+  });
 });
 
 test("archives a field only after the inline delete confirmation", async () => {
