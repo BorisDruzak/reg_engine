@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from collections.abc import Mapping
 
 import regex
@@ -96,7 +97,11 @@ def _validate_portable_regex(pattern: str) -> None:
     if not _is_portable_regex(pattern):
         raise TextValidationError("Text validation pattern is not portable.")
     try:
-        re.compile(pattern)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            re.compile(pattern)
+    except FutureWarning as exc:
+        raise TextValidationError("Text validation pattern is not portable.") from exc
     except re.error as exc:
         raise TextValidationError("Text validation pattern is invalid.") from exc
 
@@ -142,10 +147,6 @@ def _consume_character_class(pattern: str, index: int) -> int | None:
     has_member = False
     while index < len(pattern):
         character = pattern[index]
-        if character == "[":
-            return None
-        if pattern[index : index + 2] in {"&&", "||", "~~"}:
-            return None
         if character == "\\":
             escaped_index = _consume_portable_escape(pattern, index)
             if escaped_index is None:
