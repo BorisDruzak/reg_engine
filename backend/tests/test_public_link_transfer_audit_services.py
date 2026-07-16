@@ -323,6 +323,56 @@ def test_admin_can_create_public_link_with_raw_token_once_and_default_expiry(
     assert ("card_public_link", "create") in _audit_actions(db_session)
 
 
+def test_public_link_field_audit_credits_link_creator_and_records_diff(
+    db_session: Session,
+) -> None:
+    context = _phase_1e_context(db_session)
+    public_link_service = PublicLinkService(db_session)
+    created = public_link_service.create_public_link_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    public_link_service.edit_card_field_with_token(
+        raw_token=created.raw_token,
+        field_id=context["public_field"].id,
+        value="public serial",
+    )
+
+    event = db_session.scalars(
+        select(AuditEvent)
+        .where(
+            AuditEvent.object_type == "field_value",
+            AuditEvent.actor_public_link_id == created.public_link.id,
+        )
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    ).first()
+
+    assert event is not None
+    assert event.actor_type == "public_link"
+    assert event.attributed_user_id == context["source_admin"].id
+    assert event.card_id == context["card"].id
+    assert event.retention_class == "card_history"
+    assert event.old_data_json == {
+        "field": {
+            "id": str(context["public_field"].id),
+            "code": "serial_number",
+            "label": "Serial number",
+            "type": "text",
+        },
+        "value": None,
+    }
+    assert event.new_data_json == {
+        "field": {
+            "id": str(context["public_field"].id),
+            "code": "serial_number",
+            "label": "Serial number",
+            "type": "text",
+        },
+        "value": "public serial",
+    }
+
+
 def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
     db_session: Session,
 ) -> None:

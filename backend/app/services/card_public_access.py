@@ -135,6 +135,8 @@ class CardPublicAccessService:
             action="update",
             object_type="card_public_access",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json=old_data,
             new_data_json=result.model_dump(mode="json"),
         )

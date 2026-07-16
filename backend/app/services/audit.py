@@ -1,8 +1,12 @@
-from datetime import UTC, datetime, timedelta
-from typing import Any
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, is_dataclass
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+from typing import Any, Protocol, cast
 from uuid import UUID
 
 from sqlalchemy import and_, delete, desc, or_, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.domain.constants import AUDIT_RETENTION_CLASSES
@@ -11,6 +15,47 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 
 CARD_HISTORY_RETENTION = timedelta(days=14)
 TECHNICAL_AUDIT_RETENTION = timedelta(days=3)
+
+
+class FieldAuditSnapshotInput(Protocol):
+    id: UUID
+    code: str
+    label: str
+    field_type: str
+    sensitivity_level: str
+
+
+def safe_field_value_audit_snapshot(
+    *, field: FieldAuditSnapshotInput, value: object | None
+) -> dict[str, Any]:
+    """Build a display-safe schema-driven field-value snapshot for card history."""
+    field_data = {
+        "id": str(field.id),
+        "code": field.code,
+        "label": field.label,
+        "type": field.field_type,
+    }
+    if field.sensitivity_level != "normal":
+        return {"field": field_data, "value": {"redacted": True}}
+    return {"field": field_data, "value": _json_safe_audit_value(value)}
+
+
+def _json_safe_audit_value(value: object | None) -> object | None:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return _json_safe_audit_value(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_audit_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_json_safe_audit_value(item) for item in value]
+    return str(value)
 
 
 class AuditService:
@@ -244,7 +289,7 @@ class AuditRetentionService:
             )
         )
         self.session.flush()
-        return int(result.rowcount or 0)
+        return int(cast(CursorResult[Any], result).rowcount or 0)
 
 
 def _normalize_audit_source(raw_source: object) -> str:

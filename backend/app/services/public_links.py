@@ -207,6 +207,8 @@ class PublicLinkService:
             action="create",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={
                 "card_id": str(card.id),
                 "expires_at": expires_at.isoformat(),
@@ -253,6 +255,8 @@ class PublicLinkService:
             action="disable",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={"card_id": str(card.id)},
         )
         return public_link
@@ -277,6 +281,8 @@ class PublicLinkService:
             action="public_link.review_started",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={"status": public_link.status, "review_enabled": True},
         )
         return public_link
@@ -301,6 +307,9 @@ class PublicLinkService:
             action="public_link.submit",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=public_link.card_id,
+            attributed_user_id=public_link.created_by,
+            retention_class="card_history",
             new_data_json={
                 "status": public_link.status,
                 "submitted_at": now.isoformat(),
@@ -341,6 +350,8 @@ class PublicLinkService:
             action="public_link.request_changes",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json={"status": "submitted"},
             new_data_json={
                 "status": public_link.status,
@@ -375,6 +386,8 @@ class PublicLinkService:
             action="public_link.approve",
             object_type="card_public_link",
             object_id=public_link.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json={"status": "submitted"},
             new_data_json={
                 "status": public_link.status,
@@ -616,6 +629,7 @@ class PublicLinkService:
 
         field_value = CardService(self.session).set_field_value_from_public_link(
             actor_public_link_id=public_link.id,
+            attributed_user_id=public_link.created_by,
             card_id=card.id,
             field_id=field.id,
             value=value,
@@ -623,13 +637,6 @@ class PublicLinkService:
         )
         public_link.used_count += 1
         self.session.flush()
-        AuditService(self.session).record_public_link_event(
-            actor_public_link_id=public_link.id,
-            action="public_link.update",
-            object_type="field_value",
-            object_id=field_value.id,
-            new_data_json={"card_id": str(card.id), "field_id": str(field.id)},
-        )
         return field_value
 
     def _resolve_public_edit_field(
@@ -723,6 +730,8 @@ class PublicLinkService:
                 action="public_link.expire",
                 object_type="card_public_link",
                 object_id=public_link.id,
+                card_id=public_link.card_id,
+                retention_class="card_history",
                 old_data_json={"status": old_status},
                 new_data_json={"status": "expired"},
             )

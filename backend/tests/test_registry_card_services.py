@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+import app.services.audit as audit_module
 import app.services.cards as cards_module
 from app.models import (
     AccessGrant,
@@ -52,6 +53,31 @@ from app.services.registry_schema import RegistrySchemaError, RegistrySchemaServ
 class _FlushOnlySession:
     def flush(self) -> None:
         pass
+
+
+def test_safe_field_value_audit_snapshot_redacts_non_normal_sensitivity() -> None:
+    field = SimpleNamespace(
+        id=uuid4(),
+        code="secret",
+        label="Secret",
+        field_type="text",
+        sensitivity_level="restricted",
+    )
+
+    snapshot_builder = getattr(audit_module, "safe_field_value_audit_snapshot", None)
+
+    assert snapshot_builder is not None
+    snapshot = snapshot_builder(field=field, value="never persist this")
+
+    assert snapshot == {
+        "field": {
+            "id": str(field.id),
+            "code": "secret",
+            "label": "Secret",
+            "type": "text",
+        },
+        "value": {"redacted": True},
+    }
 
 
 def test_automatic_lifecycle_marks_complete_card_active_without_database(
@@ -1228,6 +1254,134 @@ def test_static_text_fields_cannot_be_edited_as_card_values(db_session: Session)
             field_id=field.id,
             value="attempt",
         )
+
+
+def test_field_value_audit_records_safe_before_and_after_snapshots(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="audit-diff",
+        title="Audit diff",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="serial",
+        label="Serial number",
+        field_type="text",
+    )
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+
+    CardService(db_session).set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="old serial",
+    )
+    CardService(db_session).set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="new serial",
+    )
+
+    event = db_session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.object_type == "field_value")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    ).first()
+
+    assert event is not None
+    assert event.card_id == card.id
+    assert event.retention_class == "card_history"
+    assert event.old_data_json == {
+        "field": {
+            "id": str(field.id),
+            "code": "serial",
+            "label": "Serial number",
+            "type": "text",
+        },
+        "value": "old serial",
+    }
+    assert event.new_data_json == {
+        "field": {
+            "id": str(field.id),
+            "code": "serial",
+            "label": "Serial number",
+            "type": "text",
+        },
+        "value": "new serial",
+    }
+
+
+def test_sensitive_field_value_audit_redacts_before_and_after_values(db_session: Session) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="sensitive-audit-diff",
+        title="Sensitive audit diff",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="secret",
+        label="Secret",
+        field_type="text",
+    )
+    field.sensitivity_level = "restricted"
+    db_session.flush()
+    card = CardService(db_session).create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+    )
+
+    CardService(db_session).set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="previous secret",
+    )
+    CardService(db_session).set_field_value_for_actor(
+        actor_user_id=context["org_admin"].id,
+        card_id=card.id,
+        field_id=field.id,
+        value="next secret",
+    )
+
+    event = db_session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.object_type == "field_value")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    ).first()
+
+    assert event is not None
+    assert event.old_data_json == {
+        "field": {
+            "id": str(field.id),
+            "code": "secret",
+            "label": "Secret",
+            "type": "text",
+        },
+        "value": {"redacted": True},
+    }
+    assert event.new_data_json == {
+        "field": {
+            "id": str(field.id),
+            "code": "secret",
+            "label": "Secret",
+            "type": "text",
+        },
+        "value": {"redacted": True},
+    }
 
 
 def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visibility(

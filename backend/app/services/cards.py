@@ -32,7 +32,7 @@ from app.models import (
     StoredFile,
     User,
 )
-from app.services.audit import AuditService
+from app.services.audit import AuditService, safe_field_value_audit_snapshot
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
@@ -226,6 +226,8 @@ class CardService:
             action="create",
             object_type="card",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={
                 "registry_id": str(registry_id),
                 "organization_id": str(organization_id),
@@ -336,6 +338,7 @@ class CardService:
             old_status=old_status,
             actor_user_id=actor_user_id,
             actor_public_link_id=None,
+            attributed_user_id=None,
         )
 
     def preview_card_creation_for_actor(
@@ -1023,6 +1026,7 @@ class CardService:
             field_id=field_model.id,
             actor_user_id=actor_user_id,
         )
+        old_data = self._field_value_audit_snapshot(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=actor_user_id)
         self.session.flush()
         AuditService(self.session).record_user_event(
@@ -1030,7 +1034,10 @@ class CardService:
             action="update",
             object_type="field_value",
             object_id=field_value.id,
-            new_data_json={"card_id": str(card.id), "field_id": str(field_model.id)},
+            card_id=card.id,
+            retention_class="card_history",
+            old_data_json=old_data,
+            new_data_json=self._field_value_audit_snapshot(field_model, field_value),
         )
         if synchronize_lifecycle:
             self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
@@ -1111,6 +1118,7 @@ class CardService:
         self,
         *,
         actor_public_link_id: UUID,
+        attributed_user_id: UUID | None = None,
         card_id: UUID,
         field_id: UUID,
         value: object,
@@ -1143,11 +1151,24 @@ class CardService:
             field_id=field_model.id,
             actor_user_id=None,
         )
+        old_data = self._field_value_audit_snapshot(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=None)
         self.session.flush()
+        AuditService(self.session).record_public_link_event(
+            actor_public_link_id=actor_public_link_id,
+            action="public_link.update",
+            object_type="field_value",
+            object_id=field_value.id,
+            card_id=card.id,
+            attributed_user_id=attributed_user_id,
+            retention_class="card_history",
+            old_data_json=old_data,
+            new_data_json=self._field_value_audit_snapshot(field_model, field_value),
+        )
         self.synchronize_card_lifecycle(
             card,
             actor_public_link_id=actor_public_link_id,
+            attributed_user_id=attributed_user_id,
         )
         return field_value
 
@@ -1197,6 +1218,8 @@ class CardService:
             action="update",
             object_type="card",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json=old_data,
             new_data_json={
                 "display_name": card.display_name,
@@ -1408,6 +1431,8 @@ class CardService:
             action="archive",
             object_type="card",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
         )
         return card
 
@@ -1478,6 +1503,8 @@ class CardService:
             action="transfer",
             object_type="card",
             object_id=old_card.id,
+            card_id=old_card.id,
+            retention_class="card_history",
             new_data_json=new_data_json,
         )
         return new_card
@@ -1522,6 +1549,8 @@ class CardService:
             action="update",
             object_type="card",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json={
                 "organization_id": str(old_organization_id),
                 "org_unit_id": str(old_org_unit_id) if old_org_unit_id is not None else None,
@@ -1566,6 +1595,8 @@ class CardService:
             action="create",
             object_type="card_block_instance",
             object_id=block_instance.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
         )
         self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
@@ -1603,6 +1634,8 @@ class CardService:
             action="archive",
             object_type="card_block_instance",
             object_id=block_instance.id,
+            card_id=card.id,
+            retention_class="card_history",
             new_data_json={"card_id": str(card.id), "block_id": str(block.id)},
         )
         self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
@@ -2003,6 +2036,7 @@ class CardService:
         *,
         actor_user_id: UUID | None = None,
         actor_public_link_id: UUID | None = None,
+        attributed_user_id: UUID | None = None,
         audit_transition: bool = True,
     ) -> bool:
         if card.lifecycle_status in {"archived", "superseded"}:
@@ -2023,6 +2057,7 @@ class CardService:
                 old_status=old_status,
                 actor_user_id=actor_user_id,
                 actor_public_link_id=actor_public_link_id,
+                attributed_user_id=attributed_user_id,
             )
         return True
 
@@ -2033,6 +2068,7 @@ class CardService:
         old_status: str,
         actor_user_id: UUID | None,
         actor_public_link_id: UUID | None,
+        attributed_user_id: UUID | None,
     ) -> None:
         event_data = {
             "lifecycle_status": card.lifecycle_status,
@@ -2045,6 +2081,9 @@ class CardService:
                 action="lifecycle_sync",
                 object_type="card",
                 object_id=card.id,
+                card_id=card.id,
+                attributed_user_id=attributed_user_id,
+                retention_class="card_history",
                 old_data_json={"lifecycle_status": old_status},
                 new_data_json=event_data,
             )
@@ -2055,6 +2094,8 @@ class CardService:
                 action="lifecycle_sync",
                 object_type="card",
                 object_id=card.id,
+                card_id=card.id,
+                retention_class="card_history",
                 old_data_json={"lifecycle_status": old_status},
                 new_data_json=event_data,
             )
@@ -2063,6 +2104,8 @@ class CardService:
             action="lifecycle_sync",
             object_type="card",
             object_id=card.id,
+            card_id=card.id,
+            retention_class="card_history",
             old_data_json={"lifecycle_status": old_status},
             new_data_json=event_data,
         )
@@ -2860,6 +2903,17 @@ class CardService:
         if field_model.field_type == "file_ref":
             return self._read_file_ref_value(field_value.value_attachment_id)
         return None
+
+    def _field_value_audit_snapshot(
+        self,
+        field_model: FormField,
+        field_value: FieldValue,
+    ) -> dict[str, Any]:
+        item_ids_by_value_id = self._multi_select_item_ids([field_value])
+        return safe_field_value_audit_snapshot(
+            field=field_model,
+            value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
+        )
 
     def _read_file_ref_value(self, attachment_id: UUID | None) -> FileRefValueRead | None:
         if attachment_id is None:
