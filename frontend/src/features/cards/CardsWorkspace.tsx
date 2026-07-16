@@ -554,6 +554,47 @@ export function CardsWorkspace({
     return [baseDetail, ...selectedFieldDetails].join(" / ");
   }
 
+  const selectedCardBaseBlock =
+    card && selectedCard ? (
+      <CardBaseBlock
+        card={card}
+        token={token}
+        organizationName={
+          organizationsById.get(card.organization_id)?.name ?? shortId(card.organization_id)
+        }
+        templateName={
+          card.card_template_name ??
+          selectedCard.card_template_name ??
+          shortId(card.card_template_id)
+        }
+        fields={presentationFields}
+        canManage={card.can_manage}
+        publicAccess={publicAccess}
+        publicAccessError={publicAccessQuery.error}
+        isUpdatingPublicAccess={updatePublicAccessMutation.isPending}
+        repeatableBlocks={repeatableBlocks}
+        isCreatingBlockInstance={createBlockInstanceMutation.isPending}
+        isArchivingBlockInstance={archiveBlockInstanceMutation.isPending}
+        publicLinkControl={
+          card.can_manage && presentationLayout ? (
+            <PublicLinkQuickControl
+              blocks={presentationBlocks}
+              cardId={card.id}
+              fields={presentationFields}
+              layout={presentationLayout}
+              publicAccess={publicAccess}
+              token={token}
+            />
+          ) : null
+        }
+        onPublicAccessChange={(payload) => updatePublicAccessMutation.mutate(payload)}
+        onAddBlockInstance={(blockId) => createBlockInstanceMutation.mutate(blockId)}
+        onArchiveBlockInstance={(blockInstanceId) =>
+          archiveBlockInstanceMutation.mutate(blockInstanceId)
+        }
+      />
+    ) : null;
+
   return (
     <div className="stack">
       <WorkspaceTabs
@@ -630,9 +671,6 @@ export function CardsWorkspace({
             <>
               {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
               <DataAlert error={cardPresentationQuery.error} />
-              <div className="row-actions card-change-notification-actions">
-                <CardChangeNotificationToggle cardId={card.id} token={token} />
-              </div>
               {presentationLayout ? (
                 <FilledCardLayout
                   layout={presentationLayout}
@@ -654,52 +692,7 @@ export function CardsWorkspace({
                       requiredMissingCount: 0,
                     },
                   ]}
-                  beforeContent={
-                    selectedCard ? (
-                      <CardBaseBlock
-                        card={card}
-                        token={token}
-                        organizationName={
-                          organizationsById.get(card.organization_id)?.name ??
-                          shortId(card.organization_id)
-                        }
-                        templateName={
-                          card.card_template_name ??
-                          selectedCard.card_template_name ??
-                          shortId(card.card_template_id)
-                        }
-                        fields={presentationFields}
-                        canManage={card.can_manage}
-                        publicAccess={publicAccess}
-                        publicAccessError={publicAccessQuery.error}
-                        isUpdatingPublicAccess={updatePublicAccessMutation.isPending}
-                        repeatableBlocks={repeatableBlocks}
-                        isCreatingBlockInstance={createBlockInstanceMutation.isPending}
-                        isArchivingBlockInstance={archiveBlockInstanceMutation.isPending}
-                        publicLinkControl={
-                          card.can_manage ? (
-                            <PublicLinkQuickControl
-                              blocks={presentationBlocks}
-                              cardId={card.id}
-                              fields={presentationFields}
-                              layout={presentationLayout}
-                              publicAccess={publicAccess}
-                              token={token}
-                            />
-                          ) : null
-                        }
-                        onPublicAccessChange={(payload) =>
-                          updatePublicAccessMutation.mutate(payload)
-                        }
-                        onAddBlockInstance={(blockId) =>
-                          createBlockInstanceMutation.mutate(blockId)
-                        }
-                        onArchiveBlockInstance={(blockInstanceId) =>
-                          archiveBlockInstanceMutation.mutate(blockInstanceId)
-                        }
-                      />
-                    ) : null
-                  }
+                  beforeContent={selectedCardBaseBlock}
                   navigatorAction={
                     selectedCard ? (
                       <CardDraftActionRail
@@ -757,6 +750,9 @@ export function CardsWorkspace({
                   }
                 />
               ) : null}
+              {!cardPresentationQuery.isLoading && !presentationLayout
+                ? selectedCardBaseBlock
+                : null}
               {!cardPresentationQuery.isLoading &&
                 !cardPresentationQuery.error &&
                 !presentationLayout && <p className="data-empty">{uiText.noData}</p>}
@@ -853,6 +849,7 @@ function CardBaseBlock({
       organization={{ label: uiText.organization, value: organizationName }}
       template={{ label: "Шаблон", value: templateName }}
       displayName={{ label: uiText.card, value: card.display_name }}
+      headerAction={<CardChangeNotificationToggle cardId={card.id} token={token} />}
       publicAccessContent={
         canManage ? (
           <div className="card-base-block-public-settings">

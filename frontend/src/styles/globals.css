@@ -2426,9 +2426,16 @@ tr:last-child td {
   gap: 12px;
 }
 
-.card-base-block-header > div {
+.card-base-block-header-copy {
   display: grid;
   gap: 3px;
+}
+
+.card-base-block-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: flex-end;
 }
 
 .card-base-block-header strong,
@@ -6113,6 +6120,10 @@ button.searchable-choice-picker-option:hover:not(:disabled),
     align-items: stretch;
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .card-base-block-header-actions {
+    justify-content: flex-start;
   }
 
   .card-base-toggle-grid,

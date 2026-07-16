@@ -693,10 +693,12 @@ describe("CardsWorkspace", () => {
     expect(
       within(baseBlock).queryByRole("checkbox", { name: "Публичный просмотр карточки" }),
     ).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Уведомлять об изменениях" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const notificationButton = await within(baseBlock).findByRole("button", {
+      name: "Уведомлять об изменениях",
+    });
+    expect(notificationButton).toHaveAttribute("aria-pressed", "false");
+    expect(baseBlock.querySelector(".card-base-block-header")).toContainElement(notificationButton);
+    expect(document.querySelector(".card-change-notification-actions")).toBeNull();
     expect(
       vi
         .mocked(fetch)

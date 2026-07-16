@@ -14,6 +14,7 @@ export type CardBaseBlockSurfaceProps = {
   organization: CardBaseValue;
   template: CardBaseValue;
   displayName: CardBaseValue;
+  headerAction?: ReactNode;
   publicAccessContent?: ReactNode;
   footer?: ReactNode;
   disabled?: boolean;
@@ -31,6 +32,7 @@ export function CardBaseBlockSurface({
   organization,
   template,
   displayName,
+  headerAction,
   publicAccessContent,
   footer,
   disabled = false,
@@ -40,10 +42,11 @@ export function CardBaseBlockSurface({
   return (
     <section id={id} className="data-panel card-base-block" aria-label="Базовый блок">
       <header className="card-base-block-header">
-        <div>
+        <div className="card-base-block-header-copy">
           <strong>Базовый блок</strong>
           <small>{modeDescriptions[mode]}</small>
         </div>
+        {headerAction ? <div className="card-base-block-header-actions">{headerAction}</div> : null}
       </header>
       <div className="admin-mutation-body">
         <CardBaseBlockRow value={organization} editable={isCreation} disabled={disabled} />
