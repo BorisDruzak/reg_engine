@@ -529,20 +529,44 @@ button {
 
 .audit-history-filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
   align-items: end;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-subtle);
 }
 
 .audit-history-card-group {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
 }
 
-.audit-history-card-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.audit-history-card-group + .audit-history-card-group {
+  margin-top: 14px;
+}
+
+.audit-history-card-group .table-wrap {
+  margin: 0;
+}
+
+.audit-history-card-link {
+  padding: 0;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.audit-history-card-link:hover,
+.audit-history-card-link:focus-visible {
+  color: var(--accent);
 }
 
 .audit-diff-json {

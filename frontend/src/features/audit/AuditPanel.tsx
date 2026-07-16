@@ -7,7 +7,6 @@ import {
   auditActionLabel,
   auditObjectTypeLabel,
   auditSourceLabel,
-  lifecycleStatusLabel,
   uiText,
 } from "@/app/uiText";
 import { DataAlert, Panel, WorkspaceTabs } from "@/components/common/DataSurfaces";
@@ -131,7 +130,6 @@ export function AuditPanel({
 type CardHistoryGroup = {
   cardId: string | null;
   cardDisplayName: string;
-  cardLifecycleStatus: string | null;
   events: AuditEventRead[];
 };
 
@@ -148,7 +146,6 @@ function groupHistoryEvents(events: AuditEventRead[]): CardHistoryGroup[] {
     groups.set(key, {
       cardId,
       cardDisplayName: event.card_display_name || uiText.card,
-      cardLifecycleStatus: event.card_lifecycle_status ?? null,
       events: [event],
     });
   }
@@ -173,25 +170,26 @@ function CardHistoryGroups({
 
   return groups.map((group) => (
     <section key={group.cardId ?? group.events[0].id} className="audit-history-card-group">
-      <div className="audit-history-card-heading">
-        {group.cardId ? (
-          <button type="button" onClick={() => onSelectCard(group.cardId!)}>
-            {group.cardDisplayName}
-          </button>
-        ) : (
-          <span>{group.cardDisplayName}</span>
-        )}
-        {group.cardLifecycleStatus && <small>{lifecycleStatusLabel(group.cardLifecycleStatus)}</small>}
-      </div>
-      <CardHistoryTable events={group.events} />
+      <CardHistoryTable
+        events={group.events}
+        cardId={group.cardId}
+        cardDisplayName={group.cardDisplayName}
+        onSelectCard={onSelectCard}
+      />
     </section>
   ));
 }
 
 function CardHistoryTable({
   events,
+  cardId,
+  cardDisplayName,
+  onSelectCard,
 }: {
   events: AuditEventRead[];
+  cardId: string | null;
+  cardDisplayName: string;
+  onSelectCard: (cardId: string) => void;
 }) {
   if (events.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;
@@ -202,6 +200,7 @@ function CardHistoryTable({
       <table>
         <thead>
           <tr>
+            <th>{uiText.card}</th>
             <th>{uiText.action}</th>
             <th>{uiText.object}</th>
             <th>{uiText.auditActor}</th>
@@ -214,8 +213,11 @@ function CardHistoryTable({
         <tbody>
           {events.map((event) => (
             <HistoryEventRow
+              cardId={cardId}
+              cardDisplayName={cardDisplayName}
               event={event}
               key={event.id}
+              onSelectCard={onSelectCard}
             />
           ))}
         </tbody>
@@ -225,9 +227,15 @@ function CardHistoryTable({
 }
 
 function HistoryEventRow({
+  cardId,
+  cardDisplayName,
   event,
+  onSelectCard,
 }: {
+  cardId: string | null;
+  cardDisplayName: string;
   event: AuditEventRead;
+  onSelectCard: (cardId: string) => void;
 }) {
   const actor = event.actor_display_name || actorTypeLabel(event.actor_type);
   const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
@@ -235,6 +243,20 @@ function HistoryEventRow({
 
   return (
     <tr>
+      <td>
+        {cardId ? (
+          <button
+            type="button"
+            className="audit-history-card-link"
+            onClick={() => onSelectCard(cardId)}
+            aria-label={`Открыть историю карточки: ${cardDisplayName}`}
+          >
+            {cardDisplayName}
+          </button>
+        ) : (
+          cardDisplayName
+        )}
+      </td>
       <td>{auditActionLabel(event.action)}</td>
       <td>
         {field ? (
