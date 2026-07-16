@@ -4,8 +4,10 @@ from app.api.v1.endpoints.access_management import router as access_management_r
 from app.api.v1.endpoints.attachments import router as attachments_router
 from app.api.v1.endpoints.audit import router as audit_router
 from app.api.v1.endpoints.auth import router as auth_router
+from app.api.v1.endpoints.card_change_notifications import (
+    router as card_change_notifications_router,
+)
 from app.api.v1.endpoints.card_creation_links import router as card_creation_links_router
-from app.api.v1.endpoints.card_change_notifications import router as card_change_notifications_router
 from app.api.v1.endpoints.card_template_layouts import router as card_template_layouts_router
 from app.api.v1.endpoints.cards import router as cards_router
 from app.api.v1.endpoints.documents import router as documents_router
