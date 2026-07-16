@@ -3,6 +3,7 @@ import type {
   AccessGrantCreatePayload,
   AccessGrantRead,
   AuditEventListRead,
+  CardHistoryFilters,
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
@@ -1036,13 +1037,19 @@ export async function listAuditEvents(token: string) {
   return apiRequest<AuditEventListRead>("/api/v1/audit-events?limit=20", { token });
 }
 
-export async function listCardHistoryEvents(token: string, cardId: string) {
+export async function listCardHistoryEvents(token: string, filters: CardHistoryFilters) {
   const query = new URLSearchParams({
     scope: "card_history",
-    card_id: cardId,
+    card_status: filters.cardStatus,
     limit: "50",
   });
-  return apiRequest<AuditEventListRead>(`/api/v1/audit-events?${query.toString()}`, { token });
+  if (filters.cardId) {
+    query.set("card_id", filters.cardId);
+  }
+  if (filters.actorUserId) {
+    query.set("actor_user_id", filters.actorUserId);
+  }
+  return apiRequest<AuditEventListRead>(`/api/v1/audit-events?${query}`, { token });
 }
 
 export async function listAttachments(token: string, cardId: string) {

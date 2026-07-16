@@ -967,6 +967,12 @@ export type AuditEventListRead = {
   items: AuditEventRead[];
 };
 
+export type CardHistoryFilters = {
+  cardId?: string;
+  cardStatus: "active" | "archived" | "all";
+  actorUserId?: string;
+};
+
 export type AttachmentRead = {
   id: string;
   card_id: string;

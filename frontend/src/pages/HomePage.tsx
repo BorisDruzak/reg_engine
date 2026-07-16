@@ -173,7 +173,7 @@ export function HomePage() {
   const usersQuery = useQuery({
     queryKey: ["users", token],
     queryFn: () => listUsers(token),
-    enabled: Boolean(token && needsUsers),
+    enabled: Boolean(token && (needsUsers || needsAudit)),
   });
   const auditQuery = useQuery({
     queryKey: ["audit-events", token],
@@ -553,6 +553,7 @@ export function HomePage() {
                 auditEvents={auditQuery.data?.items ?? []}
                 cards={auditCardsQuery.data?.items ?? []}
                 token={token}
+                users={usersQuery.data?.items ?? []}
               />
             )}
           </>

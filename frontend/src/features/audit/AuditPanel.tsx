@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { listCardHistoryEvents } from "@/api/client";
-import type { AuditEventRead, CardSummaryRead } from "@/api/types";
+import type { AuditEventRead, CardSummaryRead, UserRead } from "@/api/types";
 import { auditActionLabel, auditObjectTypeLabel, auditSourceLabel, uiText } from "@/app/uiText";
 import { DataAlert, Panel, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { formatDate } from "@/components/common/dataUtils";
@@ -14,17 +14,23 @@ export function AuditPanel({
   auditEvents,
   cards,
   token,
+  users: _users,
 }: {
   auditEvents: AuditEventRead[];
   cards: CardSummaryRead[];
   token: string;
+  users: UserRead[];
 }) {
   const [activeTab, setActiveTab] = useState<AuditTab>("technical");
   const [selectedCardId, setSelectedCardId] = useState("");
   const historyQuery = useQuery({
     queryKey: ["card-history-events", token, selectedCardId],
-    queryFn: () => listCardHistoryEvents(token, selectedCardId),
-    enabled: Boolean(token && activeTab === "card_history" && selectedCardId),
+    queryFn: () =>
+      listCardHistoryEvents(token, {
+        cardId: selectedCardId || undefined,
+        cardStatus: "active",
+      }),
+    enabled: Boolean(token && activeTab === "card_history"),
   });
 
   return (
@@ -58,19 +64,11 @@ export function AuditPanel({
                 ))}
               </select>
             </label>
-            {!selectedCardId ? (
-              <p className="data-empty">{uiText.selectCardForHistory}</p>
+            <DataAlert error={historyQuery.error} />
+            {historyQuery.isLoading ? (
+              <p className="data-empty">{uiText.loading}</p>
             ) : (
-              <>
-                <DataAlert error={historyQuery.error} />
-                {historyQuery.isLoading ? (
-                  <p className="data-empty">{uiText.loading}</p>
-                ) : (
-                  <CardHistoryTable
-                    events={historyQuery.data?.items ?? []}
-                  />
-                )}
-              </>
+              <CardHistoryTable events={historyQuery.data?.items ?? []} />
             )}
           </div>
         </Panel>

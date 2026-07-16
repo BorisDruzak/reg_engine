@@ -70,12 +70,20 @@ afterEach(() => vi.unstubAllGlobals());
 test("shows a selected card's field change as values rather than JSON", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
     if (
-      String(input).endsWith(
-        "/api/v1/audit-events?scope=card_history&card_id=card-1&limit=50",
+      url.endsWith(
+        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50&card_id=card-1",
       )
     ) {
       return Response.json({ items: [historyEvent] });
+    }
+    if (
+      url.endsWith(
+        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50",
+      )
+    ) {
+      return Response.json({ items: [] });
     }
     return Response.json({ detail: "Not Found" }, { status: 404 });
   });
@@ -94,6 +102,12 @@ test("shows a selected card's field change as values rather than JSON", async ()
   expect(screen.getByText("Создание")).toBeVisible();
 
   await user.click(screen.getByRole("tab", { name: "История карточек" }));
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("scope=card_history&card_status=active&limit=50"),
+      expect.anything(),
+    );
+  });
   await user.selectOptions(screen.getByLabelText("Карточка"), card.id);
 
   expect(await screen.findByText(/Системный администратор/)).toBeVisible();
@@ -106,7 +120,9 @@ test("shows a selected card's field change as values rather than JSON", async ()
   expect(screen.queryByText(/"value"/)).not.toBeInTheDocument();
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/v1/audit-events?scope=card_history&card_id=card-1&limit=50"),
+      expect.stringContaining(
+        "/api/v1/audit-events?scope=card_history&card_status=active&limit=50&card_id=card-1",
+      ),
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer test-token" }) }),
     );
   });
@@ -118,7 +134,7 @@ function renderAuditPanel() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <AuditPanel auditEvents={[technicalEvent]} cards={[card]} token="test-token" />
+      <AuditPanel auditEvents={[technicalEvent]} cards={[card]} token="test-token" users={[]} />
     </QueryClientProvider>,
   );
 }
