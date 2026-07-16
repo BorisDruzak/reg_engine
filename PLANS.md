@@ -5755,3 +5755,21 @@ blocked by the unavailable local browser runtime.
 - Browser verification could not start because the configured in-app browser
   reported `No browser is available`; no claim is made for the authenticated
   multi-user notification flow or browser console state in this release.
+
+#### Quiet notification refresh and basic-block placement
+
+Status: verified locally; deployment pending.
+
+- The notification subscription control now appears in the `Базовый блок`
+  header for every readable selected card, including the layout-error fallback;
+  the former standalone action row is gone. The header remains compact on
+  desktop and stacks cleanly on narrow screens.
+- The notification inbox polls exactly every 10 seconds and explicitly ignores
+  window-focus refetches. It updates notification data only: it does not show
+  an `isFetching` loader or modify card/editor state, so a user keeps focus in
+  an active field.
+- TDD covered both changes. Fresh local verification passed: focused Vitest
+  `20/20`, TypeScript, scoped ESLint, Prettier, `git diff --check`, and the
+  production Vite build. The full frontend suite remains the same authorized
+  red baseline: the existing single work-experience test failure was observed
+  again; it is outside this change set.
