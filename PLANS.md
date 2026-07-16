@@ -5712,3 +5712,46 @@ Status: complete, pushed, deployed, and server verified.
   safe error message beside the field that was being edited. The regression
   test confirms that a rejected write is attempted once rather than retried in
   a tight loop.
+
+#### Card-change notifications release
+
+Status: deployed to `main` and production on 2026-07-16; browser live proof is
+blocked by the unavailable local browser runtime.
+
+- Release commit `1d62957f` is pushed to `origin/main`. Its only frontend
+  change after the notification feature commit is a test-fixture `GET` mock
+  for the card notification-subscription endpoint; it does not alter product
+  behavior.
+- Disposable PostgreSQL verification intentionally targeted `reg_engine_test`.
+  Alembic reached `0032_card_change_notifications`; the audit-retention,
+  notification-service, and notification-API test selection completed
+  successfully (16 test progress markers; one existing Starlette/httpx
+  warning).
+- Before migration, a fresh external PostgreSQL backup named
+  `reg_engine-before-0032-card-change-notifications-20260716T124944Z.dump`
+  was created and verified non-empty. Production preflight found revision
+  `0031_card_audit_history` and none of the three notification tables.
+- Production migration advanced deliberately to
+  `0032_card_change_notifications`. Post-migration checks confirmed the three
+  notification tables and required card, public-link, inbox, and retention
+  indexes.
+- Backend deployment, frontend artifact deployment, service restart,
+  same-origin frontend/API smoke check, and final server check all passed.
+  The deployed frontend artifacts are `/assets/index-DY7I5B5b.js` and
+  `/assets/index-ByBdbO_x.css`. Final server checks confirmed an active API
+  service, database TCP login, configured attachment storage, and synchronized
+  checkout.
+- The full frontend Vitest gate remains intentionally red under the explicit
+  release authorization: 7 failed, 372 passed, and 32 skipped. The failed
+  tests cover five stale card-value PATCH expectations, one anonymous
+  public-link flow expectation, and one work-experience single-textbox
+  expectation. The direct notification fixture regression was repaired before
+  release. Read-only history comparison confirms that notification production
+  source files did not change after feature commit `54a08446`; only the
+  test-only mock changed.
+- Frontend lint and typecheck passed. Existing non-blocking notices remain:
+  one `react-hooks/exhaustive-deps` warning in `FilledCardLayout.tsx` and the
+  Vite main-chunk size advisory.
+- Browser verification could not start because the configured in-app browser
+  reported `No browser is available`; no claim is made for the authenticated
+  multi-user notification flow or browser console state in this release.
