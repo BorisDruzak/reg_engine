@@ -48,10 +48,14 @@ required-field validation.
 hyphens. Every other character, including digits and punctuation, fails.
 
 `regex` uses full-string matching: the configured expression must match the
-entire non-empty value, not merely a substring. The server compiles and checks
-the expression before a schema field can be created or updated. Empty patterns,
-invalid expressions, non-string messages, unsupported keys, and validation on
-non-text fields are rejected with controlled Russian API errors.
+entire non-empty value, not merely a substring. Expressions use a portable
+browser-compatible subset: literals, character classes, ordinary groups,
+alternatives, quantifiers, escapes, and anchors. Named groups, lookbehind, and
+Python-only escapes or inline flags are rejected. The server validates the same
+subset and compiles the expression before a schema field can be created or
+updated. Empty patterns, invalid expressions, non-string messages, unsupported
+keys, and validation on non-text fields are rejected with controlled Russian
+API errors.
 
 ## Schema Editor
 

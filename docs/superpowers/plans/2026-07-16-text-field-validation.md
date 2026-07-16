@@ -14,6 +14,9 @@
 - Rules are either { "kind": "russian_text", "message": string } or { "kind": "regex", "pattern": string, "message": string }; they are mutually exclusive.
 - Russian text accepts А-Яа-яЁё, spaces, and hyphens only; empty values remain valid and required_mode is unchanged.
 - RegExp validates the complete non-empty string, never just a substring.
+- RegExp syntax is the portable browser-compatible subset: literals, character
+  classes, ordinary groups, alternatives, quantifiers, escapes, and anchors;
+  named groups, lookbehind, Python-only escapes, and inline flags are rejected.
 - No raw RegExp is returned in a value-write error; the configured Russian message is safe to show.
 - Validation applies to card creation, ordinary card editing, public links, and XLSX preview/commit through backend coercion.
 - Existing fields with validation_json=null retain their current behavior; no migration is needed.
@@ -80,7 +83,9 @@ def validate_text_value(value: str, validation: Mapping[str, object] | None) -> 
         raise TextValidationError(str(validation["message"]))
 ~~~
 
-normalize_text_validation must allow only the stated keys, compile the regex at schema-write time, and limit a custom pattern to 512 characters.
+normalize_text_validation must allow only the stated keys, reject syntax outside
+the portable subset before compilation, compile the regex at schema-write time,
+and limit a custom pattern to 512 characters.
 
 - [ ] **Step 4: Run the domain test to verify GREEN**
 
@@ -343,7 +348,14 @@ Expected: FAIL because no local validation, retained draft, or overlay exists.
 
 - [ ] **Step 3: Implement shared validation and overlay**
 
-Mirror only the two supported rule kinds using JavaScript RegExp anchored as ^(?:pattern)$. If a server-provided rule cannot be compiled, fail closed using its configured message. In the text branch of FieldEditorControl, retain invalid draft text and suppress onChange; on recovery, send the valid value and close the error. Render an absolutely positioned role="alert" popover from the card field node; reuse it for public editing and keep it outside grid flow.
+Mirror only the two supported rule kinds using JavaScript RegExp anchored as
+^(?:pattern)$. The schema contract has already limited RegExp to the portable
+browser-compatible subset; if a malformed legacy rule still reaches the client,
+fail closed using its configured message. In the text branch of
+FieldEditorControl, retain invalid draft text and suppress onChange; on
+recovery, send the valid value and close the error. Render an absolutely
+positioned role="alert" popover from the card field node; reuse it for public
+editing and keep it outside grid flow.
 
 - [ ] **Step 4: Run focused client tests to verify GREEN**
 
