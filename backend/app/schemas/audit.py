@@ -41,13 +41,18 @@ class AuditEventRead(BaseModel):
         *,
         actor_display_name: str | None,
         attributed_user_display_name: str | None,
+        old_data_json: dict[str, Any] | None = None,
+        new_data_json: dict[str, Any] | None = None,
     ) -> "AuditEventRead":
-        return cls.model_validate(event).model_copy(
-            update={
-                "actor_display_name": actor_display_name,
-                "attributed_user_display_name": attributed_user_display_name,
-            }
-        )
+        updates: dict[str, Any] = {
+            "actor_display_name": actor_display_name,
+            "attributed_user_display_name": attributed_user_display_name,
+        }
+        if old_data_json is not None:
+            updates["old_data_json"] = old_data_json
+        if new_data_json is not None:
+            updates["new_data_json"] = new_data_json
+        return cls.model_validate(event).model_copy(update=updates)
 
 
 class AuditEventListRead(BaseModel):

@@ -424,7 +424,9 @@ not a hardcoded employee registry.
   card fields (including public-link editing) now retain the local draft until the
   field loses focus, preventing an accidental empty intermediate audit record when
   a person replaces one value with another; an intentional clear followed by blur
-  remains an audited change to an empty value.
+  remains an audited change to an empty value. Reference values in card history
+  are resolved on read to their current human-readable labels, including existing
+  historical events; unavailable references do not expose UUIDs in the interface.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.

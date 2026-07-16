@@ -159,6 +159,7 @@ function actorTypeLabel(actorType: string) {
 type FieldSnapshot = {
   field: { code: string; label: string | null };
   value: unknown;
+  display_value?: unknown;
 };
 
 function fieldSnapshot(value: unknown): FieldSnapshot | null {
@@ -174,7 +175,7 @@ function fieldSnapshot(value: unknown): FieldSnapshot | null {
 
 function formatHistoryValue(value: unknown): string {
   const snapshot = fieldSnapshot(value);
-  const actualValue = snapshot ? snapshot.value : value;
+  const actualValue = snapshot?.display_value ?? snapshot?.value ?? value;
   if (actualValue === null || actualValue === undefined || actualValue === "") {
     return uiText.noValue;
   }

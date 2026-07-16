@@ -22,6 +22,8 @@ from app.models import (
     CardTemplate,
     Organization,
     Permission,
+    ReferenceItem,
+    ReferenceList,
     Registry,
     Role,
     User,
@@ -385,6 +387,80 @@ def test_api_card_history_requires_card_id(
     )
 
     assert response.status_code == 422
+
+
+def test_api_card_history_resolves_reference_labels_for_existing_snapshots(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-reference-admin@example.test",
+        is_superuser=True,
+    )
+    card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="reference-values",
+    )
+    reference_list = ReferenceList(
+        registry_id=card.registry_id,
+        owner_organization_id=None,
+        code="position-groups",
+        name="Position groups",
+        created_by=system_admin.id,
+    )
+    db_session.add(reference_list)
+    db_session.flush()
+    previous_group = ReferenceItem(
+        list_id=reference_list.id,
+        parent_id=None,
+        code="previous-group",
+        label="Previous group",
+        created_by=system_admin.id,
+    )
+    next_group = ReferenceItem(
+        list_id=reference_list.id,
+        parent_id=None,
+        code="next-group",
+        label="Next group",
+        created_by=system_admin.id,
+    )
+    db_session.add_all([previous_group, next_group])
+    db_session.flush()
+    db_session.add(
+        AuditEvent(
+            actor_type="user",
+            actor_user_id=system_admin.id,
+            action="update",
+            object_type="field_value",
+            card_id=card.id,
+            object_id=None,
+            retention_class="card_history",
+            old_data_json={
+                "field": {"code": "position_group", "label": "Position group", "type": "select"},
+                "value": str(previous_group.id),
+            },
+            new_data_json={
+                "field": {"code": "position_group", "label": "Position group", "type": "select"},
+                "value": str(next_group.id),
+            },
+            source="api",
+        )
+    )
+    db_session.flush()
+
+    response = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&card_id={card.id}&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["old_data_json"]["value"] == str(previous_group.id)
+    assert item["new_data_json"]["value"] == str(next_group.id)
+    assert item["old_data_json"]["display_value"] == previous_group.label
+    assert item["new_data_json"]["display_value"] == next_group.label
 
 
 def test_api_healthcheck_remains_independent_from_database() -> None:

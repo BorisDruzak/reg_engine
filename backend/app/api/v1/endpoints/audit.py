@@ -38,6 +38,8 @@ def list_audit_events(
                 item.event,
                 actor_display_name=item.actor_display_name,
                 attributed_user_display_name=item.attributed_user_display_name,
+                old_data_json=item.old_data_json,
+                new_data_json=item.new_data_json,
             )
             for item in events
         ]

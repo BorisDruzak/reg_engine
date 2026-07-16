@@ -10,7 +10,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.constants import AUDIT_RETENTION_CLASSES
-from app.models import AuditEvent, User
+from app.models import AuditEvent, Card, Organization, OrgUnit, ReferenceItem, Registry, User
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 CARD_HISTORY_RETENTION = timedelta(days=14)
@@ -22,6 +22,8 @@ class AuditEventListItem:
     event: AuditEvent
     actor_display_name: str | None
     attributed_user_display_name: str | None
+    old_data_json: dict[str, Any] | None
+    new_data_json: dict[str, Any] | None
 
 
 class FieldAuditSnapshotInput(Protocol):
@@ -63,6 +65,70 @@ def _json_safe_audit_value(value: object | None) -> object | None:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [_json_safe_audit_value(item) for item in value]
     return str(value)
+
+
+_REFERENCE_FIELD_TYPES = {
+    "select",
+    "multi_select",
+    "organization_ref",
+    "org_unit_ref",
+    "user_ref",
+    "card_ref",
+    "registry_ref",
+}
+_UNAVAILABLE_REFERENCE_DISPLAY = "Недоступное значение"
+
+
+def _reference_snapshot_field_type(snapshot: object) -> str | None:
+    if not isinstance(snapshot, Mapping):
+        return None
+    field = snapshot.get("field")
+    if not isinstance(field, Mapping):
+        return None
+    field_type = field.get("type")
+    if not isinstance(field_type, str) or field_type not in _REFERENCE_FIELD_TYPES:
+        return None
+    return field_type
+
+
+def _snapshot_uuid_values(value: object) -> list[UUID]:
+    raw_values = (
+        value if isinstance(value, Sequence) and not isinstance(value, str | bytes) else [value]
+    )
+    result: list[UUID] = []
+    for raw_value in raw_values:
+        try:
+            result.append(raw_value if isinstance(raw_value, UUID) else UUID(str(raw_value)))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return result
+
+
+def _snapshot_with_display_value(
+    snapshot: dict[str, Any] | None,
+    labels_by_type: Mapping[str, Mapping[UUID, str]],
+) -> dict[str, Any] | None:
+    field_type = _reference_snapshot_field_type(snapshot)
+    if field_type is None or snapshot is None:
+        return snapshot
+    value = snapshot.get("value")
+    if value is None or (isinstance(value, Mapping) and value.get("redacted") is True):
+        return snapshot
+    labels = labels_by_type[field_type]
+    display_value: object
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        display_value = [
+            labels.get(item_id, _UNAVAILABLE_REFERENCE_DISPLAY)
+            for item_id in _snapshot_uuid_values(value)
+        ]
+    else:
+        value_ids = _snapshot_uuid_values(value)
+        display_value = (
+            labels.get(value_ids[0], _UNAVAILABLE_REFERENCE_DISPLAY)
+            if value_ids
+            else _UNAVAILABLE_REFERENCE_DISPLAY
+        )
+    return {**snapshot, "display_value": display_value}
 
 
 class AuditService:
@@ -223,6 +289,9 @@ class AuditService:
             .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
             .limit(bounded_limit)
         ).all()
+        display_snapshots = self._card_history_display_snapshots(
+            [event for event, _, _ in rows] if scope == "card_history" else []
+        )
         return [
             AuditEventListItem(
                 event=event,
@@ -230,9 +299,77 @@ class AuditService:
                     "Публичная ссылка" if event.actor_type == "public_link" else actor_display_name
                 ),
                 attributed_user_display_name=attributed_user_display_name,
+                old_data_json=display_snapshots.get((event.id, "old"), event.old_data_json),
+                new_data_json=display_snapshots.get((event.id, "new"), event.new_data_json),
             )
             for event, actor_display_name, attributed_user_display_name in rows
         ]
+
+    def _card_history_display_snapshots(
+        self,
+        events: Sequence[AuditEvent],
+    ) -> dict[tuple[UUID, str], dict[str, Any] | None]:
+        snapshots: list[dict[str, Any]] = []
+        for event in events:
+            for snapshot in (event.old_data_json, event.new_data_json):
+                if (
+                    isinstance(snapshot, dict)
+                    and _reference_snapshot_field_type(snapshot) is not None
+                ):
+                    snapshots.append(snapshot)
+        labels_by_type = self._reference_labels_by_field_type(snapshots)
+        result: dict[tuple[UUID, str], dict[str, Any] | None] = {}
+        for event in events:
+            for position, snapshot in (("old", event.old_data_json), ("new", event.new_data_json)):
+                result[(event.id, position)] = _snapshot_with_display_value(
+                    snapshot,
+                    labels_by_type,
+                )
+        return result
+
+    def _reference_labels_by_field_type(
+        self,
+        snapshots: Sequence[dict[str, Any]],
+    ) -> dict[str, dict[UUID, str]]:
+        ids_by_type: dict[str, set[UUID]] = {
+            "select": set(),
+            "multi_select": set(),
+            "organization_ref": set(),
+            "org_unit_ref": set(),
+            "user_ref": set(),
+            "card_ref": set(),
+            "registry_ref": set(),
+        }
+        for snapshot in snapshots:
+            field_type = _reference_snapshot_field_type(snapshot)
+            if field_type is None:
+                continue
+            ids_by_type[field_type].update(_snapshot_uuid_values(snapshot.get("value")))
+
+        return {
+            "select": self._labels_by_id(ReferenceItem, ids_by_type["select"], "label"),
+            "multi_select": self._labels_by_id(ReferenceItem, ids_by_type["multi_select"], "label"),
+            "organization_ref": self._labels_by_id(
+                Organization, ids_by_type["organization_ref"], "name"
+            ),
+            "org_unit_ref": self._labels_by_id(OrgUnit, ids_by_type["org_unit_ref"], "name"),
+            "user_ref": self._labels_by_id(User, ids_by_type["user_ref"], "display_name"),
+            "card_ref": self._labels_by_id(Card, ids_by_type["card_ref"], "display_name"),
+            "registry_ref": self._labels_by_id(Registry, ids_by_type["registry_ref"], "name"),
+        }
+
+    def _labels_by_id(
+        self,
+        model: Any,
+        ids: set[UUID],
+        attribute: str,
+    ) -> dict[UUID, str]:
+        if not ids:
+            return {}
+        return {
+            item.id: str(getattr(item, attribute))
+            for item in self.session.scalars(select(model).where(model.id.in_(ids))).all()
+        }
 
     def _record(
         self,

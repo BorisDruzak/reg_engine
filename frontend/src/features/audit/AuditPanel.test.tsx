@@ -48,8 +48,16 @@ const historyEvent: AuditEventRead = {
   action: "update",
   object_type: "field_value",
   object_id: "field-value-1",
-  old_data_json: { field: { code: "title", label: "Наименование" }, value: "Было" },
-  new_data_json: { field: { code: "title", label: "Наименование" }, value: "Стало" },
+  old_data_json: {
+    field: { code: "position_group", label: "Группа должностей", type: "select" },
+    value: "11111111-1111-4111-8111-111111111111",
+    display_value: "Предыдущая группа",
+  },
+  new_data_json: {
+    field: { code: "position_group", label: "Группа должностей", type: "select" },
+    value: "22222222-2222-4222-8222-222222222222",
+    display_value: "Новая группа",
+  },
   source: "public_link",
   ip_address: null,
   user_agent: null,
@@ -90,10 +98,11 @@ test("shows a selected card's field change as values rather than JSON", async ()
 
   expect(await screen.findByText(/Системный администратор/)).toBeVisible();
   expect(screen.getAllByText("Публичная ссылка")).toHaveLength(2);
-  expect(screen.getByText(/Наименование/)).toBeVisible();
-  expect(screen.getAllByText("Было")).toHaveLength(2);
-  expect(screen.getAllByText("Стало")).toHaveLength(2);
-  expect(screen.queryByRole("button", { name: "Было" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Группа должностей/)).toBeVisible();
+  expect(screen.getAllByText("Предыдущая группа")).toHaveLength(1);
+  expect(screen.getAllByText("Новая группа")).toHaveLength(1);
+  expect(screen.queryByText("11111111-1111-4111-8111-111111111111")).not.toBeInTheDocument();
+  expect(screen.queryByText("22222222-2222-4222-8222-222222222222")).not.toBeInTheDocument();
   expect(screen.queryByText(/"value"/)).not.toBeInTheDocument();
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith(
