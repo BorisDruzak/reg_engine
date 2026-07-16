@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -15,8 +16,13 @@ from sqlalchemy.orm import Session
 from app.main import create_app
 from app.models import (
     AccessGrant,
+    AuditEvent,
+    Card,
     CardPublicLink,
+    CardTemplate,
+    Organization,
     Permission,
+    Registry,
     Role,
     User,
     role_permissions,
@@ -194,6 +200,170 @@ def _post_json(
     response = client.post(path, json=payload, headers=headers)
     assert response.status_code == expected_status, response.text
     return response.json()
+
+
+def _create_card_for_audit_history(
+    session: Session,
+    *,
+    created_by: User,
+    suffix: str,
+) -> Card:
+    organization = Organization(
+        code=f"audit-history-org-{suffix}",
+        name=f"Audit History Organization {suffix}",
+        created_by=created_by.id,
+    )
+    session.add(organization)
+    session.flush()
+    registry = Registry(
+        code=f"audit-history-registry-{suffix}",
+        name=f"Audit History Registry {suffix}",
+        created_by=created_by.id,
+    )
+    session.add(registry)
+    session.flush()
+    template = CardTemplate(
+        registry_id=registry.id,
+        code=f"audit-history-template-{suffix}",
+        name=f"Audit History Template {suffix}",
+        created_by=created_by.id,
+    )
+    session.add(template)
+    session.flush()
+    card = Card(
+        registry_id=registry.id,
+        card_template_id=template.id,
+        organization_id=organization.id,
+        display_name=f"Audit History Card {suffix}",
+        created_by=created_by.id,
+    )
+    session.add(card)
+    session.flush()
+    return card
+
+
+def test_api_card_history_is_superuser_only_and_isolated_by_card(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-admin@example.test",
+        is_superuser=True,
+    )
+    regular_user = _create_user(db_session, "api-audit-history-regular@example.test")
+    public_link_creator = _create_user(
+        db_session,
+        "api-audit-history-link-creator@example.test",
+    )
+    target_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="target",
+    )
+    other_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="other",
+    )
+    base_time = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+    older_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=target_card.id,
+        object_id=None,
+        retention_class="card_history",
+        old_data_json={"field": {"code": "title"}, "value": "before"},
+        new_data_json={"field": {"code": "title"}, "value": "after"},
+        source="api",
+        created_at=base_time,
+    )
+    newer_public_event = AuditEvent(
+        actor_type="public_link",
+        actor_user_id=None,
+        actor_public_link_id=None,
+        action="public_link.update",
+        object_type="field_value",
+        card_id=target_card.id,
+        object_id=None,
+        attributed_user_id=public_link_creator.id,
+        retention_class="card_history",
+        old_data_json={"field": {"code": "title"}, "value": "after"},
+        new_data_json={"field": {"code": "title"}, "value": "public after"},
+        source="public_link",
+        created_at=base_time + timedelta(minutes=1),
+    )
+    other_card_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=other_card.id,
+        object_id=None,
+        retention_class="card_history",
+        source="api",
+        created_at=base_time + timedelta(minutes=2),
+    )
+    technical_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="login",
+        object_type="session",
+        object_id=None,
+        retention_class="technical",
+        source="api",
+        created_at=base_time + timedelta(minutes=3),
+    )
+    db_session.add_all([older_event, newer_public_event, other_card_event, technical_event])
+    db_session.flush()
+
+    forbidden = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&card_id={target_card.id}",
+        headers=_actor_headers(regular_user.id),
+    )
+    assert forbidden.status_code == 403, forbidden.text
+
+    response = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&card_id={target_card.id}&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [item["id"] for item in items] == [str(newer_public_event.id), str(older_event.id)]
+    assert [item["card_id"] for item in items] == [str(target_card.id), str(target_card.id)]
+    assert items[0]["actor_display_name"] == "Публичная ссылка"
+    assert items[0]["attributed_user_id"] == str(public_link_creator.id)
+    assert items[0]["attributed_user_display_name"] == public_link_creator.display_name
+    assert items[1]["actor_display_name"] == system_admin.display_name
+    assert items[1]["old_data_json"] == older_event.old_data_json
+    assert items[1]["new_data_json"] == older_event.new_data_json
+
+    technical_response = api_client.get(
+        "/api/v1/audit-events?limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+    assert technical_response.status_code == 200, technical_response.text
+    assert [item["id"] for item in technical_response.json()["items"]] == [str(technical_event.id)]
+
+
+def test_api_card_history_requires_card_id(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-required-card@example.test",
+        is_superuser=True,
+    )
+
+    response = api_client.get(
+        "/api/v1/audit-events?scope=card_history",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 422
 
 
 def test_api_healthcheck_remains_independent_from_database() -> None:
@@ -449,7 +619,7 @@ def test_api_can_create_schema_cards_public_links_transfer_and_read_audit(
     assert archived_old.status_code == 200, archived_old.text
 
     audit_response = api_client.get(
-        "/api/v1/audit-events?object_type=card",
+        f"/api/v1/audit-events?scope=card_history&card_id={card['id']}",
         headers=headers,
     )
     assert audit_response.status_code == 200, audit_response.text

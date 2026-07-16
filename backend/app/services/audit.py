@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol, cast
@@ -7,14 +7,21 @@ from uuid import UUID
 
 from sqlalchemy import and_, delete, desc, or_, select
 from sqlalchemy.engine import CursorResult
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.domain.constants import AUDIT_RETENTION_CLASSES
-from app.models import AuditEvent
+from app.models import AuditEvent, User
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 CARD_HISTORY_RETENTION = timedelta(days=14)
 TECHNICAL_AUDIT_RETENTION = timedelta(days=3)
+
+
+@dataclass(frozen=True)
+class AuditEventListItem:
+    event: AuditEvent
+    actor_display_name: str | None
+    attributed_user_display_name: str | None
 
 
 class FieldAuditSnapshotInput(Protocol):
@@ -184,23 +191,47 @@ class AuditService:
         actor_user_id: UUID,
         object_type: str | None = None,
         limit: int = 50,
-    ) -> list[AuditEvent]:
+        scope: str = "technical",
+        card_id: UUID | None = None,
+    ) -> list[AuditEventListItem]:
         if not PermissionService(self.session).is_superuser(actor_user_id):
             raise PermissionDeniedError("Only a system admin can read audit events.")
 
         bounded_limit = max(1, min(limit, 100))
-        criteria = []
+        criteria = [AuditEvent.retention_class == scope]
+        if scope == "card_history":
+            if card_id is None:
+                raise ValueError("A card id is required for card history.")
+            criteria.append(AuditEvent.card_id == card_id)
+        elif scope != "technical":
+            raise ValueError(f"Unsupported audit scope: {scope}")
         if object_type is not None:
             criteria.append(AuditEvent.object_type == object_type)
 
-        return list(
-            self.session.scalars(
-                select(AuditEvent)
-                .where(*criteria)
-                .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
-                .limit(bounded_limit)
-            ).all()
-        )
+        actor_user = aliased(User)
+        attributed_user = aliased(User)
+        rows = self.session.execute(
+            select(
+                AuditEvent,
+                actor_user.display_name,
+                attributed_user.display_name,
+            )
+            .outerjoin(actor_user, AuditEvent.actor_user_id == actor_user.id)
+            .outerjoin(attributed_user, AuditEvent.attributed_user_id == attributed_user.id)
+            .where(*criteria)
+            .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
+            .limit(bounded_limit)
+        ).all()
+        return [
+            AuditEventListItem(
+                event=event,
+                actor_display_name=(
+                    "Публичная ссылка" if event.actor_type == "public_link" else actor_display_name
+                ),
+                attributed_user_display_name=attributed_user_display_name,
+            )
+            for event, actor_display_name, attributed_user_display_name in rows
+        ]
 
     def _record(
         self,
