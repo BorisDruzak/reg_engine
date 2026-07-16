@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 from uuid import UUID
 
 from sqlalchemy import and_, delete, desc, or_, select
@@ -22,6 +22,8 @@ class AuditEventListItem:
     event: AuditEvent
     actor_display_name: str | None
     attributed_user_display_name: str | None
+    card_display_name: str | None
+    card_lifecycle_status: str | None
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
 
@@ -259,6 +261,8 @@ class AuditService:
         limit: int = 50,
         scope: str = "technical",
         card_id: UUID | None = None,
+        card_status: Literal["active", "archived", "all"] = "active",
+        actor_filter_user_id: UUID | None = None,
     ) -> list[AuditEventListItem]:
         if not PermissionService(self.session).is_superuser(actor_user_id):
             raise PermissionDeniedError("Only a system admin can read audit events.")
@@ -266,10 +270,30 @@ class AuditService:
         bounded_limit = max(1, min(limit, 100))
         criteria = [AuditEvent.retention_class == scope]
         if scope == "card_history":
-            if card_id is None:
-                raise ValueError("A card id is required for card history.")
-            criteria.append(AuditEvent.card_id == card_id)
+            if card_id is not None:
+                criteria.append(AuditEvent.card_id == card_id)
             criteria.append(AuditEvent.action != "lifecycle_sync")
+            if card_status == "active":
+                criteria.extend(
+                    [
+                        Card.archived_at.is_(None),
+                        Card.lifecycle_status.not_in(("archived", "superseded")),
+                    ]
+                )
+            elif card_status == "archived":
+                criteria.append(
+                    or_(
+                        Card.archived_at.is_not(None),
+                        Card.lifecycle_status.in_(("archived", "superseded")),
+                    )
+                )
+            if actor_filter_user_id is not None:
+                criteria.append(
+                    or_(
+                        AuditEvent.actor_user_id == actor_filter_user_id,
+                        AuditEvent.attributed_user_id == actor_filter_user_id,
+                    )
+                )
         elif scope != "technical":
             raise ValueError(f"Unsupported audit scope: {scope}")
         if object_type is not None:
@@ -277,20 +301,27 @@ class AuditService:
 
         actor_user = aliased(User)
         attributed_user = aliased(User)
-        rows = self.session.execute(
+        statement = (
             select(
                 AuditEvent,
                 actor_user.display_name,
                 attributed_user.display_name,
+                Card.display_name,
+                Card.lifecycle_status,
             )
             .outerjoin(actor_user, AuditEvent.actor_user_id == actor_user.id)
             .outerjoin(attributed_user, AuditEvent.attributed_user_id == attributed_user.id)
             .where(*criteria)
             .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
             .limit(bounded_limit)
-        ).all()
+        )
+        if scope == "card_history":
+            statement = statement.join(Card, AuditEvent.card_id == Card.id)
+        else:
+            statement = statement.outerjoin(Card, AuditEvent.card_id == Card.id)
+        rows = self.session.execute(statement).all()
         display_snapshots = self._card_history_display_snapshots(
-            [event for event, _, _ in rows] if scope == "card_history" else []
+            [event for event, _, _, _, _ in rows] if scope == "card_history" else []
         )
         return [
             AuditEventListItem(
@@ -299,10 +330,18 @@ class AuditService:
                     "Публичная ссылка" if event.actor_type == "public_link" else actor_display_name
                 ),
                 attributed_user_display_name=attributed_user_display_name,
+                card_display_name=card_display_name,
+                card_lifecycle_status=card_lifecycle_status,
                 old_data_json=display_snapshots.get((event.id, "old"), event.old_data_json),
                 new_data_json=display_snapshots.get((event.id, "new"), event.new_data_json),
             )
-            for event, actor_display_name, attributed_user_display_name in rows
+            for (
+                event,
+                actor_display_name,
+                attributed_user_display_name,
+                card_display_name,
+                card_lifecycle_status,
+            ) in rows
         ]
 
     def _card_history_display_snapshots(

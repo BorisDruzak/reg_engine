@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
@@ -19,9 +19,9 @@ def list_audit_events(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     scope: Annotated[Literal["technical", "card_history"], Query()] = "technical",
     card_id: Annotated[UUID | None, Query()] = None,
+    card_status: Annotated[Literal["active", "archived", "all"], Query()] = "active",
+    actor_filter_user_id: Annotated[UUID | None, Query(alias="actor_user_id")] = None,
 ) -> AuditEventListRead:
-    if scope == "card_history" and card_id is None:
-        raise HTTPException(status_code=422, detail="card_id is required for card history.")
     try:
         events = AuditService(session).list_events_for_actor(
             actor_user_id=actor_user_id,
@@ -29,6 +29,8 @@ def list_audit_events(
             limit=limit,
             scope=scope,
             card_id=card_id,
+            card_status=card_status,
+            actor_filter_user_id=actor_filter_user_id,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -38,6 +40,8 @@ def list_audit_events(
                 item.event,
                 actor_display_name=item.actor_display_name,
                 attributed_user_display_name=item.attributed_user_display_name,
+                card_display_name=item.card_display_name,
+                card_lifecycle_status=item.card_lifecycle_status,
                 old_data_json=item.old_data_json,
                 new_data_json=item.new_data_json,
             )

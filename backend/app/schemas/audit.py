@@ -19,6 +19,8 @@ class AuditEventRead(BaseModel):
     object_type: str
     object_id: UUID | None
     card_id: UUID | None = None
+    card_display_name: str | None = None
+    card_lifecycle_status: str | None = None
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
     source: str
@@ -41,12 +43,16 @@ class AuditEventRead(BaseModel):
         *,
         actor_display_name: str | None,
         attributed_user_display_name: str | None,
+        card_display_name: str | None,
+        card_lifecycle_status: str | None,
         old_data_json: dict[str, Any] | None = None,
         new_data_json: dict[str, Any] | None = None,
     ) -> "AuditEventRead":
         updates: dict[str, Any] = {
             "actor_display_name": actor_display_name,
             "attributed_user_display_name": attributed_user_display_name,
+            "card_display_name": card_display_name,
+            "card_lifecycle_status": card_lifecycle_status,
         }
         if old_data_json is not None:
             updates["old_data_json"] = old_data_json

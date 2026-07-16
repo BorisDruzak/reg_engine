@@ -371,22 +371,168 @@ def test_api_card_history_is_superuser_only_and_isolated_by_card(
     assert [item["id"] for item in technical_response.json()["items"]] == [str(technical_event.id)]
 
 
-def test_api_card_history_requires_card_id(
+def test_api_card_history_general_list_defaults_to_active_cards(
     api_client: TestClient,
     db_session: Session,
 ) -> None:
     system_admin = _create_user(
         db_session,
-        "api-audit-history-required-card@example.test",
+        "api-audit-history-general-admin@example.test",
         is_superuser=True,
     )
+    active_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="general-active",
+    )
+    archived_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="general-archived",
+    )
+    archived_card.lifecycle_status = "archived"
+    archived_card.archived_at = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+    active_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=active_card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    archived_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=archived_card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    lifecycle_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="lifecycle_sync",
+        object_type="card",
+        card_id=active_card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    db_session.add_all([active_event, archived_event, lifecycle_event])
+    db_session.flush()
 
     response = api_client.get(
-        "/api/v1/audit-events?scope=card_history",
+        "/api/v1/audit-events?scope=card_history&limit=50",
         headers=_actor_headers(system_admin.id),
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [item["card_id"] for item in items] == [str(active_card.id)]
+    assert items[0]["card_display_name"] == active_card.display_name
+    assert items[0]["card_lifecycle_status"] == active_card.lifecycle_status
+
+
+def test_api_card_history_status_filter_returns_archived_cards(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-status-admin@example.test",
+        is_superuser=True,
+    )
+    active_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="status-active",
+    )
+    archived_card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="status-archived",
+    )
+    archived_card.lifecycle_status = "archived"
+    archived_card.archived_at = datetime(2026, 7, 16, 8, 0, tzinfo=UTC)
+    active_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=active_card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    archived_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=archived_card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    db_session.add_all([active_event, archived_event])
+    db_session.flush()
+
+    response = api_client.get(
+        "/api/v1/audit-events?scope=card_history&card_status=archived&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()["items"]] == [str(archived_event.id)]
+
+
+def test_api_card_history_actor_filter_includes_public_link_attribution(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-actor-admin@example.test",
+        is_superuser=True,
+    )
+    public_link_creator = _create_user(
+        db_session,
+        "api-audit-history-actor-public-link@example.test",
+    )
+    card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="actor-filter",
+    )
+    public_event = AuditEvent(
+        actor_type="public_link",
+        actor_public_link_id=None,
+        actor_user_id=None,
+        attributed_user_id=public_link_creator.id,
+        action="public_link.update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        source="public_link",
+    )
+    other_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        source="api",
+    )
+    db_session.add_all([public_event, other_event])
+    db_session.flush()
+
+    response = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&actor_user_id={public_link_creator.id}",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()["items"]] == [str(public_event.id)]
 
 
 def test_api_card_history_resolves_reference_labels_for_existing_snapshots(
