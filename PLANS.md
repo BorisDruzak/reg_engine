@@ -408,8 +408,15 @@ not a hardcoded employee registry.
   `AuditPanel` Vitest test, TypeScript, ESLint, and production frontend build
   pass locally. The existing `FilledCardLayout` Hook-dependency warning and
   Vite main-chunk-size advisory remain unchanged. Disposable PostgreSQL
-  verification, migration, deployment, and timer-state confirmation remain
-  part of the release gate.
+  verification, migration, deployment, and timer-state confirmation were
+  completed on 2026-07-16. The disposable PostgreSQL database passed the
+  `0031` upgrade/downgrade/upgrade cycle and 12 focused audit tests. A fresh
+  production backup was made before migration; production now reports revision
+  `0031_card_audit_history`. The API service restarted healthy, the new
+  frontend asset passed the same-origin smoke check, and the enabled timer is
+  scheduled daily with `Persistent=true`. A manual oneshot completed
+  successfully with `deleted_events=0`; normal inactive state after a
+  successful oneshot is explicitly handled by the installer command.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
