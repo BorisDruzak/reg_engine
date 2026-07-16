@@ -423,6 +423,23 @@ describe("FilledCardLayout", () => {
     ).not.toBeInTheDocument();
   });
 
+  test("switches to the next field from pointerdown before the browser click phase", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
+    fireEvent.pointerDown(screen.getByTestId("filled-field-layout-last-name"));
+
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
+      }),
+    );
+    expect(await screen.findByLabelText("Фамилия")).toHaveFocus();
+  });
+
   test("immediately saves choices", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

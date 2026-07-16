@@ -5782,3 +5782,17 @@ available.
   same-origin frontend/API smoke check. A fresh server check then confirmed the
   active service, database role login, attachment storage configuration, and
   synchronized checkout.
+
+#### Direct switching between card fields
+
+Status: locally verified; release pending.
+
+- Pressing another editable card field now starts the ordinary safe transition
+  on `pointerdown`, before the browser can blur the current field. The current
+  dirty value is saved by the existing editor path and the requested field then
+  receives focus; a click outside every card field still saves and closes the
+  editor.
+- A focused regression test sends only the early pointer event while the first
+  field contains an unsaved value. It confirms that the first value is saved
+  and the second field receives focus. Tab navigation is intentionally outside
+  this focused change.

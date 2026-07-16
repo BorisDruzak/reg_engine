@@ -167,7 +167,7 @@ export function FilledCardLayout({
     const closeFieldOnOutsidePointer = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
       const fieldNode = event.target.closest<HTMLElement>("[data-card-field-id]");
-      if (fieldNode?.dataset.cardFieldId === activeFieldId) return;
+      if (fieldNode) return;
       commitAndClose();
     };
 
