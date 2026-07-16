@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -20,6 +21,8 @@ from app.models import (
     Card,
     CardPublicLink,
     CardTemplate,
+    FormBlock,
+    FormField,
     Organization,
     Permission,
     ReferenceItem,
@@ -607,6 +610,135 @@ def test_api_card_history_resolves_reference_labels_for_existing_snapshots(
     assert item["new_data_json"]["value"] == str(next_group.id)
     assert item["old_data_json"]["display_value"] == previous_group.label
     assert item["new_data_json"]["display_value"] == next_group.label
+
+
+def test_api_card_history_diff_normalizes_composite_events_and_keeps_field_redaction(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "api-audit-history-diff-admin@example.test",
+        is_superuser=True,
+    )
+    card = _create_card_for_audit_history(
+        db_session,
+        created_by=system_admin,
+        suffix="diff",
+    )
+    block = FormBlock(
+        registry_id=card.registry_id,
+        code="audit-history-diff",
+        title="Audit history diff",
+        created_by=system_admin.id,
+    )
+    db_session.add(block)
+    db_session.flush()
+    public_field = FormField(
+        block_id=block.id,
+        code="public_field",
+        label="Публичное поле",
+        field_type="text",
+        created_by=system_admin.id,
+    )
+    sensitive_field = FormField(
+        block_id=block.id,
+        code="sensitive_field",
+        label="Чувствительное поле",
+        field_type="text",
+        sensitivity_level="restricted",
+        created_by=system_admin.id,
+    )
+    db_session.add_all([public_field, sensitive_field])
+    db_session.flush()
+    base_time = datetime(2026, 7, 16, 9, 0, tzinfo=UTC)
+    sensitive_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "field": {
+                "id": str(sensitive_field.id),
+                "code": sensitive_field.code,
+                "label": sensitive_field.label,
+                "type": sensitive_field.field_type,
+            },
+            "value": {"redacted": True},
+        },
+        new_data_json={
+            "field": {
+                "id": str(sensitive_field.id),
+                "code": sensitive_field.code,
+                "label": sensitive_field.label,
+                "type": sensitive_field.field_type,
+            },
+            "value": {"redacted": True},
+        },
+        source="api",
+        created_at=base_time,
+    )
+    public_access_event = AuditEvent(
+        actor_type="user",
+        actor_user_id=system_admin.id,
+        action="update",
+        object_type="card_public_access",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "card_id": str(card.id),
+            "public_view_enabled": True,
+            "public_edit_enabled": False,
+            "fields": [
+                {
+                    "field_id": str(public_field.id),
+                    "public_visible": True,
+                    "public_editable": True,
+                }
+            ],
+            "sensitive_snapshot": "secret-before",
+        },
+        new_data_json={
+            "card_id": str(card.id),
+            "public_view_enabled": True,
+            "public_edit_enabled": True,
+            "fields": [
+                {
+                    "field_id": str(public_field.id),
+                    "public_visible": True,
+                    "public_editable": True,
+                }
+            ],
+            "sensitive_snapshot": "secret-after",
+        },
+        source="api",
+        created_at=base_time + timedelta(minutes=1),
+    )
+    db_session.add_all([sensitive_event, public_access_event])
+    db_session.flush()
+
+    response = api_client.get(
+        f"/api/v1/audit-events?scope=card_history&card_id={card.id}&limit=50",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["old_data_json"] == {
+        "changes": [
+            {
+                "label": "Публичное редактирование",
+                "old": "Отключено",
+                "new": "Включено",
+            }
+        ]
+    }
+    assert item["new_data_json"] == item["old_data_json"]
+    assert "secret-before" not in json.dumps(item, ensure_ascii=False)
+    assert response.json()["items"][1]["old_data_json"] == sensitive_event.old_data_json
+    assert response.json()["items"][1]["new_data_json"] == sensitive_event.new_data_json
 
 
 def test_api_healthcheck_remains_independent_from_database() -> None:

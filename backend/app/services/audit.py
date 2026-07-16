@@ -10,7 +10,16 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.constants import AUDIT_RETENTION_CLASSES
-from app.models import AuditEvent, Card, Organization, OrgUnit, ReferenceItem, Registry, User
+from app.models import (
+    AuditEvent,
+    Card,
+    FormField,
+    Organization,
+    OrgUnit,
+    ReferenceItem,
+    Registry,
+    User,
+)
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 CARD_HISTORY_RETENTION = timedelta(days=14)
@@ -79,6 +88,173 @@ _REFERENCE_FIELD_TYPES = {
     "registry_ref",
 }
 _UNAVAILABLE_REFERENCE_DISPLAY = "Недоступное значение"
+_UNAVAILABLE_AUDIT_VALUE = "Недоступно"
+_EMPTY_AUDIT_VALUE = "Не указано"
+_CARD_LIFECYCLE_DISPLAY = {
+    "draft": "Черновик",
+    "active": "Активна",
+    "archived": "Архивирована",
+    "superseded": "Заменена",
+}
+_CARD_CHANGE_FIELDS = (
+    ("display_name", "Название карточки"),
+    ("org_unit_id", "Подразделение организации"),
+    ("lifecycle_status", "Статус карточки"),
+    ("public_view_enabled", "Публичный просмотр"),
+    ("public_edit_enabled", "Публичное редактирование"),
+)
+_PUBLIC_ACCESS_CHANGE_FIELDS = (
+    ("public_view_enabled", "Публичный просмотр"),
+    ("public_edit_enabled", "Публичное редактирование"),
+)
+
+
+def _normalized_change_snapshot(
+    *,
+    object_type: str,
+    old_data: dict[str, Any] | None,
+    new_data: dict[str, Any] | None,
+    field_labels_by_id: Mapping[UUID, str] | None = None,
+    org_unit_labels_by_id: Mapping[UUID, str] | None = None,
+) -> list[dict[str, object]] | None:
+    """Return a display-safe diff for card-composite audit snapshots."""
+    if object_type not in {"card", "card_public_access"}:
+        return None
+
+    old_snapshot = old_data if isinstance(old_data, Mapping) else {}
+    new_snapshot = new_data if isinstance(new_data, Mapping) else {}
+    changes: list[dict[str, object]] = []
+    fields = _CARD_CHANGE_FIELDS if object_type == "card" else _PUBLIC_ACCESS_CHANGE_FIELDS
+    for field_name, label in fields:
+        old_value = _normalized_card_change_value(
+            field_name,
+            old_snapshot.get(field_name),
+            org_unit_labels_by_id=org_unit_labels_by_id or {},
+        )
+        new_value = _normalized_card_change_value(
+            field_name,
+            new_snapshot.get(field_name),
+            org_unit_labels_by_id=org_unit_labels_by_id or {},
+        )
+        if old_value != new_value:
+            changes.append({"label": label, "old": old_value, "new": new_value})
+
+    if object_type == "card_public_access":
+        changes.extend(
+            _normalized_public_field_access_changes(
+                old_snapshot=old_snapshot,
+                new_snapshot=new_snapshot,
+                field_labels_by_id=field_labels_by_id or {},
+            )
+        )
+
+    if changes:
+        return changes
+    return [
+        {
+            "label": (
+                "Настройки публичного доступа"
+                if object_type == "card_public_access"
+                else "Изменение карточки"
+            ),
+            "old": None,
+            "new": "Изменено",
+        }
+    ]
+
+
+def _normalized_card_change_value(
+    field_name: str,
+    value: object,
+    *,
+    org_unit_labels_by_id: Mapping[UUID, str],
+) -> object:
+    if field_name in {"public_view_enabled", "public_edit_enabled"}:
+        return _localized_bool(value)
+    if field_name == "display_name":
+        return value if isinstance(value, str) and value else _EMPTY_AUDIT_VALUE
+    if field_name == "lifecycle_status":
+        return _CARD_LIFECYCLE_DISPLAY.get(str(value), _UNAVAILABLE_AUDIT_VALUE)
+    if field_name == "org_unit_id":
+        if value is None:
+            return _EMPTY_AUDIT_VALUE
+        try:
+            org_unit_id = value if isinstance(value, UUID) else UUID(str(value))
+        except (TypeError, ValueError, AttributeError):
+            return _UNAVAILABLE_AUDIT_VALUE
+        return org_unit_labels_by_id.get(org_unit_id, _UNAVAILABLE_AUDIT_VALUE)
+    return _UNAVAILABLE_AUDIT_VALUE
+
+
+def _localized_bool(value: object) -> str:
+    if value is True:
+        return "Включено"
+    if value is False:
+        return "Отключено"
+    return _UNAVAILABLE_AUDIT_VALUE
+
+
+def _normalized_public_field_access_changes(
+    *,
+    old_snapshot: Mapping[str, Any],
+    new_snapshot: Mapping[str, Any],
+    field_labels_by_id: Mapping[UUID, str],
+) -> list[dict[str, object]]:
+    old_settings = _public_field_settings_by_id(old_snapshot.get("fields"))
+    new_settings = _public_field_settings_by_id(new_snapshot.get("fields"))
+    changes: list[dict[str, object]] = []
+    for field_id in sorted(set(old_settings) | set(new_settings), key=str):
+        label = field_labels_by_id.get(field_id, "Недоступное поле")
+        old_setting = old_settings.get(field_id, {})
+        new_setting = new_settings.get(field_id, {})
+        for key, suffix in (
+            ("public_visible", "публичный просмотр"),
+            ("public_editable", "публичное редактирование"),
+        ):
+            old_value = _localized_bool(old_setting.get(key))
+            new_value = _localized_bool(new_setting.get(key))
+            if old_value != new_value:
+                changes.append(
+                    {
+                        "label": f"{label}: {suffix}",
+                        "old": old_value,
+                        "new": new_value,
+                    }
+                )
+    return changes
+
+
+def _public_field_settings_by_id(value: object) -> dict[UUID, Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
+        return {}
+    result: dict[UUID, Mapping[str, Any]] = {}
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            field_id = UUID(str(item.get("field_id")))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        result[field_id] = item
+    return result
+
+
+def _public_access_snapshot_field_ids(snapshot: object) -> set[UUID]:
+    if not isinstance(snapshot, Mapping):
+        return set()
+    return set(_public_field_settings_by_id(snapshot.get("fields")))
+
+
+def _snapshot_org_unit_ids(snapshot: object) -> set[UUID]:
+    if not isinstance(snapshot, Mapping):
+        return set()
+    value = snapshot.get("org_unit_id")
+    if value is None:
+        return set()
+    try:
+        return {value if isinstance(value, UUID) else UUID(str(value))}
+    except (TypeError, ValueError, AttributeError):
+        return set()
 
 
 def _reference_snapshot_field_type(snapshot: object) -> str | None:
@@ -349,6 +525,8 @@ class AuditService:
         events: Sequence[AuditEvent],
     ) -> dict[tuple[UUID, str], dict[str, Any] | None]:
         snapshots: list[dict[str, Any]] = []
+        public_field_ids: set[UUID] = set()
+        org_unit_ids: set[UUID] = set()
         for event in events:
             for snapshot in (event.old_data_json, event.new_data_json):
                 if (
@@ -356,13 +534,28 @@ class AuditService:
                     and _reference_snapshot_field_type(snapshot) is not None
                 ):
                     snapshots.append(snapshot)
+                public_field_ids.update(_public_access_snapshot_field_ids(snapshot))
+                org_unit_ids.update(_snapshot_org_unit_ids(snapshot))
         labels_by_type = self._reference_labels_by_field_type(snapshots)
+        public_field_labels = self._labels_by_id(FormField, public_field_ids, "label")
+        org_unit_labels = self._labels_by_id(OrgUnit, org_unit_ids, "name")
         result: dict[tuple[UUID, str], dict[str, Any] | None] = {}
         for event in events:
+            changes = _normalized_change_snapshot(
+                object_type=event.object_type,
+                old_data=event.old_data_json,
+                new_data=event.new_data_json,
+                field_labels_by_id=public_field_labels,
+                org_unit_labels_by_id=org_unit_labels,
+            )
             for position, snapshot in (("old", event.old_data_json), ("new", event.new_data_json)):
-                result[(event.id, position)] = _snapshot_with_display_value(
-                    snapshot,
-                    labels_by_type,
+                result[(event.id, position)] = (
+                    {"changes": changes}
+                    if changes is not None
+                    else _snapshot_with_display_value(
+                        snapshot,
+                        labels_by_type,
+                    )
                 )
         return result
 
