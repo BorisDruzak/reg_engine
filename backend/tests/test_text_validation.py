@@ -71,6 +71,29 @@ def test_normalize_rejects_python_only_unicode_escape() -> None:
         normalize_text_validation({"kind": "regex", "pattern": r"\U00000041", "message": "Ошибка"})
 
 
+def test_normalize_rejects_python_only_end_of_string_escape() -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": r"А\z", "message": "Ошибка"})
+
+
+@pytest.mark.parametrize("pattern", [r"А*+", r"А++", r"А?+", r"А{1,2}+"])
+def test_normalize_rejects_possessive_quantifiers(pattern: str) -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+
+def test_normalize_allows_the_agreed_portable_regex_grammar() -> None:
+    rule = normalize_text_validation(
+        {
+            "kind": "regex",
+            "pattern": r"^(А|Б)[А-Я]{1,2}\s[0-9]+$",
+            "message": "Ошибка",
+        }
+    )
+
+    assert rule is not None
+
+
 @pytest.mark.parametrize(
     "rule",
     [
