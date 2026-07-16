@@ -752,6 +752,12 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/card-change-notifications?limit=20")) {
         return jsonResponse({ unread_count: 0, items: [] });
       }
+      const cardChangeNotificationSubscriptionMatch = pathname.match(
+        /^\/api\/v1\/cards\/([^/]+)\/change-notification-subscription$/,
+      );
+      if (cardChangeNotificationSubscriptionMatch && (!init?.method || init.method === "GET")) {
+        return jsonResponse({ enabled: false });
+      }
       if (url.endsWith("/api/v1/organizations/tree")) {
         return jsonResponse({ items: organizationTreeItems() });
       }
