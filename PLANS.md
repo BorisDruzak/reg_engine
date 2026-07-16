@@ -5785,7 +5785,7 @@ available.
 
 #### Direct switching between card fields
 
-Status: locally verified; release pending.
+Status: pushed and deployed to production on 2026-07-16; server verification pending.
 
 - Pressing another editable card field now starts the ordinary safe transition
   on `pointerdown`, before the browser can blur the current field. The current
@@ -5796,3 +5796,7 @@ Status: locally verified; release pending.
   field contains an unsaved value. It confirms that the first value is saved
   and the second field receives focus. Tab navigation is intentionally outside
   this focused change.
+- Release commit `ab1ccbae` is pushed to `origin/main`. The server checkout
+  was fast-forwarded to that commit, frontend asset `/assets/index-Be-6rP2z.js`
+  was deployed, `reg-engine.service` was restarted, and the same-origin
+  frontend/API smoke check passed.
