@@ -677,7 +677,7 @@ class RegistrySchemaService:
         )
         self._validate_field_type(field_type)
         self._validate_required_mode(required_mode)
-        validation_json = self._normalize_validation_for_field(
+        normalized_validation_json = self._normalize_validation_for_field(
             field_type=field_type,
             validation_json=validation_json,
         )
@@ -707,7 +707,7 @@ class RegistrySchemaService:
             field_type=field_type,
             position=position,
             required_mode=required_mode,
-            validation_json=validation_json,
+            validation_json=normalized_validation_json,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
             options_config_json=options_config_json,
@@ -731,7 +731,7 @@ class RegistrySchemaService:
                 "code": code,
                 "field_type": field_type,
                 "required_mode": required_mode,
-                "validation_json": validation_json,
+                "validation_json": normalized_validation_json,
                 "is_list_display": is_list_display,
                 "display_config_json": display_config_json,
             },
