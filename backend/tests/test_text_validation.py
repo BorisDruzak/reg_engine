@@ -210,6 +210,16 @@ def test_normalize_allows_the_agreed_portable_regex_grammar() -> None:
     assert rule is not None
 
 
+def test_normalize_accepts_inline_editor_default_regex_payload() -> None:
+    payload = {
+        "kind": "regex",
+        "pattern": r"[^\r\n]{1,256}",
+        "message": "Введите значение в нужном формате",
+    }
+
+    assert normalize_text_validation(payload) == payload
+
+
 @pytest.mark.parametrize(
     "rule",
     [

@@ -18,7 +18,7 @@ const RUSSIAN_TEXT_VALIDATION_DEFAULT: TextValidationRule = {
 
 const REGEX_VALIDATION_DEFAULT: TextValidationRule = {
   kind: "regex",
-  pattern: ".*",
+  pattern: "[^\\r\\n]{1,256}",
   message: "Введите значение в нужном формате",
 };
 

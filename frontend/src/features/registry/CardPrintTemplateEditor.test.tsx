@@ -812,7 +812,7 @@ test("existing field edits send type reference list and static-text controls wit
   );
 });
 
-test("sends and clears text validation in existing field update payloads", async () => {
+test("sends the portable default regex validation payload for an existing field update", async () => {
   const user = userEvent.setup();
   const api = createEditorFetchMock();
   vi.stubGlobal("fetch", api.fetchMock);
@@ -829,7 +829,7 @@ test("sends and clears text validation in existing field update payloads", async
   expect(api.updatedFieldPayloads[0]).toMatchObject({
     validation_json: {
       kind: "regex",
-      pattern: ".*",
+      pattern: "[^\\r\\n]{1,256}",
       message: "Введите нужный формат",
     },
   });
