@@ -45,6 +45,8 @@ const historyEvent: AuditEventRead = {
   actor_display_name: "Публичная ссылка",
   attributed_user_display_name: "Системный администратор",
   card_id: card.id,
+  card_display_name: card.display_name,
+  card_lifecycle_status: card.lifecycle_status,
   action: "update",
   object_type: "field_value",
   object_id: "field-value-1",

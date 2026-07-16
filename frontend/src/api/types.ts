@@ -951,6 +951,8 @@ export type AuditEventRead = {
   actor_display_name?: string | null;
   attributed_user_display_name?: string | null;
   card_id?: string | null;
+  card_display_name?: string | null;
+  card_lifecycle_status?: string | null;
   action: string;
   object_type: string;
   object_id: string | null;
