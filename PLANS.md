@@ -5785,7 +5785,7 @@ available.
 
 #### Direct switching between card fields
 
-Status: pushed and deployed to production on 2026-07-16; server verification pending.
+Status: pushed, deployed, and server-verified on 2026-07-16.
 
 - Pressing another editable card field now starts the ordinary safe transition
   on `pointerdown`, before the browser can blur the current field. The current
@@ -5799,4 +5799,6 @@ Status: pushed and deployed to production on 2026-07-16; server verification pen
 - Release commit `ab1ccbae` is pushed to `origin/main`. The server checkout
   was fast-forwarded to that commit, frontend asset `/assets/index-Be-6rP2z.js`
   was deployed, `reg-engine.service` was restarted, and the same-origin
-  frontend/API smoke check passed.
+  frontend/API smoke check passed. The final server check confirmed the active
+  service, database role login, configured attachment storage, and synchronized
+  checkout.
