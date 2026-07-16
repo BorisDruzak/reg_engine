@@ -1,5 +1,6 @@
 import pytest
 
+from app.domain import text_validation
 from app.domain.text_validation import (
     TextValidationError,
     normalize_text_validation,
@@ -121,10 +122,14 @@ def test_regex_rule_rejects_non_bmp_or_surrogate_values(value: str) -> None:
         validate_text_value(value, rule)
 
 
-@pytest.mark.parametrize("pattern", [r"^(a+)+$", r"^(ab*)+$", r"^(ab?){2}$"])
-def test_normalize_rejects_nested_quantified_groups(pattern: str) -> None:
-    with pytest.raises(TextValidationError):
-        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+@pytest.mark.parametrize(
+    "pattern",
+    [r"^(a+)+$", r"^(a|aa)+$", r"^a*a*a*a*a*a*$"],
+)
+def test_normalize_leaves_runtime_timeout_guarded_patterns_available(pattern: str) -> None:
+    rule = normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+    assert rule is not None
 
 
 def test_normalize_allows_single_quantified_group() -> None:
@@ -133,17 +138,30 @@ def test_normalize_allows_single_quantified_group() -> None:
     assert rule is not None
 
 
-@pytest.mark.parametrize("pattern", [r"^(a|aa)+$", r"^(a|b){2}$"])
-def test_normalize_rejects_quantified_groups_with_alternation(pattern: str) -> None:
-    with pytest.raises(TextValidationError):
-        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+def test_regex_timeout_maps_pathological_evaluation_to_configured_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(text_validation, "_REGEX_MATCH_TIMEOUT_SECONDS", 0.000001)
+    original_fullmatch = text_validation.regex.fullmatch
+    timeout_observed = False
 
+    def fullmatch_with_timeout_probe(*args: object, **kwargs: object) -> object:
+        nonlocal timeout_observed
+        try:
+            return original_fullmatch(*args, **kwargs)
+        except TimeoutError:
+            timeout_observed = True
+            raise
 
-def test_normalize_rejects_adjacent_ambiguous_repeated_atoms() -> None:
-    with pytest.raises(TextValidationError):
-        normalize_text_validation(
-            {"kind": "regex", "pattern": r"^a*a*a*a*a*a*$", "message": "Ошибка"}
-        )
+    monkeypatch.setattr(text_validation.regex, "fullmatch", fullmatch_with_timeout_probe)
+    rule = normalize_text_validation(
+        {"kind": "regex", "pattern": r"^(a|aa)+$", "message": "Слишком сложная проверка"}
+    )
+
+    with pytest.raises(TextValidationError, match="Слишком сложная проверка"):
+        validate_text_value("a" * 10_000 + "!", rule)
+
+    assert timeout_observed
 
 
 def test_normalize_allows_adjacent_disjoint_repeated_classes() -> None:
