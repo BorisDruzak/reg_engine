@@ -5683,3 +5683,20 @@ Status: complete, pushed to `main`, deployed, and Browser-verified on 2026-07-15
   Browser proof on an existing administrative card confirmed `19` selected as
   range `0..2`, then month `2` selected as `0..1`, with no console errors and
   no value saved during the check.
+
+#### Initial work-experience save audit fix
+
+Status: complete, pushed, deployed, and server verified.
+
+- The first value of a `work_experience` field is now auditable: an absent
+  previous anchor is treated as an empty old value, rather than as corrupt
+  stored data. This lets a new value such as `1 day, 1 month, 1 year` persist.
+- The production symptom was reproduced against the affected card in an
+  explicitly rolled-back diagnostic transaction. The same request failed
+  before the fix while the audit snapshot was reading the newly-created,
+  still-empty field value.
+- Regression test
+  `test_work_experience_field_persists_private_anchor_and_projects_api_reads`
+  passed on the updated server code against the disposable `reg_engine_test`
+  database. `reg-engine.service` was restarted and the healthcheck and server
+  checks passed after deployment.
