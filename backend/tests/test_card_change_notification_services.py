@@ -1,19 +1,25 @@
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app.models import (
     AccessGrant,
+    AuditEvent,
+    Card,
     CardChangeNotification,
     CardPublicLink,
+    Organization,
     Permission,
+    Registry,
     Role,
     User,
     role_permissions,
@@ -21,7 +27,7 @@ from app.models import (
 from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
-from app.services.permissions import PermissionDeniedError
+from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -153,10 +159,13 @@ def notification_context(db_session: Session) -> dict[str, object]:
     db_session.add_all([reader_notification, manager_notification])
     db_session.flush()
     return {
+        "admin": admin,
         "reader": reader,
         "manager": manager,
         "outsider": outsider,
         "card": card,
+        "organization": organization,
+        "registry": registry,
         "public_link": public_link,
         "reader_grant": reader_grant,
         "reader_notification": reader_notification,
@@ -178,7 +187,7 @@ def test_subscriptions_require_card_visibility_and_public_link_ownership(
     assert isinstance(reader, User)
     assert isinstance(manager, User)
     assert isinstance(outsider, User)
-    assert isinstance(card, object)
+    assert isinstance(card, Card)
     assert isinstance(public_link, CardPublicLink)
     assert service.set_card_subscription_for_actor(
         actor_user_id=reader.id,
@@ -252,3 +261,165 @@ def test_inbox_is_scoped_to_actor_and_filters_lost_card_access(
     unread_count, notifications = service.list_for_actor(actor_user_id=reader.id, limit=20)
     assert unread_count == 0
     assert notifications == []
+
+
+def test_inbox_counts_only_visible_cards_paginates_and_keeps_archived_cards(
+    db_session: Session,
+    notification_context: dict[str, object],
+) -> None:
+    service = CardChangeNotificationService(db_session)
+    admin = notification_context["admin"]
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    organization = notification_context["organization"]
+    registry = notification_context["registry"]
+
+    assert isinstance(admin, User)
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(organization, Organization)
+    assert isinstance(registry, Registry)
+
+    card.lifecycle_status = "archived"
+    card.archived_at = datetime.now(UTC)
+    invisible_organization = OrganizationService(db_session).create_child_for_actor(
+        actor_user_id=admin.id,
+        parent_id=organization.id,
+        code="notification-hidden-child",
+        name="Недоступная организация",
+    )
+    invisible_card = CardService(db_session).create_card_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        organization_id=invisible_organization.id,
+        display_name="Недоступная карточка",
+    )
+    archived_notification = CardChangeNotification(
+        user_id=reader.id,
+        card_id=card.id,
+        actor_display_name="Исполнитель",
+        changes_json=[{"label": "Архив", "before": None, "after": "Да"}],
+    )
+    inaccessible_notification = CardChangeNotification(
+        user_id=reader.id,
+        card_id=invisible_card.id,
+        actor_display_name="Исполнитель",
+        changes_json=[{"label": "Скрыто", "before": None, "after": "Да"}],
+    )
+    db_session.add_all([archived_notification, inaccessible_notification])
+    db_session.flush()
+
+    unread_count, page = service.list_for_actor(actor_user_id=reader.id, limit=1)
+    assert unread_count == 2
+    assert len(page) == 1
+
+    _unread_count, visible_notifications = service.list_for_actor(
+        actor_user_id=reader.id,
+        limit=20,
+    )
+    assert {item.id for item in visible_notifications} >= {archived_notification.id}
+    assert inaccessible_notification.id not in {item.id for item in visible_notifications}
+
+
+def test_inbox_calculates_one_visibility_scope_per_registry(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    notification_context: dict[str, object],
+) -> None:
+    service = CardChangeNotificationService(db_session)
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    registry = notification_context["registry"]
+
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(registry, Registry)
+    db_session.add(
+        CardChangeNotification(
+            user_id=reader.id,
+            card_id=card.id,
+            actor_display_name="Исполнитель",
+            changes_json=[{"label": "Ещё поле", "before": None, "after": "Да"}],
+        )
+    )
+    db_session.flush()
+
+    calls: list[UUID | None] = []
+    original = PermissionService.get_organization_scope_ids
+
+    def record_scope(
+        permissions: PermissionService,
+        actor_user_id: UUID,
+        *,
+        registry_id: UUID | None = None,
+    ) -> set[UUID]:
+        calls.append(registry_id)
+        return original(permissions, actor_user_id, registry_id=registry_id)
+
+    monkeypatch.setattr(PermissionService, "get_organization_scope_ids", record_scope)
+
+    unread_count, notifications = service.list_for_actor(actor_user_id=reader.id, limit=20)
+
+    assert unread_count == 2
+    assert len(notifications) == 2
+    assert calls == [registry.id]
+
+
+def test_subscription_toggles_write_technical_audit_without_inbox_events(
+    db_session: Session,
+    notification_context: dict[str, object],
+) -> None:
+    service = CardChangeNotificationService(db_session)
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    public_link = notification_context["public_link"]
+
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(public_link, CardPublicLink)
+    inbox_count_before = db_session.scalar(select(func.count(CardChangeNotification)))
+
+    service.set_card_subscription_for_actor(
+        actor_user_id=reader.id,
+        card_id=card.id,
+        enabled=True,
+    )
+    service.set_card_subscription_for_actor(
+        actor_user_id=reader.id,
+        card_id=card.id,
+        enabled=False,
+    )
+    service.set_public_link_subscription_for_creator(
+        actor_user_id=reader.id,
+        public_link_id=public_link.id,
+        enabled=True,
+    )
+    service.set_public_link_subscription_for_creator(
+        actor_user_id=reader.id,
+        public_link_id=public_link.id,
+        enabled=False,
+    )
+
+    events = list(
+        db_session.scalars(
+            select(AuditEvent)
+            .where(AuditEvent.actor_user_id == reader.id)
+            .where(
+                AuditEvent.object_type.in_(
+                    {
+                        "card_change_notification_subscription",
+                        "public_link_change_notification_subscription",
+                    }
+                )
+            )
+            .order_by(AuditEvent.created_at, AuditEvent.id)
+        ).all()
+    )
+    assert [(event.object_type, event.action, event.new_data_json) for event in events] == [
+        ("card_change_notification_subscription", "subscribe", {"enabled": True}),
+        ("card_change_notification_subscription", "unsubscribe", {"enabled": False}),
+        ("public_link_change_notification_subscription", "subscribe", {"enabled": True}),
+        ("public_link_change_notification_subscription", "unsubscribe", {"enabled": False}),
+    ]
+    assert all(event.retention_class == "technical" for event in events)
+    assert db_session.scalar(select(func.count(CardChangeNotification))) == inbox_count_before

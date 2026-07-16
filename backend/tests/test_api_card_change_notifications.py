@@ -307,3 +307,42 @@ def test_inbox_endpoints_are_actor_scoped_idempotent_and_omit_lost_access(
     hidden = api_client.get(inbox_path, headers=_headers(creator.id))
     assert hidden.status_code == 200, hidden.text
     assert hidden.json() == {"unread_count": 0, "items": []}
+
+
+def test_inbox_dto_ignores_extra_persisted_audit_like_change_keys(
+    api_client: TestClient,
+    db_session: Session,
+    notification_api_context: dict[str, object],
+) -> None:
+    creator = notification_api_context["creator"]
+    creator_notification = notification_api_context["creator_notification"]
+
+    assert isinstance(creator, User)
+    assert isinstance(creator_notification, CardChangeNotification)
+    creator_notification.changes_json = [
+        {
+            "label": "Поле",
+            "before": "Было",
+            "after": "Стало",
+            "description": "Безопасное описание",
+            "audit_event_id": "audit-id-must-not-leak",
+            "token_hash": "hash-must-not-leak",
+            "raw_metadata": {"stored_file_id": "file-id-must-not-leak"},
+        }
+    ]
+    db_session.flush()
+
+    response = api_client.get(
+        "/api/v1/card-change-notifications?limit=20",
+        headers=_headers(creator.id),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["changes"] == [
+        {
+            "label": "Поле",
+            "before": "Было",
+            "after": "Стало",
+            "description": "Безопасное описание",
+        }
+    ]

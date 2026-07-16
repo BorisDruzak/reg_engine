@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import (
     Card,
@@ -11,6 +12,7 @@ from app.models import (
     CardPublicLink,
     PublicLinkChangeNotificationSubscription,
 )
+from app.services.audit import AuditService
 from app.services.cards import CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.public_links import PublicLinkError
@@ -50,9 +52,24 @@ class CardChangeNotificationService:
             self.session.add(
                 CardChangeNotificationSubscription(user_id=actor_user_id, card_id=card_id)
             )
+            self.session.flush()
+            self._record_subscription_audit(
+                actor_user_id=actor_user_id,
+                action="subscribe",
+                object_type="card_change_notification_subscription",
+                object_id=card_id,
+                enabled=True,
+            )
         elif not enabled and subscription is not None:
             self.session.delete(subscription)
-        self.session.flush()
+            self.session.flush()
+            self._record_subscription_audit(
+                actor_user_id=actor_user_id,
+                action="unsubscribe",
+                object_type="card_change_notification_subscription",
+                object_id=card_id,
+                enabled=False,
+            )
         return enabled
 
     def get_public_link_subscription_for_creator(
@@ -99,9 +116,24 @@ class CardChangeNotificationService:
                     public_link_id=public_link_id,
                 )
             )
+            self.session.flush()
+            self._record_subscription_audit(
+                actor_user_id=actor_user_id,
+                action="subscribe",
+                object_type="public_link_change_notification_subscription",
+                object_id=public_link_id,
+                enabled=True,
+            )
         elif not enabled and subscription is not None:
             self.session.delete(subscription)
-        self.session.flush()
+            self.session.flush()
+            self._record_subscription_audit(
+                actor_user_id=actor_user_id,
+                action="unsubscribe",
+                object_type="public_link_change_notification_subscription",
+                object_id=public_link_id,
+                enabled=False,
+            )
         return enabled
 
     def list_for_actor(
@@ -110,26 +142,33 @@ class CardChangeNotificationService:
         actor_user_id: UUID,
         limit: int,
     ) -> tuple[int, list[CardChangeNotification]]:
+        visible_criteria = self._visible_notification_card_criteria(actor_user_id=actor_user_id)
+        if visible_criteria is None:
+            return 0, []
+        criteria = [CardChangeNotification.user_id == actor_user_id, visible_criteria]
+        unread_count = int(
+            self.session.scalar(
+                select(func.count())
+                .select_from(CardChangeNotification)
+                .join(Card, Card.id == CardChangeNotification.card_id)
+                .where(*criteria, CardChangeNotification.read_at.is_(None))
+            )
+            or 0
+        )
         notifications = list(
             self.session.scalars(
                 select(CardChangeNotification)
+                .join(Card, Card.id == CardChangeNotification.card_id)
                 .where(CardChangeNotification.user_id == actor_user_id)
+                .where(visible_criteria)
                 .order_by(
                     CardChangeNotification.created_at.desc(),
                     CardChangeNotification.id.desc(),
                 )
+                .limit(limit)
             ).all()
         )
-        visible_notifications = [
-            notification
-            for notification in notifications
-            if self._can_see_notification_card(
-                actor_user_id=actor_user_id,
-                notification=notification,
-            )
-        ]
-        unread_count = sum(notification.read_at is None for notification in visible_notifications)
-        return unread_count, visible_notifications[:limit]
+        return unread_count, notifications
 
     def mark_read_for_actor(
         self,
@@ -209,4 +248,49 @@ class CardChangeNotificationService:
             actor_user_id,
             card.organization_id,
             registry_id=card.registry_id,
+        )
+
+    def _visible_notification_card_criteria(
+        self,
+        *,
+        actor_user_id: UUID,
+    ) -> ColumnElement[bool] | None:
+        registry_ids = self.session.scalars(
+            select(Card.registry_id)
+            .join(CardChangeNotification, CardChangeNotification.card_id == Card.id)
+            .where(CardChangeNotification.user_id == actor_user_id)
+            .distinct()
+        ).all()
+        permissions = PermissionService(self.session)
+        criteria = []
+        for registry_id in registry_ids:
+            scope_ids = permissions.get_organization_scope_ids(
+                actor_user_id,
+                registry_id=registry_id,
+            )
+            if scope_ids:
+                criteria.append(
+                    and_(
+                        Card.registry_id == registry_id,
+                        Card.organization_id.in_(scope_ids),
+                    )
+                )
+        return or_(*criteria) if criteria else None
+
+    def _record_subscription_audit(
+        self,
+        *,
+        actor_user_id: UUID,
+        action: str,
+        object_type: str,
+        object_id: UUID,
+        enabled: bool,
+    ) -> None:
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action=action,
+            object_type=object_type,
+            object_id=object_id,
+            new_data_json={"enabled": enabled},
+            retention_class="technical",
         )
