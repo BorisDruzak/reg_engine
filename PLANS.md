@@ -420,7 +420,11 @@ not a hardcoded employee registry.
   history rendering excludes automatic `lifecycle_sync` events, so one field
   write is not paired with a technical lifecycle row; it displays the field
   label and direct `Было` / `Стало` values instead of JSON. Distinct sequential
-  field writes remain separate, preserving their real before/after chain.
+  field writes remain separate, preserving their real before/after chain. Free-form
+  card fields (including public-link editing) now retain the local draft until the
+  field loses focus, preventing an accidental empty intermediate audit record when
+  a person replaces one value with another; an intentional clear followed by blur
+  remains an audited change to an empty value.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.

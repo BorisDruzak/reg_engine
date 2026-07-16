@@ -18,6 +18,7 @@ export type BlockFieldControlProps = {
   fileRefControl?: ReactNode;
   autoFocus?: boolean;
   onChange: (value: FieldEditorState) => void;
+  onBlur?: () => void;
 };
 
 export function BlockFieldControl({
@@ -31,6 +32,7 @@ export function BlockFieldControl({
   fileRefControl,
   autoFocus = false,
   onChange,
+  onBlur,
 }: BlockFieldControlProps) {
   const controlRef = useRef<HTMLDivElement>(null);
   const autoOpenChoice = autoFocus && pickerFieldTypes.has(field.field_type);
@@ -67,7 +69,16 @@ export function BlockFieldControl({
   }
 
   return (
-    <div ref={controlRef} className="filled-card-block-field-control" aria-busy={pending}>
+    <div
+      ref={controlRef}
+      className="filled-card-block-field-control"
+      aria-busy={pending}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+        onBlur?.();
+      }}
+    >
       <FieldEditorControl
         fieldType={field.field_type}
         label={field.label}

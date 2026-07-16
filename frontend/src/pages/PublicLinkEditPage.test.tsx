@@ -91,9 +91,11 @@ describe("PublicLinkEditPage", () => {
         .querySelector(".card-layout-presentation-description"),
     ).toHaveTextContent("Укажите публичный статус");
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Публичный статус" }), {
+    const statusInput = screen.getByRole("textbox", { name: "Публичный статус" });
+    fireEvent.change(statusInput, {
       target: { value: "Подтверждено" },
     });
+    fireEvent.blur(statusInput);
     await waitFor(() => expect(editCalls()).toHaveLength(1));
     expect(
       screen.getByRole("button", { name: "Основные сведения: нужно заполнить 1 из 4" }),
@@ -126,9 +128,11 @@ describe("PublicLinkEditPage", () => {
       "Черновик",
     );
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Публичный статус" }), {
+    const statusInput = screen.getByRole("textbox", { name: "Публичный статус" });
+    fireEvent.change(statusInput, {
       target: { value: "Подтверждено" },
     });
+    fireEvent.blur(statusInput);
     await waitFor(() => expect(editCalls()).toHaveLength(1));
 
     preview = { ...preview, lifecycle_status: "active" };
@@ -400,7 +404,7 @@ describe("PublicLinkEditPage", () => {
     );
   });
 
-  test("serializes field autosaves without replacing the focused local draft", async () => {
+  test("saves a public text draft only after the field loses focus", async () => {
     editResponseMode = "deferred";
     renderPage();
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
@@ -408,29 +412,23 @@ describe("PublicLinkEditPage", () => {
 
     fireEvent.change(statusInput, { target: { value: "first" } });
     expect(await screen.findByText("Сохранение…")).toBeInTheDocument();
-    await waitFor(() => expect(editCalls()).toHaveLength(1));
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    expect(editCalls()).toHaveLength(0);
 
     fireEvent.change(statusInput, { target: { value: "latest" } });
     expect(statusInput).toHaveValue("latest");
-    expect(editCalls()).toHaveLength(1);
+    expect(editCalls()).toHaveLength(0);
 
-    resolveNextEdit("first canonical");
-    await waitFor(() => expect(editCalls()).toHaveLength(2));
-    expect(statusInput).toHaveValue("latest");
-    expect(screen.getByText("Сохранение…")).toBeInTheDocument();
-    expect(screen.queryByText("Все изменения сохранены")).not.toBeInTheDocument();
+    fireEvent.blur(statusInput);
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
+    expect(editCalls()[0].body).toMatchObject({ value: "latest" });
 
     resolveNextEdit("latest canonical");
     expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
-    expect(statusInput).toHaveFocus();
     expect(statusInput).toHaveValue("latest");
-    expect(editCalls().map((call) => (call.body as { value: unknown }).value)).toEqual([
-      "first",
-      "latest",
-    ]);
   });
 
-  test("debounces a public date field and flushes it on blur", async () => {
+  test("keeps a public date draft unsaved until blur", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-public-date", "field-public-date", 3, 1, 1, 6),
     );
@@ -444,7 +442,7 @@ describe("PublicLinkEditPage", () => {
     try {
       fireEvent.change(input, { target: { value: "2001-02-03" } });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(599);
+        await vi.advanceTimersByTimeAsync(600);
       });
       expect(editCalls()).toHaveLength(0);
 
@@ -468,6 +466,7 @@ describe("PublicLinkEditPage", () => {
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
 
     fireEvent.change(statusInput, { target: { value: "rejected locally" } });
+    fireEvent.blur(statusInput);
 
     expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
     expect(statusInput).toHaveValue("rejected locally");
@@ -480,10 +479,12 @@ describe("PublicLinkEditPage", () => {
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
 
     fireEvent.change(statusInput, { target: { value: "strict rejected" } });
+    fireEvent.blur(statusInput);
     expect(await screen.findByText("Запрос не выполнен")).toBeInTheDocument();
 
     editResponseMode = "success";
     fireEvent.change(statusInput, { target: { value: "strict recovered" } });
+    fireEvent.blur(statusInput);
     expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
     expect(statusInput).toHaveValue("strict recovered");
   });
@@ -511,6 +512,7 @@ describe("PublicLinkEditPage", () => {
     expect(statusInputs[0]).toHaveValue("drafted");
     expect(statusInputs[1]).toHaveValue("second instance");
     fireEvent.change(statusInputs[1], { target: { value: "updated second" } });
+    fireEvent.blur(statusInputs[1]);
     await waitFor(() => expect(editCalls()).toHaveLength(1));
     expect(editCalls()[0].body).toMatchObject({
       block_instance_id: "instance-main-2",
@@ -668,6 +670,7 @@ describe("PublicLinkEditPage", () => {
       });
 
       fireEvent.change(statusInput, { target: { value: "denied edit" } });
+      fireEvent.blur(statusInput);
 
       expect(
         await screen.findByRole("heading", { name: "Доступ к карточке закрыт" }),

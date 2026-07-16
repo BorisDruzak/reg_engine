@@ -709,16 +709,12 @@ function PublicFieldEditor({
   const latestVersionRef = useRef(0);
   const queuedSaveRef = useRef<{ value: unknown; version: number } | null>(null);
   const savingRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (saveTimerRef.current !== null) {
-        clearTimeout(saveTimerRef.current);
-      }
     };
   }, []);
 
@@ -763,10 +759,6 @@ function PublicFieldEditor({
   }
 
   function flushPendingSave() {
-    if (saveTimerRef.current !== null) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
     void drainSaveQueue();
   }
 
@@ -782,15 +774,7 @@ function PublicFieldEditor({
       };
       setSaveState("saving");
       onSaveStateChange(fieldKey, "saving");
-      if (usesDelayedPublicSave(field.field_type)) {
-        if (saveTimerRef.current !== null) {
-          clearTimeout(saveTimerRef.current);
-        }
-        saveTimerRef.current = setTimeout(() => {
-          saveTimerRef.current = null;
-          void drainSaveQueue();
-        }, 600);
-      } else {
+      if (!usesDelayedPublicSave(field.field_type)) {
         void drainSaveQueue();
       }
     } catch (error) {
@@ -802,14 +786,20 @@ function PublicFieldEditor({
   }
 
   return (
-    <div className="public-inline-field-control">
+    <div
+      className="public-inline-field-control"
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+        flushPendingSave();
+      }}
+    >
       <FieldEditorControl
         fieldType={field.field_type}
         label={field.label}
         hint={field.description}
         options={field.options}
         value={rawValue}
-        onBlur={flushPendingSave}
         onChange={updateRawValue}
       />
       {saveState === "saving" && <p className="public-muted">Сохранение…</p>}

@@ -357,7 +357,7 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
-  test("keeps an automatically saved text field open and focused", async () => {
+  test("keeps a text draft unsaved until its field loses focus", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(<EditableFilledCard saveValues={saveValues} />);
@@ -365,15 +365,15 @@ describe("FilledCardLayout", () => {
     await user.click(screen.getByTestId("filled-field-layout-first-name"));
     fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
 
-    await waitFor(
-      () =>
-        expect(saveValues).toHaveBeenCalledWith({
-          values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
-        }),
-      { timeout: 1500 },
+    await new Promise((resolve) => window.setTimeout(resolve, 700));
+    expect(saveValues).not.toHaveBeenCalled();
+
+    fireEvent.blur(screen.getByLabelText("Имя"));
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledWith({
+        values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
+      }),
     );
-    expect(screen.getByLabelText("Имя")).toHaveFocus();
-    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
   });
 
   test("saves the current field before opening another field", async () => {
@@ -414,7 +414,7 @@ describe("FilledCardLayout", () => {
     );
   });
 
-  test("debounces date saves while its input remains focused", async () => {
+  test("keeps a date draft unsaved until its field loses focus", async () => {
     vi.useFakeTimers();
     const saveValues = vi.fn().mockResolvedValue(undefined);
     render(<EditableFilledCard saveValues={saveValues} />);
@@ -426,17 +426,17 @@ describe("FilledCardLayout", () => {
       fireEvent.change(input, { target: { value: "2001-02-03" } });
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(599);
+        await vi.advanceTimersByTimeAsync(600);
       });
       expect(saveValues).not.toHaveBeenCalled();
 
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
+        fireEvent.blur(input);
+        await vi.advanceTimersByTimeAsync(0);
       });
       expect(saveValues).toHaveBeenCalledWith({
         values: [{ field_id: "birth-date", value: "2001-02-03", block_instance_id: null }],
       });
-      expect(screen.getByLabelText("Дата рождения")).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }

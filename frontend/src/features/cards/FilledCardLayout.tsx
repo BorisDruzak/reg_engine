@@ -324,9 +324,10 @@ export function FilledCardLayout({
                           blockEditor.updateAndSave(
                             field.id,
                             nextValue,
-                            immediateAutosaveFieldTypes.has(field.field_type) ? 0 : 600,
+                            immediateAutosaveFieldTypes.has(field.field_type) ? 0 : null,
                           )
                         }
+                        onBlur={blockEditor.flushPendingSave}
                       />
                     );
                   }}

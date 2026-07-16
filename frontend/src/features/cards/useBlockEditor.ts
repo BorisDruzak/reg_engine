@@ -29,7 +29,8 @@ export type BlockEditorState = {
     fieldId: string,
     initial: Record<string, unknown>,
   ) => void;
-  updateAndSave: (fieldId: string, value: FieldEditorState, delayMs: number) => void;
+  updateAndSave: (fieldId: string, value: FieldEditorState, delayMs: number | null) => void;
+  flushPendingSave: () => void;
   commitAndClose: () => void;
   cancel: () => void;
 };
@@ -90,7 +91,7 @@ export function useBlockEditor({
     [editableFieldIds, fieldsById],
   );
 
-  const updateAndSave = useCallback((fieldId: string, value: FieldEditorState, delayMs: number) => {
+  const updateAndSave = useCallback((fieldId: string, value: FieldEditorState, delayMs: number | null) => {
     setSession((current) => {
       if (!current || current.pending || !(fieldId in current.values)) return current;
       const values = { ...current.values, [fieldId]: value };
@@ -104,6 +105,13 @@ export function useBlockEditor({
         dirty: isDirty(current.initialValues, values),
         autoSaveDelayMs: delayMs,
       };
+    });
+  }, []);
+
+  const flushPendingSave = useCallback(() => {
+    setSession((current) => {
+      if (!current || current.pending || !current.dirty) return current;
+      return { ...current, autoSaveDelayMs: 0 };
     });
   }, []);
 
@@ -205,6 +213,7 @@ export function useBlockEditor({
     errors: session?.errors ?? emptyErrors,
     openField,
     updateAndSave,
+    flushPendingSave,
     commitAndClose,
     cancel,
   };
