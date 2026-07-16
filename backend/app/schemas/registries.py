@@ -90,6 +90,7 @@ class FormFieldCreate(BaseModel):
     description: str | None = None
     position: int = 0
     required_mode: str = "not_required"
+    validation_json: dict[str, Any] | None = None
     options_source_type: str | None = None
     options_source_id: UUID | None = None
     options_config_json: dict[str, Any] | None = None
@@ -110,6 +111,7 @@ class FormFieldRead(BaseModel):
     field_type: str
     position: int
     required_mode: str
+    validation_json: dict[str, Any] | None
     options_source_type: str | None
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None
@@ -127,6 +129,7 @@ class FormFieldUpdate(BaseModel):
     field_type: str | None = None
     position: int | None = None
     required_mode: str | None = None
+    validation_json: dict[str, Any] | None = None
     options_source_type: str | None = None
     options_source_id: UUID | None = None
     options_config_json: dict[str, Any] | None = None

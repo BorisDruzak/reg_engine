@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import registries as registry_endpoints
 from app.models import CardTemplate, FormBlock, FormField, ReferenceList, Registry
-from app.schemas.registries import FormBlockUpdate, FormFieldUpdate
+from app.schemas.registries import FormBlockUpdate, FormFieldCreate, FormFieldRead, FormFieldUpdate
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
 
@@ -151,6 +151,7 @@ def test_field_update_endpoint_forwards_every_editable_schema_property(
                 "options_source_type": "reference_list",
                 "options_source_id": reference_list_id,
                 "options_config_json": {"allow_empty": False},
+                "validation_json": {"kind": "russian_text", "message": "Use Russian letters"},
                 "public_visible": False,
                 "public_editable": True,
                 "is_list_display": True,
@@ -165,10 +166,57 @@ def test_field_update_endpoint_forwards_every_editable_schema_property(
     assert captured["field_type"] == "select"
     assert captured["options_source_type"] == "reference_list"
     assert captured["options_source_id"] == reference_list_id
+    assert captured["validation_json"] == {
+        "kind": "russian_text",
+        "message": "Use Russian letters",
+    }
     assert captured["public_visible"] is False
     assert captured["public_editable"] is True
     assert result.field_type == "select"
     assert result.options_source_id == reference_list_id
+
+
+def test_field_create_endpoint_forwards_text_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    block_id = uuid4()
+    field = _field(block_id=block_id)
+    captured: dict[str, object] = {}
+
+    class FakeRegistrySchemaService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def create_field_for_actor(self, **payload: object) -> FormField:
+            captured.update(payload)
+            field.validation_json = payload["validation_json"]  # type: ignore[assignment]
+            return field
+
+    monkeypatch.setattr(registry_endpoints, "RegistrySchemaService", FakeRegistrySchemaService)
+
+    result = registry_endpoints.create_field(
+        block_id=block_id,
+        payload=FormFieldCreate.model_validate(
+            {
+                "code": "name",
+                "label": "Name",
+                "field_type": "text",
+                "validation_json": {
+                    "kind": "russian_text",
+                    "message": "Use Russian letters",
+                },
+            }
+        ),
+        session=Mock(spec=Session),
+        actor_user_id=actor_user_id,
+    )
+
+    assert captured["validation_json"] == {
+        "kind": "russian_text",
+        "message": "Use Russian letters",
+    }
+    assert result.validation_json == captured["validation_json"]
 
 
 def test_block_update_endpoint_forwards_complete_semantic_payload(
@@ -318,6 +366,7 @@ def test_field_update_service_persists_reference_visibility_and_static_text_with
         "field_type": "static_text",
         "position": 0,
         "required_mode": "not_required",
+        "validation_json": None,
         "options_source_type": None,
         "options_source_id": None,
         "options_config_json": {"static_text": "Только для чтения"},
@@ -327,6 +376,116 @@ def test_field_update_service_persists_reference_visibility_and_static_text_with
         "public_visible": True,
         "public_editable": False,
     }
+
+
+def test_field_schema_payloads_expose_validation_json() -> None:
+    validation = {"kind": "russian_text", "message": "Use Russian letters"}
+    field = _field(block_id=uuid4())
+    field.validation_json = validation
+
+    assert (
+        FormFieldCreate.model_validate(
+            {
+                "code": "name",
+                "label": "Name",
+                "field_type": "text",
+                "validation_json": validation,
+            }
+        ).validation_json
+        == validation
+    )
+    assert (
+        FormFieldUpdate.model_validate({"validation_json": validation}).validation_json
+        == validation
+    )
+    assert FormFieldRead.model_validate(field).validation_json == validation
+
+
+def test_text_field_validation_is_persisted_and_included_in_field_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    block = FormBlock(id=uuid4(), registry_id=uuid4(), code="main", title="Main")
+    session = Mock(spec=Session)
+    session.scalar.return_value = None
+    service = RegistrySchemaService(session)
+    audit_events: list[dict[str, object]] = []
+    validation = {"kind": "russian_text", "message": "Use Russian letters"}
+
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "ensure_base_card_template_for_registry", lambda **_payload: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **payload: audit_events.append(payload),
+    )
+
+    field = service.create_field_for_actor(
+        actor_user_id=actor_user_id,
+        block_id=block.id,
+        code="name",
+        label="Name",
+        field_type="text",
+        validation_json=validation,
+    )
+
+    assert field.validation_json == validation
+    assert audit_events[-1]["new_data_json"]["validation_json"] == validation
+
+
+def test_schema_rejects_text_validation_for_non_text_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block = FormBlock(id=uuid4(), registry_id=uuid4(), code="main", title="Main")
+    session = Mock(spec=Session)
+    session.scalar.return_value = None
+    service = RegistrySchemaService(session)
+
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+
+    with pytest.raises(RegistrySchemaError, match="Text validation"):
+        service.create_field_for_actor(
+            actor_user_id=uuid4(),
+            block_id=block.id,
+            code="birth_date",
+            label="Birth date",
+            field_type="date",
+            validation_json={"kind": "russian_text", "message": "Invalid"},
+        )
+
+    session.add.assert_not_called()
+
+
+def test_field_type_transition_away_from_text_clears_validation_and_audits_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    field = _field(block_id=uuid4())
+    validation = {"kind": "russian_text", "message": "Use Russian letters"}
+    field.validation_json = validation
+    block = FormBlock(id=field.block_id, registry_id=uuid4(), code="main", title="Main")
+    service = RegistrySchemaService(Mock(spec=Session))
+    audit_events: list[dict[str, object]] = []
+
+    monkeypatch.setattr(service, "_get_active_field", lambda _field_id: field)
+    monkeypatch.setattr(service, "_get_active_block", lambda _block_id: block)
+    monkeypatch.setattr(service, "_ensure_mutable_field", lambda _field: None)
+    monkeypatch.setattr(service, "_require_schema_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "ensure_base_card_template_for_registry", lambda **_payload: None)
+    monkeypatch.setattr(
+        "app.services.registry_schema.AuditService.record_user_event",
+        lambda _self, **payload: audit_events.append(payload),
+    )
+
+    updated = service.update_field_for_actor(
+        actor_user_id=uuid4(),
+        field_id=field.id,
+        field_type="date",
+    )
+
+    assert updated.validation_json is None
+    assert audit_events[-1]["old_data_json"]["validation_json"] == validation
+    assert audit_events[-1]["new_data_json"]["validation_json"] is None
 
 
 def test_field_update_service_rejects_reference_list_from_another_registry(

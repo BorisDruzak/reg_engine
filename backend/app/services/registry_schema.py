@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import FIELD_TYPES, REQUIRED_MODES
+from app.domain.text_validation import TextValidationError, normalize_text_validation
 from app.models import (
     Card,
     CardTemplate,
@@ -657,6 +658,7 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int = 0,
         required_mode: str = "not_required",
+        validation_json: dict[str, object] | None = None,
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
         options_config_json: dict[str, object] | None = None,
@@ -675,6 +677,10 @@ class RegistrySchemaService:
         )
         self._validate_field_type(field_type)
         self._validate_required_mode(required_mode)
+        validation_json = self._normalize_validation_for_field(
+            field_type=field_type,
+            validation_json=validation_json,
+        )
         options_config_json = self._normalize_options_config_for_field(
             field_type,
             options_config_json,
@@ -701,6 +707,7 @@ class RegistrySchemaService:
             field_type=field_type,
             position=position,
             required_mode=required_mode,
+            validation_json=validation_json,
             options_source_type=options_source_type,
             options_source_id=options_source_id,
             options_config_json=options_config_json,
@@ -724,6 +731,7 @@ class RegistrySchemaService:
                 "code": code,
                 "field_type": field_type,
                 "required_mode": required_mode,
+                "validation_json": validation_json,
                 "is_list_display": is_list_display,
                 "display_config_json": display_config_json,
             },
@@ -755,6 +763,7 @@ class RegistrySchemaService:
         field_type: str | object = UNSET_FIELD_UPDATE,
         position: int | None = None,
         required_mode: str | None = None,
+        validation_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
         options_source_type: str | None | object = UNSET_FIELD_UPDATE,
         options_source_id: UUID | None | object = UNSET_FIELD_UPDATE,
         options_config_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
@@ -775,6 +784,7 @@ class RegistrySchemaService:
             "field_type": field.field_type,
             "position": field.position,
             "required_mode": field.required_mode,
+            "validation_json": field.validation_json,
             "options_source_type": field.options_source_type,
             "options_source_id": (
                 str(field.options_source_id) if field.options_source_id is not None else None
@@ -805,6 +815,16 @@ class RegistrySchemaService:
             effective_field_type = field_type
         if required_mode is not None:
             self._validate_required_mode(required_mode)
+        candidate_validation = (
+            field.validation_json if validation_json is UNSET_FIELD_UPDATE else validation_json
+        )
+        if not isinstance(candidate_validation, (dict, type(None))):
+            raise RegistrySchemaError("Text validation must be an object.")
+        effective_validation = self._normalize_validation_for_field(
+            field_type=effective_field_type,
+            validation_json=candidate_validation,
+            reject_non_text_validation=(validation_json is not UNSET_FIELD_UPDATE),
+        )
         effective_options_source_type = (
             field.options_source_type
             if options_source_type is UNSET_FIELD_UPDATE
@@ -886,6 +906,7 @@ class RegistrySchemaService:
         if position is not None:
             field.position = position
         field.required_mode = effective_required_mode
+        field.validation_json = effective_validation
         field.options_source_type = effective_options_source_type
         field.options_source_id = effective_options_source_id
         field.options_config_json = effective_options_config
@@ -909,6 +930,7 @@ class RegistrySchemaService:
                 "field_type": field.field_type,
                 "position": field.position,
                 "required_mode": field.required_mode,
+                "validation_json": field.validation_json,
                 "options_source_type": field.options_source_type,
                 "options_source_id": (
                     str(field.options_source_id) if field.options_source_id is not None else None
@@ -1524,6 +1546,22 @@ class RegistrySchemaService:
         if duplicate is not None:
             raise RegistrySchemaError("Field code already exists in this registry.")
         return cleaned
+
+    @staticmethod
+    def _normalize_validation_for_field(
+        *,
+        field_type: str,
+        validation_json: dict[str, object] | None,
+        reject_non_text_validation: bool = True,
+    ) -> dict[str, str] | None:
+        if field_type != "text":
+            if reject_non_text_validation and validation_json is not None:
+                raise RegistrySchemaError("Text validation is available only for text fields.")
+            return None
+        try:
+            return normalize_text_validation(validation_json)
+        except TextValidationError as exc:
+            raise RegistrySchemaError(str(exc)) from exc
 
     def _normalize_field_display_config(
         self,

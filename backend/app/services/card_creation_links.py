@@ -656,6 +656,7 @@ class CardCreationLinkService:
             field_type=field_model.field_type,
             required_mode=field_model.required_mode,
             value=None,
+            validation_json=field_model.validation_json,
             options_source_type=field_model.options_source_type,
             options_source_id=field_model.options_source_id,
             options_config_json=field_model.options_config_json,

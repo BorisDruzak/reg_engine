@@ -96,6 +96,7 @@ class PublicLinkPreviewFieldRead(BaseModel):
     field_type: str
     required_mode: str
     value: Any
+    validation_json: dict[str, Any] | None
     options_source_type: str | None
     options_source_id: UUID | None
     options_config_json: dict[str, Any] | None

@@ -85,6 +85,7 @@ class PublicPreviewField:
     value: object | None
     options_source_type: str | None
     options_source_id: UUID | None
+    validation_json: dict[str, Any] | None = None
     options_config_json: dict[str, Any] | None = None
     display_config_json: dict[str, Any] | None = None
     public_editable: bool = False
@@ -1280,6 +1281,7 @@ class PublicLinkService:
             field_type=field_model.field_type,
             required_mode=field_model.required_mode,
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
+            validation_json=field_model.validation_json,
             options_source_type=field_model.options_source_type,
             options_source_id=field_model.options_source_id,
             options_config_json=field_model.options_config_json,

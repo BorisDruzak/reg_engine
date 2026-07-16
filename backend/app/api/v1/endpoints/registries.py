@@ -331,6 +331,7 @@ def create_field(
             description=payload.description,
             position=payload.position,
             required_mode=payload.required_mode,
+            validation_json=payload.validation_json,
             options_source_type=payload.options_source_type,
             options_source_id=payload.options_source_id,
             options_config_json=payload.options_config_json,
@@ -369,6 +370,11 @@ def update_field(
             ),
             position=payload.position,
             required_mode=payload.required_mode,
+            validation_json=(
+                payload.validation_json
+                if "validation_json" in payload.model_fields_set
+                else UNSET_FIELD_UPDATE
+            ),
             options_source_type=(
                 payload.options_source_type
                 if "options_source_type" in payload.model_fields_set
