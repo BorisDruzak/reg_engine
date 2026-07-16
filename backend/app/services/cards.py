@@ -2871,6 +2871,8 @@ class CardService:
         if field_model.field_type == "json":
             return field_value.value_json
         if field_model.field_type == "work_experience":
+            if field_value.value_json is None:
+                return None
             try:
                 value_json = field_value.value_json
                 if (
