@@ -7,6 +7,27 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-16 saved-card choice-popup overlay is released in `aab7dd59`.
+  `SearchableChoicePicker` now marks its existing open state, and its search
+  list is absolutely positioned above the card canvas. Only the containing
+  field and canvas restore visible overflow while a list is open; closed fields
+  retain their former clipping and grid geometry. This covers select,
+  multi-select, organization, and organization-unit pickers without a portal,
+  API, persistence, or migration change. A regression test first failed because
+  the root lacked `is-open`, then passed alongside the direct-field regression
+  suite: 37 frontend tests in two files. TypeScript, scoped ESLint, Prettier,
+  production Vite build, `git diff --check`, and the full local
+  `scripts/check.ps1 -SkipRemote` gate pass (backend: 345 passed, 261 skipped,
+  with the existing Starlette/httpx deprecation warning). The server checkout
+  is synchronized to `aab7dd59`; `reg-engine.service`, PostgreSQL access, and
+  attachment-storage checks pass. Frontend deployment published
+  `index-GXoCvqIF.js` and `index-RnNVTnSp.css` with a successful same-origin
+  health smoke check. Live administrator-card verification opened `Группа
+  должностей` without selecting a value: the popup computed as `absolute`, the
+  field remained 59 px high while the popup extended below it, Escape closed
+  the list, and browser console errors/warnings were absent. No card value was
+  changed during the check.
+
 - 2026-07-16 card-audit general history is implemented locally in commits
   `c2508ee9` through `b35b0a33`: default active-card history, status/card/actor
   filters, card grouping and reset, safe field and standalone event rendering.

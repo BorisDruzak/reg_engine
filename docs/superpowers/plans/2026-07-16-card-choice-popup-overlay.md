@@ -4,7 +4,7 @@
 
 **Goal:** Display saved-card choice lists above the card canvas without changing card-field grid geometry.
 
-**Architecture:** `SearchableChoicePicker` exposes its existing open state as an `is-open` root class. CSS makes the picker a positioning context and its popup an absolute overlay. A narrow `:has(.searchable-choice-picker.is-open)` rule lifts only the saved-card field node containing the open popup above adjacent fields and restores visible overflow only for that state.
+**Architecture:** `SearchableChoicePicker` exposes its existing open state as an `is-open` root class. CSS makes the picker a positioning context and its popup an absolute overlay. Narrow `:has(.searchable-choice-picker.is-open)` rules lift only the saved-card field node and card canvas containing the open popup, restoring visible overflow only for that state.
 
 **Tech Stack:** React, TypeScript, CSS, Vitest, Testing Library.
 
@@ -30,7 +30,7 @@
 - Consumes: local `isOpen` state already maintained by `SearchableChoicePicker`.
 - Produces: `searchable-choice-picker is-open` on the root only while the popup is rendered.
 
-- [ ] **Step 1: Write failing component and CSS contract tests**
+- [x] **Step 1: Write failing component and CSS contract tests**
 
 Import `readFileSync` and define:
 
@@ -59,7 +59,7 @@ test("marks an open choice picker for overlay positioning", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test to verify RED**
+- [x] **Step 2: Run the focused test to verify RED**
 
 Run:
 
@@ -69,7 +69,7 @@ pnpm -C frontend exec vitest run src/features/cards/FieldEditorControl.test.tsx
 
 Expected: FAIL because the picker root has no `is-open` class and overlay selectors do not exist.
 
-- [ ] **Step 3: Add the minimal component and CSS implementation**
+- [x] **Step 3: Add the minimal component and CSS implementation**
 
 Set the root class without new state:
 
@@ -111,11 +111,15 @@ Use these CSS rules:
   overflow: visible;
   z-index: 8;
 }
+
+.filled-card-layout .card-web-layout-canvas:has(.searchable-choice-picker.is-open) {
+  overflow: visible;
+}
 ```
 
-Remove the popup's former in-flow grid layout only; keep its search and options children unchanged.
+Keep the popup grid and its search/options children unchanged; absolute positioning removes that grid from document flow.
 
-- [ ] **Step 4: Run the focused test to verify GREEN**
+- [x] **Step 4: Run the focused test to verify GREEN**
 
 Run:
 
@@ -126,11 +130,11 @@ pnpm -C frontend exec vitest run src/features/cards/FilledCardLayout.test.tsx
 
 Expected: both files pass, including filtering, selection, Escape, immediate choice opening, and direct card-field switching.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add frontend/src/features/cards/SearchableChoicePicker.tsx frontend/src/features/cards/FieldEditorControl.test.tsx frontend/src/styles/globals.css
-git commit -m "fix: overlay card choice popups"
+git commit -m "fix: overlay card choice popups" # aab7dd59
 ```
 
 ### Task 2: Verify and record the release
@@ -144,7 +148,7 @@ git commit -m "fix: overlay card choice popups"
 - Consumes: overlay implementation from Task 1.
 - Produces: release evidence for the saved-card choice popup behavior.
 
-- [ ] **Step 1: Run focused quality checks**
+- [x] **Step 1: Run focused quality checks**
 
 ```powershell
 pnpm -C frontend exec tsc --noEmit
@@ -156,7 +160,7 @@ git diff --check
 
 Expected: TypeScript, Prettier, and build pass. ESLint reports no errors. The known Vite chunk-size advisory may remain.
 
-- [ ] **Step 2: Update the release plan and commit**
+- [x] **Step 2: Update the release plan and commit**
 
 Record red-green test evidence, build output, deployment artifact, server smoke check, and browser overlay proof in `PLANS.md`, then commit:
 
@@ -164,4 +168,3 @@ Record red-green test evidence, build output, deployment artifact, server smoke 
 git add PLANS.md
 git commit -m "docs: record card choice popup overlay release"
 ```
-
