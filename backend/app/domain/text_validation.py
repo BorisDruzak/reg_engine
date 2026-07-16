@@ -47,6 +47,8 @@ def validate_text_value(value: str, validation: Mapping[str, object] | None) -> 
     normalized = normalize_text_validation(validation)
     if normalized is None:
         return
+    if _contains_non_bmp_or_surrogate(value):
+        raise TextValidationError(normalized["message"])
     if normalized["kind"] == "russian_text":
         valid = RUSSIAN_TEXT_PATTERN.fullmatch(value) is not None
     else:
@@ -72,10 +74,12 @@ def _validate_portable_regex(pattern: str) -> None:
         raise TextValidationError("Text validation pattern must not be empty.")
     if len(pattern) > _MAX_REGEX_PATTERN_LENGTH:
         raise TextValidationError("Text validation pattern is too long.")
-    if any(ord(character) > 0xFFFF for character in pattern):
+    if _contains_non_bmp_or_surrogate(pattern):
         raise TextValidationError("Text validation pattern must use BMP Unicode only.")
     if not _is_portable_regex(pattern):
         raise TextValidationError("Text validation pattern is not portable.")
+    if _has_nested_quantified_groups(pattern):
+        raise TextValidationError("Text validation pattern has nested quantifiers.")
     try:
         re.compile(pattern)
     except re.error as exc:
@@ -114,6 +118,42 @@ def _is_portable_regex(pattern: str) -> bool:
             return False
         index += 1
     return True
+
+
+def _has_nested_quantified_groups(pattern: str) -> bool:
+    quantified_contents: list[bool] = []
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "\\":
+            escaped_index = _consume_portable_escape(pattern, index)
+            if escaped_index is None:
+                return False
+            index = escaped_index
+            continue
+        if character == "[":
+            class_end = _consume_character_class(pattern, index)
+            if class_end is None:
+                return False
+            index = class_end
+            continue
+        if character == "(":
+            quantified_contents.append(False)
+        elif character == ")" and quantified_contents:
+            contains_quantifier = quantified_contents.pop()
+            if contains_quantifier and _consume_quantifier(pattern, index + 1) is not None:
+                return True
+            if contains_quantifier and quantified_contents:
+                quantified_contents[-1] = True
+        else:
+            quantifier_end = _consume_quantifier(pattern, index)
+            if quantifier_end is not None:
+                if quantified_contents:
+                    quantified_contents[-1] = True
+                index = quantifier_end
+                continue
+        index += 1
+    return False
 
 
 def _consume_character_class(pattern: str, index: int) -> int | None:
@@ -156,6 +196,21 @@ def _consume_braced_quantifier(pattern: str, index: int) -> int | None:
     return index
 
 
+def _consume_quantifier(pattern: str, index: int) -> int | None:
+    if pattern[index : index + 1] in {"*", "+", "?"}:
+        index += 1
+    elif pattern[index : index + 1] == "{":
+        braced_quantifier_end = _consume_braced_quantifier(pattern, index)
+        if braced_quantifier_end is None:
+            return None
+        index = braced_quantifier_end
+    else:
+        return None
+    if pattern[index : index + 1] == "?":
+        index += 1
+    return index
+
+
 def _consume_portable_escape(pattern: str, index: int) -> int | None:
     escape_code = pattern[index + 1 : index + 2]
     if (
@@ -178,3 +233,7 @@ def _has_hex_digits(pattern: str, start: int, count: int) -> bool:
     return len(pattern[start : start + count]) == count and all(
         character in _HEX_DIGITS for character in pattern[start : start + count]
     )
+
+
+def _contains_non_bmp_or_surrogate(value: str) -> bool:
+    return any(ord(character) > 0xFFFF or 0xD800 <= ord(character) <= 0xDFFF for character in value)

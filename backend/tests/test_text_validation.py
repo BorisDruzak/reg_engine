@@ -97,6 +97,26 @@ def test_normalize_rejects_non_bmp_unicode_patterns(pattern: str) -> None:
         normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
 
 
+@pytest.mark.parametrize("value", ["😀", chr(0xD83D)])
+def test_regex_rule_rejects_non_bmp_or_surrogate_values(value: str) -> None:
+    rule = normalize_text_validation({"kind": "regex", "pattern": "[^a]", "message": "Только BMP"})
+
+    with pytest.raises(TextValidationError, match="Только BMP"):
+        validate_text_value(value, rule)
+
+
+@pytest.mark.parametrize("pattern", [r"^(a+)+$", r"^(ab*)+$", r"^(ab?){2}$"])
+def test_normalize_rejects_nested_quantified_groups(pattern: str) -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+
+def test_normalize_allows_single_quantified_group() -> None:
+    rule = normalize_text_validation({"kind": "regex", "pattern": r"^(ab)+$", "message": "Ошибка"})
+
+    assert rule is not None
+
+
 def test_normalize_allows_the_agreed_portable_regex_grammar() -> None:
     rule = normalize_text_validation(
         {
