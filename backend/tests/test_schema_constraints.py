@@ -79,7 +79,11 @@ def test_important_check_constraints_exist() -> None:
             "ck_card_public_links_max_attachment_uploads_non_negative",
             "ck_card_public_links_attachment_upload_count_non_negative",
         },
-        "audit_events": {"ck_audit_events_actor_type", "ck_audit_events_source"},
+        "audit_events": {
+            "ck_audit_events_actor_type",
+            "ck_audit_events_retention_class",
+            "ck_audit_events_source",
+        },
     }
 
     for table_name, names in expected_constraints.items():
@@ -164,7 +168,9 @@ def test_important_indexes_exist() -> None:
         "audit_events": {
             "ix_audit_events_object",
             "ix_audit_events_actor_user_id",
+            "ix_audit_events_card_history",
             "ix_audit_events_created_at",
+            "ix_audit_events_retention",
         },
     }
 

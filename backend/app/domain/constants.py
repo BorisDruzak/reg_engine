@@ -31,6 +31,7 @@ PUBLIC_LINK_STATUSES = (
 CARD_RELATION_TYPES = ("related_to", "transferred_to", "duplicates")
 AUDIT_ACTOR_TYPES = ("user", "public_link", "reference_edit_link", "system")
 AUDIT_SOURCES = ("api", "public_link", "reference_edit_link", "system", "mcp")
+AUDIT_RETENTION_CLASSES = ("technical", "card_history")
 MALWARE_SCANNER_STATUSES = ("deferred", "pending", "clean", "blocked", "error")
 DOCUMENT_TEMPLATE_FORMATS = ("docx_text_v1", "docx_binary_v1", "card_print_layout_v1")
 GENERATED_DOCUMENT_STATUSES = ("generated",)

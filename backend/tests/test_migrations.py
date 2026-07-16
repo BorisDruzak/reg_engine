@@ -94,6 +94,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0020_schema_layout_static_text" in sql
     assert "0022_card_print_layout_templates" in sql
     assert "0030_work_experience_field" in sql
+    assert "0031_card_audit_history" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -248,3 +249,22 @@ def test_work_experience_field_migration_replaces_constraint_and_guards_downgrad
     assert "DROP CONSTRAINT IF EXISTS ck_form_fields_field_type" in upgrade_sql
     assert "'work_experience'" in upgrade_sql
     assert "Cannot downgrade while work_experience form fields exist" in downgrade_sql
+
+
+def test_card_audit_history_migration_adds_retention_classification() -> None:
+    upgrade_sql = _render_upgrade_sql("0031_card_audit_history")
+    downgrade_sql = _render_downgrade_sql(
+        "0031_card_audit_history",
+        "0030_work_experience_field",
+    )
+
+    assert "card_id UUID" in upgrade_sql
+    assert "attributed_user_id UUID" in upgrade_sql
+    assert "retention_class VARCHAR DEFAULT 'technical' NOT NULL" in upgrade_sql
+    assert "UPDATE public.audit_events SET retention_class = 'technical'" in upgrade_sql
+    assert "ck_audit_events_retention_class" in upgrade_sql
+    assert "ix_audit_events_card_history" in upgrade_sql
+    assert "ix_audit_events_retention" in upgrade_sql
+    assert "DROP COLUMN retention_class" in downgrade_sql
+    assert "DROP COLUMN attributed_user_id" in downgrade_sql
+    assert "DROP COLUMN card_id" in downgrade_sql

@@ -1,11 +1,16 @@
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import desc, select
+from sqlalchemy import and_, delete, desc, or_, select
 from sqlalchemy.orm import Session
 
+from app.domain.constants import AUDIT_RETENTION_CLASSES
 from app.models import AuditEvent
 from app.services.permissions import PermissionDeniedError, PermissionService
+
+CARD_HISTORY_RETENTION = timedelta(days=14)
+TECHNICAL_AUDIT_RETENTION = timedelta(days=3)
 
 
 class AuditService:
@@ -22,6 +27,9 @@ class AuditService:
         old_data_json: dict[str, Any] | None = None,
         new_data_json: dict[str, Any] | None = None,
         source: str = "api",
+        card_id: UUID | None = None,
+        attributed_user_id: UUID | None = None,
+        retention_class: str = "technical",
     ) -> AuditEvent:
         return self._record(
             actor_type="user",
@@ -34,6 +42,9 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source=source,
+            card_id=card_id,
+            attributed_user_id=attributed_user_id,
+            retention_class=retention_class,
         )
 
     def record_public_link_event(
@@ -45,6 +56,9 @@ class AuditService:
         object_id: UUID | None = None,
         old_data_json: dict[str, Any] | None = None,
         new_data_json: dict[str, Any] | None = None,
+        card_id: UUID | None = None,
+        attributed_user_id: UUID | None = None,
+        retention_class: str = "technical",
     ) -> AuditEvent:
         return self._record(
             actor_type="public_link",
@@ -57,6 +71,9 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source="public_link",
+            card_id=card_id,
+            attributed_user_id=attributed_user_id,
+            retention_class=retention_class,
         )
 
     def record_reference_edit_link_event(
@@ -68,6 +85,9 @@ class AuditService:
         object_id: UUID | None = None,
         old_data_json: dict[str, Any] | None = None,
         new_data_json: dict[str, Any] | None = None,
+        card_id: UUID | None = None,
+        attributed_user_id: UUID | None = None,
+        retention_class: str = "technical",
     ) -> AuditEvent:
         return self._record(
             actor_type="reference_edit_link",
@@ -80,6 +100,9 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source="reference_edit_link",
+            card_id=card_id,
+            attributed_user_id=attributed_user_id,
+            retention_class=retention_class,
         )
 
     def record_system_event(
@@ -90,6 +113,9 @@ class AuditService:
         object_id: UUID | None = None,
         old_data_json: dict[str, Any] | None = None,
         new_data_json: dict[str, Any] | None = None,
+        card_id: UUID | None = None,
+        attributed_user_id: UUID | None = None,
+        retention_class: str = "technical",
     ) -> AuditEvent:
         return self._record(
             actor_type="system",
@@ -102,6 +128,9 @@ class AuditService:
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source="system",
+            card_id=card_id,
+            attributed_user_id=attributed_user_id,
+            retention_class=retention_class,
         )
 
     def list_events_for_actor(
@@ -141,7 +170,13 @@ class AuditService:
         old_data_json: dict[str, Any] | None,
         new_data_json: dict[str, Any] | None,
         source: str,
+        card_id: UUID | None,
+        attributed_user_id: UUID | None,
+        retention_class: str,
     ) -> AuditEvent:
+        if retention_class not in AUDIT_RETENTION_CLASSES:
+            raise ValueError(f"Unsupported audit retention class: {retention_class}")
+
         metadata = self._request_metadata()
         resolved_source = (metadata.get("source") or "api") if source == "api" else source
         event = AuditEvent(
@@ -152,6 +187,9 @@ class AuditService:
             action=action,
             object_type=object_type,
             object_id=object_id,
+            card_id=card_id,
+            attributed_user_id=attributed_user_id,
+            retention_class=retention_class,
             old_data_json=old_data_json,
             new_data_json=new_data_json,
             source=resolved_source,
@@ -180,6 +218,33 @@ class AuditService:
             "request_id": getattr(raw_metadata, "request_id", None),
             "source": _normalize_audit_source(getattr(raw_metadata, "source", None)),
         }
+
+
+class AuditRetentionService:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def delete_expired_events(self, *, now: datetime | None = None) -> int:
+        evaluated_at = now or datetime.now(UTC)
+        if evaluated_at.tzinfo is None:
+            raise ValueError("Audit retention time must include a timezone.")
+
+        result = self.session.execute(
+            delete(AuditEvent).where(
+                or_(
+                    and_(
+                        AuditEvent.retention_class == "card_history",
+                        AuditEvent.created_at < evaluated_at - CARD_HISTORY_RETENTION,
+                    ),
+                    and_(
+                        AuditEvent.retention_class == "technical",
+                        AuditEvent.created_at < evaluated_at - TECHNICAL_AUDIT_RETENTION,
+                    ),
+                )
+            )
+        )
+        self.session.flush()
+        return int(result.rowcount or 0)
 
 
 def _normalize_audit_source(raw_source: object) -> str:
