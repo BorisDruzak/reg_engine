@@ -7,6 +7,14 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-16 card-audit general history is implemented locally in commits
+  `c2508ee9` through `b35b0a33`: default active-card history, status/card/actor
+  filters, card grouping and reset, safe field and standalone event rendering.
+  Card history remains system-admin-only and retains 14 days; technical audit
+  retains 3 days. Local backend API tests are intentionally skipped without
+  `TEST_DATABASE_URL`; database-backed verification on a disposable `_test`
+  database is required before release/deployment acceptance.
+
 - 2026-07-15 `work_experience` is implemented locally only in commits
   `338e1983`, `d130b115`, `dbbaf94e`, `10efb5e1`, `0408a1c6`, `4b5d0d09`,
   `1aecbed7`, `37fd905c`, `4d8e1668`, and `f66a0561`; Tasks 1-5 and their
