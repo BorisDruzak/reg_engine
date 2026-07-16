@@ -2533,6 +2533,50 @@ def test_required_field_mode_is_saved_and_enforced_on_bulk_save(db_session: Sess
     assert saved[0].value_text == "filled"
 
 
+def test_card_text_value_rejects_configured_russian_text_violation(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    card_service = CardService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=context["registry"].id,
+        code="validated-text",
+        title="Validated text",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="full_name",
+        label="ФИО",
+        field_type="text",
+        validation_json={
+            "kind": "russian_text",
+            "message": "Введите ФИО русскими буквами",
+        },
+    )
+    card = card_service.create_card_for_actor(
+        actor_user_id=context["org_admin"].id,
+        registry_id=context["registry"].id,
+        organization_id=context["child"].id,
+        display_name="Validated card",
+    )
+
+    with pytest.raises(
+        InvalidFieldValueError,
+        match="Введите ФИО русскими буквами",
+    ) as exc_info:
+        card_service.set_field_value_for_actor(
+            actor_user_id=context["org_admin"].id,
+            card_id=card.id,
+            field_id=field.id,
+            value="Иванов 7",
+        )
+
+    assert str(exc_info.value) == "Введите ФИО русскими буквами"
+
+
 def test_card_without_mandatory_fields_is_active_after_creation(db_session: Session) -> None:
     context = _phase_1d_context(db_session)
 

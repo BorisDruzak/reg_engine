@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from app.api.v1.endpoints import import_export as import_export_endpoint
 from app.services import import_export
+from app.services.cards import InvalidFieldValueError
 
 
 def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -> None:
@@ -413,6 +414,9 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         def set_field_value_for_actor(self, *, value: object, **_kwargs: object) -> None:
             written_values.append(value)
 
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
     class AuditService:
         def __init__(self, _session: object) -> None:
             pass
@@ -443,6 +447,90 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
     assert preview["rows"][0]["values"] == {field.id: {"days": 16, "months": 3, "years": 9}}
     assert committed["summary"] == {"created_cards": 1, "field_values_written": 1}
     assert written_values == [{"days": 16, "months": 3, "years": 9}]
+
+
+def test_tabular_xlsx_preview_and_commit_report_text_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(
+        id=uuid4(),
+        label="ФИО",
+        field_type="text",
+        validation_json={
+            "kind": "russian_text",
+            "message": "Введите ФИО русскими буквами",
+        },
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="ФИО",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "ФИО"])
+    sheet.append([1, "Иванов 7"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+    validation_calls: list[dict[str, object]] = []
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **kwargs: object) -> None:
+            validation_calls.append(kwargs)
+            raise InvalidFieldValueError("Введите ФИО русскими буквами")
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
+    monkeypatch.setattr(
+        service,
+        "_configuration_from_metadata",
+        lambda **_kwargs: configuration,
+    )
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=content.getvalue(),
+    )
+
+    assert preview["rows"][0]["status"] == "invalid"
+    assert preview["rows"][0]["errors"] == ["ФИО: Введите ФИО русскими буквами"]
+    assert validation_calls == [
+        {
+            "actor_user_id": actor_user_id,
+            "registry_id": registry_id,
+            "organization_id": organization_id,
+            "field_id": field.id,
+            "value": "Иванов 7",
+        }
+    ]
+    with pytest.raises(import_export.TabularCardImportValidationError) as exc_info:
+        service.commit_import_xlsx_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            xlsx_content=content.getvalue(),
+        )
+    assert exc_info.value.preview["rows"][0]["errors"] == ["ФИО: Введите ФИО русскими буквами"]
 
 
 def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
@@ -544,7 +632,16 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
             foreign_unit_id: foreign_organization_id,
         },
     )
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
     service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
     monkeypatch.setattr(
         service,
         "_configuration_from_metadata",

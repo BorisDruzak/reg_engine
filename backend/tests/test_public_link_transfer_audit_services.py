@@ -410,6 +410,39 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
         )
 
 
+def test_public_link_text_value_rejects_regex_and_preserves_old_value(
+    db_session: Session,
+) -> None:
+    context = _phase_1e_context(db_session)
+    card_service = CardService(db_session)
+    public_link_service = PublicLinkService(db_session)
+    context["public_field"].validation_json = {
+        "kind": "regex",
+        "pattern": "[А-Я]{2}",
+        "message": "Введите две буквы",
+    }
+    stored = card_service.set_field_value_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+        field_id=context["public_field"].id,
+        value="АБ",
+    )
+    created = public_link_service.create_public_link_for_actor(
+        actor_user_id=context["source_admin"].id,
+        card_id=context["card"].id,
+    )
+
+    with pytest.raises(InvalidFieldValueError, match="Введите две буквы") as exc_info:
+        public_link_service.edit_card_field_with_token(
+            raw_token=created.raw_token,
+            field_id=context["public_field"].id,
+            value="АБВ",
+        )
+
+    assert str(exc_info.value) == "Введите две буквы"
+    assert stored.value_text == "АБ"
+
+
 def test_public_link_preview_includes_visible_static_text_without_editing(
     db_session: Session,
 ) -> None:

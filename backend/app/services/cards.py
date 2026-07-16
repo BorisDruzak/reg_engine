@@ -9,6 +9,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.domain.text_validation import TextValidationError, validate_text_value
 from app.domain.work_experience import (
     anchor_for_experience,
     experience_for_anchor,
@@ -2190,6 +2191,10 @@ class CardService:
         if field_model.field_type == "text":
             if not isinstance(value, str):
                 raise InvalidFieldValueError("Text fields require a string value.")
+            try:
+                validate_text_value(value, field_model.validation_json)
+            except TextValidationError as exc:
+                raise InvalidFieldValueError(str(exc)) from exc
             return _FieldAssignment(value_text=value)
 
         if field_model.field_type == "number":

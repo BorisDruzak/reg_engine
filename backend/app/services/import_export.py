@@ -26,6 +26,7 @@ from app.services.audit import AuditService
 from app.services.cards import (
     CardRead,
     CardService,
+    InvalidFieldValueError,
 )
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -1090,6 +1091,7 @@ class TabularCardExchangeService:
                 )
 
             rows: list[dict[str, Any]] = []
+            card_service = CardService(self.session)
             max_rows = get_settings().max_import_rows
             for row_number, values in enumerate(
                 sheet.iter_rows(min_row=2, values_only=True),
@@ -1133,6 +1135,18 @@ class TabularCardExchangeService:
                         )
                     except ImportExportServiceError as exc:
                         errors.append(f"{item.header}: {exc}")
+                    else:
+                        if isinstance(organization_id, UUID):
+                            try:
+                                card_service.validate_field_value_for_actor(
+                                    actor_user_id=actor_user_id,
+                                    registry_id=registry_id,
+                                    organization_id=organization_id,
+                                    field_id=item.field.id,
+                                    value=parsed_values[item.field.id],
+                                )
+                            except InvalidFieldValueError as exc:
+                                errors.append(f"{item.header}: {exc}")
                 rows.append(
                     {
                         "row_number": row_number,

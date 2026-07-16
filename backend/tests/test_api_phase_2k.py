@@ -1375,6 +1375,64 @@ def test_bulk_card_values_update_rolls_back_on_partial_validation_failure(
     assert card_read["fields"]["main.organization"]["value"] is None
 
 
+def test_card_value_validation_returns_only_configured_message(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase2k-text-validation-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase2k-text-validation-root", "name": "Root"},
+        actor_id=system_admin.id,
+    )
+    registry = _post_json(
+        api_client,
+        "/api/v1/registries",
+        {"code": "phase2k-text-validation-registry", "name": "Registry"},
+        actor_id=system_admin.id,
+    )
+    block = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/blocks",
+        {"code": "main", "title": "Main"},
+        actor_id=system_admin.id,
+    )
+    field = _post_json(
+        api_client,
+        f"/api/v1/blocks/{block['id']}/fields",
+        {
+            "code": "full_name",
+            "label": "ФИО",
+            "field_type": "text",
+            "validation_json": {
+                "kind": "russian_text",
+                "message": "Введите ФИО русскими буквами",
+            },
+        },
+        actor_id=system_admin.id,
+    )
+    card = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry['id']}/cards",
+        {"organization_id": organization["id"], "display_name": "Card"},
+        actor_id=system_admin.id,
+    )
+
+    response = api_client.patch(
+        f"/api/v1/cards/{card['id']}/fields/{field['id']}",
+        json={"value": "Иванов 7"},
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"detail": "Введите ФИО русскими буквами"}
+
+
 def test_bulk_card_values_update_requires_card_permission(
     api_client: TestClient,
     db_session: Session,
