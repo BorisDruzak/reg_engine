@@ -693,6 +693,55 @@ describe("CardsWorkspace", () => {
     expect(
       within(baseBlock).queryByRole("checkbox", { name: "Публичный просмотр карточки" }),
     ).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Уведомлять об изменениях" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([input]) =>
+          String(input).includes(
+            `/api/v1/cards/${organizationUnitCard.id}/change-notification-subscription`,
+          ),
+        ),
+    ).toBe(true);
+  });
+
+  test("keeps the readable-card notification control available when presentation loading fails", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("/presentation")) {
+        return Response.json({ detail: "layout unavailable" }, { status: 500 });
+      }
+      if (url.includes("/change-notification-subscription")) {
+        return Response.json({ enabled: false });
+      }
+      return Response.json({ items: [] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+
+    renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: { ...organizationUnitCard, can_manage: false },
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    expect(await screen.findByRole("button", { name: "Уведомлять об изменениях" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        String(input).includes(
+          `/api/v1/cards/${organizationUnitCard.id}/change-notification-subscription`,
+        ),
+      ),
+    ).toBe(true);
   });
 
   test("does not render a public-link action while creating a card", () => {

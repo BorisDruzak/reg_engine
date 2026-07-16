@@ -630,6 +630,9 @@ export function CardsWorkspace({
             <>
               {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
               <DataAlert error={cardPresentationQuery.error} />
+              <div className="row-actions card-change-notification-actions">
+                <CardChangeNotificationToggle cardId={card.id} token={token} />
+              </div>
               {presentationLayout ? (
                 <FilledCardLayout
                   layout={presentationLayout}
@@ -707,9 +710,6 @@ export function CardsWorkspace({
                   }
                   afterContent={
                     <>
-                      <div className="row-actions card-change-notification-actions">
-                        <CardChangeNotificationToggle cardId={card.id} token={token} />
-                      </div>
                       {card.can_manage ? (
                         <CardWorkspaceFooter
                           card={card}
