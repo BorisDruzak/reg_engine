@@ -5758,7 +5758,9 @@ blocked by the unavailable local browser runtime.
 
 #### Quiet notification refresh and basic-block placement
 
-Status: verified locally; deployment pending.
+Status: pushed, deployed, and server-verified on 2026-07-16; authenticated
+browser proof remains unavailable because the local browser runtime is not
+available.
 
 - The notification subscription control now appears in the `Базовый блок`
   header for every readable selected card, including the layout-error fallback;
@@ -5773,3 +5775,10 @@ Status: verified locally; deployment pending.
   production Vite build. The full frontend suite remains the same authorized
   red baseline: the existing single work-experience test failure was observed
   again; it is outside this change set.
+- Release commits `854a7859`, `eecea65c`, and `febd0d28` are pushed to
+  `origin/main`. The server checkout was fast-forwarded to `febd0d28`; the
+  frontend deployment published `/assets/index-D6uTFvVy.js` and
+  `/assets/index-DB_RRYP-.css`, restarted `reg-engine.service`, and passed the
+  same-origin frontend/API smoke check. A fresh server check then confirmed the
+  active service, database role login, attachment storage configuration, and
+  synchronized checkout.
