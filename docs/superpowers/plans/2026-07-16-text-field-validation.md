@@ -6,7 +6,7 @@
 
 **Architecture:** form_fields.validation_json already exists, so the schema service normalizes a compact rule object and exposes it in existing field APIs. A pure backend domain module is authoritative and is called during every text-value coercion. A matching frontend helper gives immediate feedback; the shared text control keeps an invalid draft until it becomes valid and displays an accessible overlay without changing card geometry.
 
-**Tech Stack:** FastAPI, Pydantic, SQLAlchemy/PostgreSQL JSONB, Python re, React, TypeScript, Vitest, Testing Library.
+**Tech Stack:** FastAPI, Pydantic, SQLAlchemy/PostgreSQL JSONB, Python `regex` with a bounded match timeout, React, TypeScript, Vitest, Testing Library.
 
 ## Global Constraints
 
@@ -17,6 +17,11 @@
 - RegExp syntax is the portable browser-compatible subset: literals, character
   classes, ordinary groups, alternatives, quantifiers, escapes, and anchors;
   named groups, lookbehind, Python-only escapes, and inline flags are rejected.
+- Custom RegExp treats non-BMP and surrogate input as invalid before matching;
+  it uses the ECMAScript definition of blank text. The browser helper must make
+  the same prechecks before invoking `RegExp`, so it exactly mirrors the API.
+- Backend matching has a short bounded timeout. A regex timeout is presented as
+  the configured validation message and must never delay a card write indefinitely.
 - No raw RegExp is returned in a value-write error; the configured Russian message is safe to show.
 - Validation applies to card creation, ordinary card editing, public links, and XLSX preview/commit through backend coercion.
 - Existing fields with validation_json=null retain their current behavior; no migration is needed.
@@ -349,9 +354,12 @@ Expected: FAIL because no local validation, retained draft, or overlay exists.
 - [ ] **Step 3: Implement shared validation and overlay**
 
 Mirror only the two supported rule kinds using JavaScript RegExp anchored as
-^(?:pattern)$. The schema contract has already limited RegExp to the portable
-browser-compatible subset; if a malformed legacy rule still reaches the client,
-fail closed using its configured message. In the text branch of
+^(?:pattern)$. Before that call, use ECMAScript `trim()` to detect blank text
+and reject non-BMP or surrogate text with the configured message; these
+prechecks are part of the shared backend contract. The schema contract has
+already limited RegExp to the portable browser-compatible subset; if a malformed
+legacy rule still reaches the client, fail closed using its configured message.
+In the text branch of
 FieldEditorControl, retain invalid draft text and suppress onChange; on
 recovery, send the valid value and close the error. Render an absolutely
 positioned role="alert" popover from the card field node; reuse it for public
