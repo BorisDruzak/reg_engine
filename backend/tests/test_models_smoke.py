@@ -395,8 +395,7 @@ def test_card_change_notification_metadata_is_registered() -> None:
         if isinstance(constraint, UniqueConstraint)
     } >= {"uq_public_link_change_notification_subscription"}
     assert {
-        index.name: [column.name for column in index.columns]
-        for index in notifications.indexes
+        index.name: [column.name for column in index.columns] for index in notifications.indexes
     }["ix_card_change_notifications_inbox"] == ["user_id", "read_at", "created_at"]
 
     assert isinstance(notifications.c.changes_json.type, JSONB)

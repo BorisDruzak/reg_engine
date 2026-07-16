@@ -37,9 +37,7 @@ def test_important_unique_constraints_exist() -> None:
         "field_value_items": {"uq_field_value_items_value_item"},
         "card_relations": {"uq_card_relations_source_target_type"},
         "card_public_links": {"uq_card_public_links_token_hash"},
-        "card_change_notification_subscriptions": {
-            "uq_card_change_notification_subscription"
-        },
+        "card_change_notification_subscriptions": {"uq_card_change_notification_subscription"},
         "public_link_change_notification_subscriptions": {
             "uq_public_link_change_notification_subscription"
         },
