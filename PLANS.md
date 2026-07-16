@@ -5805,7 +5805,7 @@ Status: pushed, deployed, and server-verified on 2026-07-16.
 
 #### Card-field editor state indicators
 
-Status: locally verified; release pending.
+Status: pushed, deployed, and server-verified on 2026-07-16.
 
 - A single active card field now receives a blue state. A changed value that is
   not yet saved receives a high-contrast amber/red state; an in-flight save
@@ -5820,3 +5820,9 @@ Status: locally verified; release pending.
   (the one pre-existing hook-dependency warning only), Prettier, `git diff
   --check`, and the production Vite build passed. The existing Vite chunk-size
   advisory remains.
+- Release commit `9fe64195` is pushed to `origin/main`. Frontend assets
+  `/assets/index-DvCzNySW.js` and `/assets/index-ylyk2KTs.css` are deployed;
+  `reg-engine.service` restarted and same-origin frontend/API smoke checks
+  passed. Browser verification opened an existing field without changing its
+  value and confirmed `is-editor-active`, border color `rgb(15, 102, 208)`,
+  the expected blue halo, and zero console errors.
