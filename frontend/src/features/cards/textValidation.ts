@@ -9,21 +9,22 @@ export function validateTextDraft(
   validation: TextValidationRule | null | undefined,
 ): TextDraftValidationResult {
   if (value.trim() === "" || validation == null) return { valid: true };
-  if (containsNonBmpOrSurrogate(value)) return invalid(validation.message);
+  const message = validation.message;
+  if (containsNonBmpOrSurrogate(value)) return invalid(message);
 
   if (validation.kind === "russian_text") {
-    return russianTextPattern.test(value) ? { valid: true } : invalid(validation.message);
+    return russianTextPattern.test(value) ? { valid: true } : invalid(message);
   }
   if (validation.kind === "regex") {
     try {
       return new RegExp(`^(?:${validation.pattern})$`).test(value)
         ? { valid: true }
-        : invalid(validation.message);
+        : invalid(message);
     } catch {
-      return invalid(validation.message);
+      return invalid(message);
     }
   }
-  return invalid(validation.message);
+  return invalid(message);
 }
 
 function containsNonBmpOrSurrogate(value: string) {
