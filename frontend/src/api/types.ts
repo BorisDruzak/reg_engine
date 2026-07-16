@@ -199,6 +199,7 @@ export type FormFieldRead = {
   field_type: string;
   position: number;
   required_mode: string;
+  validation_json?: TextValidationRule | null;
   options_source_type: string | null;
   options_source_id: string | null;
   options_config_json: Record<string, unknown> | null;
@@ -208,6 +209,17 @@ export type FormFieldRead = {
   public_visible: boolean;
   public_editable: boolean;
 };
+
+export type TextValidationRule =
+  | {
+      kind: "russian_text";
+      message: string;
+    }
+  | {
+      kind: "regex";
+      pattern: string;
+      message: string;
+    };
 
 export type WorkExperienceValue = {
   days: number;
@@ -223,6 +235,7 @@ export type FormFieldCreatePayload = {
   description?: string | null;
   position?: number;
   required_mode?: string;
+  validation_json?: TextValidationRule | null;
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
@@ -239,6 +252,7 @@ export type FormFieldUpdatePayload = {
   field_type?: string | null;
   position?: number | null;
   required_mode?: string | null;
+  validation_json?: TextValidationRule | null;
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;

@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import type { FormFieldRead, OrganizationRead, ReferenceListRead } from "@/api/types";
+import type {
+  FormFieldRead,
+  OrganizationRead,
+  ReferenceListRead,
+  TextValidationRule,
+} from "@/api/types";
 import { FIELD_TYPE_OPTIONS } from "@/app/uiText";
 
 import { InlineReferenceEditor, type InlineReferenceEditorContext } from "./InlineReferenceEditor";
+
+const RUSSIAN_TEXT_VALIDATION_DEFAULT: TextValidationRule = {
+  kind: "russian_text",
+  message: "Введите текст русскими буквами",
+};
+
+const REGEX_VALIDATION_DEFAULT: TextValidationRule = {
+  kind: "regex",
+  pattern: ".*",
+  message: "Введите значение в нужном формате",
+};
 
 export type InlineFieldEditorProps = {
   field: FormFieldRead;
@@ -168,6 +184,7 @@ export function InlineFieldEditor({
               ...draft,
               field_type: fieldType,
               required_mode: staticTextField ? "not_required" : draft.required_mode,
+              validation_json: fieldType === "text" ? (draft.validation_json ?? null) : null,
               options_source_type: usesReference ? draft.options_source_type : null,
               options_source_id: usesReference ? draft.options_source_id : null,
               options_config_json: staticTextField
@@ -208,6 +225,73 @@ export function InlineFieldEditor({
             </select>
           </label>
         </>
+      ) : null}
+      {draft.field_type === "text" ? (
+        <details>
+          <summary>Проверка значения</summary>
+          <label>
+            <span>Тип проверки</span>
+            <select
+              value={draft.validation_json?.kind ?? "none"}
+              onChange={(event) => {
+                const kind = event.currentTarget.value;
+                const validation_json =
+                  kind === "russian_text"
+                    ? draft.validation_json?.kind === "russian_text"
+                      ? draft.validation_json
+                      : RUSSIAN_TEXT_VALIDATION_DEFAULT
+                    : kind === "regex"
+                      ? draft.validation_json?.kind === "regex"
+                        ? draft.validation_json
+                        : REGEX_VALIDATION_DEFAULT
+                      : null;
+                setDraft({ ...draft, validation_json });
+              }}
+            >
+              <option value="none">Без проверки</option>
+              <option value="russian_text">Только русские буквы</option>
+              <option value="regex">Регулярное выражение</option>
+            </select>
+          </label>
+          {draft.validation_json?.kind === "regex" ? (
+            <label>
+              <span>Регулярное выражение</span>
+              <input
+                value={draft.validation_json.pattern}
+                onChange={(event) => {
+                  const pattern = event.currentTarget.value;
+                  setDraft((current) =>
+                    current.validation_json?.kind === "regex"
+                      ? {
+                          ...current,
+                          validation_json: { ...current.validation_json, pattern },
+                        }
+                      : current,
+                  );
+                }}
+              />
+            </label>
+          ) : null}
+          {draft.validation_json ? (
+            <label>
+              <span>Подсказка при ошибке</span>
+              <input
+                value={draft.validation_json.message}
+                onChange={(event) => {
+                  const message = event.currentTarget.value;
+                  setDraft((current) =>
+                    current.validation_json
+                      ? {
+                          ...current,
+                          validation_json: { ...current.validation_json, message },
+                        }
+                      : current,
+                  );
+                }}
+              />
+            </label>
+          ) : null}
+        </details>
       ) : null}
       {usesReferenceList ? (
         <div className="inline-reference-field-settings">

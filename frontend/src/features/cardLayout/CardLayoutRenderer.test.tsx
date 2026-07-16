@@ -1672,6 +1672,86 @@ describe("CardWebLayoutCanvas", () => {
     );
   });
 
+  test("commits the Russian-text validation rule configured in the field editor", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onCommitField })} />);
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    await user.click(screen.getByText("Проверка значения"));
+    await user.selectOptions(screen.getByLabelText("Тип проверки"), "russian_text");
+    await user.clear(screen.getByLabelText("Подсказка при ошибке"));
+    await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите ФИО русскими буквами");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onCommitField).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validation_json: {
+          kind: "russian_text",
+          message: "Введите ФИО русскими буквами",
+        },
+      }),
+    );
+  });
+
+  test("shows regex pattern and message controls for a regex validation rule", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    render(<CardWebLayoutCanvas {...canvasProps({ onCommitField })} />);
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    await user.click(screen.getByText("Проверка значения"));
+    await user.selectOptions(screen.getByLabelText("Тип проверки"), "regex");
+    fireEvent.change(screen.getByLabelText("Регулярное выражение"), {
+      target: { value: "[А-Я]{2}" },
+    });
+    await user.clear(screen.getByLabelText("Подсказка при ошибке"));
+    await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите две заглавные буквы");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onCommitField).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validation_json: {
+          kind: "regex",
+          pattern: "[А-Я]{2}",
+          message: "Введите две заглавные буквы",
+        },
+      }),
+    );
+  });
+
+  test("clears a text validation rule when the field type changes", async () => {
+    const user = userEvent.setup();
+    const onCommitField = vi.fn();
+    render(
+      <CardWebLayoutCanvas
+        {...canvasProps({
+          fields: [
+            {
+              ...fields[0],
+              validation_json: {
+                kind: "russian_text",
+                message: "Введите текст русскими буквами",
+              },
+            },
+            fields[1],
+          ],
+          onCommitField,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("layout-field-field-name"));
+    expect(screen.getByText("Проверка значения")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Тип поля"), "date");
+    expect(screen.queryByText("Проверка значения")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(onCommitField).toHaveBeenCalledWith(
+      expect.objectContaining({ field_type: "date", validation_json: null }),
+    );
+  });
+
   test("keeps reference-list selection real for select and multi-select field types", async () => {
     const user = userEvent.setup();
     const onCommitField = vi.fn();
