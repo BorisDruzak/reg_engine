@@ -532,41 +532,25 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
   align-items: end;
-  padding: 14px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--surface-subtle);
+  padding: 16px;
+  border: 1px solid #c9d8e6;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4f8fc, #eef5fb);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%);
 }
 
-.audit-history-card-group {
-  display: grid;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+.audit-history-event-row.is-clickable {
+  cursor: pointer;
 }
 
-.audit-history-card-group + .audit-history-card-group {
-  margin-top: 14px;
+.audit-history-event-row.is-clickable:hover > td {
+  background: #edf5fc;
 }
 
-.audit-history-card-group .table-wrap {
-  margin: 0;
-}
-
-.audit-history-card-link {
-  padding: 0;
-  color: var(--accent-strong);
-  font: inherit;
-  font-weight: 600;
-  text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.audit-history-card-link:hover,
-.audit-history-card-link:focus-visible {
-  color: var(--accent);
+.audit-history-event-row.is-clickable:focus-visible > td {
+  outline: 2px solid #2c74b3;
+  outline-offset: -2px;
+  background: #e5f1fb;
 }
 
 .audit-diff-json {

@@ -97,8 +97,9 @@ test("groups the default active history and applies card, actor, status, and res
       expect.anything(),
     );
   });
-  expect(await screen.findByRole("button", { name: "Открыть историю карточки: Карточка для аудита" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Открыть историю карточки: Карточка для аудита" }));
+  const auditRow = (await screen.findByText("Новая группа")).closest("tr");
+  expect(auditRow).not.toBeNull();
+  await user.click(auditRow!);
   expect(screen.getByLabelText("Карточка")).toHaveValue(card.id);
   expect(screen.getByText(/Группа должностей/)).toBeVisible();
   expect(screen.getByText("Предыдущая группа")).toBeVisible();

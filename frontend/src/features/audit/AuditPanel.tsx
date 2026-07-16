@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { listCardHistoryEvents } from "@/api/client";
 import type { AuditEventRead, CardHistoryFilters, CardSummaryRead, UserRead } from "@/api/types";
@@ -33,10 +33,6 @@ export function AuditPanel({
     queryFn: () => listCardHistoryEvents(token, filters),
     enabled: Boolean(token && activeTab === "card_history"),
   });
-  const groupedEvents = useMemo(
-    () => groupHistoryEvents(historyQuery.data?.items ?? []),
-    [historyQuery.data?.items],
-  );
   const resetFilters = () => setFilters({ cardStatus: "active" });
 
   return (
@@ -116,7 +112,7 @@ export function AuditPanel({
               <p className="data-empty">{uiText.loading}</p>
             ) : (
               <CardHistoryGroups
-                groups={groupedEvents}
+                events={historyQuery.data?.items ?? []}
                 onSelectCard={(cardId) => setFilters((value) => ({ ...value, cardId }))}
               />
             )}
@@ -127,68 +123,25 @@ export function AuditPanel({
   );
 }
 
-type CardHistoryGroup = {
-  cardId: string | null;
-  cardDisplayName: string;
-  events: AuditEventRead[];
-};
-
-function groupHistoryEvents(events: AuditEventRead[]): CardHistoryGroup[] {
-  const groups = new Map<string, CardHistoryGroup>();
-  for (const event of events) {
-    const cardId = event.card_id ?? null;
-    const key = cardId ?? event.id;
-    const group = groups.get(key);
-    if (group) {
-      group.events.push(event);
-      continue;
-    }
-    groups.set(key, {
-      cardId,
-      cardDisplayName: event.card_display_name || uiText.card,
-      events: [event],
-    });
-  }
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      events: [...group.events].sort((left, right) => right.created_at.localeCompare(left.created_at)),
-    }))
-    .sort((left, right) => right.events[0].created_at.localeCompare(left.events[0].created_at));
-}
-
 function CardHistoryGroups({
-  groups,
+  events,
   onSelectCard,
 }: {
-  groups: CardHistoryGroup[];
+  events: AuditEventRead[];
   onSelectCard: (cardId: string) => void;
 }) {
-  if (groups.length === 0) {
+  if (events.length === 0) {
     return <p className="data-empty">{uiText.noData}</p>;
   }
 
-  return groups.map((group) => (
-    <section key={group.cardId ?? group.events[0].id} className="audit-history-card-group">
-      <CardHistoryTable
-        events={group.events}
-        cardId={group.cardId}
-        cardDisplayName={group.cardDisplayName}
-        onSelectCard={onSelectCard}
-      />
-    </section>
-  ));
+  return <CardHistoryTable events={events} onSelectCard={onSelectCard} />;
 }
 
 function CardHistoryTable({
   events,
-  cardId,
-  cardDisplayName,
   onSelectCard,
 }: {
   events: AuditEventRead[];
-  cardId: string | null;
-  cardDisplayName: string;
   onSelectCard: (cardId: string) => void;
 }) {
   if (events.length === 0) {
@@ -213,8 +166,6 @@ function CardHistoryTable({
         <tbody>
           {events.map((event) => (
             <HistoryEventRow
-              cardId={cardId}
-              cardDisplayName={cardDisplayName}
               event={event}
               key={event.id}
               onSelectCard={onSelectCard}
@@ -227,35 +178,36 @@ function CardHistoryTable({
 }
 
 function HistoryEventRow({
-  cardId,
-  cardDisplayName,
   event,
   onSelectCard,
 }: {
-  cardId: string | null;
-  cardDisplayName: string;
   event: AuditEventRead;
   onSelectCard: (cardId: string) => void;
 }) {
   const actor = event.actor_display_name || actorTypeLabel(event.actor_type);
   const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
   const isStandalone = event.history_display === "standalone" && Boolean(event.history_description);
+  const cardId = event.card_id;
+  const cardDisplayName = event.card_display_name || uiText.card;
 
   return (
-    <tr>
+    <tr
+      className={cardId ? "audit-history-event-row is-clickable" : "audit-history-event-row"}
+      tabIndex={cardId ? 0 : undefined}
+      onClick={cardId ? () => onSelectCard(cardId) : undefined}
+      onKeyDown={
+        cardId
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelectCard(cardId);
+              }
+            }
+          : undefined
+      }
+    >
       <td>
-        {cardId ? (
-          <button
-            type="button"
-            className="audit-history-card-link"
-            onClick={() => onSelectCard(cardId)}
-            aria-label={`Открыть историю карточки: ${cardDisplayName}`}
-          >
-            {cardDisplayName}
-          </button>
-        ) : (
-          cardDisplayName
-        )}
+        {cardDisplayName}
       </td>
       <td>{auditActionLabel(event.action)}</td>
       <td>
