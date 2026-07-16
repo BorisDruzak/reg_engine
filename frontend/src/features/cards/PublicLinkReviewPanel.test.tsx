@@ -105,6 +105,46 @@ afterEach(() => {
 });
 
 describe("PublicLinkReviewPanel", () => {
+  test("shows a notification switch only for a public-link creator and refreshes the link list", async () => {
+    const user = userEvent.setup();
+    links = [
+      publicLink("creator", {
+        can_manage_change_notifications: true,
+        change_notifications_enabled: false,
+      }),
+      publicLink("card-manager", {
+        can_manage_change_notifications: false,
+        change_notifications_enabled: false,
+      }),
+    ];
+    renderPanel();
+
+    const button = await screen.findByRole("button", { name: "Уведомлять об изменениях" });
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getAllByRole("button", { name: "Уведомлять об изменениях" })).toHaveLength(1);
+
+    await user.click(button);
+
+    await waitFor(() =>
+      expect(fetchCalls).toContainEqual({
+        method: "PUT",
+        path: "/api/v1/public-links/creator/change-notification-subscription",
+        body: { enabled: true },
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "Уведомления включены" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await waitFor(() =>
+      expect(
+        fetchCalls.filter(
+          (item) => item.method === "GET" && item.path === `/api/v1/cards/${cardId}/public-links`,
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
   test("creates a review link from public-editable schema and keeps raw URL ephemeral", async () => {
     const user = userEvent.setup();
     clipboardWrite = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
@@ -381,6 +421,17 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
       review_enabled: true,
     });
   }
+  const subscriptionMatch = path.match(
+    /^\/api\/v1\/public-links\/([^/]+)\/change-notification-subscription$/,
+  );
+  if (subscriptionMatch && method === "PUT") {
+    const [, id] = subscriptionMatch;
+    const change_notifications_enabled = Boolean((body as { enabled: boolean }).enabled);
+    links = links.map((item) =>
+      item.id === id ? { ...item, change_notifications_enabled } : item,
+    );
+    return jsonResponse({ enabled: change_notifications_enabled });
+  }
   const reviewMatch = path.match(/^\/api\/v1\/public-links\/([^/]+)\/review$/);
   if (reviewMatch && method === "GET") {
     reviewRequestCount += 1;
@@ -459,6 +510,8 @@ function publicLink(id: string, overrides: Partial<PublicLinkRead> = {}): Public
     reviewed_by: null,
     review_comment: null,
     review_enabled: true,
+    can_manage_change_notifications: false,
+    change_notifications_enabled: false,
     completed_public_fields: null,
     total_public_fields: null,
     ...overrides,

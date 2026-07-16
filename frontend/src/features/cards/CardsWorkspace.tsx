@@ -66,6 +66,7 @@ import { FieldEditorControl, type FieldEditorFileRefOption } from "./FieldEditor
 import { CardCreationLinksPanel } from "./CardCreationLinksPanel";
 import { CardTagSearchBar } from "./CardTagSearchBar";
 import { CardDraftActionRail } from "./CardDraftActionRail";
+import { CardChangeNotificationToggle } from "./CardChangeNotificationToggle";
 import { FilledCardLayout, type FilledCardBlockInstanceRead } from "./FilledCardLayout";
 import { PublicLinkQuickControl } from "./PublicLinkQuickControl";
 import { PublicAccessFieldPicker } from "./PublicAccessFieldPicker";
@@ -706,6 +707,9 @@ export function CardsWorkspace({
                   }
                   afterContent={
                     <>
+                      <div className="row-actions card-change-notification-actions">
+                        <CardChangeNotificationToggle cardId={card.id} token={token} />
+                      </div>
                       {card.can_manage ? (
                         <CardWorkspaceFooter
                           card={card}

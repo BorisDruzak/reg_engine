@@ -9,6 +9,7 @@ import {
   listPublicLinks,
   requestPublicLinkChanges,
   startPublicLinkReviewCycle,
+  updatePublicLinkChangeNotificationSubscription,
 } from "@/api/client";
 import type {
   CardTemplateLayoutRead,
@@ -388,6 +389,8 @@ export function PublicLinkReviewPanel({
                 startReviewMutation.isPending
               }
               publicLink={publicLink}
+              cardId={cardId}
+              token={token}
               onDisable={() => setDisableTarget(publicLink)}
               onOpenReview={() => {
                 setSelectedReviewId(publicLink.id);
@@ -545,12 +548,16 @@ export function PublicLinkReviewPanel({
 
 function PublicLinkTimelineItem({
   publicLink,
+  cardId,
+  token,
   isBusy,
   onDisable,
   onOpenReview,
   onStartReview,
 }: {
   publicLink: PublicLinkRead;
+  cardId: string;
+  token: string;
   isBusy: boolean;
   onDisable: () => void;
   onOpenReview: () => void;
@@ -603,6 +610,13 @@ function PublicLinkTimelineItem({
         </ol>
       </div>
       <div className="row-actions">
+        {publicLink.can_manage_change_notifications ? (
+          <PublicLinkChangeNotificationToggle
+            cardId={cardId}
+            publicLink={publicLink}
+            token={token}
+          />
+        ) : null}
         {publicLink.status === "submitted" ? (
           <button type="button" className="primary-button" disabled={isBusy} onClick={onOpenReview}>
             Открыть проверку
@@ -626,6 +640,45 @@ function PublicLinkTimelineItem({
         ) : null}
       </div>
     </li>
+  );
+}
+
+function PublicLinkChangeNotificationToggle({
+  cardId,
+  publicLink,
+  token,
+}: {
+  cardId: string;
+  publicLink: PublicLinkRead;
+  token: string;
+}) {
+  const queryClient = useQueryClient();
+  const updateMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      updatePublicLinkChangeNotificationSubscription(token, publicLink.id, enabled),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["public-links", token, cardId] });
+    },
+  });
+  const enabled = publicLink.change_notifications_enabled;
+
+  return (
+    <div className="card-change-notification-toggle">
+      <button
+        type="button"
+        className="ghost-button"
+        aria-pressed={enabled}
+        disabled={updateMutation.isPending}
+        onClick={() => updateMutation.mutate(!enabled)}
+      >
+        {enabled ? "Уведомления включены" : "Уведомлять об изменениях"}
+      </button>
+      {updateMutation.error ? (
+        <p className="inline-alert" role="alert">
+          Не удалось изменить настройки уведомлений.
+        </p>
+      ) : null}
+    </div>
   );
 }
 

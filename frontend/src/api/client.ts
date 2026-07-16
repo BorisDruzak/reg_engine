@@ -7,6 +7,7 @@ import type {
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
+  CardChangeNotificationSubscriptionRead,
   CardCreationLinkCardListRead,
   CardCreationLinkCreatePayload,
   CardCreationLinkFirstSaveRead,
@@ -512,6 +513,24 @@ export async function createOrganizationCardDraftPublicLink(
 
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
+}
+
+export async function getCardChangeNotificationSubscription(token: string, cardId: string) {
+  return apiRequest<CardChangeNotificationSubscriptionRead>(
+    `/api/v1/cards/${cardId}/change-notification-subscription`,
+    { token },
+  );
+}
+
+export async function updateCardChangeNotificationSubscription(
+  token: string,
+  cardId: string,
+  enabled: boolean,
+) {
+  return apiRequest<CardChangeNotificationSubscriptionRead>(
+    `/api/v1/cards/${cardId}/change-notification-subscription`,
+    { method: "PUT", token, body: { enabled } },
+  );
 }
 
 export async function readCardPresentation(token: string, cardId: string) {
@@ -1584,6 +1603,17 @@ export async function archivePublicLink(token: string, publicLinkId: string) {
     method: "DELETE",
     token,
   });
+}
+
+export async function updatePublicLinkChangeNotificationSubscription(
+  token: string,
+  publicLinkId: string,
+  enabled: boolean,
+) {
+  return apiRequest<CardChangeNotificationSubscriptionRead>(
+    `/api/v1/public-links/${publicLinkId}/change-notification-subscription`,
+    { method: "PUT", token, body: { enabled } },
+  );
 }
 
 export async function getPublicLinkReview(token: string, publicLinkId: string) {

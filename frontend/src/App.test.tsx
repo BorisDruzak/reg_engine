@@ -1816,6 +1816,8 @@ beforeEach(() => {
             reviewed_by: null,
             review_comment: null,
             review_enabled: true,
+            can_manage_change_notifications: true,
+            change_notifications_enabled: false,
             completed_public_fields: null,
             total_public_fields: null,
           };

@@ -30,6 +30,7 @@ import {
   createReportTemplate,
   createUser,
   generateReportRun,
+  getCardChangeNotificationSubscription,
   getPublicLinkReview,
   getPublicLinkStatus,
   requestPublicLinkChanges,
@@ -37,6 +38,7 @@ import {
   submitPublicLink,
   transferCard,
   updateCard,
+  updateCardChangeNotificationSubscription,
   updateCardFieldValues,
   updateFormBlock,
   updateFormField,
@@ -47,6 +49,7 @@ import {
   updateRegistry,
   updateReportTemplate,
   updateUser,
+  updatePublicLinkChangeNotificationSubscription,
 } from "./client";
 import type { PublicLinkRead, PublicLinkReviewRead, PublicLinkSafeStatusRead } from "./types";
 
@@ -68,6 +71,45 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test("notification subscription API client uses scoped routes, bearer auth, and exact payloads", async () => {
+  vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ enabled: false }));
+  expect(await getCardChangeNotificationSubscription(token, "card-id")).toEqual({ enabled: false });
+  let [input, init] = vi.mocked(fetch).mock.calls[0];
+  expect(String(input)).toBe("/api/v1/cards/card-id/change-notification-subscription");
+  expect(init?.method).toBe("GET");
+  expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
+  expect(init?.body).toBeUndefined();
+
+  const updates = [
+    {
+      action: () => updateCardChangeNotificationSubscription(token, "card-id", true),
+      path: "/api/v1/cards/card-id/change-notification-subscription",
+      enabled: true,
+    },
+    {
+      action: () => updateCardChangeNotificationSubscription(token, "card-id", false),
+      path: "/api/v1/cards/card-id/change-notification-subscription",
+      enabled: false,
+    },
+    {
+      action: () => updatePublicLinkChangeNotificationSubscription(token, "public-link-id", true),
+      path: "/api/v1/public-links/public-link-id/change-notification-subscription",
+      enabled: true,
+    },
+  ];
+
+  for (const update of updates) {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ enabled: update.enabled }));
+    expect(await update.action()).toEqual({ enabled: update.enabled });
+    [input, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(input)).toBe(update.path);
+    expect(init?.method).toBe("PUT");
+    expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
+    expect(JSON.parse(String(init?.body))).toEqual({ enabled: update.enabled });
+  }
 });
 
 test("admin mutation API client uses backend routes with bearer auth and JSON bodies", async () => {
@@ -603,6 +645,8 @@ test("public link review clients keep public tokens in JSON and admin auth in he
       reviewed_by: null,
       review_comment: null,
       review_enabled: true,
+      can_manage_change_notifications: false,
+      change_notifications_enabled: false,
       completed_public_fields: 2,
       total_public_fields: 3,
     },

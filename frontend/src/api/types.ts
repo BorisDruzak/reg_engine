@@ -606,6 +606,17 @@ export type CardRead = {
   fields: Record<string, CardFieldRead>;
 };
 
+export type CardChangeNotificationSubscriptionRead = {
+  enabled: boolean;
+};
+
+export type CardChangeNotificationChangeRead = {
+  label: string;
+  before: unknown | null;
+  after: unknown | null;
+  description: string | null;
+};
+
 export type FieldValueRead = {
   id: string;
   card_id: string;
@@ -678,6 +689,8 @@ export type PublicLinkRead = {
   reviewed_by: string | null;
   review_comment: string | null;
   review_enabled: boolean;
+  can_manage_change_notifications: boolean;
+  change_notifications_enabled: boolean;
   completed_public_fields: number | null;
   total_public_fields: number | null;
 };
