@@ -380,7 +380,9 @@ def test_subscription_toggles_write_technical_audit_without_inbox_events(
     assert isinstance(reader, User)
     assert isinstance(card, Card)
     assert isinstance(public_link, CardPublicLink)
-    inbox_count_before = db_session.scalar(select(func.count(CardChangeNotification)))
+    inbox_count_before = db_session.scalar(
+        select(func.count()).select_from(CardChangeNotification)
+    )
 
     service.set_card_subscription_for_actor(
         actor_user_id=reader.id,
@@ -425,4 +427,7 @@ def test_subscription_toggles_write_technical_audit_without_inbox_events(
         ("public_link_change_notification_subscription", "unsubscribe", {"enabled": False}),
     ]
     assert all(event.retention_class == "technical" for event in events)
-    assert db_session.scalar(select(func.count(CardChangeNotification))) == inbox_count_before
+    assert (
+        db_session.scalar(select(func.count()).select_from(CardChangeNotification))
+        == inbox_count_before
+    )
