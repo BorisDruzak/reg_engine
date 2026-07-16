@@ -389,6 +389,9 @@ not a hardcoded employee registry.
   reverse field selection left export enabled, required an import target only
   for the template, toggled back to visible organization mode correctly, and
   downloaded a fresh template without browser-console errors.
+- 2026-07-16 XLSX date export now fixes separators as literal dots
+  (`DD"."MM"."YYYY`), so Excel cannot substitute the local date separator.
+  The focused XLSX backend suite (11 tests) and scoped Ruff check pass locally.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.

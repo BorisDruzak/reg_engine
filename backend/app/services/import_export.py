@@ -676,7 +676,7 @@ class TabularCardExchangeService:
     def _number_format_for_field(self, field: FormField) -> str | None:
         return {
             "number": "0.############",
-            "date": "DD.MM.YYYY",
+            "date": 'DD"."MM"."YYYY',
             "datetime": "DD.MM.YYYY HH:MM",
         }.get(field.field_type)
 

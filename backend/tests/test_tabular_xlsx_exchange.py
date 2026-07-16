@@ -142,7 +142,7 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
     assert [cell.value for cell in sheet[1][:3]] == ["№ п/п", "Организация", "Дата рождения"]
     assert sheet["A2"].value == 1
     assert sheet["B2"].value == "Администрация (admin)"
-    assert sheet["C2"].number_format == "DD.MM.YYYY"
+    assert sheet["C2"].number_format == 'DD"."MM"."YYYY'
     assert workbook["_registry_engine"].sheet_state == "hidden"
 
 
