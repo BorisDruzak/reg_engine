@@ -1036,6 +1036,15 @@ export async function listAuditEvents(token: string) {
   return apiRequest<AuditEventListRead>("/api/v1/audit-events?limit=20", { token });
 }
 
+export async function listCardHistoryEvents(token: string, cardId: string) {
+  const query = new URLSearchParams({
+    scope: "card_history",
+    card_id: cardId,
+    limit: "50",
+  });
+  return apiRequest<AuditEventListRead>(`/api/v1/audit-events?${query.toString()}`, { token });
+}
+
 export async function listAttachments(token: string, cardId: string) {
   return apiRequest<AttachmentListRead>(`/api/v1/cards/${cardId}/attachments`, { token });
 }

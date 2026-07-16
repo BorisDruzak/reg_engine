@@ -947,9 +947,15 @@ export type AuditEventRead = {
   actor_type: string;
   actor_user_id: string | null;
   actor_public_link_id: string | null;
+  attributed_user_id?: string | null;
+  actor_display_name?: string | null;
+  attributed_user_display_name?: string | null;
+  card_id?: string | null;
   action: string;
   object_type: string;
   object_id: string | null;
+  old_data_json?: unknown | null;
+  new_data_json?: unknown | null;
   source: string;
   ip_address: string | null;
   user_agent: string | null;

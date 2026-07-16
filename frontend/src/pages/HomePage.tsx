@@ -24,7 +24,7 @@ import {
 import type { CardFieldFilterPayload } from "@/api/types";
 import { BrandMark } from "@/components/common/BrandMark";
 import { DataAlert, Panel } from "@/components/common/DataSurfaces";
-import { AuditTable } from "@/features/audit/AuditTable";
+import { AuditPanel } from "@/features/audit/AuditPanel";
 import { LoginScreen } from "@/features/auth/LoginScreen";
 import {
   clearSession,
@@ -129,6 +129,22 @@ export function HomePage() {
       }),
     enabled: Boolean(token && cardListOrganizationId && needsCards),
   });
+  const auditCardListOrganizationId =
+    organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
+    organizationsQuery.data?.items[0]?.id ??
+    "";
+  const auditCardsQuery = useQuery({
+    queryKey: ["audit-card-selector", token, auditCardListOrganizationId],
+    queryFn: () =>
+      listOrganizationCards(token, auditCardListOrganizationId, {
+        organizationIds: [],
+        includeDescendantOrganizations: true,
+        includeArchive: true,
+        cardTemplateIds: [],
+        fieldFilters: [],
+      }),
+    enabled: Boolean(token && auditCardListOrganizationId && activeSection === "audit"),
+  });
   const visibleCards = cardsQuery.data?.items ?? [];
   const activeCardId =
     selectedCardId && visibleCards.some((card) => card.id === selectedCardId)
@@ -143,7 +159,7 @@ export function HomePage() {
   const cardReadQuery = useQuery({
     queryKey: ["card", token, activeCardId],
     queryFn: () => readCard(token, activeCardId),
-    enabled: Boolean(token && activeCardId),
+    enabled: Boolean(token && activeCardId && activeSection === "cards"),
   });
   const registrySchemaQuery = useQuery({
     queryKey: ["registry-schema", token, schemaRegistryId],
@@ -533,7 +549,11 @@ export function HomePage() {
             {auditSectionDenied ? (
               <SectionAccessDenied />
             ) : (
-              <AuditTable auditEvents={auditQuery.data?.items ?? []} />
+              <AuditPanel
+                auditEvents={auditQuery.data?.items ?? []}
+                cards={auditCardsQuery.data?.items ?? []}
+                token={token}
+              />
             )}
           </>
         )}
