@@ -44,6 +44,8 @@ class PublicLinkRead(BaseModel):
     review_enabled: bool
     completed_public_fields: int | None
     total_public_fields: int | None
+    can_manage_change_notifications: bool
+    change_notifications_enabled: bool
 
 
 class PublicLinkListRead(BaseModel):

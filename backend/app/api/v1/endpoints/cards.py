@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
 from app.api.v1.endpoints._field_values import coerce_api_field_value, field_value_to_read
 from app.models import Card
+from app.schemas.card_change_notifications import (
+    CardChangeNotificationSubscriptionRead,
+    CardChangeNotificationSubscriptionUpdate,
+)
 from app.schemas.cards import (
     CardBlockInstanceRead,
     CardBlockInstanceSummaryRead,
@@ -40,6 +44,7 @@ from app.schemas.cards import (
     OrganizationCardCreate,
 )
 from app.schemas.registries import ReferenceItemListRead, ReferenceItemRead
+from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import (
     BulkFieldValueInput,
@@ -309,6 +314,46 @@ def list_organization_cards(
     except Exception as exc:
         raise_service_http_error(exc)
     return CardListRead(items=[_card_to_summary(card, card_service) for card in cards])
+
+
+@router.get(
+    "/cards/{card_id}/change-notification-subscription",
+    response_model=CardChangeNotificationSubscriptionRead,
+)
+def get_card_change_notification_subscription(
+    card_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardChangeNotificationSubscriptionRead:
+    try:
+        enabled = CardChangeNotificationService(session).get_card_subscription_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardChangeNotificationSubscriptionRead(enabled=enabled)
+
+
+@router.put(
+    "/cards/{card_id}/change-notification-subscription",
+    response_model=CardChangeNotificationSubscriptionRead,
+)
+def set_card_change_notification_subscription(
+    card_id: UUID,
+    payload: CardChangeNotificationSubscriptionUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardChangeNotificationSubscriptionRead:
+    try:
+        enabled = CardChangeNotificationService(session).set_card_subscription_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            enabled=payload.enabled,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardChangeNotificationSubscriptionRead(enabled=enabled)
 
 
 @router.get("/cards/{card_id}", response_model=CardRead)

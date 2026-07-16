@@ -14,6 +14,10 @@ from app.api.v1.endpoints.attachments import (
 )
 from app.core.config import get_settings
 from app.models import CardAttachment, CardPublicLink
+from app.schemas.card_change_notifications import (
+    CardChangeNotificationSubscriptionRead,
+    CardChangeNotificationSubscriptionUpdate,
+)
 from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 from app.schemas.cards import FieldValueRead
 from app.schemas.public_links import (
@@ -39,6 +43,7 @@ from app.schemas.public_links import (
     PublicLinkTokenRead,
 )
 from app.services.attachments import AttachmentService
+from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.public_links import (
     PublicLinkPreview,
     PublicLinkReviewDiff,
@@ -96,7 +101,12 @@ def list_public_links(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return PublicLinkListRead(items=[_public_link_to_read(link) for link in public_links])
+    return PublicLinkListRead(
+        items=[
+            _public_link_to_read(link, actor_user_id=actor_user_id, session=session)
+            for link in public_links
+        ]
+    )
 
 
 @router.delete("/public-links/{public_link_id}", response_model=PublicLinkRead)
@@ -112,7 +122,7 @@ def disable_public_link(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _public_link_to_read(public_link)
+    return _public_link_to_read(public_link, actor_user_id=actor_user_id, session=session)
 
 
 @router.post("/public-links/submit", response_model=PublicLinkSafeStatusRead)
@@ -154,7 +164,7 @@ def read_public_link_review(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _public_link_review_to_read(review)
+    return _public_link_review_to_read(review, actor_user_id=actor_user_id, session=session)
 
 
 @router.post("/public-links/{public_link_id}/request-changes", response_model=PublicLinkRead)
@@ -172,7 +182,7 @@ def request_public_link_changes(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _public_link_to_read(public_link)
+    return _public_link_to_read(public_link, actor_user_id=actor_user_id, session=session)
 
 
 @router.post("/public-links/{public_link_id}/approve", response_model=PublicLinkRead)
@@ -188,7 +198,7 @@ def approve_public_link(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _public_link_to_read(public_link)
+    return _public_link_to_read(public_link, actor_user_id=actor_user_id, session=session)
 
 
 @router.post("/public-links/{public_link_id}/start-review-cycle", response_model=PublicLinkRead)
@@ -204,7 +214,47 @@ def start_public_link_review_cycle(
         )
     except Exception as exc:
         raise_service_http_error(exc)
-    return _public_link_to_read(public_link)
+    return _public_link_to_read(public_link, actor_user_id=actor_user_id, session=session)
+
+
+@router.get(
+    "/public-links/{public_link_id}/change-notification-subscription",
+    response_model=CardChangeNotificationSubscriptionRead,
+)
+def get_public_link_change_notification_subscription(
+    public_link_id: UUID,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardChangeNotificationSubscriptionRead:
+    try:
+        enabled = CardChangeNotificationService(session).get_public_link_subscription_for_creator(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardChangeNotificationSubscriptionRead(enabled=enabled)
+
+
+@router.put(
+    "/public-links/{public_link_id}/change-notification-subscription",
+    response_model=CardChangeNotificationSubscriptionRead,
+)
+def set_public_link_change_notification_subscription(
+    public_link_id: UUID,
+    payload: CardChangeNotificationSubscriptionUpdate,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardChangeNotificationSubscriptionRead:
+    try:
+        enabled = CardChangeNotificationService(session).set_public_link_subscription_for_creator(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link_id,
+            enabled=payload.enabled,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return CardChangeNotificationSubscriptionRead(enabled=enabled)
 
 
 @router.post("/public-links/preview", response_model=PublicLinkPreviewRead)
@@ -335,8 +385,22 @@ def read_public_link_attachment_content(
     )
 
 
-def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
+def _public_link_to_read(
+    public_link: CardPublicLink,
+    *,
+    actor_user_id: UUID,
+    session: Session,
+) -> PublicLinkRead:
     submission_summary = public_link.submission_summary_json or {}
+    can_manage_change_notifications = public_link.created_by == actor_user_id
+    change_notifications_enabled = (
+        CardChangeNotificationService(session).get_public_link_subscription_for_creator(
+            actor_user_id=actor_user_id,
+            public_link_id=public_link.id,
+        )
+        if can_manage_change_notifications
+        else False
+    )
     return PublicLinkRead(
         id=public_link.id,
         card_id=public_link.card_id,
@@ -362,6 +426,8 @@ def _public_link_to_read(public_link: CardPublicLink) -> PublicLinkRead:
             submission_summary,
             "total_public_fields",
         ),
+        can_manage_change_notifications=can_manage_change_notifications,
+        change_notifications_enabled=change_notifications_enabled,
     )
 
 
@@ -379,9 +445,18 @@ def _public_link_safe_status_to_read(
     )
 
 
-def _public_link_review_to_read(review: PublicLinkReviewDiff) -> PublicLinkReviewRead:
+def _public_link_review_to_read(
+    review: PublicLinkReviewDiff,
+    *,
+    actor_user_id: UUID,
+    session: Session,
+) -> PublicLinkReviewRead:
     return PublicLinkReviewRead(
-        public_link=_public_link_to_read(review.public_link),
+        public_link=_public_link_to_read(
+            review.public_link,
+            actor_user_id=actor_user_id,
+            session=session,
+        ),
         changed_field_count=review.changed_field_count,
         changed_attachment_count=review.changed_attachment_count,
         fields=[
