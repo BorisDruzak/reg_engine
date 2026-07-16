@@ -19,15 +19,18 @@ from app.models import (
     CardPublicLink,
     Organization,
     Permission,
+    PublicLinkChangeNotificationSubscription,
     Registry,
     Role,
     User,
     role_permissions,
 )
+from app.services.audit import AuditService
 from app.services.card_change_notifications import CardChangeNotificationService
-from app.services.cards import CardService
+from app.services.cards import BulkFieldValueInput, CardService
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.references import ReferenceListService
 from app.services.registry_schema import RegistrySchemaService
 
 
@@ -472,3 +475,308 @@ def test_subscription_toggles_write_technical_audit_without_inbox_events(
         db_session.scalar(select(func.count()).select_from(CardChangeNotification))
         == inbox_count_before
     )
+
+
+def test_card_history_events_create_safe_notifications_without_self_or_link_duplicates(
+    db_session: Session,
+    notification_context: dict[str, object],
+) -> None:
+    admin = notification_context["admin"]
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    organization = notification_context["organization"]
+    registry = notification_context["registry"]
+
+    assert isinstance(admin, User)
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(organization, Organization)
+    assert isinstance(registry, Registry)
+
+    editor = User(email="notification-editor@example.test", display_name="Исполнитель")
+    link_creator = User(
+        email="notification-link-creator@example.test", display_name="Создатель ссылки"
+    )
+    other_creator = User(
+        email="notification-other-creator@example.test", display_name="Другой создатель"
+    )
+    db_session.add_all([editor, link_creator, other_creator])
+    db_session.flush()
+    role = db_session.scalar(select(Role).where(Role.code == "notification-card-manager"))
+    assert role is not None
+    db_session.add_all(
+        [
+            AccessGrant(
+                user_id=user.id,
+                role_id=role.id,
+                organization_id=organization.id,
+                registry_id=registry.id,
+                include_descendants=False,
+                created_by=admin.id,
+            )
+            for user in (editor, link_creator, other_creator)
+        ]
+    )
+    schema = RegistrySchemaService(db_session)
+    block = schema.create_block_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        code="notification-history",
+        title="История уведомлений",
+    )
+    field = schema.create_field_for_actor(
+        actor_user_id=admin.id,
+        block_id=block.id,
+        code="full_name",
+        label="ФИО",
+        field_type="text",
+    )
+    cards = CardService(db_session)
+    cards.set_field_value_for_actor(
+        actor_user_id=admin.id,
+        card_id=card.id,
+        field_id=field.id,
+        value="Было",
+    )
+    public_link = CardPublicLink(
+        card_id=card.id,
+        token_hash="history-notification-link",
+        created_by=link_creator.id,
+    )
+    db_session.add(public_link)
+    db_session.flush()
+
+    service = CardChangeNotificationService(db_session)
+    service.set_card_subscription_for_actor(
+        actor_user_id=reader.id,
+        card_id=card.id,
+        enabled=True,
+    )
+    service.set_card_subscription_for_actor(
+        actor_user_id=other_creator.id,
+        card_id=card.id,
+        enabled=True,
+    )
+    service.set_public_link_subscription_for_creator(
+        actor_user_id=link_creator.id,
+        public_link_id=public_link.id,
+        enabled=True,
+    )
+    db_session.add(
+        PublicLinkChangeNotificationSubscription(
+            user_id=other_creator.id,
+            public_link_id=public_link.id,
+        )
+    )
+    db_session.flush()
+
+    cards.set_field_value_for_actor(
+        actor_user_id=editor.id,
+        card_id=card.id,
+        field_id=field.id,
+        value="Стало",
+    )
+
+    generated = [
+        item
+        for item in service.list_for_actor(actor_user_id=reader.id, limit=20)[1]
+        if item.changes_json == [{"label": "ФИО", "before": "Было", "after": "Стало"}]
+    ]
+    assert len(generated) == 1
+    assert generated[0].actor_display_name == "Исполнитель"
+    assert service.list_for_actor(actor_user_id=editor.id, limit=20)[1] == []
+
+    event = AuditEvent(
+        actor_type="public_link",
+        actor_public_link_id=public_link.id,
+        attributed_user_id=link_creator.id,
+        action="update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "field": {"code": "full_name", "label": "ФИО", "type": "text"},
+            "value": "Стало",
+        },
+        new_data_json={
+            "field": {"code": "full_name", "label": "ФИО", "type": "text"},
+            "value": "Из публичной ссылки",
+        },
+        source="public_link",
+    )
+    db_session.add(event)
+    db_session.flush()
+    service.record_card_history_events([event])
+
+    assert service.list_for_actor(actor_user_id=link_creator.id, limit=20)[1] == []
+    public_items = [
+        item
+        for item in service.list_for_actor(actor_user_id=other_creator.id, limit=20)[1]
+        if item.changes_json
+        == [{"label": "ФИО", "before": "Стало", "after": "Из публичной ссылки"}]
+    ]
+    assert len(public_items) == 1
+
+
+def test_bulk_field_updates_make_one_notification_with_safe_history_values(
+    db_session: Session,
+    notification_context: dict[str, object],
+) -> None:
+    admin = notification_context["admin"]
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    registry = notification_context["registry"]
+
+    assert isinstance(admin, User)
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(registry, Registry)
+
+    schema = RegistrySchemaService(db_session)
+    block = schema.create_block_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        code="notification-bulk",
+        title="Пакет уведомлений",
+    )
+    first = schema.create_field_for_actor(
+        actor_user_id=admin.id,
+        block_id=block.id,
+        code="first",
+        label="Первое поле",
+        field_type="text",
+    )
+    second = schema.create_field_for_actor(
+        actor_user_id=admin.id,
+        block_id=block.id,
+        code="second",
+        label="Второе поле",
+        field_type="text",
+    )
+    service = CardChangeNotificationService(db_session)
+    service.set_card_subscription_for_actor(actor_user_id=reader.id, card_id=card.id, enabled=True)
+    before_audits = db_session.scalar(
+        select(func.count()).select_from(AuditEvent).where(AuditEvent.object_type == "field_value")
+    )
+    before_notifications = db_session.scalar(
+        select(func.count())
+        .select_from(CardChangeNotification)
+        .where(CardChangeNotification.user_id == reader.id)
+    )
+
+    CardService(db_session).set_field_values_for_actor(
+        actor_user_id=admin.id,
+        card_id=card.id,
+        values=[
+            BulkFieldValueInput(field_id=first.id, value="Раз"),
+            BulkFieldValueInput(field_id=second.id, value="Два"),
+        ],
+    )
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.object_type == "field_value")
+        )
+        == before_audits + 2
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CardChangeNotification)
+            .where(CardChangeNotification.user_id == reader.id)
+        )
+        == before_notifications + 1
+    )
+    bulk_changes = [
+        item.changes_json
+        for item in service.list_for_actor(actor_user_id=reader.id, limit=20)[1]
+        if {change.get("label") for change in item.changes_json} == {"Первое поле", "Второе поле"}
+    ]
+    assert bulk_changes == [
+        [
+            {"label": "Первое поле", "before": None, "after": "Раз"},
+            {"label": "Второе поле", "before": None, "after": "Два"},
+        ]
+    ]
+
+
+def test_notifications_reuse_safe_history_redaction_and_reference_labels(
+    db_session: Session,
+    notification_context: dict[str, object],
+) -> None:
+    admin = notification_context["admin"]
+    reader = notification_context["reader"]
+    card = notification_context["card"]
+    registry = notification_context["registry"]
+
+    assert isinstance(admin, User)
+    assert isinstance(reader, User)
+    assert isinstance(card, Card)
+    assert isinstance(registry, Registry)
+
+    service = CardChangeNotificationService(db_session)
+    service.set_card_subscription_for_actor(actor_user_id=reader.id, card_id=card.id, enabled=True)
+    references = ReferenceListService(db_session)
+    reference_list = references.create_reference_list_for_actor(
+        actor_user_id=admin.id,
+        registry_id=registry.id,
+        code="notification-assets",
+        name="Активы уведомлений",
+    )
+    before_item = references.create_reference_item_for_actor(
+        actor_user_id=admin.id,
+        list_id=reference_list.id,
+        code="laptop",
+        label="Ноутбук",
+    )
+    after_item = references.create_reference_item_for_actor(
+        actor_user_id=admin.id,
+        list_id=reference_list.id,
+        code="monitor",
+        label="Монитор",
+    )
+    audit = AuditService(db_session)
+    audit.record_user_event(
+        actor_user_id=admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "field": {"code": "secret", "label": "Секрет", "type": "text"},
+            "value": {"redacted": True},
+        },
+        new_data_json={
+            "field": {"code": "secret", "label": "Секрет", "type": "text"},
+            "value": {"redacted": True},
+        },
+    )
+    audit.record_user_event(
+        actor_user_id=admin.id,
+        action="update",
+        object_type="field_value",
+        card_id=card.id,
+        retention_class="card_history",
+        old_data_json={
+            "field": {"code": "asset", "label": "Актив", "type": "select"},
+            "value": str(before_item.id),
+        },
+        new_data_json={
+            "field": {"code": "asset", "label": "Актив", "type": "select"},
+            "value": str(after_item.id),
+        },
+    )
+
+    notifications = service.list_for_actor(actor_user_id=reader.id, limit=20)[1]
+    safe_changes = [change for item in notifications for change in item.changes_json]
+    assert {
+        "label": "Секрет",
+        "before": {"redacted": True},
+        "after": {"redacted": True},
+    } in safe_changes
+    assert {"label": "Актив", "before": "Ноутбук", "after": "Монитор"} in safe_changes
+    serialized = str(safe_changes)
+    assert str(before_item.id) not in serialized
+    assert str(after_item.id) not in serialized

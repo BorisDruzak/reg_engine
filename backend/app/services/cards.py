@@ -16,6 +16,7 @@ from app.domain.work_experience import (
     serialize_experience,
 )
 from app.models import (
+    AuditEvent,
     Card,
     CardAttachment,
     CardBlockInstance,
@@ -993,6 +994,7 @@ class CardService:
         value: object,
         block_instance_id: UUID | None = None,
         synchronize_lifecycle: bool = True,
+        notification_batch: list[AuditEvent] | None = None,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -1038,6 +1040,7 @@ class CardService:
             retention_class="card_history",
             old_data_json=old_data,
             new_data_json=self._field_value_audit_snapshot(field_model, field_value),
+            notification_batch=notification_batch,
         )
         if synchronize_lifecycle:
             self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
@@ -1050,6 +1053,7 @@ class CardService:
         card_id: UUID,
         values: Sequence[BulkFieldValueInput],
     ) -> list[FieldValue]:
+        notification_batch: list[AuditEvent] = []
         with self.session.begin_nested():
             card = self._get_editable_card(card_id)
             field_values = [
@@ -1060,10 +1064,14 @@ class CardService:
                     value=item.value,
                     block_instance_id=item.block_instance_id,
                     synchronize_lifecycle=False,
+                    notification_batch=notification_batch,
                 )
                 for item in values
             ]
             self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
+        from app.services.card_change_notifications import CardChangeNotificationService
+
+        CardChangeNotificationService(self.session).record_card_history_events(notification_batch)
         return field_values
 
     def validate_field_value_for_actor(

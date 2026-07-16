@@ -25,6 +25,7 @@ from app.main import create_app
 from app.models import AuditEvent, Card, CardPublicLink, CardTemplate, FieldValue, FormBlock, User
 from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
+from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
@@ -251,6 +252,39 @@ def _read_text_value(session: Session, fixture: ReviewFixture) -> str | None:
         )
     )
     return value.value_text if value is not None else None
+
+
+def test_public_link_autosave_excludes_its_attributed_creator_from_notifications(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    public_links = PublicLinkService(db_session)
+    token = public_links.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=review_fixture.card_id,
+    )
+    notifications = CardChangeNotificationService(db_session)
+    notifications.set_public_link_subscription_for_creator(
+        actor_user_id=review_fixture.admin_id,
+        public_link_id=token.public_link.id,
+        enabled=True,
+    )
+
+    public_links.edit_card_field_with_token(
+        raw_token=token.raw_token,
+        field_id=review_fixture.text_field_id,
+        value="Изменено по публичной ссылке",
+    )
+
+    event = db_session.scalars(
+        select(AuditEvent)
+        .where(AuditEvent.actor_public_link_id == token.public_link.id)
+        .where(AuditEvent.object_type == "field_value")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    ).first()
+    assert event is not None
+    assert event.attributed_user_id == review_fixture.admin_id
+    assert notifications.list_for_actor(actor_user_id=review_fixture.admin_id, limit=20)[1] == []
 
 
 def test_active_public_link_uses_current_card_access_settings(

@@ -218,8 +218,9 @@ class AuditService:
         card_id: UUID | None = None,
         attributed_user_id: UUID | None = None,
         retention_class: str = "technical",
+        notification_batch: list[AuditEvent] | None = None,
     ) -> AuditEvent:
-        return self._record(
+        event = self._record(
             actor_type="user",
             actor_user_id=actor_user_id,
             actor_public_link_id=None,
@@ -234,6 +235,8 @@ class AuditService:
             attributed_user_id=attributed_user_id,
             retention_class=retention_class,
         )
+        self._dispatch_card_change_notification(event, notification_batch)
+        return event
 
     def record_public_link_event(
         self,
@@ -247,8 +250,9 @@ class AuditService:
         card_id: UUID | None = None,
         attributed_user_id: UUID | None = None,
         retention_class: str = "technical",
+        notification_batch: list[AuditEvent] | None = None,
     ) -> AuditEvent:
-        return self._record(
+        event = self._record(
             actor_type="public_link",
             actor_user_id=None,
             actor_public_link_id=actor_public_link_id,
@@ -263,6 +267,8 @@ class AuditService:
             attributed_user_id=attributed_user_id,
             retention_class=retention_class,
         )
+        self._dispatch_card_change_notification(event, notification_batch)
+        return event
 
     def record_reference_edit_link_event(
         self,
@@ -276,8 +282,9 @@ class AuditService:
         card_id: UUID | None = None,
         attributed_user_id: UUID | None = None,
         retention_class: str = "technical",
+        notification_batch: list[AuditEvent] | None = None,
     ) -> AuditEvent:
-        return self._record(
+        event = self._record(
             actor_type="reference_edit_link",
             actor_user_id=None,
             actor_public_link_id=None,
@@ -292,6 +299,8 @@ class AuditService:
             attributed_user_id=attributed_user_id,
             retention_class=retention_class,
         )
+        self._dispatch_card_change_notification(event, notification_batch)
+        return event
 
     def record_system_event(
         self,
@@ -304,8 +313,9 @@ class AuditService:
         card_id: UUID | None = None,
         attributed_user_id: UUID | None = None,
         retention_class: str = "technical",
+        notification_batch: list[AuditEvent] | None = None,
     ) -> AuditEvent:
-        return self._record(
+        event = self._record(
             actor_type="system",
             actor_user_id=None,
             actor_public_link_id=None,
@@ -320,6 +330,14 @@ class AuditService:
             attributed_user_id=attributed_user_id,
             retention_class=retention_class,
         )
+        self._dispatch_card_change_notification(event, notification_batch)
+        return event
+
+    def present_card_history_events(
+        self,
+        events: Sequence[AuditEvent],
+    ) -> dict[UUID, CardHistoryPresentation]:
+        return self._card_history_presentations(events)
 
     def list_events_for_actor(
         self,
@@ -555,6 +573,20 @@ class AuditService:
         self.session.add(event)
         self.session.flush()
         return event
+
+    def _dispatch_card_change_notification(
+        self,
+        event: AuditEvent,
+        notification_batch: list[AuditEvent] | None,
+    ) -> None:
+        if event.retention_class != "card_history" or event.action == "lifecycle_sync":
+            return
+        if notification_batch is not None:
+            notification_batch.append(event)
+            return
+        from app.services.card_change_notifications import CardChangeNotificationService
+
+        CardChangeNotificationService(self.session).record_card_history_events([event])
 
     def _request_metadata(self) -> dict[str, str | None]:
         raw_metadata = self.session.info.get("audit_metadata")

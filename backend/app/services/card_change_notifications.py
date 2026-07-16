@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import (
+    AuditEvent,
     Card,
     CardChangeNotification,
     CardChangeNotificationSubscription,
     CardPublicLink,
     Organization,
     PublicLinkChangeNotificationSubscription,
+    User,
 )
 from app.services.audit import AuditService
 from app.services.cards import CardServiceError
@@ -181,6 +183,92 @@ class CardChangeNotificationService:
             ).all()
         )
         return unread_count, notifications
+
+    def record_card_history_events(
+        self,
+        events: Sequence[AuditEvent],
+    ) -> list[CardChangeNotification]:
+        history_events = [
+            event
+            for event in events
+            if event.card_id is not None
+            and event.retention_class == "card_history"
+            and event.action != "lifecycle_sync"
+        ]
+        if not history_events:
+            return []
+
+        presentations = AuditService(self.session).present_card_history_events(history_events)
+        grouped_changes: dict[tuple[UUID, UUID, str], list[dict[str, object]]] = {}
+        for event in history_events:
+            assert event.card_id is not None
+            recipients = set(
+                self.session.scalars(
+                    select(CardChangeNotificationSubscription.user_id).where(
+                        CardChangeNotificationSubscription.card_id == event.card_id
+                    )
+                ).all()
+            )
+            if event.actor_public_link_id is not None:
+                recipients.update(
+                    self.session.scalars(
+                        select(PublicLinkChangeNotificationSubscription.user_id).where(
+                            PublicLinkChangeNotificationSubscription.public_link_id
+                            == event.actor_public_link_id
+                        )
+                    ).all()
+                )
+            effective_actor_user_id = event.attributed_user_id or event.actor_user_id
+            if effective_actor_user_id is not None:
+                recipients.discard(effective_actor_user_id)
+            actor_display_name = self._notification_actor_display_name(
+                effective_actor_user_id=effective_actor_user_id
+            )
+            change = self._notification_change(presentation=presentations[event.id])
+            for recipient_id in recipients:
+                grouped_changes.setdefault(
+                    (recipient_id, event.card_id, actor_display_name), []
+                ).append(change)
+
+        notifications = [
+            CardChangeNotification(
+                user_id=user_id,
+                card_id=card_id,
+                actor_display_name=actor_display_name,
+                changes_json=changes,
+            )
+            for (user_id, card_id, actor_display_name), changes in grouped_changes.items()
+        ]
+        self.session.add_all(notifications)
+        if notifications:
+            self.session.flush()
+        return notifications
+
+    def _notification_actor_display_name(
+        self,
+        *,
+        effective_actor_user_id: UUID | None,
+    ) -> str:
+        if effective_actor_user_id is None:
+            return "Система"
+        user = self.session.get(User, effective_actor_user_id)
+        return user.display_name if user is not None else "Система"
+
+    @staticmethod
+    def _notification_change(*, presentation: object) -> dict[str, object]:
+        if getattr(presentation, "display", None) == "field_diff":
+            old_snapshot = getattr(presentation, "old_data_json", None)
+            new_snapshot = getattr(presentation, "new_data_json", None)
+            snapshot = new_snapshot if isinstance(new_snapshot, dict) else old_snapshot
+            field = snapshot.get("field") if isinstance(snapshot, dict) else None
+            label = field.get("label") if isinstance(field, dict) else None
+            return {
+                "label": label if isinstance(label, str) and label else "Поле",
+                "before": old_snapshot.get("value") if isinstance(old_snapshot, dict) else None,
+                "after": new_snapshot.get("value") if isinstance(new_snapshot, dict) else None,
+            }
+        description = getattr(presentation, "description", None)
+        return {"label": "Событие карточки", "description": description or "Событие карточки"}
 
     def get_visible_cards_for_actor(
         self,
