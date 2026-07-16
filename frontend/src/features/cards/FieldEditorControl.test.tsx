@@ -1,8 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
 
 import { FieldEditorControl } from "./FieldEditorControl";
+
+const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
 const options = [
   { id: "one", label: "Первый" },
@@ -86,6 +89,26 @@ describe("FieldEditorControl hints", () => {
       expect(onChange).not.toHaveBeenCalled();
     },
   );
+
+  test("marks an open choice picker for overlay positioning", async () => {
+    const user = userEvent.setup();
+    renderControl("select", "Выберите вариант");
+
+    const picker = screen.getByRole("group", { name: "Поле select" });
+    expect(picker).not.toHaveClass("is-open");
+
+    await user.click(within(picker).getByRole("combobox", { name: "Поле select" }));
+
+    expect(picker).toHaveClass("is-open");
+    expect(globalStyles).toContain(".searchable-choice-picker.is-open");
+    expect(globalStyles).toContain("position: absolute;");
+    expect(globalStyles).toContain(
+      ".filled-card-layout .card-layout-field-node:has(.searchable-choice-picker.is-open)",
+    );
+    expect(globalStyles).toContain(
+      ".filled-card-layout .card-web-layout-canvas:has(.searchable-choice-picker.is-open)",
+    );
+  });
 
   test("filters server-supplied single choices and never exposes a free-text value", async () => {
     const user = userEvent.setup();

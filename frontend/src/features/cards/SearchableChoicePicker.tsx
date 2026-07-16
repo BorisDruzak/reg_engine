@@ -71,7 +71,11 @@ export function SearchableChoicePicker({
   }
 
   return (
-    <div className="searchable-choice-picker" role="group" aria-label={label}>
+    <div
+      className={`searchable-choice-picker${isOpen ? " is-open" : ""}`}
+      role="group"
+      aria-label={label}
+    >
       <button
         ref={triggerRef}
         type="button"
