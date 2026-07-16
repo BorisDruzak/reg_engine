@@ -404,7 +404,10 @@ not a hardcoded employee registry.
   That command creates/enables a daily persistent systemd oneshot timer; it
   reads the existing external runtime environment file and stores neither
   credentials nor server paths in Git. The focused CLI and timer static tests,
-  Ruff, and PowerShell syntax checks pass locally; disposable PostgreSQL
+  Ruff, PowerShell syntax checks, focused backend audit suite, focused
+  `AuditPanel` Vitest test, TypeScript, ESLint, and production frontend build
+  pass locally. The existing `FilledCardLayout` Hook-dependency warning and
+  Vite main-chunk-size advisory remain unchanged. Disposable PostgreSQL
   verification, migration, deployment, and timer-state confirmation remain
   part of the release gate.
 - Phase 6 organization-centered card workflow cleanup is implemented and

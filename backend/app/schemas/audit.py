@@ -12,13 +12,13 @@ class AuditEventRead(BaseModel):
     actor_type: str
     actor_user_id: UUID | None
     actor_public_link_id: UUID | None
-    attributed_user_id: UUID | None
+    attributed_user_id: UUID | None = None
     actor_display_name: str | None = None
     attributed_user_display_name: str | None = None
     action: str
     object_type: str
     object_id: UUID | None
-    card_id: UUID | None
+    card_id: UUID | None = None
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
     source: str
