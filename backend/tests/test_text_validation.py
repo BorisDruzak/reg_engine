@@ -99,6 +99,17 @@ def test_normalize_rejects_reserved_character_class_set_operators(pattern: str) 
         normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
 
 
+def test_normalize_rejects_unescaped_open_bracket_inside_character_class() -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": r"[[]", "message": "Ошибка"})
+
+
+def test_normalize_allows_escaped_open_bracket_inside_character_class() -> None:
+    rule = normalize_text_validation({"kind": "regex", "pattern": r"[\[]", "message": "Ошибка"})
+
+    assert rule is not None
+
+
 @pytest.mark.parametrize("pattern", [r"А*+", r"А++", r"А?+", r"А{1,2}+"])
 def test_normalize_rejects_possessive_quantifiers(pattern: str) -> None:
     with pytest.raises(TextValidationError):

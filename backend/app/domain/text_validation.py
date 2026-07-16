@@ -142,6 +142,8 @@ def _consume_character_class(pattern: str, index: int) -> int | None:
     has_member = False
     while index < len(pattern):
         character = pattern[index]
+        if character == "[":
+            return None
         if pattern[index : index + 2] in {"&&", "||", "~~"}:
             return None
         if character == "\\":
