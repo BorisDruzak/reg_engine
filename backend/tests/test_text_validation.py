@@ -93,6 +93,12 @@ def test_normalize_rejects_python_only_end_of_string_escape() -> None:
         normalize_text_validation({"kind": "regex", "pattern": r"А\z", "message": "Ошибка"})
 
 
+@pytest.mark.parametrize("pattern", [r"[a&&b]", r"[a||b]", r"[a~~b]"])
+def test_normalize_rejects_reserved_character_class_set_operators(pattern: str) -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+
 @pytest.mark.parametrize("pattern", [r"А*+", r"А++", r"А?+", r"А{1,2}+"])
 def test_normalize_rejects_possessive_quantifiers(pattern: str) -> None:
     with pytest.raises(TextValidationError):
