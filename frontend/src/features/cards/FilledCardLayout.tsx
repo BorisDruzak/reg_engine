@@ -248,15 +248,25 @@ export function FilledCardLayout({
                   }}
                   fieldPresentation={({ field }) => {
                     const completion = completionBySurface.get(surface.key)?.fields.get(field.id);
-                    return completion
-                      ? {
-                          state: completion.state,
-                          description:
-                            completion.state !== "filled"
-                              ? field.description?.trim() || completion.label
-                              : completion.label,
-                        }
+                    const isActiveEditorField =
+                      editorTarget?.blockId === field.block_id &&
+                      Object.prototype.hasOwnProperty.call(blockEditor?.values ?? {}, field.id);
+                    const editingState = isActiveEditorField
+                      ? blockEditor?.pending
+                        ? "saving"
+                        : blockEditor?.dirty
+                          ? "dirty"
+                          : "active"
                       : undefined;
+                    if (!completion && !editingState) return undefined;
+                    return {
+                      state: completion?.state,
+                      editingState,
+                      description:
+                        completion && completion.state !== "filled"
+                          ? field.description?.trim() || completion.label
+                          : completion?.label,
+                    };
                   }}
                   canActivateField={({ field }) =>
                     Boolean(

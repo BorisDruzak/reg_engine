@@ -30,6 +30,7 @@ export type CardLayoutBlockPresentation = {
 
 export type CardLayoutFieldPresentation = {
   state?: "filled" | "required-missing" | "empty";
+  editingState?: "active" | "dirty" | "saving";
   description?: string;
 };
 

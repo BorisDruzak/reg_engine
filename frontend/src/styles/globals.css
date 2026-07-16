@@ -2677,6 +2677,18 @@ tr:last-child td {
   background: #f5fcf8;
 }
 
+.filled-card-layout .card-layout-field-node.is-editor-active,
+.filled-card-layout .card-layout-field-node.is-editor-saving {
+  border-color: #0f66d0;
+  box-shadow: 0 0 0 2px rgba(15, 102, 208, 0.18);
+}
+
+.filled-card-layout .card-layout-field-node.is-editor-dirty {
+  border-color: #d25c19;
+  background: #fff4e8;
+  box-shadow: 0 0 0 3px rgba(210, 92, 25, 0.24);
+}
+
 .card-layout-presentation-description {
   position: absolute;
   width: 1px;

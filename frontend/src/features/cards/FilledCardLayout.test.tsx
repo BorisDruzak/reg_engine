@@ -357,6 +357,50 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
+  test("marks only the active field while its value matches the saved value", async () => {
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+
+    expect(screen.getByTestId("filled-field-layout-first-name")).toHaveClass("is-editor-active");
+    expect(screen.getByTestId("filled-field-layout-last-name")).not.toHaveClass("is-editor-active");
+  });
+
+  test("marks the changed field as unsaved until its save resolves", async () => {
+    let resolveSave: () => void = () => {
+      throw new Error("The save promise was not initialized.");
+    };
+    const saveValues = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    fireEvent.click(screen.getByTestId("filled-field-layout-first-name"));
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
+    expect(screen.getByTestId("filled-field-layout-first-name")).toHaveClass("is-editor-dirty");
+
+    fireEvent.blur(screen.getByLabelText("Имя"));
+    await waitFor(() => expect(saveValues).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("filled-field-layout-first-name")).toHaveClass("is-editor-saving");
+
+    await act(async () => {
+      resolveSave();
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("filled-field-layout-first-name")).toHaveClass("is-editor-active"),
+    );
+  });
+
+  test("defines the active, unsaved, and saving field state styles", () => {
+    expect(globalStyles).toContain(".filled-card-layout .card-layout-field-node.is-editor-active");
+    expect(globalStyles).toContain(".filled-card-layout .card-layout-field-node.is-editor-dirty");
+    expect(globalStyles).toContain(".filled-card-layout .card-layout-field-node.is-editor-saving");
+  });
+
   test("shows a failed field save and does not retry it automatically", async () => {
     vi.useFakeTimers();
     const saveValues = vi.fn().mockRejectedValue(new Error("Server rejected the value."));

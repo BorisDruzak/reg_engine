@@ -373,7 +373,7 @@ export function CardFieldLayoutNode({
 
   return (
     <article
-      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}${presentation?.state ? ` is-${presentation.state}` : ""}`}
+      className={`card-layout-field-node${schemaEditing || blockValueEditing ? " is-editing" : ""}${directInteraction ? " is-direct-interaction" : ""}${geometryTarget ? " is-geometry-target" : ""}${presentation?.editingState ? ` is-editor-${presentation.editingState}` : ""}${presentation?.state ? ` is-${presentation.state}` : ""}`}
       data-card-field-id={field.id}
       data-testid={`${testIdPrefix}-field-${item.id}`}
       style={style}
