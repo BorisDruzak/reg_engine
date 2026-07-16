@@ -172,6 +172,27 @@ describe("PublicLinkEditPage", () => {
     expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
   });
 
+  test("keeps an invalid public text draft local and does not call the public edit mutation", async () => {
+    preview.blocks[0].instances[0].fields[0] = {
+      ...preview.blocks[0].instances[0].fields[0],
+      label: "ФИО",
+      validation_json: {
+        kind: "russian_text",
+        message: "Введите ФИО русскими буквами",
+      },
+    };
+    renderPage();
+
+    const input = await screen.findByRole("textbox", { name: "ФИО" });
+    fireEvent.change(input, { target: { value: "Иван 2" } });
+    fireEvent.blur(input);
+
+    expect(input).toHaveValue("Иван 2");
+    expect(screen.getByRole("alert")).toHaveTextContent("Введите ФИО русскими буквами");
+    await act(async () => {});
+    expect(editCalls()).toHaveLength(0);
+  });
+
   test("debounces a public work-experience mask and flushes its complete value on blur", async () => {
     preview.form_layout.sections[0].items.push(
       layoutItem("item-experience", "field-experience", 3, 1, 1, 6),

@@ -635,6 +635,7 @@ function publicCardTemplateLayout(preview: PublicCardPreview): CardTemplateLayou
         field_type: field.field_type,
         position: index,
         required_mode: publicEditable ? field.required_mode : "not_required",
+        validation_json: field.validation_json,
         options_source_type: field.options_source_type,
         options_source_id: field.options_source_id,
         options_config_json: field.options_config_json ?? null,
@@ -798,6 +799,7 @@ function PublicFieldEditor({
         fieldType={field.field_type}
         label={field.label}
         hint={field.description}
+        validation={field.validation_json}
         options={field.options}
         value={rawValue}
         onChange={updateRawValue}

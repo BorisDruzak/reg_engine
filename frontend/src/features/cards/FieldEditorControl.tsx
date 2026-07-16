@@ -1,12 +1,15 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import type { TextValidationRule } from "@/api/types";
 import { uiText } from "@/app/uiText";
 
+import { TextValidationPopover } from "./TextValidationPopover";
 import type { FieldEditorOption, FieldEditorState } from "./fieldEditorUtils";
 import { inputTypeForField } from "./fieldEditorUtils";
 import { SearchableChoicePicker } from "./SearchableChoicePicker";
 import { WorkExperienceEditor } from "./WorkExperienceEditor";
 import { defaultWorkExperienceValue, workExperienceValueFromUnknown } from "./workExperience";
+import { validateTextDraft } from "./textValidation";
 
 export function FieldEditorControl({
   fieldType,
@@ -17,6 +20,7 @@ export function FieldEditorControl({
   value,
   disabled = false,
   autoOpenChoice = false,
+  validation = null,
   onBlur,
   onChange,
 }: {
@@ -28,6 +32,7 @@ export function FieldEditorControl({
   value: FieldEditorState;
   disabled?: boolean;
   autoOpenChoice?: boolean;
+  validation?: TextValidationRule | null;
   onBlur?: () => void;
   onChange: (value: FieldEditorState) => void;
 }) {
@@ -171,6 +176,7 @@ export function FieldEditorControl({
         value={typeof value === "string" ? value : ""}
         disabled={disabled}
         onBlur={onBlur}
+        validation={validation}
         onChange={(nextValue) => onChange(nextValue)}
       />
     );
@@ -196,6 +202,7 @@ function AutoSizingTextControl({
   value,
   disabled,
   onBlur,
+  validation,
   onChange,
 }: {
   label: string;
@@ -203,29 +210,54 @@ function AutoSizingTextControl({
   value: string;
   disabled: boolean;
   onBlur?: () => void;
+  validation: TextValidationRule | null;
   onChange: (value: string) => void;
 }) {
   const controlRef = useRef<HTMLTextAreaElement>(null);
+  const [draft, setDraft] = useState(value);
+  const [validationError, setValidationError] = useState<{ message: string; id: number } | null>(
+    null,
+  );
+  const dismissValidationError = useCallback(() => setValidationError(null), []);
 
   useLayoutEffect(() => {
     const control = controlRef.current;
     if (!control) return;
     control.style.height = "auto";
     control.style.height = `${control.scrollHeight}px`;
-  }, [value]);
+  }, [draft]);
+
+  function updateDraft(nextValue: string) {
+    setDraft(nextValue);
+    const result = validateTextDraft(nextValue, validation);
+    if (result.valid) {
+      setValidationError(null);
+      onChange(nextValue);
+      return;
+    }
+    setValidationError((current) => ({ message: result.message, id: (current?.id ?? 0) + 1 }));
+  }
 
   return (
-    <textarea
-      ref={controlRef}
-      aria-label={label}
-      className="field-editor-autosize-text"
-      disabled={disabled}
-      onBlur={onBlur}
-      onChange={(event) => onChange(event.currentTarget.value)}
-      placeholder={hint || uiText.empty}
-      rows={1}
-      value={value}
-    />
+    <div className="field-editor-text-validation-anchor">
+      <textarea
+        ref={controlRef}
+        aria-label={label}
+        className="field-editor-autosize-text"
+        disabled={disabled}
+        onBlur={onBlur}
+        onChange={(event) => updateDraft(event.currentTarget.value)}
+        placeholder={hint || uiText.empty}
+        rows={1}
+        value={draft}
+      />
+      <TextValidationPopover
+        key={validationError?.id}
+        message={validationError?.message ?? ""}
+        visible={validationError !== null}
+        onDismiss={dismissValidationError}
+      />
+    </div>
   );
 }
 

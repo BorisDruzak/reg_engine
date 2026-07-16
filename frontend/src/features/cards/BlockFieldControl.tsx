@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
-import type { FormFieldRead } from "@/api/types";
+import type { FormFieldRead, TextValidationRule } from "@/api/types";
 
 import { FieldEditorControl } from "./FieldEditorControl";
 import type { FieldEditorState } from "./fieldEditorUtils";
@@ -13,6 +13,7 @@ export type BlockFieldControlProps = {
   editable: boolean;
   pending: boolean;
   error?: string;
+  validation?: TextValidationRule | null;
   options?: ReadonlyArray<{ id: string; label: string; archived?: boolean }>;
   readValue: ReactNode;
   fileRefControl?: ReactNode;
@@ -27,6 +28,7 @@ export function BlockFieldControl({
   editable,
   pending,
   error,
+  validation,
   options = [],
   readValue,
   fileRefControl,
@@ -83,6 +85,7 @@ export function BlockFieldControl({
         fieldType={field.field_type}
         label={field.label}
         hint={field.description}
+        validation={validation ?? field.validation_json}
         options={options.map((option) => ({
           id: option.id,
           label: option.label,

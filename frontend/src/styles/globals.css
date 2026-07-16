@@ -2729,6 +2729,11 @@ tr:last-child td {
   overflow: visible;
 }
 
+.filled-card-layout .card-layout-field-node:has(.text-validation-popover) {
+  z-index: 9;
+  overflow: visible;
+}
+
 .filled-card-layout .card-layout-field-node[tabindex="0"] {
   cursor: pointer;
   transition:
@@ -2857,6 +2862,27 @@ tr:last-child td {
   resize: none;
   overflow: hidden;
   line-height: 1.45;
+}
+
+.field-editor-text-validation-anchor {
+  position: relative;
+}
+
+.text-validation-popover {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 8px);
+  left: 0;
+  max-width: min(28rem, calc(100vw - 32px));
+  padding: 8px 10px;
+  border: 1px solid #b42318;
+  border-radius: 8px;
+  background: #fff1f0;
+  color: #8f1d16;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.16);
+  pointer-events: none;
 }
 
 .work-experience-editor {

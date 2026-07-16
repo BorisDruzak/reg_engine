@@ -357,6 +357,21 @@ describe("FilledCardLayout", () => {
     expect(screen.queryByLabelText("Имя")).not.toBeInTheDocument();
   });
 
+  test("keeps an invalid saved-card text draft local and does not call its mutation", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(<EditableValidatedFilledCard saveValues={saveValues} />);
+
+    fireEvent.click(screen.getByTestId("filled-field-layout-first-name"));
+    const input = screen.getByRole("textbox", { name: "Имя" });
+    fireEvent.change(input, { target: { value: "Иван 2" } });
+
+    expect(input).toHaveValue("Иван 2");
+    expect(screen.getByRole("alert")).toHaveTextContent("Введите имя русскими буквами");
+    fireEvent.pointerDown(document.body);
+    await act(async () => {});
+    expect(saveValues).not.toHaveBeenCalled();
+  });
+
   test("marks only the active field while its value matches the saved value", async () => {
     const user = userEvent.setup();
     render(<EditableFilledCard saveValues={vi.fn().mockResolvedValue(undefined)} />);
@@ -545,6 +560,39 @@ function EditableFilledCard({
     <FilledCardLayout
       {...defaultProps({
         editableFieldIds: new Set(["first-name", "last-name", "status", "birth-date"]),
+        blockEditor,
+      })}
+    />
+  );
+}
+
+function EditableValidatedFilledCard({
+  saveValues,
+}: {
+  saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
+}) {
+  const validatedFields = fields.map((candidate) =>
+    candidate.id === "first-name"
+      ? {
+          ...candidate,
+          validation_json: {
+            kind: "russian_text" as const,
+            message: "Введите имя русскими буквами",
+          },
+        }
+      : candidate,
+  );
+  const blockEditor = useBlockEditor({
+    fields: validatedFields,
+    editableFieldIds: new Set(["first-name"]),
+    saveValues,
+  });
+  return (
+    <FilledCardLayout
+      {...defaultProps({
+        layout: { ...layout, structure: { ...layout.structure, fields: validatedFields } },
+        fields: validatedFields,
+        editableFieldIds: new Set(["first-name"]),
         blockEditor,
       })}
     />

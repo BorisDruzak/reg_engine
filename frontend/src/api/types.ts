@@ -783,6 +783,7 @@ export type PublicLinkPreviewFieldRead = {
   description: string | null;
   field_type: string;
   required_mode: string;
+  validation_json?: TextValidationRule | null;
   value: unknown;
   options_source_type: string | null;
   options_source_id: string | null;

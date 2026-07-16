@@ -1,9 +1,10 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
 
 import { FieldEditorControl } from "./FieldEditorControl";
+import { validateTextDraft } from "./textValidation";
 
 const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
@@ -26,6 +27,80 @@ function renderControl(fieldType: string, hint: string | null = "Заполни�
 }
 
 describe("FieldEditorControl hints", () => {
+  test("retains an invalid text draft, announces it transiently, and resumes changes after recovery", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="text"
+        label="ФИО"
+        options={[]}
+        value="Иванов"
+        validation={{
+          kind: "russian_text",
+          message: "Введите ФИО русскими буквами",
+        }}
+        onChange={onChange}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "ФИО" });
+    await user.type(input, " 2");
+
+    expect(onChange).not.toHaveBeenCalledWith("Иванов 2");
+    expect(screen.getByRole("alert")).toHaveTextContent("Введите ФИО русскими буквами");
+    expect(input).toHaveValue("Иванов 2");
+    expect(input).toHaveFocus();
+
+    await user.clear(input);
+    await user.type(input, "Иванов");
+    expect(onChange).toHaveBeenLastCalledWith("Иванов");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("dismisses a text validation alert after four seconds and restarts its timer for a new error", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <FieldEditorControl
+          fieldType="text"
+          label="ФИО"
+          options={[]}
+          value=""
+          validation={{ kind: "russian_text", message: "Введите ФИО русскими буквами" }}
+          onChange={vi.fn()}
+        />,
+      );
+
+      const input = screen.getByRole("textbox", { name: "ФИО" });
+      fireEvent.change(input, { target: { value: "Ivan" } });
+      act(() => vi.advanceTimersByTime(3_000));
+      fireEvent.change(input, { target: { value: "Ivan 2" } });
+      act(() => vi.advanceTimersByTime(1_500));
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(2_500));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("mirrors blank, BMP, and malformed legacy validation rules without sending unsafe text", () => {
+    const rule = { kind: "regex", pattern: "[А-Я]{2}", message: "Введите две буквы" } as const;
+
+    expect(validateTextDraft(" \u00a0", rule)).toEqual({ valid: true });
+    expect(validateTextDraft("АБ", rule)).toEqual({ valid: true });
+    expect(validateTextDraft("😀", rule)).toEqual({ valid: false, message: rule.message });
+    expect(
+      validateTextDraft("АБ", {
+        kind: "regex",
+        pattern: "[",
+        message: "Некорректное значение",
+      }),
+    ).toEqual({ valid: false, message: "Некорректное значение" });
+  });
+
   test("renders one visual work-experience mask used by card creation and saved edits", () => {
     render(
       <FieldEditorControl

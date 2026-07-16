@@ -637,6 +637,7 @@ function defaultFieldValue({
         fieldType={field.field_type}
         label={field.label}
         hint={field.description}
+        validation={field.validation_json}
         options={options}
         fileRefOptions={fileRefOptions}
         value={initialEditorValue({ field_type: field.field_type, value })}

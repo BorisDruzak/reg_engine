@@ -317,6 +317,7 @@ export function FilledCardLayout({
                         editable={editable}
                         pending={blockEditor.pending}
                         error={blockEditor.errors[field.id]}
+                        validation={field.validation_json}
                         options={referenceOptions[field.id]}
                         readValue={displayReadValue}
                         fileRefControl={
