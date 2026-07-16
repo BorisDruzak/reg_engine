@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.domain.constants import DOCUMENT_TEMPLATE_FORMATS, FIELD_TYPES, PUBLIC_LINK_STATUSES
@@ -14,6 +14,8 @@ EXPECTED_TABLES = {
     "card_creation_link_cards",
     "card_creation_link_organizations",
     "card_creation_links",
+    "card_change_notification_subscriptions",
+    "card_change_notifications",
     "card_relations",
     "card_templates",
     "cards",
@@ -28,6 +30,7 @@ EXPECTED_TABLES = {
     "organization_closure",
     "organizations",
     "permissions",
+    "public_link_change_notification_subscriptions",
     "reference_items",
     "reference_edit_links",
     "reference_lists",
@@ -372,6 +375,39 @@ def test_public_link_review_lifecycle_metadata_is_registered() -> None:
         "status",
         "submitted_at",
     ]
+
+
+def test_card_change_notification_metadata_is_registered() -> None:
+    card_subscriptions = Base.metadata.tables["card_change_notification_subscriptions"]
+    public_link_subscriptions = Base.metadata.tables[
+        "public_link_change_notification_subscriptions"
+    ]
+    notifications = Base.metadata.tables["card_change_notifications"]
+
+    assert {
+        constraint.name
+        for constraint in card_subscriptions.constraints
+        if isinstance(constraint, UniqueConstraint)
+    } >= {"uq_card_change_notification_subscription"}
+    assert {
+        constraint.name
+        for constraint in public_link_subscriptions.constraints
+        if isinstance(constraint, UniqueConstraint)
+    } >= {"uq_public_link_change_notification_subscription"}
+    assert {
+        index.name: [column.name for column in index.columns]
+        for index in notifications.indexes
+    }["ix_card_change_notifications_inbox"] == ["user_id", "read_at", "created_at"]
+
+    assert isinstance(notifications.c.changes_json.type, JSONB)
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in notifications.c.user_id.foreign_keys
+    } == {("users", "id")}
+    assert {
+        (foreign_key.column.table.name, foreign_key.column.name)
+        for foreign_key in notifications.c.card_id.foreign_keys
+    } == {("cards", "id")}
 
 
 def test_registry_default_owner_metadata_is_registered() -> None:

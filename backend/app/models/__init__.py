@@ -9,6 +9,11 @@ from app.models.card import (
     FieldValue,
     FieldValueItem,
 )
+from app.models.card_change_notification import (
+    CardChangeNotification,
+    CardChangeNotificationSubscription,
+    PublicLinkChangeNotificationSubscription,
+)
 from app.models.card_creation_link import (
     CardCreationLink,
     CardCreationLinkCard,
@@ -28,6 +33,8 @@ __all__ = [
     "AuditEvent",
     "Base",
     "Card",
+    "CardChangeNotification",
+    "CardChangeNotificationSubscription",
     "CardCreationLink",
     "CardCreationLinkCard",
     "CardCreationLinkOrganization",
@@ -48,6 +55,7 @@ __all__ = [
     "OrganizationClosure",
     "OrgUnit",
     "Permission",
+    "PublicLinkChangeNotificationSubscription",
     "ReferenceItem",
     "ReferenceEditLink",
     "ReferenceList",

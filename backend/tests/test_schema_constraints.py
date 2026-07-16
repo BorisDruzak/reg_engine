@@ -37,6 +37,12 @@ def test_important_unique_constraints_exist() -> None:
         "field_value_items": {"uq_field_value_items_value_item"},
         "card_relations": {"uq_card_relations_source_target_type"},
         "card_public_links": {"uq_card_public_links_token_hash"},
+        "card_change_notification_subscriptions": {
+            "uq_card_change_notification_subscription"
+        },
+        "public_link_change_notification_subscriptions": {
+            "uq_public_link_change_notification_subscription"
+        },
     }
 
     for table_name, names in expected_constraints.items():
@@ -164,6 +170,10 @@ def test_important_indexes_exist() -> None:
         "card_public_links": {
             "ix_card_public_links_card_id",
             "ix_card_public_links_token_hash",
+        },
+        "card_change_notifications": {
+            "ix_card_change_notifications_inbox",
+            "ix_card_change_notifications_retention",
         },
         "audit_events": {
             "ix_audit_events_object",

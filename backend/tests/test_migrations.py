@@ -41,6 +41,8 @@ EXPECTED_TABLES = {
     "card_creation_link_cards",
     "card_creation_link_organizations",
     "card_creation_links",
+    "card_change_notification_subscriptions",
+    "card_change_notifications",
     "card_relations",
     "card_templates",
     "cards",
@@ -55,6 +57,7 @@ EXPECTED_TABLES = {
     "organization_closure",
     "organizations",
     "permissions",
+    "public_link_change_notification_subscriptions",
     "reference_items",
     "reference_edit_links",
     "reference_lists",
@@ -95,6 +98,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0022_card_print_layout_templates" in sql
     assert "0030_work_experience_field" in sql
     assert "0031_card_audit_history" in sql
+    assert "0032_card_change_notifications" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -268,3 +272,26 @@ def test_card_audit_history_migration_adds_retention_classification() -> None:
     assert "DROP COLUMN retention_class" in downgrade_sql
     assert "DROP COLUMN attributed_user_id" in downgrade_sql
     assert "DROP COLUMN card_id" in downgrade_sql
+
+
+def test_card_change_notifications_migration_creates_subscription_and_inbox_tables() -> None:
+    sql = _render_upgrade_sql("0032_card_change_notifications")
+
+    for table_name in {
+        "card_change_notification_subscriptions",
+        "public_link_change_notification_subscriptions",
+        "card_change_notifications",
+    }:
+        assert f"CREATE TABLE public.{table_name}" in sql or f"CREATE TABLE {table_name}" in sql
+
+    assert "REFERENCES users (id)" in sql
+    assert "REFERENCES cards (id)" in sql
+    assert "REFERENCES card_public_links (id)" in sql
+    assert "changes_json JSONB NOT NULL" in sql
+    assert "uq_card_change_notification_subscription" in sql
+    assert "uq_public_link_change_notification_subscription" in sql
+    assert "ix_card_change_notifications_inbox" in sql
+    assert (
+        "CREATE INDEX ix_card_change_notifications_inbox ON public.card_change_notifications "
+        "(user_id, read_at, created_at)"
+    ) in sql
