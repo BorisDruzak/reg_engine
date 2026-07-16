@@ -11,6 +11,10 @@ _PORTABLE_CONTROL_ESCAPE_CODES = frozenset("fnrtv")
 _ESCAPABLE_LITERAL_CHARACTERS = frozenset(r"\\^$.*+?()[]{}|/-")
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 _REGEX_METACHARACTERS = frozenset(r"\\^$.*+?()[]{}|")
+_ECMASCRIPT_TRIM_CHARACTERS = frozenset(
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003"
+    "\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 
 
 class TextValidationError(ValueError):
@@ -41,7 +45,7 @@ def normalize_text_validation(value: object) -> dict[str, str] | None:
 
 def validate_text_value(value: str, validation: Mapping[str, object] | None) -> None:
     """Raise the configured message when a non-empty text value violates its rule."""
-    if not value.strip() or validation is None:
+    if _is_ecmascript_blank(value) or validation is None:
         return
 
     normalized = normalize_text_validation(validation)
@@ -78,8 +82,10 @@ def _validate_portable_regex(pattern: str) -> None:
         raise TextValidationError("Text validation pattern must use BMP Unicode only.")
     if not _is_portable_regex(pattern):
         raise TextValidationError("Text validation pattern is not portable.")
-    if _has_nested_quantified_groups(pattern):
+    if _has_unsafe_quantified_groups(pattern):
         raise TextValidationError("Text validation pattern has nested quantifiers.")
+    if _has_adjacent_ambiguous_quantified_atoms(pattern):
+        raise TextValidationError("Text validation pattern has ambiguous repeated atoms.")
     try:
         re.compile(pattern)
     except re.error as exc:
@@ -120,8 +126,9 @@ def _is_portable_regex(pattern: str) -> bool:
     return True
 
 
-def _has_nested_quantified_groups(pattern: str) -> bool:
+def _has_unsafe_quantified_groups(pattern: str) -> bool:
     quantified_contents: list[bool] = []
+    alternation_contents: list[bool] = []
     index = 0
     while index < len(pattern):
         character = pattern[index]
@@ -139,12 +146,20 @@ def _has_nested_quantified_groups(pattern: str) -> bool:
             continue
         if character == "(":
             quantified_contents.append(False)
+            alternation_contents.append(False)
+        elif character == "|" and alternation_contents:
+            alternation_contents[-1] = True
         elif character == ")" and quantified_contents:
             contains_quantifier = quantified_contents.pop()
-            if contains_quantifier and _consume_quantifier(pattern, index + 1) is not None:
+            contains_alternation = alternation_contents.pop()
+            if (contains_quantifier or contains_alternation) and _consume_quantifier(
+                pattern, index + 1
+            ) is not None:
                 return True
             if contains_quantifier and quantified_contents:
                 quantified_contents[-1] = True
+            if contains_alternation and alternation_contents:
+                alternation_contents[-1] = True
         else:
             quantifier_end = _consume_quantifier(pattern, index)
             if quantifier_end is not None:
@@ -154,6 +169,102 @@ def _has_nested_quantified_groups(pattern: str) -> bool:
                 continue
         index += 1
     return False
+
+
+def _has_adjacent_ambiguous_quantified_atoms(pattern: str) -> bool:
+    previous_quantified_atom: tuple[str, str] | None = None
+    index = 0
+    while index < len(pattern):
+        atom = _consume_regex_atom(pattern, index)
+        if atom is None:
+            previous_quantified_atom = None
+            index += 1
+            continue
+        atom_key, atom_end = atom
+        if atom_key[0] == "group" and _has_adjacent_ambiguous_quantified_atoms(
+            pattern[index + 1 : atom_end - 1]
+        ):
+            return True
+        quantifier_end = _consume_quantifier(pattern, atom_end)
+        if quantifier_end is None:
+            previous_quantified_atom = None
+            index = atom_end
+            continue
+        if previous_quantified_atom is not None and _quantified_atoms_are_ambiguous(
+            previous_quantified_atom, atom_key
+        ):
+            return True
+        previous_quantified_atom = atom_key
+        index = quantifier_end
+    return False
+
+
+def _consume_regex_atom(pattern: str, index: int) -> tuple[tuple[str, str], int] | None:
+    character = pattern[index]
+    if character == "\\":
+        escaped_index = _consume_portable_escape(pattern, index)
+        if escaped_index is None:
+            return None
+        return (_portable_escape_atom_key(pattern, index, escaped_index), escaped_index)
+    if character == "[":
+        class_end = _consume_character_class(pattern, index)
+        if class_end is None:
+            return None
+        class_kind = "negated_class" if pattern[index + 1 : index + 2] == "^" else "class"
+        return ((class_kind, pattern[index:class_end]), class_end)
+    if character == "(":
+        group_end = _consume_group(pattern, index)
+        if group_end is None:
+            return None
+        return (("group", pattern[index:group_end]), group_end)
+    if character in _REGEX_METACHARACTERS:
+        return None
+    return (("literal", character), index + 1)
+
+
+def _consume_group(pattern: str, index: int) -> int | None:
+    depth = 1
+    index += 1
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "\\":
+            escaped_index = _consume_portable_escape(pattern, index)
+            if escaped_index is None:
+                return None
+            index = escaped_index
+            continue
+        if character == "[":
+            class_end = _consume_character_class(pattern, index)
+            if class_end is None:
+                return None
+            index = class_end
+            continue
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
+    return None
+
+
+def _portable_escape_atom_key(pattern: str, start: int, end: int) -> tuple[str, str]:
+    escape_code = pattern[start + 1 : start + 2]
+    escaped_literals = {"f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
+    if escape_code in escaped_literals:
+        return ("literal", escaped_literals[escape_code])
+    if escape_code in _ESCAPABLE_LITERAL_CHARACTERS:
+        return ("literal", escape_code)
+    if escape_code == "0":
+        return ("literal", "\0")
+    if escape_code in {"x", "u"}:
+        return ("literal", chr(int(pattern[start + 2 : end], 16)))
+    return ("escape", pattern[start:end])
+
+
+def _quantified_atoms_are_ambiguous(previous: tuple[str, str], current: tuple[str, str]) -> bool:
+    return previous[0] == "negated_class" or current[0] == "negated_class" or previous == current
 
 
 def _consume_character_class(pattern: str, index: int) -> int | None:
@@ -237,3 +348,8 @@ def _has_hex_digits(pattern: str, start: int, count: int) -> bool:
 
 def _contains_non_bmp_or_surrogate(value: str) -> bool:
     return any(ord(character) > 0xFFFF or 0xD800 <= ord(character) <= 0xDFFF for character in value)
+
+
+def _is_ecmascript_blank(value: str) -> bool:
+    """Match the character set removed by JavaScript String.prototype.trim()."""
+    return all(character in _ECMASCRIPT_TRIM_CHARACTERS for character in value)

@@ -40,6 +40,22 @@ def test_empty_text_values_bypass_validation(value: str) -> None:
     )
 
 
+@pytest.mark.parametrize("value", ["\u00a0", "\ufeff", "\u2000"])
+def test_ecmascript_blank_values_bypass_validation(value: str) -> None:
+    validate_text_value(
+        value,
+        {"kind": "regex", "pattern": "[А-Я]{2}", "message": "Две заглавные"},
+    )
+
+
+def test_non_ecmascript_blank_value_does_not_bypass_validation() -> None:
+    with pytest.raises(TextValidationError, match="Две заглавные"):
+        validate_text_value(
+            "\u0085",
+            {"kind": "regex", "pattern": "[А-Я]{2}", "message": "Две заглавные"},
+        )
+
+
 @pytest.mark.parametrize(
     "rule",
     [
@@ -113,6 +129,27 @@ def test_normalize_rejects_nested_quantified_groups(pattern: str) -> None:
 
 def test_normalize_allows_single_quantified_group() -> None:
     rule = normalize_text_validation({"kind": "regex", "pattern": r"^(ab)+$", "message": "Ошибка"})
+
+    assert rule is not None
+
+
+@pytest.mark.parametrize("pattern", [r"^(a|aa)+$", r"^(a|b){2}$"])
+def test_normalize_rejects_quantified_groups_with_alternation(pattern: str) -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation({"kind": "regex", "pattern": pattern, "message": "Ошибка"})
+
+
+def test_normalize_rejects_adjacent_ambiguous_repeated_atoms() -> None:
+    with pytest.raises(TextValidationError):
+        normalize_text_validation(
+            {"kind": "regex", "pattern": r"^a*a*a*a*a*a*$", "message": "Ошибка"}
+        )
+
+
+def test_normalize_allows_adjacent_disjoint_repeated_classes() -> None:
+    rule = normalize_text_validation(
+        {"kind": "regex", "pattern": r"^[A-Z]+[0-9]+$", "message": "Ошибка"}
+    )
 
     assert rule is not None
 
