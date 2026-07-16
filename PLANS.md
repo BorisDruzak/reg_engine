@@ -392,6 +392,21 @@ not a hardcoded employee registry.
 - 2026-07-16 XLSX date export now fixes separators as literal dots
   (`DD"."MM"."YYYY`), so Excel cannot substitute the local date separator.
   The focused XLSX backend suite (11 tests) and scoped Ruff check pass locally.
+- Card-audit history implementation is in the local integration checkpoint:
+  system administrators receive the separate `История карточек` view within
+  `Аудит`, while the card workspace remains unchanged. Audit records are
+  otherwise append-only, with the user-approved operational exception that
+  `technical` events are deleted after three days and `card_history` events
+  after fourteen days. The cleanup is run once by
+  `python -m app.cli.audit_retention` and is installed on the configured
+  runtime server only after the release is synchronized with
+  `powershell -ExecutionPolicy Bypass -File scripts/audit-retention.ps1 -Command install`.
+  That command creates/enables a daily persistent systemd oneshot timer; it
+  reads the existing external runtime environment file and stores neither
+  credentials nor server paths in Git. The focused CLI and timer static tests,
+  Ruff, and PowerShell syntax checks pass locally; disposable PostgreSQL
+  verification, migration, deployment, and timer-state confirmation remain
+  part of the release gate.
 - Phase 6 organization-centered card workflow cleanup is implemented and
   verified.
 - Phase 6B UI simplification/tree work is completed and browser-verified.
