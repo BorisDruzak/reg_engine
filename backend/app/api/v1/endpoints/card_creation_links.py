@@ -258,6 +258,7 @@ def _public_preview_to_read(
                                 field_type=field.field_type,
                                 required_mode=field.required_mode,
                                 value=field.value,
+                                validation_json=field.validation_json,
                                 options_source_type=field.options_source_type,
                                 options_source_id=field.options_source_id,
                                 options_config_json=field.options_config_json,
