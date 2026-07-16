@@ -34,6 +34,7 @@ import {
   type SessionState,
 } from "@/features/auth/session";
 import { CardsWorkspace } from "@/features/cards/CardsWorkspace";
+import { CardChangeNotificationBell } from "@/features/notifications/CardChangeNotificationBell";
 import { OrganizationsTable } from "@/features/organizations/OrganizationsTable";
 import { Overview } from "@/features/overview/Overview";
 import { RegistriesAndSchema } from "@/features/registry/RegistriesAndSchema";
@@ -390,6 +391,58 @@ export function HomePage() {
     });
   }
 
+  async function handleOpenNotificationCard(cardId: string) {
+    const broadOrganizationId =
+      organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
+      organizationsQuery.data?.items[0]?.id ??
+      "";
+    const includeDescendantOrganizations = true;
+
+    setWorkspaceUiState((current) => ({
+      ...current,
+      activeSection: "cards",
+      selectedCardId: cardId,
+      cardSearch: "",
+      cardOrganizationIds: [],
+      cardIncludeDescendantOrganizations: includeDescendantOrganizations,
+      cardTemplateIds: [],
+      cardFieldFilters: [],
+      includeArchivedCards: true,
+    }));
+
+    if (!token || !broadOrganizationId) {
+      return;
+    }
+
+    const broadCardQueryKey = [
+      "organization-cards",
+      token,
+      broadOrganizationId,
+      "",
+      includeDescendantOrganizations,
+      true,
+      "",
+      "",
+      "[]",
+    ];
+    await queryClient.invalidateQueries({
+      queryKey: broadCardQueryKey,
+      exact: true,
+      refetchType: "none",
+    });
+    await queryClient.fetchQuery({
+      queryKey: broadCardQueryKey,
+      queryFn: () =>
+        listOrganizationCards(token, broadOrganizationId, {
+          organizationIds: [],
+          includeDescendantOrganizations,
+          includeArchive: true,
+          cardTemplateIds: [],
+          fieldFilters: [],
+        }),
+    });
+  }
+
   if (!session) {
     return <LoginScreen onLogin={handleLogin} />;
   }
@@ -441,6 +494,7 @@ export function HomePage() {
             <h2>{sectionLabel(activeSection)}</h2>
           </div>
           <div className="account-strip">
+            <CardChangeNotificationBell token={token} onOpenCard={handleOpenNotificationCard} />
             <div>
               <strong>
                 {currentUser?.display_name

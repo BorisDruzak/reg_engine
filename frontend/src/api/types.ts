@@ -617,6 +617,25 @@ export type CardChangeNotificationChangeRead = {
   description: string | null;
 };
 
+export type CardChangeNotificationRead = {
+  id: string;
+  card_id: string;
+  card_display_name: string;
+  actor_display_name: string;
+  changes: CardChangeNotificationChangeRead[];
+  read_at: string | null;
+  created_at: string;
+};
+
+export type CardChangeNotificationListRead = {
+  unread_count: number;
+  items: CardChangeNotificationRead[];
+};
+
+export type CardChangeNotificationMarkAllRead = {
+  marked_count: number;
+};
+
 export type FieldValueRead = {
   id: string;
   card_id: string;

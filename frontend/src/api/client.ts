@@ -7,6 +7,9 @@ import type {
   AttachmentListRead,
   AttachmentRead,
   CardBlockInstanceSummaryRead,
+  CardChangeNotificationListRead,
+  CardChangeNotificationMarkAllRead,
+  CardChangeNotificationRead,
   CardChangeNotificationSubscriptionRead,
   CardCreationLinkCardListRead,
   CardCreationLinkCreatePayload,
@@ -513,6 +516,29 @@ export async function createOrganizationCardDraftPublicLink(
 
 export async function readCard(token: string, cardId: string) {
   return apiRequest<CardRead>(`/api/v1/cards/${cardId}`, { token });
+}
+
+export async function listCardChangeNotifications(token: string) {
+  return apiRequest<CardChangeNotificationListRead>("/api/v1/card-change-notifications?limit=20", {
+    token,
+  });
+}
+
+export async function markCardChangeNotificationRead(token: string, notificationId: string) {
+  return apiRequest<CardChangeNotificationRead>(
+    `/api/v1/card-change-notifications/${notificationId}/read`,
+    { method: "POST", token },
+  );
+}
+
+export async function markAllCardChangeNotificationsRead(token: string) {
+  return apiRequest<CardChangeNotificationMarkAllRead>(
+    "/api/v1/card-change-notifications/read-all",
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function getCardChangeNotificationSubscription(token: string, cardId: string) {

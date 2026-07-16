@@ -749,6 +749,9 @@ beforeEach(() => {
         }
         return jsonResponse(apiPayloads.login.user);
       }
+      if (url.endsWith("/api/v1/card-change-notifications?limit=20")) {
+        return jsonResponse({ unread_count: 0, items: [] });
+      }
       if (url.endsWith("/api/v1/organizations/tree")) {
         return jsonResponse({ items: organizationTreeItems() });
       }
