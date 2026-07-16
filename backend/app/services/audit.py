@@ -185,6 +185,7 @@ def _safe_field_history_snapshot(
     if value is None or (isinstance(value, Mapping) and value.get("redacted") is True):
         return {"field": safe_field, "value": _safe_field_history_value(value)}
     labels = labels_by_type.get(str(field_type), {})
+    safe_value: object
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         safe_value = [
             labels.get(value_id, _UNAVAILABLE_REFERENCE_DISPLAY)
