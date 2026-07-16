@@ -5802,3 +5802,21 @@ Status: pushed, deployed, and server-verified on 2026-07-16.
   frontend/API smoke check passed. The final server check confirmed the active
   service, database role login, configured attachment storage, and synchronized
   checkout.
+
+#### Card-field editor state indicators
+
+Status: locally verified; release pending.
+
+- A single active card field now receives a blue state. A changed value that is
+  not yet saved receives a high-contrast amber/red state; an in-flight save
+  returns to blue without presenting it as saved. After save, the existing
+  green filled presentation remains unchanged when the field is no longer
+  active.
+- The state is derived from the existing `useBlockEditor` session and applies
+  only to its target field. It introduces no persistence, API calls, or changes
+  to direct field switching and outside-click save behavior.
+- TDD evidence: the focused test file first failed with the three state classes
+  absent, then passed `18/18` after implementation. TypeScript, scoped ESLint
+  (the one pre-existing hook-dependency warning only), Prettier, `git diff
+  --check`, and the production Vite build passed. The existing Vite chunk-size
+  advisory remains.

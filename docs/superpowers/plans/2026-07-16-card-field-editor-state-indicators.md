@@ -31,7 +31,7 @@
 - Consumes: `BlockEditorState.values`, `dirty`, `pending`, and `target` from `useBlockEditor`.
 - Produces: optional `editingState` in `CardLayoutFieldPresentation`, with one of `"active"`, `"dirty"`, or `"saving"`.
 
-- [ ] **Step 1: Write failing editor-state tests**
+- [x] **Step 1: Write failing editor-state tests**
 
 Add a deferred save helper and tests that assert classes on `filled-field-layout-first-name`:
 
@@ -66,7 +66,7 @@ test("marks the changed field as unsaved until its save resolves", async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify RED**
+- [x] **Step 2: Run test to verify RED**
 
 Run:
 
@@ -76,7 +76,7 @@ pnpm -C frontend exec vitest run src/features/cards/FilledCardLayout.test.tsx
 
 Expected: FAIL because `is-editor-active`, `is-editor-dirty`, and `is-editor-saving` are not emitted.
 
-- [ ] **Step 3: Add the minimal presentation contract and projection**
+- [x] **Step 3: Add the minimal presentation contract and projection**
 
 Extend the presentation type without replacing completion state:
 
@@ -110,7 +110,7 @@ Return `editingState` together with existing completion presentation. In `CardFi
 ${presentation?.editingState ? ` is-editor-${presentation.editingState}` : ""}
 ```
 
-- [ ] **Step 4: Run test to verify GREEN**
+- [x] **Step 4: Run test to verify GREEN**
 
 Run:
 
@@ -120,7 +120,7 @@ pnpm -C frontend exec vitest run src/features/cards/FilledCardLayout.test.tsx
 
 Expected: PASS with the new active, unsaved, and saving assertions and existing field-switch tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add frontend/src/features/cardLayout/CardLayoutRenderer.tsx frontend/src/features/cardLayout/CardFieldLayoutNode.tsx frontend/src/features/cards/FilledCardLayout.tsx frontend/src/features/cards/FilledCardLayout.test.tsx
@@ -140,7 +140,7 @@ git commit -m "fix: show card field editor states"
 - Consumes: `is-editor-active`, `is-editor-dirty`, and `is-editor-saving` classes emitted by Task 1.
 - Produces: active blue, unsaved amber/red, and saving blue visual treatments.
 
-- [ ] **Step 1: Write a failing CSS-contract assertion**
+- [x] **Step 1: Write a failing CSS-contract assertion**
 
 Read `globals.css` in the existing test and assert:
 
@@ -150,7 +150,7 @@ expect(globalStyles).toContain(".filled-card-layout .card-layout-field-node.is-e
 expect(globalStyles).toContain(".filled-card-layout .card-layout-field-node.is-editor-saving");
 ```
 
-- [ ] **Step 2: Run test to verify RED**
+- [x] **Step 2: Run test to verify RED**
 
 Run:
 
@@ -160,7 +160,7 @@ pnpm -C frontend exec vitest run src/features/cards/FilledCardLayout.test.tsx
 
 Expected: FAIL because the editor-state CSS selectors do not exist.
 
-- [ ] **Step 3: Add the state-specific styling**
+- [x] **Step 3: Add the state-specific styling**
 
 Add rules after the completion presentation rules:
 
@@ -180,7 +180,7 @@ Add rules after the completion presentation rules:
 
 The selectors are more specific than completion styling, so unsaved state overrides green only while the draft differs from its saved value.
 
-- [ ] **Step 4: Run focused checks and build**
+- [x] **Step 4: Run focused checks and build**
 
 Run:
 
@@ -195,7 +195,7 @@ git diff --check
 
 Expected: test and typecheck pass; ESLint has no new errors; the existing `FilledCardLayout.tsx` hook-dependency warning may remain; build succeeds with only the known Vite chunk-size advisory.
 
-- [ ] **Step 5: Record and commit release evidence**
+- [x] **Step 5: Record and commit release evidence**
 
 Add the local and deployment outcome to `PLANS.md`, then commit:
 
@@ -203,4 +203,3 @@ Add the local and deployment outcome to `PLANS.md`, then commit:
 git add frontend/src/styles/globals.css frontend/src/features/cards/FilledCardLayout.test.tsx PLANS.md
 git commit -m "docs: record card field state indicators"
 ```
-
