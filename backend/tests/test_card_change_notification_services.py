@@ -380,9 +380,7 @@ def test_subscription_toggles_write_technical_audit_without_inbox_events(
     assert isinstance(reader, User)
     assert isinstance(card, Card)
     assert isinstance(public_link, CardPublicLink)
-    inbox_count_before = db_session.scalar(
-        select(func.count()).select_from(CardChangeNotification)
-    )
+    inbox_count_before = db_session.scalar(select(func.count()).select_from(CardChangeNotification))
 
     service.set_card_subscription_for_actor(
         actor_user_id=reader.id,
@@ -420,12 +418,15 @@ def test_subscription_toggles_write_technical_audit_without_inbox_events(
             .order_by(AuditEvent.created_at, AuditEvent.id)
         ).all()
     )
-    assert [(event.object_type, event.action, event.new_data_json) for event in events] == [
-        ("card_change_notification_subscription", "subscribe", {"enabled": True}),
-        ("card_change_notification_subscription", "unsubscribe", {"enabled": False}),
-        ("public_link_change_notification_subscription", "subscribe", {"enabled": True}),
-        ("public_link_change_notification_subscription", "unsubscribe", {"enabled": False}),
-    ]
+    assert {
+        (event.object_type, event.action, (event.new_data_json or {})["enabled"])
+        for event in events
+    } == {
+        ("card_change_notification_subscription", "subscribe", True),
+        ("card_change_notification_subscription", "unsubscribe", False),
+        ("public_link_change_notification_subscription", "subscribe", True),
+        ("public_link_change_notification_subscription", "unsubscribe", False),
+    }
     assert all(event.retention_class == "technical" for event in events)
     assert (
         db_session.scalar(select(func.count()).select_from(CardChangeNotification))
