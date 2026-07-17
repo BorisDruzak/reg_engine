@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
@@ -10,6 +11,8 @@ class TabularCardWorkbookRequest(BaseModel):
     organization_ids: list[UUID]
     include_organization_column: bool = False
     fixed_organization_id: UUID | None = None
+    import_mode: Literal["strict", "enrich_global_references"] = "strict"
+    work_experience_as_of_date: date | None = None
 
 
 class TabularCardExchangeFieldRead(BaseModel):
@@ -50,6 +53,7 @@ class TabularCardImportPreviewRowRead(BaseModel):
     row_number: int
     status: Literal["valid", "invalid"]
     organization_label: str | None
+    display_name: str | None
     errors: list[str]
 
 

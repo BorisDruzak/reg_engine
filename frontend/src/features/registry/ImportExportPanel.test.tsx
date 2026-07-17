@@ -61,7 +61,7 @@ function renderPanel() {
 beforeEach(() => {
   api.getTabularXlsxCardExchangeOptions.mockResolvedValue(options);
   api.previewTabularXlsxImport.mockResolvedValue({
-    format_version: "tabular_card_xlsx_v1",
+    format_version: "tabular_card_xlsx_v2",
     registry_id: "registry-1",
     summary: { total_rows: 1, valid_rows: 1, invalid_rows: 0, would_create_cards: 1 },
     rows: [
@@ -69,12 +69,13 @@ beforeEach(() => {
         row_number: 2,
         status: "valid",
         organization_label: "Администрация (admin)",
+        display_name: "Карточка",
         errors: [],
       },
     ],
   });
   api.commitTabularXlsxImport.mockResolvedValue({
-    format_version: "tabular_card_xlsx_v1",
+    format_version: "tabular_card_xlsx_v2",
     registry_id: "registry-1",
     summary: { created_cards: 1, field_values_written: 1 },
   });

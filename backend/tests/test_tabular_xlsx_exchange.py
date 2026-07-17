@@ -1,5 +1,6 @@
 import json
 from contextlib import nullcontext
+from datetime import date
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -10,16 +11,191 @@ from openpyxl import Workbook, load_workbook
 from starlette.responses import Response
 
 from app.api.v1.endpoints import import_export as import_export_endpoint
+from app.schemas.import_export import TabularCardWorkbookRequest
 from app.services import import_export
 from app.services.cards import InvalidFieldValueError
+
+
+def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None:
+    field = SimpleNamespace(id=uuid4(), label="Комментарий", field_type="text")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Заявка"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="Комментарий",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=uuid4(), name="Администрация", code="admin"),),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+        import_mode="enrich_global_references",
+        work_experience_as_of_date=date(2026, 7, 17),
+        title_header="Наименование заявки",
+    )
+
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=None,
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=True)
+    sheet = workbook["Карточки"]
+    metadata = json.loads(workbook["_registry_engine"]["B1"].value)
+
+    assert [cell.value for cell in sheet[1][:4]] == [
+        "№ п/п",
+        "Наименование заявки",
+        "Организация",
+        "Комментарий",
+    ]
+    assert sheet["B2"].number_format == "@"
+    assert metadata["format_version"] == "tabular_card_xlsx_v2"
+    assert metadata["import_mode"] == "enrich_global_references"
+    assert metadata["work_experience_as_of_date"] == "2026-07-17"
+    assert metadata["title_header"] == "Наименование заявки"
+    assert metadata["title_required"] is True
+
+
+def test_tabular_xlsx_request_defaults_to_strict_and_accepts_enrichment_metadata() -> None:
+    payload = {
+        "card_template_id": str(uuid4()),
+        "field_ids": [str(uuid4())],
+        "organization_ids": [str(uuid4())],
+    }
+
+    strict = TabularCardWorkbookRequest.model_validate(payload)
+    enrich = TabularCardWorkbookRequest.model_validate(
+        {
+            **payload,
+            "import_mode": "enrich_global_references",
+            "work_experience_as_of_date": "2026-07-17",
+        }
+    )
+
+    assert strict.import_mode == "strict"
+    assert strict.work_experience_as_of_date is None
+    assert enrich.import_mode == "enrich_global_references"
+    assert enrich.work_experience_as_of_date == date(2026, 7, 17)
+
+
+def test_tabular_xlsx_rejects_legacy_v1_metadata() -> None:
+    with pytest.raises(import_export.ImportExportServiceError, match="Версия XLSX-шаблона"):
+        import_export.TabularCardExchangeService(MagicMock())._configuration_from_metadata(
+            actor_user_id=uuid4(),
+            registry_id=uuid4(),
+            metadata={"format_version": "tabular_card_xlsx_v1"},
+        )
+
+
+def test_tabular_xlsx_import_marks_blank_card_title_invalid_and_uses_title_on_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Комментарий", field_type="text")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Заявка"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="Комментарий",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+        import_mode="strict",
+        work_experience_as_of_date=date(2026, 7, 17),
+        title_header="Название карточки",
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки", "Комментарий"])
+    sheet.append([1, "", "Нужны уточнения"])
+    sheet.append([2, "Карточка для импорта", "Готово"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    output = BytesIO()
+    workbook.save(output)
+    created_display_names: list[object] = []
+
+    class ImportSession:
+        def begin_nested(self) -> object:
+            return nullcontext()
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+        def create_card_for_actor(self, **kwargs: object) -> object:
+            created_display_names.append(kwargs["display_name"])
+            return SimpleNamespace(id=uuid4())
+
+        def set_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    class AuditService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(ImportSession())
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
+    monkeypatch.setattr(import_export, "AuditService", AuditService)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=output.getvalue(),
+    )
+
+    assert preview["rows"][0]["errors"] == ["Название карточки: заполните название карточки."]
+    assert preview["rows"][1]["display_name"] == "Карточка для импорта"
+    with pytest.raises(import_export.TabularCardImportValidationError):
+        service.commit_import_xlsx_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            xlsx_content=output.getvalue(),
+        )
+
+    sheet.delete_rows(2)
+    output = BytesIO()
+    workbook.save(output)
+    service.commit_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=output.getvalue(),
+    )
+
+    assert created_display_names == ["Карточка для импорта"]
 
 
 def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -> None:
     assert import_export.tabular_xlsx_fixed_headers(True) == (
         "№ п/п",
+        "Название карточки",
         "Организация",
     )
-    assert import_export.tabular_xlsx_fixed_headers(False) == ("№ п/п",)
+    assert import_export.tabular_xlsx_fixed_headers(False) == ("№ п/п", "Название карточки")
     assert getattr(import_export, "TABULAR_XLSX_SUPPORTED_FIELD_TYPES", None) == {
         "text",
         "number",
@@ -140,10 +316,16 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
 
     workbook = load_workbook(filename=__import__("io").BytesIO(content), data_only=True)
     sheet = workbook["Карточки"]
-    assert [cell.value for cell in sheet[1][:3]] == ["№ п/п", "Организация", "Дата рождения"]
+    assert [cell.value for cell in sheet[1][:4]] == [
+        "№ п/п",
+        "Название карточки",
+        "Организация",
+        "Дата рождения",
+    ]
     assert sheet["A2"].value == 1
-    assert sheet["B2"].value == "Администрация (admin)"
-    assert sheet["C2"].number_format == 'DD"."MM"."YYYY'
+    assert sheet["B2"].value is None
+    assert sheet["C2"].value == "Администрация (admin)"
+    assert sheet["D2"].number_format == 'DD"."MM"."YYYY'
     assert workbook["_registry_engine"].sheet_state == "hidden"
 
 
@@ -179,10 +361,10 @@ def test_tabular_xlsx_template_hides_organization_column_and_records_import_targ
     metadata = json.loads(workbook["_registry_engine"]["B1"].value)
     validations = {validation.sqref for validation in sheet.data_validations.dataValidation}
 
-    assert [cell.value for cell in sheet[1][:2]] == ["№ п/п", "Дата рождения"]
+    assert [cell.value for cell in sheet[1][:3]] == ["№ п/п", "Название карточки", "Дата рождения"]
     assert sheet["A2"].value == 1
     assert sheet["B2"].value is None
-    assert "B2:B101" not in validations
+    assert "C2:C101" not in validations
     assert metadata["include_organization_column"] is False
     assert metadata["fixed_organization_id"] == str(organization.id)
 
@@ -227,10 +409,10 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
     validations = {
         validation.sqref: validation for validation in sheet.data_validations.dataValidation
     }
-    assert validations["B2:B101"].formula1 == "=organization_choices"
-    assert validations["C2:C101"].formula1 == f"=field_{select_field.id.hex}_choices"
-    assert validations["D2:D101"].formula1 == f"=field_{multi_select_field.id.hex}_choices"
-    assert validations["D2:D101"].showErrorMessage is False
+    assert validations["C2:C101"].formula1 == "=organization_choices"
+    assert validations["D2:D101"].formula1 == f"=field_{select_field.id.hex}_choices"
+    assert validations["E2:E101"].formula1 == f"=field_{multi_select_field.id.hex}_choices"
+    assert validations["E2:E101"].showErrorMessage is False
 
 
 def test_tabular_xlsx_exports_readable_organization_and_unit_values(
@@ -315,10 +497,10 @@ def test_tabular_xlsx_exports_readable_organization_and_unit_values(
     )
 
     sheet = load_workbook(filename=BytesIO(content), data_only=True)["Карточки"]
-    assert sheet["C2"].value == "Администрация"
-    assert sheet["D2"].value == "Администрация → Управление → Отдел"
-    assert str(card_organization_id) not in {sheet["C2"].value, sheet["D2"].value}
-    assert str(department_id) not in {sheet["C2"].value, sheet["D2"].value}
+    assert sheet["D2"].value == "Администрация"
+    assert sheet["E2"].value == "Администрация → Управление → Отдел"
+    assert str(card_organization_id) not in {sheet["D2"].value, sheet["E2"].value}
+    assert str(department_id) not in {sheet["D2"].value, sheet["E2"].value}
 
 
 def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor_metadata(
@@ -346,7 +528,11 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         reference_labels={},
         unit_organization_ids={},
     )
-    card = SimpleNamespace(id=uuid4(), organization_id=organization_id)
+    card = SimpleNamespace(
+        id=uuid4(),
+        organization_id=organization_id,
+        display_name="Карточка для проверки стажа",
+    )
     display = "16 дней 3 месяца 9 лет"
 
     class ExportCardService:
@@ -394,8 +580,8 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         for cell in row
         if isinstance(cell.value, str)
     ]
-    assert sheet["B2"].value == display
-    assert sheet["B2"].number_format == "General"
+    assert sheet["C2"].value == display
+    assert sheet["C2"].number_format == "General"
     assert not any("anchor_date" in value or "2016-04-29" in value for value in values)
 
     class ImportSession:
@@ -484,8 +670,8 @@ def test_tabular_xlsx_preview_and_commit_report_text_validation_error(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "ФИО"])
-    sheet.append([1, "Иванов 7"])
+    sheet.append(["№ п/п", "Название карточки", "ФИО"])
+    sheet.append([1, "Проверка ФИО", "Иванов 7"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -559,8 +745,8 @@ def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Стаж"])
-    sheet.append([1, "9 лет 3 месяца 16 дней"])
+    sheet.append(["№ п/п", "Название карточки", "Стаж"])
+    sheet.append([1, "Проверка стажа", "9 лет 3 месяца 16 дней"])
     metadata_sheet = workbook.create_sheet("_registry_engine")
     metadata_sheet["B1"] = "{}"
     content = BytesIO()
@@ -653,6 +839,7 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             "№ п/п",
+            "Название карточки",
             "Организация",
             "Организация для согласования",
             "Подразделение для согласования",
@@ -661,6 +848,7 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             1,
+            "Карточка администрации",
             "Администрация (admin)",
             "Администрация",
             "Администрация → Управление → Отдел",
@@ -669,6 +857,7 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             2,
+            "Карточка с неверным подразделением",
             "Администрация (admin)",
             "Администрация",
             "Школа → Отдел",

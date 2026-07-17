@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from importlib import import_module
 from io import BytesIO
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,7 +21,9 @@ from app.models import (
     Organization,
     OrgUnit,
     ReferenceItem,
+    Registry,
 )
+from app.models.registry_schema import DEFAULT_CARD_TITLE_LABEL
 from app.services.audit import AuditService
 from app.services.cards import (
     CardRead,
@@ -30,7 +32,8 @@ from app.services.cards import (
 )
 from app.services.permissions import PermissionDeniedError, PermissionService
 
-TABULAR_XLSX_FIXED_HEADERS = ("№ п/п", "Организация")
+TABULAR_XLSX_ORDINAL_HEADER = "№ п/п"
+TABULAR_XLSX_ORGANIZATION_HEADER = "Организация"
 TABULAR_XLSX_SUPPORTED_FIELD_TYPES = {
     "text",
     "number",
@@ -43,17 +46,26 @@ TABULAR_XLSX_SUPPORTED_FIELD_TYPES = {
     "org_unit_ref",
     "work_experience",
 }
-TABULAR_XLSX_FORMAT_VERSION = "tabular_card_xlsx_v1"
+TABULAR_XLSX_FORMAT_VERSION = "tabular_card_xlsx_v2"
 TABULAR_XLSX_SHEET_TITLE = "Карточки"
 TABULAR_XLSX_METADATA_SHEET_TITLE = "_registry_engine"
 TABULAR_XLSX_TEMPLATE_ROW_COUNT = 100
 
 
-def tabular_xlsx_fixed_headers(include_organization_column: bool) -> tuple[str, ...]:
+def tabular_xlsx_title_header(card_title_label: object | None) -> str:
+    if isinstance(card_title_label, str) and card_title_label.strip():
+        return card_title_label.strip()
+    return DEFAULT_CARD_TITLE_LABEL
+
+
+def tabular_xlsx_fixed_headers(
+    include_organization_column: bool,
+    title_header: str = DEFAULT_CARD_TITLE_LABEL,
+) -> tuple[str, ...]:
     return (
-        TABULAR_XLSX_FIXED_HEADERS
+        (TABULAR_XLSX_ORDINAL_HEADER, title_header, TABULAR_XLSX_ORGANIZATION_HEADER)
         if include_organization_column
-        else (TABULAR_XLSX_FIXED_HEADERS[0],)
+        else (TABULAR_XLSX_ORDINAL_HEADER, title_header)
     )
 
 
@@ -87,6 +99,9 @@ class TabularWorkbookConfiguration:
     organization_labels: dict[str, UUID]
     reference_labels: dict[UUID, dict[str, UUID]]
     unit_organization_ids: dict[UUID, UUID]
+    import_mode: Literal["strict", "enrich_global_references"] = "strict"
+    work_experience_as_of_date: date | None = None
+    title_header: str = DEFAULT_CARD_TITLE_LABEL
 
 
 class TabularCardExchangeService:
@@ -179,6 +194,8 @@ class TabularCardExchangeService:
         organization_ids: Sequence[UUID],
         include_organization_column: bool = False,
         fixed_organization_id: UUID | None = None,
+        import_mode: Literal["strict", "enrich_global_references"] = "strict",
+        work_experience_as_of_date: date | None = None,
     ) -> bytes:
         configuration = self._configuration_for_actor(
             actor_user_id=actor_user_id,
@@ -188,6 +205,8 @@ class TabularCardExchangeService:
             organization_ids=organization_ids,
             include_organization_column=include_organization_column,
             fixed_organization_id=fixed_organization_id,
+            import_mode=import_mode,
+            work_experience_as_of_date=work_experience_as_of_date,
             require_fixed_organization=False,
         )
         cards = CardService(self.session).list_visible_cards(
@@ -228,6 +247,8 @@ class TabularCardExchangeService:
         organization_ids: Sequence[UUID],
         include_organization_column: bool = False,
         fixed_organization_id: UUID | None = None,
+        import_mode: Literal["strict", "enrich_global_references"] = "strict",
+        work_experience_as_of_date: date | None = None,
     ) -> bytes:
         configuration = self._configuration_for_actor(
             actor_user_id=actor_user_id,
@@ -237,6 +258,8 @@ class TabularCardExchangeService:
             organization_ids=organization_ids,
             include_organization_column=include_organization_column,
             fixed_organization_id=fixed_organization_id,
+            import_mode=import_mode,
+            work_experience_as_of_date=work_experience_as_of_date or date.today(),
             require_fixed_organization=True,
         )
         return self._build_workbook(
@@ -255,6 +278,8 @@ class TabularCardExchangeService:
         organization_ids: Sequence[UUID],
         include_organization_column: bool,
         fixed_organization_id: UUID | None,
+        import_mode: Literal["strict", "enrich_global_references"] = "strict",
+        work_experience_as_of_date: date | None = None,
         require_fixed_organization: bool,
     ) -> TabularWorkbookConfiguration:
         if not field_ids:
@@ -278,6 +303,9 @@ class TabularCardExchangeService:
             or not template.is_active
         ):
             raise ImportExportServiceError("Шаблон карточки не найден или недоступен.")
+        registry = self.session.get(Registry, registry_id)
+        if registry is None or registry.archived_at is not None:
+            raise ImportExportServiceError("Реестр не найден или недоступен.")
 
         blocks = list(
             self.session.scalars(
@@ -372,6 +400,9 @@ class TabularCardExchangeService:
             },
             reference_labels=reference_labels,
             unit_organization_ids=unit_organization_ids,
+            import_mode=import_mode,
+            work_experience_as_of_date=work_experience_as_of_date,
+            title_header=tabular_xlsx_title_header(registry.card_title_label),
         )
 
     @staticmethod
@@ -400,7 +431,10 @@ class TabularCardExchangeService:
         sheet = workbook.active
         sheet.title = TABULAR_XLSX_SHEET_TITLE
         headers = [
-            *tabular_xlsx_fixed_headers(configuration.include_organization_column),
+            *tabular_xlsx_fixed_headers(
+                configuration.include_organization_column,
+                configuration.title_header,
+            ),
             *(item.header for item in configuration.fields),
         ]
         sheet.append(headers)
@@ -417,7 +451,7 @@ class TabularCardExchangeService:
                     card_id=card.id,
                 )
                 values_by_field = self._card_values_by_field(card_read)
-                row: list[object] = [ordinal]
+                row: list[object] = [ordinal, getattr(card, "display_name", None)]
                 if configuration.include_organization_column:
                     row.append(
                         self._organization_label(
@@ -458,7 +492,7 @@ class TabularCardExchangeService:
             else None
         )
         for ordinal in range(1, TABULAR_XLSX_TEMPLATE_ROW_COUNT + 1):
-            row: list[object] = [ordinal]
+            row: list[object] = [ordinal, None]
             if configuration.include_organization_column:
                 row.append(organization_label)
             row.extend(None for _ in configuration.fields)
@@ -501,10 +535,14 @@ class TabularCardExchangeService:
         )
         sheet.column_dimensions["A"].width = 10
         fixed_column_count = len(
-            tabular_xlsx_fixed_headers(configuration.include_organization_column)
+            tabular_xlsx_fixed_headers(
+                configuration.include_organization_column,
+                configuration.title_header,
+            )
         )
+        sheet.column_dimensions["B"].width = max(22, min(36, len(configuration.title_header) + 6))
         if configuration.include_organization_column:
-            sheet.column_dimensions["B"].width = 34
+            sheet.column_dimensions["C"].width = 34
         for row in sheet.iter_rows(
             min_row=2,
             max_row=last_row,
@@ -514,6 +552,8 @@ class TabularCardExchangeService:
             for cell in row:
                 cell.border = border
                 cell.alignment = openpyxl.styles.Alignment(vertical="top", wrap_text=True)
+                if cell.column == 2:
+                    cell.number_format = "@"
 
         for index, item in enumerate(configuration.fields, start=fixed_column_count + 1):
             letter = openpyxl.utils.get_column_letter(index)
@@ -538,6 +578,14 @@ class TabularCardExchangeService:
         metadata_sheet = workbook.create_sheet(TABULAR_XLSX_METADATA_SHEET_TITLE)
         metadata = {
             "format_version": TABULAR_XLSX_FORMAT_VERSION,
+            "import_mode": configuration.import_mode,
+            "work_experience_as_of_date": (
+                configuration.work_experience_as_of_date.isoformat()
+                if configuration.work_experience_as_of_date is not None
+                else None
+            ),
+            "title_header": configuration.title_header,
+            "title_required": True,
             "registry_id": str(configuration.registry_id),
             "card_template_id": str(configuration.template.id),
             "field_columns": [
@@ -605,7 +653,7 @@ class TabularCardExchangeService:
             allow_blank=False,
         )
         sheet.add_data_validation(validation)
-        validation.add(f"B2:B{last_row}")
+        validation.add(f"C2:C{last_row}")
 
     def _add_field_validation(
         self,
@@ -947,6 +995,7 @@ class TabularCardExchangeService:
                 "row_number": row["row_number"],
                 "status": "invalid" if row["errors"] else "valid",
                 "organization_label": row["organization_label"],
+                "display_name": row["display_name"],
                 "errors": row["errors"],
                 "organization_id": row["organization_id"],
                 "values": row["values"],
@@ -999,7 +1048,7 @@ class TabularCardExchangeService:
                         registry_id=registry_id,
                         organization_id=organization_id,
                         card_template_id=configuration.template.id,
-                        display_name=configuration.template.name,
+                        display_name=row["display_name"],
                     )
                     for field_id, value in row["values"].items():
                         card_service.set_field_value_for_actor(
@@ -1077,10 +1126,16 @@ class TabularCardExchangeService:
                 for value in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
             ]
             fixed_column_count = len(
-                tabular_xlsx_fixed_headers(configuration.include_organization_column)
+                tabular_xlsx_fixed_headers(
+                    configuration.include_organization_column,
+                    configuration.title_header,
+                )
             )
             expected_headers = [
-                *tabular_xlsx_fixed_headers(configuration.include_organization_column),
+                *tabular_xlsx_fixed_headers(
+                    configuration.include_organization_column,
+                    configuration.title_header,
+                ),
                 *(field.header for field in configuration.fields),
             ]
             if headers[: len(expected_headers)] != expected_headers or any(
@@ -1101,12 +1156,17 @@ class TabularCardExchangeService:
                     raise ImportExportServiceError(f"Превышен лимит строк XLSX: {max_rows}.")
                 row_values = list(values[: len(expected_headers)])
                 row_values.extend([None] * (len(expected_headers) - len(row_values)))
+                display_name = self._normalized_label(row_values[1])
                 field_values = row_values[fixed_column_count:]
-                if all(self._is_blank_cell(value) for value in field_values):
+                if display_name is None and all(
+                    self._is_blank_cell(value) for value in field_values
+                ):
                     continue
                 errors: list[str] = []
+                if display_name is None:
+                    errors.append(f"{configuration.title_header}: заполните название карточки.")
                 if configuration.include_organization_column:
-                    organization_label = self._normalized_label(row_values[1])
+                    organization_label = self._normalized_label(row_values[2])
                     organization_id = configuration.organization_labels.get(
                         organization_label or ""
                     )
@@ -1152,6 +1212,7 @@ class TabularCardExchangeService:
                         "row_number": row_number,
                         "organization_label": organization_label,
                         "organization_id": organization_id,
+                        "display_name": display_name,
                         "values": parsed_values,
                         "errors": errors,
                     }
@@ -1174,6 +1235,23 @@ class TabularCardExchangeService:
         if metadata.get("registry_id") != str(registry_id):
             raise ImportExportServiceError("XLSX-шаблон относится к другому реестру.")
         template_id = self._metadata_uuid(metadata.get("card_template_id"), "шаблон карточки")
+        import_mode = metadata.get("import_mode")
+        if import_mode not in {"strict", "enrich_global_references"}:
+            raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
+        raw_work_experience_as_of_date = metadata.get("work_experience_as_of_date")
+        if not isinstance(raw_work_experience_as_of_date, str):
+            raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
+        try:
+            work_experience_as_of_date = date.fromisoformat(raw_work_experience_as_of_date)
+        except ValueError as exc:
+            raise ImportExportServiceError("Служебная разметка XLSX повреждена.") from exc
+        title_header = metadata.get("title_header")
+        if (
+            not isinstance(title_header, str)
+            or not title_header.strip()
+            or metadata.get("title_required") is not True
+        ):
+            raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
         raw_columns = metadata.get("field_columns")
         raw_organizations = metadata.get("organizations")
         include_organization_column = metadata.get("include_organization_column", True)
@@ -1207,8 +1285,14 @@ class TabularCardExchangeService:
             organization_ids=organization_ids,
             include_organization_column=include_organization_column,
             fixed_organization_id=fixed_organization_id,
+            import_mode=cast(Literal["strict", "enrich_global_references"], import_mode),
+            work_experience_as_of_date=work_experience_as_of_date,
             require_fixed_organization=True,
         )
+        if configuration.title_header != title_header:
+            raise ImportExportServiceError(
+                "Заголовок названия карточки XLSX был изменён или устарел."
+            )
         expected_columns = [
             {
                 "field_id": str(item.field.id),

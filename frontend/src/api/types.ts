@@ -538,6 +538,8 @@ export type TabularCardWorkbookPayload = {
   organization_ids: string[];
   include_organization_column: boolean;
   fixed_organization_id?: string;
+  import_mode?: "strict" | "enrich_global_references";
+  work_experience_as_of_date?: string;
 };
 
 export type TabularCardExchangeFieldRead = {
@@ -578,6 +580,7 @@ export type TabularCardImportPreviewRowRead = {
   row_number: number;
   status: "valid" | "invalid";
   organization_label: string | null;
+  display_name: string | null;
   errors: string[];
 };
 
