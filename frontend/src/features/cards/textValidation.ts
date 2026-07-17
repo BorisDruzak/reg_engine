@@ -1,6 +1,8 @@
-import type { TextValidationRule } from "@/api/types";
+import type { TextValidationCondition, TextValidationValue } from "@/api/types";
 
-export type TextDraftValidationResult = { valid: true } | { valid: false; message: string };
+export type TextDraftValidationResult =
+  | { valid: true }
+  | { valid: false; conditions: TextValidationCondition[]; messages: string[] };
 
 const maxPortableRegexPatternLength = 512;
 
@@ -8,26 +10,46 @@ const russianTextPattern = /^[А-Яа-яЁё -]+$/u;
 
 export function validateTextDraft(
   value: string,
-  validation: TextValidationRule | null | undefined,
+  validation: TextValidationValue | null | undefined,
 ): TextDraftValidationResult {
   if (value.trim() === "" || validation == null) return { valid: true };
-  const message = validation.message;
-  if (containsNonBmpOrSurrogate(value)) return invalid(message);
+  const invalidConditions = normalizeTextValidationConditions(validation).filter(
+    (condition) => !conditionIsValid(value, condition),
+  );
+  return invalidConditions.length === 0
+    ? { valid: true }
+    : {
+        valid: false,
+        conditions: invalidConditions,
+        messages: invalidConditions.map((condition) => condition.message),
+      };
+}
 
+export function normalizeTextValidationConditions(
+  validation: TextValidationValue | null | undefined,
+): TextValidationCondition[] {
+  if (validation == null) return [];
+  const conditions = Array.isArray(validation) ? validation : [validation];
+  return conditions.map((condition) => ({
+    ...condition,
+    input_mode: condition.input_mode ?? "show_error",
+  }));
+}
+
+function conditionIsValid(value: string, validation: TextValidationCondition) {
+  if (containsNonBmpOrSurrogate(value)) return false;
   if (validation.kind === "russian_text") {
-    return russianTextPattern.test(value) ? { valid: true } : invalid(message);
+    return russianTextPattern.test(value);
   }
   if (validation.kind === "regex") {
-    if (!isSafeClientRegexPattern(validation.pattern)) return invalid(message);
+    if (!isSafeClientRegexPattern(validation.pattern)) return false;
     try {
-      return new RegExp(`^(?:${validation.pattern})$`).test(value)
-        ? { valid: true }
-        : invalid(message);
+      return new RegExp(`^(?:${validation.pattern})$`).test(value);
     } catch {
-      return invalid(message);
+      return false;
     }
   }
-  return invalid(message);
+  return false;
 }
 
 function containsNonBmpOrSurrogate(value: string) {
@@ -36,10 +58,6 @@ function containsNonBmpOrSurrogate(value: string) {
     if (codeUnit >= 0xd800 && codeUnit <= 0xdfff) return true;
   }
   return false;
-}
-
-function invalid(message: string): TextDraftValidationResult {
-  return { valid: false, message };
 }
 
 type Quantifier = {

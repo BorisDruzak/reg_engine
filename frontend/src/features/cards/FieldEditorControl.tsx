@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import type { TextValidationRule } from "@/api/types";
+import type { TextValidationValue } from "@/api/types";
 import { uiText } from "@/app/uiText";
 
 import { TextValidationPopover } from "./TextValidationPopover";
@@ -32,7 +32,7 @@ export function FieldEditorControl({
   value: FieldEditorState;
   disabled?: boolean;
   autoOpenChoice?: boolean;
-  validation?: TextValidationRule | null;
+  validation?: TextValidationValue | null;
   onBlur?: () => void;
   onChange: (value: FieldEditorState) => void;
 }) {
@@ -210,12 +210,12 @@ function AutoSizingTextControl({
   value: string;
   disabled: boolean;
   onBlur?: () => void;
-  validation: TextValidationRule | null;
+  validation: TextValidationValue | null;
   onChange: (value: string) => void;
 }) {
   const controlRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState(value);
-  const [validationError, setValidationError] = useState<{ message: string; id: number } | null>(
+  const [validationError, setValidationError] = useState<{ messages: string[]; id: number } | null>(
     null,
   );
   const dismissValidationError = useCallback(() => setValidationError(null), []);
@@ -228,14 +228,26 @@ function AutoSizingTextControl({
   }, [draft]);
 
   function updateDraft(nextValue: string) {
-    setDraft(nextValue);
     const result = validateTextDraft(nextValue, validation);
     if (result.valid) {
       setValidationError(null);
+      setDraft(nextValue);
       onChange(nextValue);
       return;
     }
-    setValidationError((current) => ({ message: result.message, id: (current?.id ?? 0) + 1 }));
+    setValidationError((current) => ({
+      messages: result.messages,
+      id: (current?.id ?? 0) + 1,
+    }));
+    if (result.conditions.some((condition) => condition.input_mode === "block_input")) {
+      const control = controlRef.current;
+      if (control) {
+        control.value = draft;
+        control.setSelectionRange(draft.length, draft.length);
+      }
+      return;
+    }
+    setDraft(nextValue);
   }
 
   return (
@@ -245,6 +257,7 @@ function AutoSizingTextControl({
         aria-label={label}
         className="field-editor-autosize-text"
         disabled={disabled}
+        aria-invalid={validationError !== null}
         onBlur={onBlur}
         onChange={(event) => updateDraft(event.currentTarget.value)}
         placeholder={hint || uiText.empty}
@@ -253,7 +266,7 @@ function AutoSizingTextControl({
       />
       <TextValidationPopover
         key={validationError?.id}
-        message={validationError?.message ?? ""}
+        messages={validationError?.messages ?? []}
         visible={validationError !== null}
         onDismiss={dismissValidationError}
       />

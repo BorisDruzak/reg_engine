@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
 export function TextValidationPopover({
-  message,
+  messages,
   visible,
   onDismiss,
 }: {
-  message: string;
+  messages: string[];
   visible: boolean;
   onDismiss: () => void;
 }) {
@@ -16,5 +16,17 @@ export function TextValidationPopover({
   }, [onDismiss, visible]);
 
   if (!visible) return null;
-  return <div className="text-validation-popover" role="alert">{message}</div>;
+  return (
+    <div className="text-validation-popover" role="alert">
+      {messages.length === 1 ? (
+        messages[0]
+      ) : (
+        <ul>
+          {messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

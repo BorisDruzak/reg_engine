@@ -5,22 +5,44 @@ import type {
   FormFieldRead,
   OrganizationRead,
   ReferenceListRead,
-  TextValidationRule,
+  TextValidationCondition,
+  TextValidationValue,
 } from "@/api/types";
 import { FIELD_TYPE_OPTIONS } from "@/app/uiText";
 
 import { InlineReferenceEditor, type InlineReferenceEditorContext } from "./InlineReferenceEditor";
 
-const RUSSIAN_TEXT_VALIDATION_DEFAULT: TextValidationRule = {
+const RUSSIAN_TEXT_VALIDATION_DEFAULT: TextValidationCondition = {
   kind: "russian_text",
   message: "Введите текст русскими буквами",
+  input_mode: "show_error",
 };
 
-const REGEX_VALIDATION_DEFAULT: TextValidationRule = {
+const REGEX_VALIDATION_DEFAULT: TextValidationCondition = {
   kind: "regex",
   pattern: "[^\\r\\n]{1,256}",
   message: "Введите значение в нужном формате",
+  input_mode: "show_error",
 };
+
+function validationConditions(
+  value: TextValidationValue | null | undefined,
+): TextValidationCondition[] {
+  if (Array.isArray(value)) return value;
+  return value ? [{ ...value, input_mode: value.input_mode ?? "show_error" }] : [];
+}
+
+function validationJson(conditions: TextValidationCondition[]) {
+  return conditions.length > 0 ? conditions : null;
+}
+
+function defaultValidationCondition(
+  kind: TextValidationCondition["kind"],
+): TextValidationCondition {
+  return kind === "regex"
+    ? { ...REGEX_VALIDATION_DEFAULT }
+    : { ...RUSSIAN_TEXT_VALIDATION_DEFAULT };
+}
 
 export type InlineFieldEditorProps = {
   field: FormFieldRead;
@@ -119,6 +141,7 @@ export function InlineFieldEditor({
         (organizationId): organizationId is string => typeof organizationId === "string",
       )
     : [];
+  const textValidationConditions = validationConditions(draft.validation_json);
 
   if (editorScreen !== "field" && inlineReferenceEditorContext) {
     return (
@@ -184,7 +207,10 @@ export function InlineFieldEditor({
               ...draft,
               field_type: fieldType,
               required_mode: staticTextField ? "not_required" : draft.required_mode,
-              validation_json: fieldType === "text" ? (draft.validation_json ?? null) : null,
+              validation_json:
+                fieldType === "text"
+                  ? validationJson(validationConditions(draft.validation_json))
+                  : null,
               options_source_type: usesReference ? draft.options_source_type : null,
               options_source_id: usesReference ? draft.options_source_id : null,
               options_config_json: staticTextField
@@ -227,70 +253,115 @@ export function InlineFieldEditor({
         </>
       ) : null}
       {draft.field_type === "text" ? (
-        <details>
+        <details className="text-validation-settings">
           <summary>Проверка значения</summary>
-          <label>
-            <span>Тип проверки</span>
-            <select
-              value={draft.validation_json?.kind ?? "none"}
-              onChange={(event) => {
-                const kind = event.currentTarget.value;
-                const validation_json =
-                  kind === "russian_text"
-                    ? draft.validation_json?.kind === "russian_text"
-                      ? draft.validation_json
-                      : RUSSIAN_TEXT_VALIDATION_DEFAULT
-                    : kind === "regex"
-                      ? draft.validation_json?.kind === "regex"
-                        ? draft.validation_json
-                        : REGEX_VALIDATION_DEFAULT
-                      : null;
-                setDraft({ ...draft, validation_json });
-              }}
-            >
-              <option value="none">Без проверки</option>
-              <option value="russian_text">Только русские буквы</option>
-              <option value="regex">Регулярное выражение</option>
-            </select>
-          </label>
-          {draft.validation_json?.kind === "regex" ? (
-            <label>
-              <span>Регулярное выражение</span>
-              <input
-                value={draft.validation_json.pattern}
-                onChange={(event) => {
-                  const pattern = event.currentTarget.value;
-                  setDraft((current) =>
-                    current.validation_json?.kind === "regex"
-                      ? {
-                          ...current,
-                          validation_json: { ...current.validation_json, pattern },
-                        }
-                      : current,
-                  );
-                }}
-              />
-            </label>
-          ) : null}
-          {draft.validation_json ? (
-            <label>
-              <span>Подсказка при ошибке</span>
-              <input
-                value={draft.validation_json.message}
-                onChange={(event) => {
-                  const message = event.currentTarget.value;
-                  setDraft((current) =>
-                    current.validation_json
-                      ? {
-                          ...current,
-                          validation_json: { ...current.validation_json, message },
-                        }
-                      : current,
-                  );
-                }}
-              />
-            </label>
-          ) : null}
+          {textValidationConditions.map((condition, index) => (
+            <fieldset key={`${condition.kind}-${index}`} className="text-validation-condition">
+              <legend>Условие {index + 1}</legend>
+              <label>
+                <span>Тип проверки</span>
+                <select
+                  value={condition.kind}
+                  onChange={(event) => {
+                    const nextKind = event.currentTarget.value as TextValidationCondition["kind"];
+                    setDraft((current) => {
+                      const conditions = validationConditions(current.validation_json);
+                      conditions[index] = defaultValidationCondition(nextKind);
+                      return { ...current, validation_json: validationJson(conditions) };
+                    });
+                  }}
+                >
+                  <option value="russian_text">Только русские буквы</option>
+                  <option value="regex">Регулярное выражение</option>
+                </select>
+              </label>
+              {condition.kind === "regex" ? (
+                <label>
+                  <span>Регулярное выражение</span>
+                  <input
+                    value={condition.pattern}
+                    onChange={(event) => {
+                      const pattern = event.currentTarget.value;
+                      setDraft((current) => {
+                        const conditions = validationConditions(current.validation_json);
+                        const currentCondition = conditions[index];
+                        if (currentCondition?.kind !== "regex") return current;
+                        conditions[index] = { ...currentCondition, pattern };
+                        return { ...current, validation_json: validationJson(conditions) };
+                      });
+                    }}
+                  />
+                </label>
+              ) : null}
+              <label>
+                <span>Подсказка при ошибке</span>
+                <input
+                  value={condition.message}
+                  onChange={(event) => {
+                    const message = event.currentTarget.value;
+                    setDraft((current) => {
+                      const conditions = validationConditions(current.validation_json);
+                      const currentCondition = conditions[index];
+                      if (!currentCondition) return current;
+                      conditions[index] = { ...currentCondition, message };
+                      return { ...current, validation_json: validationJson(conditions) };
+                    });
+                  }}
+                />
+              </label>
+              <label>
+                <span>Поведение при вводе</span>
+                <select
+                  value={condition.input_mode ?? "show_error"}
+                  onChange={(event) => {
+                    const input_mode = event.currentTarget
+                      .value as TextValidationCondition["input_mode"];
+                    setDraft((current) => {
+                      const conditions = validationConditions(current.validation_json);
+                      const currentCondition = conditions[index];
+                      if (!currentCondition) return current;
+                      conditions[index] = { ...currentCondition, input_mode };
+                      return { ...current, validation_json: validationJson(conditions) };
+                    });
+                  }}
+                >
+                  <option value="show_error">Показывать ошибку</option>
+                  <option value="block_input">Запретить ввод</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ghost-button text-validation-condition-remove"
+                onClick={() =>
+                  setDraft((current) => {
+                    const conditions = validationConditions(current.validation_json);
+                    conditions.splice(index, 1);
+                    return { ...current, validation_json: validationJson(conditions) };
+                  })
+                }
+              >
+                Удалить условие
+              </button>
+            </fieldset>
+          ))}
+          <button
+            type="button"
+            className="ghost-button text-validation-condition-create"
+            onClick={() =>
+              setDraft((current) => {
+                const conditions = validationConditions(current.validation_json);
+                return {
+                  ...current,
+                  validation_json: validationJson([
+                    ...conditions,
+                    defaultValidationCondition("russian_text"),
+                  ]),
+                };
+              })
+            }
+          >
+            Создать условие
+          </button>
         </details>
       ) : null}
       {usesReferenceList ? (

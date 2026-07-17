@@ -199,7 +199,7 @@ export type FormFieldRead = {
   field_type: string;
   position: number;
   required_mode: string;
-  validation_json?: TextValidationRule | null;
+  validation_json?: TextValidationValue | null;
   options_source_type: string | null;
   options_source_id: string | null;
   options_config_json: Record<string, unknown> | null;
@@ -210,16 +210,23 @@ export type FormFieldRead = {
   public_editable: boolean;
 };
 
-export type TextValidationRule =
+export type TextValidationInputMode = "show_error" | "block_input";
+
+export type TextValidationCondition =
   | {
       kind: "russian_text";
       message: string;
+      input_mode?: TextValidationInputMode;
     }
   | {
       kind: "regex";
       pattern: string;
       message: string;
+      input_mode?: TextValidationInputMode;
     };
+
+export type TextValidationRule = TextValidationCondition[];
+export type TextValidationValue = TextValidationCondition | TextValidationRule;
 
 export type WorkExperienceValue = {
   days: number;
@@ -235,7 +242,7 @@ export type FormFieldCreatePayload = {
   description?: string | null;
   position?: number;
   required_mode?: string;
-  validation_json?: TextValidationRule | null;
+  validation_json?: TextValidationValue | null;
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
@@ -252,7 +259,7 @@ export type FormFieldUpdatePayload = {
   field_type?: string | null;
   position?: number | null;
   required_mode?: string | null;
-  validation_json?: TextValidationRule | null;
+  validation_json?: TextValidationValue | null;
   options_source_type?: string | null;
   options_source_id?: string | null;
   options_config_json?: Record<string, unknown> | null;
@@ -783,7 +790,7 @@ export type PublicLinkPreviewFieldRead = {
   description: string | null;
   field_type: string;
   required_mode: string;
-  validation_json?: TextValidationRule | null;
+  validation_json?: TextValidationValue | null;
   value: unknown;
   options_source_type: string | null;
   options_source_id: string | null;

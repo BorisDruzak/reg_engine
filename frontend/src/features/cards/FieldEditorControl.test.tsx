@@ -91,14 +91,61 @@ describe("FieldEditorControl hints", () => {
 
     expect(validateTextDraft(" \u00a0", rule)).toEqual({ valid: true });
     expect(validateTextDraft("АБ", rule)).toEqual({ valid: true });
-    expect(validateTextDraft("😀", rule)).toEqual({ valid: false, message: rule.message });
+    expect(validateTextDraft("😀", rule)).toEqual({
+      valid: false,
+      conditions: [{ ...rule, input_mode: "show_error" }],
+      messages: [rule.message],
+    });
     expect(
       validateTextDraft("АБ", {
         kind: "regex",
         pattern: "[",
         message: "Некорректное значение",
       }),
-    ).toEqual({ valid: false, message: "Некорректное значение" });
+    ).toEqual({
+      valid: false,
+      conditions: [
+        {
+          kind: "regex",
+          pattern: "[",
+          message: "Некорректное значение",
+          input_mode: "show_error",
+        },
+      ],
+      messages: ["Некорректное значение"],
+    });
+  });
+
+  test("blocks an invalid typed value when one failed condition prohibits input", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="text"
+        label="ФИО"
+        options={[]}
+        value="Ста"
+        validation={[
+          { kind: "russian_text", message: "Только русские буквы", input_mode: "show_error" },
+          {
+            kind: "regex",
+            pattern: "[^0-9]{1,256}",
+            message: "Цифры запрещены",
+            input_mode: "block_input",
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "ФИО" });
+    await user.type(input, "1");
+
+    expect(input).toHaveValue("Ста");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toHaveTextContent("Только русские буквы");
+    expect(screen.getByRole("alert")).toHaveTextContent("Цифры запрещены");
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   test("renders one visual work-experience mask used by card creation and saved edits", () => {

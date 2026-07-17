@@ -1679,17 +1679,20 @@ describe("CardWebLayoutCanvas", () => {
 
     await user.click(screen.getByTestId("layout-field-field-name"));
     await user.click(screen.getByText("Проверка значения"));
-    await user.selectOptions(screen.getByLabelText("Тип проверки"), "russian_text");
+    await user.click(screen.getByRole("button", { name: "Создать условие" }));
     await user.clear(screen.getByLabelText("Подсказка при ошибке"));
     await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите ФИО русскими буквами");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(onCommitField).toHaveBeenCalledWith(
       expect.objectContaining({
-        validation_json: {
-          kind: "russian_text",
-          message: "Введите ФИО русскими буквами",
-        },
+        validation_json: [
+          {
+            kind: "russian_text",
+            message: "Введите ФИО русскими буквами",
+            input_mode: "show_error",
+          },
+        ],
       }),
     );
   });
@@ -1701,6 +1704,7 @@ describe("CardWebLayoutCanvas", () => {
 
     await user.click(screen.getByTestId("layout-field-field-name"));
     await user.click(screen.getByText("Проверка значения"));
+    await user.click(screen.getByRole("button", { name: "Создать условие" }));
     await user.selectOptions(screen.getByLabelText("Тип проверки"), "regex");
     fireEvent.change(screen.getByLabelText("Регулярное выражение"), {
       target: { value: "[А-Я]{2}" },
@@ -1711,11 +1715,14 @@ describe("CardWebLayoutCanvas", () => {
 
     expect(onCommitField).toHaveBeenCalledWith(
       expect.objectContaining({
-        validation_json: {
-          kind: "regex",
-          pattern: "[А-Я]{2}",
-          message: "Введите две заглавные буквы",
-        },
+        validation_json: [
+          {
+            kind: "regex",
+            pattern: "[А-Я]{2}",
+            message: "Введите две заглавные буквы",
+            input_mode: "show_error",
+          },
+        ],
       }),
     );
   });

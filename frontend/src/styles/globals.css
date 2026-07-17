@@ -2832,6 +2832,33 @@ tr:last-child td {
   min-width: 0;
 }
 
+.text-validation-settings {
+  display: grid;
+  gap: 10px;
+}
+
+.text-validation-condition {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d7e1eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.text-validation-condition legend {
+  padding: 0 4px;
+  color: #344054;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.text-validation-condition-create,
+.text-validation-condition-remove {
+  justify-self: start;
+}
+
 .inline-reference-field-settings,
 .inline-reference-manage,
 .inline-reference-form,
@@ -2862,6 +2889,12 @@ tr:last-child td {
   resize: none;
   overflow: hidden;
   line-height: 1.45;
+}
+
+.field-editor-autosize-text[aria-invalid="true"] {
+  border-color: #b42318;
+  background: #fff7f6;
+  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.12);
 }
 
 .field-editor-text-validation-anchor {
