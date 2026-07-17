@@ -1,5 +1,6 @@
 import json
 from contextlib import nullcontext
+from dataclasses import replace
 from datetime import date
 from io import BytesIO
 from types import SimpleNamespace
@@ -63,6 +64,124 @@ def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None
     assert metadata["title_required"] is True
 
 
+def test_tabular_xlsx_export_defaults_v2_as_of_date_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Заявка"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=SimpleNamespace(id=uuid4(), label="Комментарий", field_type="text"),
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="Комментарий",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+
+    class ExportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def list_visible_cards(self, **_kwargs: object) -> list[object]:
+            return []
+
+    class AuditService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "CardService", ExportCardService)
+    monkeypatch.setattr(import_export, "AuditService", AuditService)
+    monkeypatch.setattr(
+        service,
+        "_configuration_for_actor",
+        lambda **kwargs: replace(
+            configuration,
+            work_experience_as_of_date=kwargs["work_experience_as_of_date"],
+        ),
+    )
+
+    content = service.export_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        card_template_id=configuration.template.id,
+        field_ids=[configuration.fields[0].field.id],
+        organization_ids=[organization_id],
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=True)
+    metadata = json.loads(workbook["_registry_engine"]["B1"].value)
+
+    assert metadata["work_experience_as_of_date"] == date.today().isoformat()
+    assert metadata["importable"] is False
+
+
+def test_tabular_xlsx_uses_stable_dynamic_columns_when_headers_collide_with_fixed_headers() -> None:
+    title_field = SimpleNamespace(
+        id=uuid4(),
+        label="Название карточки",
+        field_type="select",
+    )
+    organization_field = SimpleNamespace(
+        id=uuid4(),
+        label="Организация",
+        field_type="select",
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Заявка"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=title_field,
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="Название карточки",
+            ),
+            import_export.TabularWorkbookField(
+                field=organization_field,
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="Организация",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=uuid4(), name="Администрация", code="admin"),),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={},
+        reference_labels={
+            title_field.id: {"Первое": uuid4()},
+            organization_field.id: {"Второе": uuid4()},
+        },
+        unit_organization_ids={},
+    )
+
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=None,
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=True)
+    sheet = workbook["Карточки"]
+    validations = {
+        validation.sqref: validation for validation in sheet.data_validations.dataValidation
+    }
+
+    assert validations["D2:D101"].formula1 == f"=field_{title_field.id.hex}_choices"
+    assert validations["E2:E101"].formula1 == f"=field_{organization_field.id.hex}_choices"
+
+
 def test_tabular_xlsx_request_defaults_to_strict_and_accepts_enrichment_metadata() -> None:
     payload = {
         "card_template_id": str(uuid4()),
@@ -91,6 +210,18 @@ def test_tabular_xlsx_rejects_legacy_v1_metadata() -> None:
             actor_user_id=uuid4(),
             registry_id=uuid4(),
             metadata={"format_version": "tabular_card_xlsx_v1"},
+        )
+
+
+def test_tabular_xlsx_rejects_export_workbook_as_explicitly_non_importable() -> None:
+    with pytest.raises(import_export.ImportExportServiceError, match="не предназначен для импорта"):
+        import_export.TabularCardExchangeService(MagicMock())._configuration_from_metadata(
+            actor_user_id=uuid4(),
+            registry_id=uuid4(),
+            metadata={
+                "format_version": "tabular_card_xlsx_v2",
+                "importable": False,
+            },
         )
 
 

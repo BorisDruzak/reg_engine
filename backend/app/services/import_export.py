@@ -206,7 +206,7 @@ class TabularCardExchangeService:
             include_organization_column=include_organization_column,
             fixed_organization_id=fixed_organization_id,
             import_mode=import_mode,
-            work_experience_as_of_date=work_experience_as_of_date,
+            work_experience_as_of_date=work_experience_as_of_date or date.today(),
             require_fixed_organization=False,
         )
         cards = CardService(self.session).list_visible_cards(
@@ -472,7 +472,11 @@ class TabularCardExchangeService:
                 )
                 sheet.append(row)
 
-        self._write_metadata_sheet(workbook, configuration)
+        self._write_metadata_sheet(
+            workbook,
+            configuration,
+            importable=cards is None,
+        )
         self._apply_sheet_formats(sheet, configuration, sheet.max_row)
         sheet.auto_filter.ref = (
             f"A1:{openpyxl.utils.get_column_letter(len(headers))}{max(2, sheet.max_row)}"
@@ -565,7 +569,13 @@ class TabularCardExchangeService:
                 cell.alignment = openpyxl.styles.Alignment(vertical="top", wrap_text=True)
                 if number_format is not None:
                     cell.number_format = number_format
-            self._add_field_validation(sheet, item, last_row, configuration)
+            self._add_field_validation(
+                sheet,
+                item,
+                last_row,
+                configuration,
+                column=index,
+            )
 
         if configuration.include_organization_column:
             self._add_organization_validation(sheet, configuration, last_row)
@@ -574,10 +584,13 @@ class TabularCardExchangeService:
         self,
         workbook: Any,
         configuration: TabularWorkbookConfiguration,
+        *,
+        importable: bool,
     ) -> None:
         metadata_sheet = workbook.create_sheet(TABULAR_XLSX_METADATA_SHEET_TITLE)
         metadata = {
             "format_version": TABULAR_XLSX_FORMAT_VERSION,
+            "importable": importable,
             "import_mode": configuration.import_mode,
             "work_experience_as_of_date": (
                 configuration.work_experience_as_of_date.isoformat()
@@ -661,9 +674,10 @@ class TabularCardExchangeService:
         item: TabularWorkbookField,
         last_row: int,
         configuration: TabularWorkbookConfiguration,
+        *,
+        column: int,
     ) -> None:
         openpyxl = _openpyxl()
-        column = self._field_column_index(item, sheet)
         letter = openpyxl.utils.get_column_letter(column)
         if item.field.field_type == "bool":
             validation = openpyxl.worksheet.datavalidation.DataValidation(
@@ -715,12 +729,6 @@ class TabularCardExchangeService:
 
     def _reference_choices_name(self, field_id: UUID) -> str:
         return f"field_{field_id.hex}_choices"
-
-    def _field_column_index(self, item: TabularWorkbookField, sheet: Any) -> int:
-        for column in range(1, sheet.max_column + 1):
-            if sheet.cell(row=1, column=column).value == item.header:
-                return column
-        raise ImportExportServiceError("Колонка XLSX не найдена.")
 
     def _number_format_for_field(self, field: FormField) -> str | None:
         return {
@@ -1232,6 +1240,12 @@ class TabularCardExchangeService:
             raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
         if metadata.get("format_version") != TABULAR_XLSX_FORMAT_VERSION:
             raise ImportExportServiceError("Версия XLSX-шаблона не поддерживается.")
+        if metadata.get("importable") is False:
+            raise ImportExportServiceError(
+                "Выгруженный список XLSX не предназначен для импорта. Скачайте шаблон импорта."
+            )
+        if metadata.get("importable") is not True:
+            raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
         if metadata.get("registry_id") != str(registry_id):
             raise ImportExportServiceError("XLSX-шаблон относится к другому реестру.")
         template_id = self._metadata_uuid(metadata.get("card_template_id"), "шаблон карточки")
