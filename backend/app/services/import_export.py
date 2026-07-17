@@ -42,7 +42,6 @@ TABULAR_XLSX_SUPPORTED_FIELD_TYPES = {
     "datetime",
     "bool",
     "select",
-    "multi_select",
     "organization_ref",
     "org_unit_ref",
     "work_experience",
@@ -675,6 +674,8 @@ class TabularCardExchangeService:
 
         column = 3
         for item in configuration.fields:
+            if item.field.field_type == "multi_select":
+                continue
             labels = configuration.reference_labels.get(item.field.id)
             if not labels:
                 continue
@@ -731,12 +732,12 @@ class TabularCardExchangeService:
                 formula1='"Да,Нет"',
                 allow_blank=True,
             )
-        elif item.field.field_type in {
-            "select",
-            "multi_select",
-            "organization_ref",
-            "org_unit_ref",
-        }:
+        elif item.field.field_type in {"select", "organization_ref", "org_unit_ref"}:
+            if (
+                configuration.import_mode == "enrich_global_references"
+                and item.field.field_type == "select"
+            ):
+                return
             if not configuration.reference_labels.get(item.field.id):
                 return
             validation = openpyxl.worksheet.datavalidation.DataValidation(
@@ -795,6 +796,8 @@ class TabularCardExchangeService:
         columns: list[TabularWorkbookColumn] = []
         labels = {"days": "дни", "months": "месяцы", "years": "годы"}
         for item in fields:
+            if item.field.field_type == "multi_select":
+                continue
             if item.field.field_type == "work_experience":
                 columns.extend(
                     TabularWorkbookColumn(
@@ -880,7 +883,7 @@ class TabularCardExchangeService:
     ) -> dict[UUID, dict[str, UUID]]:
         result: dict[UUID, dict[str, UUID]] = {}
         for item in fields:
-            if item.field.field_type not in {"select", "multi_select"}:
+            if item.field.field_type != "select":
                 continue
             list_id = item.field.options_source_id
             if list_id is None:
@@ -1058,8 +1061,6 @@ class TabularCardExchangeService:
             value, UUID
         ):
             return labels_by_id.get(value, "")
-        if field.field_type == "multi_select" and isinstance(value, list):
-            return "; ".join(labels_by_id.get(item, "") for item in value if item in labels_by_id)
         return value
 
     def _safe_export_cell_value(self, value: object | None) -> object | None:
@@ -1200,6 +1201,11 @@ class TabularCardExchangeService:
                                 value=value,
                             )
                         field_values_written += 1
+                    if self._row_has_empty_required_field(row, configuration):
+                        card_service._preserve_draft_lifecycle(
+                            card,
+                            actor_user_id=actor_user_id,
+                        )
                 AuditService(self.session).record_user_event(
                     actor_user_id=actor_user_id,
                     action="import_commit",
@@ -1317,7 +1323,10 @@ class TabularCardExchangeService:
             ):
                 if row_number - 1 > max_rows:
                     raise ImportExportServiceError(f"Превышен лимит строк XLSX: {max_rows}.")
-                row_values = list(values[: len(expected_headers)])
+                row_values = [
+                    self._logical_import_cell_value(value)
+                    for value in values[: len(expected_headers)]
+                ]
                 row_values.extend([None] * (len(expected_headers) - len(row_values)))
                 display_name = self._normalized_label(row_values[1])
                 field_values = row_values[fixed_column_count:]
@@ -1581,6 +1590,18 @@ class TabularCardExchangeService:
                     )
                 except InvalidFieldValueError as exc:
                     row["errors"].append(f"{workbook_field.header}: {exc}")
+
+    @staticmethod
+    def _row_has_empty_required_field(
+        row: dict[str, Any],
+        configuration: TabularWorkbookConfiguration,
+    ) -> bool:
+        imported_field_ids = set(row["values"])
+        return any(
+            item.field.id not in imported_field_ids
+            and getattr(item.field, "required_mode", None) in {"required", "required_on_publish"}
+            for item in configuration.fields
+        )
 
     def _configuration_from_metadata(
         self,

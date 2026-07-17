@@ -747,7 +747,6 @@ def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -
         "datetime",
         "bool",
         "select",
-        "multi_select",
         "organization_ref",
         "org_unit_ref",
         "work_experience",
@@ -913,7 +912,7 @@ def test_tabular_xlsx_template_hides_organization_column_and_records_import_targ
     assert metadata["fixed_organization_id"] == str(organization.id)
 
 
-def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_selects() -> None:
+def test_tabular_xlsx_template_does_not_expose_multi_select() -> None:
     select_field = SimpleNamespace(id=uuid4(), label="Статус", field_type="select")
     multi_select_field = SimpleNamespace(id=uuid4(), label="Категории", field_type="multi_select")
     configuration = import_export.TabularWorkbookConfiguration(
@@ -955,8 +954,50 @@ def test_tabular_xlsx_template_offers_reference_values_for_single_and_multiple_s
     }
     assert validations["C2:C101"].formula1 == "=organization_choices"
     assert validations["D2:D101"].formula1 == f"=field_{select_field.id.hex}_choices"
-    assert validations["E2:E101"].formula1 == f"=field_{multi_select_field.id.hex}_choices"
-    assert validations["E2:E101"].showErrorMessage is False
+    assert "E2:E101" not in validations
+    assert sheet.max_column == 4
+
+
+def test_tabular_xlsx_marks_multi_select_as_unsupported() -> None:
+    service = import_export.TabularCardExchangeService(MagicMock())
+    multi_select_field = SimpleNamespace(id=uuid4(), label="Categories", field_type="multi_select")
+
+    assert (
+        service._is_supported_field(multi_select_field, SimpleNamespace(is_repeatable=False))
+        is False
+    )
+
+
+def test_tabular_xlsx_enrich_template_leaves_select_column_without_validation() -> None:
+    select_field = SimpleNamespace(id=uuid4(), label="Status", field_type="select")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Cards"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=select_field,
+                block=SimpleNamespace(id=uuid4(), title="Main"),
+                header="Status",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=uuid4(), name="Administration", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=uuid4(),
+        organization_labels={},
+        reference_labels={select_field.id: {"Existing": uuid4()}},
+        unit_organization_ids={},
+        import_mode="enrich_global_references",
+    )
+
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=None,
+    )
+
+    sheet = load_workbook(filename=BytesIO(content), data_only=True)["Карточки"]
+    validations = {validation.sqref for validation in sheet.data_validations.dataValidation}
+    assert "C2:C101" not in validations
 
 
 def test_tabular_xlsx_exports_readable_organization_and_unit_values(
@@ -1555,6 +1596,137 @@ def test_tabular_xlsx_imports_generated_formula_escaped_headers_and_choices(
     assert preview["summary"]["invalid_rows"] == 0
     assert preview["rows"][0]["organization_id"] == organization_id
     assert preview["rows"][0]["values"] == {field.id: reference_item_id}
+
+
+def test_tabular_xlsx_imports_formula_escaped_text_without_apostrophe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Comment", field_type="text")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Cards"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Main"),
+                header="Comment",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Administration", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки", "Comment"])
+    sheet.append([1, "Formula text", "'=2+2"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+
+    class ImportCards:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "CardService", ImportCards)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=uuid4(),
+        registry_id=registry_id,
+        xlsx_content=content.getvalue(),
+    )
+
+    assert preview["rows"][0]["values"] == {field.id: "=2+2"}
+
+
+def test_tabular_xlsx_empty_required_cell_preserves_draft_despite_template_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(
+        id=uuid4(),
+        label="Required status",
+        field_type="text",
+        required_mode="required",
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Cards"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Main"),
+                header="Required status",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Administration", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки", "Required status"])
+    sheet.append([1, "Card without imported value", None])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+    preserved_drafts: list[object] = []
+
+    class ImportSession:
+        def begin_nested(self) -> object:
+            return nullcontext()
+
+    class ImportCards:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+        def create_card_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(id=uuid4(), lifecycle_status="active")
+
+        def _preserve_draft_lifecycle(self, card: object, **_kwargs: object) -> None:
+            card.lifecycle_status = "draft"
+            preserved_drafts.append(card)
+
+    class Audit:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(ImportSession())
+    monkeypatch.setattr(import_export, "CardService", ImportCards)
+    monkeypatch.setattr(import_export, "AuditService", Audit)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    service.commit_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=content.getvalue(),
+    )
+
+    assert len(preserved_drafts) == 1
+    assert preserved_drafts[0].lifecycle_status == "draft"
 
 
 @pytest.mark.parametrize(
