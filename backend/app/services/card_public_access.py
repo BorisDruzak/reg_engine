@@ -287,7 +287,6 @@ class CardPublicAccessService:
             return (
                 public_visible,
                 public_visible
-                and block.public_editable
                 and field_model.public_editable
                 and default_editable,
             )
