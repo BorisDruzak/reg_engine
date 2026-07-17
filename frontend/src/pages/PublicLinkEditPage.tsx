@@ -816,6 +816,7 @@ function PublicFieldEditor({
   }
 
   function updateRawValue(nextValue: FieldEditorState) {
+    if (!requireActorName()) return;
     setRawValue(nextValue);
     setLocalError(null);
     const version = latestVersionRef.current + 1;
@@ -847,7 +848,7 @@ function PublicFieldEditor({
         event.stopPropagation();
       }}
       onKeyDownCapture={(event) => {
-        if (requireActorName() || !["Enter", " "].includes(event.key)) return;
+        if (!["Enter", " "].includes(event.key) || requireActorName()) return;
         event.preventDefault();
         event.stopPropagation();
       }}

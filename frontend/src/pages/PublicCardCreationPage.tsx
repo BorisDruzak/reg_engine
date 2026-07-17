@@ -44,10 +44,16 @@ export function PublicCardCreationPage() {
   }
 
   function selectOrganization(selectedOrganizationId: string) {
-    setOrganizationId(selectedOrganizationId || null);
-    if (selectedOrganizationId && requireActorName()) {
-      createDraftMutation.mutate(selectedOrganizationId);
+    if (!selectedOrganizationId) {
+      setOrganizationId(null);
+      return;
     }
+    if (!requireActorName()) {
+      setOrganizationId(null);
+      return;
+    }
+    setOrganizationId(selectedOrganizationId);
+    createDraftMutation.mutate(selectedOrganizationId);
   }
 
   return (

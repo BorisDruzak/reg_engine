@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { StrictMode, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -67,6 +68,37 @@ describe("PublicLinkEditPage", () => {
     expect(editCalls()).toHaveLength(0);
   });
 
+  test("blocks Tab-focused typing without FIO and saves after FIO is supplied", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const actorName = await screen.findByRole("textbox", { name: "ФИО" });
+    const input = screen.getByRole("textbox", { name: "Публичный статус" });
+    actorName.focus();
+    while (document.activeElement !== input) {
+      await user.tab();
+    }
+    await user.type(input, "Без ФИО");
+
+    expect(await screen.findByRole("status", { name: "ФИО" })).toHaveTextContent(
+      "Сначала укажите ФИО",
+    );
+    expect(editCalls()).toHaveLength(0);
+
+    await user.click(actorName);
+    await user.type(actorName, "Иванов Иван Иванович");
+    await user.click(input);
+    await user.clear(input);
+    await user.type(input, "Подтверждено");
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
+    expect(editCalls()[0]?.body).toMatchObject({
+      actor_name: "Иванов Иван Иванович",
+      value: "Подтверждено",
+    });
+  });
+
   test("sends normalized FIO when a public field is autosaved", async () => {
     renderPage();
 
@@ -115,6 +147,7 @@ describe("PublicLinkEditPage", () => {
       value: "",
     };
     renderPage();
+    await providePublicActorName();
 
     expect(
       await screen.findByRole("navigation", { name: "Содержание карточки" }),
@@ -161,6 +194,7 @@ describe("PublicLinkEditPage", () => {
       value: "",
     };
     renderPage();
+    await providePublicActorName();
 
     expect(await screen.findByRole("status", { name: "Статус карточки" })).toHaveTextContent(
       "Черновик",
@@ -248,6 +282,7 @@ describe("PublicLinkEditPage", () => {
     );
 
     renderPage();
+    await providePublicActorName();
 
     const experienceControl = await screen.findByRole("group", { name: "Стаж работы" });
     expect(
@@ -469,6 +504,7 @@ describe("PublicLinkEditPage", () => {
   test("saves a public text draft only after the field loses focus", async () => {
     editResponseMode = "deferred";
     renderPage();
+    await providePublicActorName();
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
     statusInput.focus();
 
@@ -498,6 +534,7 @@ describe("PublicLinkEditPage", () => {
       previewField("field-public-date", "public_date", "Публичная дата", "date", "2000-01-01"),
     );
     renderPage();
+    await providePublicActorName();
 
     const input = await screen.findByLabelText("Публичная дата");
     vi.useFakeTimers();
@@ -525,6 +562,7 @@ describe("PublicLinkEditPage", () => {
   test("keeps a rejected local value visible and shows the server error", async () => {
     editResponseMode = "error";
     renderPage();
+    await providePublicActorName();
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
 
     fireEvent.change(statusInput, { target: { value: "rejected locally" } });
@@ -538,6 +576,7 @@ describe("PublicLinkEditPage", () => {
   test("reports save errors and recovery under React StrictMode", async () => {
     editResponseMode = "error";
     renderPage(undefined, true);
+    await providePublicActorName();
     const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
 
     fireEvent.change(statusInput, { target: { value: "strict rejected" } });
@@ -568,6 +607,7 @@ describe("PublicLinkEditPage", () => {
     ];
 
     renderPage();
+    await providePublicActorName();
     const statusInputs = await screen.findAllByRole("textbox", { name: "Публичный статус" });
 
     expect(statusInputs).toHaveLength(2);
@@ -726,6 +766,7 @@ describe("PublicLinkEditPage", () => {
     async (action, denialPath) => {
       lifecycleDenialPath = denialPath;
       const queryClient = renderPage();
+      await providePublicActorName();
       const statusInput = await screen.findByRole("textbox", { name: "Публичный статус" });
       await waitFor(() => {
         expect(queryClient.getQueryData(["public-link-preview", rawToken])).toBeDefined();
@@ -743,6 +784,12 @@ describe("PublicLinkEditPage", () => {
     },
   );
 });
+
+async function providePublicActorName() {
+  fireEvent.change(await screen.findByRole("textbox", { name: "ФИО" }), {
+    target: { value: "Иванов Иван Иванович" },
+  });
+}
 
 function renderPage(setup?: (queryClient: QueryClient) => void, strict = false) {
   const queryClient = new QueryClient({

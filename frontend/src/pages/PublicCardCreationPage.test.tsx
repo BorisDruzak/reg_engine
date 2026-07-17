@@ -57,6 +57,7 @@ describe("PublicCardCreationPage", () => {
     });
 
     expect(await screen.findByRole("status")).toHaveTextContent("Сначала укажите ФИО");
+    expect(screen.getByRole("combobox")).toHaveValue("");
     expect(fetchCalls.map((call) => call.path)).not.toContain(
       "/api/v1/public/card-creation-links/create-draft",
     );
