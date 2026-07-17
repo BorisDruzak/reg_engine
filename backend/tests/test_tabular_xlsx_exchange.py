@@ -1491,6 +1491,72 @@ def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cell
     ]
 
 
+def test_tabular_xlsx_imports_generated_formula_escaped_headers_and_choices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    reference_item_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Поле", field_type="select")
+    organization = SimpleNamespace(id=organization_id, name="-Организация", code="@code")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="+Значение справочника",
+            ),
+        ),
+        organizations=(organization,),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={"-Организация (@code)": organization_id},
+        reference_labels={field.id: {"@Значение": reference_item_id}},
+        unit_organization_ids={},
+        title_header="=Название карточки",
+    )
+    service = import_export.TabularCardExchangeService(MagicMock())
+    content = service._build_workbook(
+        actor_user_id=actor_user_id,
+        configuration=configuration,
+        cards=None,
+    )
+    workbook = load_workbook(filename=BytesIO(content), data_only=False)
+    sheet = workbook["Карточки"]
+    metadata_sheet = workbook["_registry_engine"]
+    sheet["B2"] = "Карточка из шаблона"
+    sheet["D2"] = metadata_sheet["C3"].value
+    output = BytesIO()
+    workbook.save(output)
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
+    monkeypatch.setattr(
+        service,
+        "_configuration_from_metadata",
+        lambda **_kwargs: configuration,
+    )
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+        xlsx_content=output.getvalue(),
+    )
+
+    assert preview["summary"]["invalid_rows"] == 0
+    assert preview["rows"][0]["organization_id"] == organization_id
+    assert preview["rows"][0]["values"] == {field.id: reference_item_id}
+
+
 @pytest.mark.parametrize(
     ("setting_name", "setting_value", "workbook_setup"),
     [

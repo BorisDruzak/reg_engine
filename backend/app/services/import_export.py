@@ -1277,7 +1277,7 @@ class TabularCardExchangeService:
             )
             sheet = workbook[TABULAR_XLSX_SHEET_TITLE]
             headers = [
-                "" if value is None else str(value).strip()
+                "" if value is None else str(self._logical_import_cell_value(value)).strip()
                 for value in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
             ]
             fixed_column_count = len(
@@ -1711,7 +1711,11 @@ class TabularCardExchangeService:
                 raise ImportExportServiceError("значение отсутствует в справочнике.")
             return reference_id
         if field.field_type == "multi_select":
-            labels = [part.strip() for part in str(raw_value).split(";") if part.strip()]
+            labels = [
+                label
+                for part in str(raw_value).split(";")
+                if (label := self._normalized_label(part)) is not None
+            ]
             selected = [reference_labels.get(label) for label in labels]
             if not labels or any(item is None for item in selected):
                 raise ImportExportServiceError("укажите значения справочника через «;».")
@@ -1772,8 +1776,18 @@ class TabularCardExchangeService:
     def _normalized_label(self, value: object) -> str | None:
         if value is None:
             return None
-        label = str(value).strip()
+        label = str(self._logical_import_cell_value(value)).strip()
         return label or None
+
+    def _logical_import_cell_value(self, value: object) -> object:
+        if (
+            isinstance(value, str)
+            and len(value) >= 2
+            and value[0] == "'"
+            and value[1] in {"=", "+", "-", "@"}
+        ):
+            return value[1:]
+        return value
 
 
 def _openpyxl() -> Any:
