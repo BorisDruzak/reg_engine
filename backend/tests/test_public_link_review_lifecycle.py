@@ -31,6 +31,7 @@ from app.models import (
     CardTemplate,
     FieldValue,
     FormBlock,
+    FormField,
     PublicLinkChangeNotificationSubscription,
     User,
 )
@@ -606,6 +607,69 @@ def test_unconfigured_schema_hidden_field_stays_private_across_public_surfaces(
         "completed_public_fields": 2,
         "total_public_fields": 2,
     }
+
+
+def test_review_diff_filters_legacy_hidden_baseline_fields(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    card = db_session.get(Card, review_fixture.card_id)
+    assert card is not None
+    template = db_session.get(CardTemplate, card.card_template_id)
+    assert template is not None
+    hidden_field = db_session.get(FormField, review_fixture.hidden_field_id)
+    assert hidden_field is not None
+    template.field_schema_json = {
+        **template.field_schema_json,
+        "field_ids": [
+            *template.field_schema_json["field_ids"],
+            str(hidden_field.id),
+        ],
+    }
+    db_session.flush()
+
+    service = PublicLinkService(db_session)
+    token = service.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=card.id,
+        review_enabled=True,
+    )
+    baseline = token.public_link.baseline_snapshot_json
+    assert baseline is not None
+    token.public_link.baseline_snapshot_json = {
+        **baseline,
+        "fields": [
+            *baseline["fields"],
+            {
+                "block_id": str(hidden_field.block_id),
+                "field_id": str(hidden_field.id),
+                "block_instance_id": None,
+                "is_repeatable": False,
+                "label": hidden_field.label,
+                "field_type": hidden_field.field_type,
+                "value": review_fixture.hidden_value,
+            },
+        ],
+    }
+    db_session.flush()
+
+    preview = service.preview_public_link(raw_token=token.raw_token)
+    review = service.review_diff_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        public_link_id=token.public_link.id,
+    )
+
+    serialized_preview = json.dumps(asdict(preview), ensure_ascii=False, default=str)
+    serialized_review = json.dumps(asdict(review), ensure_ascii=False, default=str)
+    assert str(hidden_field.id) not in serialized_preview
+    assert review_fixture.hidden_value not in serialized_preview
+    assert str(hidden_field.id) not in serialized_review
+    assert review_fixture.hidden_value not in serialized_review
+    assert {field.field_id for field in review.fields} == {
+        review_fixture.text_field_id,
+        review_fixture.number_field_id,
+    }
+    assert review.changed_field_count == 0
 
 
 def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
