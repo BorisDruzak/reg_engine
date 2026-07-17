@@ -339,11 +339,9 @@ class CardCreationLinkService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
-        actor_name: str | None = None,
+        actor_name: str,
     ) -> CardCreationLinkPublicCardValue:
-        actor_display_name = (
-            normalize_public_actor_name(actor_name) if actor_name is not None else None
-        )
+        actor_display_name = normalize_public_actor_name(actor_name)
         creation_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_public_link_open(creation_link)
         template = self._active_template(
@@ -387,11 +385,9 @@ class CardCreationLinkService:
         *,
         raw_token: str,
         organization_id: UUID,
-        actor_name: str | None = None,
+        actor_name: str,
     ) -> CardCreationLinkPublicCardValue:
-        actor_display_name = (
-            normalize_public_actor_name(actor_name) if actor_name is not None else None
-        )
+        actor_display_name = normalize_public_actor_name(actor_name)
         creation_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_public_link_open(creation_link)
         template = self._active_template(

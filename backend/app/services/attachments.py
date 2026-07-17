@@ -18,6 +18,7 @@ from app.services.permissions import (
     PersistStatePermissionDeniedError,
     PublicLinkSubmittedReadOnlyError,
 )
+from app.services.public_links import normalize_public_actor_name
 
 
 class AttachmentServiceError(ValueError):
@@ -415,10 +416,11 @@ class AttachmentService:
         original_filename: str,
         content_type: str,
         content: bytes,
+        actor_name: str,
         title: str | None = None,
         description: str | None = None,
-        actor_display_name: str | None = None,
     ) -> CardAttachment:
+        actor_display_name = normalize_public_actor_name(actor_name)
         public_link = self._get_public_attachment_link(
             actor_public_link_id,
             lock_for_update=True,

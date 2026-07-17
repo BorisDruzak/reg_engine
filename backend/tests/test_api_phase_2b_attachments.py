@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -8,14 +9,18 @@ from uuid import UUID
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from app.api.v1.endpoints import attachments as attachment_endpoints
+from app.api.v1.endpoints import public_links as public_link_endpoints
 from app.main import create_app
 from app.models import AccessGrant, AuditEvent, Permission, Role, User, role_permissions
+from app.services.attachments import AttachmentService
+from app.services.card_creation_links import CardCreationLinkService
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.public_links import PublicLinkService
@@ -32,6 +37,51 @@ def _require_test_database_url() -> str:
         pytest.fail("TEST_DATABASE_URL must point to a disposable database ending with '_test'.")
 
     return database_url
+
+
+def test_public_mutation_services_require_actor_name() -> None:
+    required_actor_parameters = [
+        (PublicLinkService.edit_card_field_with_token, "actor_name"),
+        (PublicLinkService.submit_for_review, "actor_name"),
+        (CardCreationLinkService.create_card_from_public_link, "actor_name"),
+        (CardCreationLinkService.create_draft_from_public_link, "actor_name"),
+        (AttachmentService.create_attachment_from_public_link, "actor_name"),
+    ]
+
+    for method, parameter_name in required_actor_parameters:
+        parameter = inspect.signature(method).parameters[parameter_name]
+        assert parameter.default is inspect.Parameter.empty
+
+
+@pytest.mark.parametrize("actor_name", ["   ", "А" * 201])
+def test_public_attachment_upload_rejects_invalid_actor_before_token_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    actor_name: str,
+) -> None:
+    token_lookups: list[str] = []
+
+    def fail_token_lookup(self: object, *, raw_token: str) -> object:
+        token_lookups.append(raw_token)
+        raise AssertionError("invalid actor name must stop before token lookup")
+
+    monkeypatch.setattr(
+        public_link_endpoints.PublicLinkService,
+        "validate_public_attachment_token",
+        fail_token_lookup,
+    )
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            public_link_endpoints.create_public_link_attachment(
+                session=object(),  # type: ignore[arg-type]
+                file=object(),  # type: ignore[arg-type]
+                raw_token="opaque-token",
+                actor_name=actor_name,
+            )
+        )
+
+    assert error.value.status_code == 400
+    assert token_lookups == []
 
 
 def _alembic_config() -> Config:

@@ -389,6 +389,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
             organization_id=source_organization.id,
             field_id=field.id,
             value="   ",
+            actor_name="Публичный пользователь",
         )
 
     assert db_session.scalar(select(func.count()).select_from(Card)) == 0
@@ -461,6 +462,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
             organization_id=source_organization.id,
             field_id=field.id,
             value="New card after parent close",
+            actor_name="Публичный пользователь",
         )
     field_value = db_session.scalar(
         select(FieldValue).where(
@@ -477,6 +479,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
             organization_id=target_organization.id,
             field_id=field.id,
             value="Недоступная организация",
+            actor_name="Публичный пользователь",
         )
 
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1

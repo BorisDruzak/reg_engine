@@ -289,6 +289,7 @@ def test_public_link_autosave_excludes_its_attributed_creator_from_notifications
         raw_token=token.raw_token,
         field_id=review_fixture.text_field_id,
         value="Изменено по публичной ссылке",
+        actor_name="Публичный пользователь",
     )
 
     event = db_session.scalars(
@@ -413,6 +414,7 @@ def test_active_public_link_uses_current_card_access_settings(
             raw_token=token.raw_token,
             field_id=review_fixture.number_field_id,
             value=Decimal("2.50"),
+            actor_name="Публичный пользователь",
         )
 
 
@@ -567,6 +569,7 @@ def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
         raw_token=token.raw_token,
         field_id=review_fixture.text_field_id,
         value="Новое значение",
+        actor_name="Публичный пользователь",
     )
     assert _read_text_value(db_session, review_fixture) == "Новое значение"
 
@@ -590,6 +593,7 @@ def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
             raw_token=token.raw_token,
             field_id=review_fixture.text_field_id,
             value="После отправки",
+            actor_name="Публичный пользователь",
         )
     with pytest.raises(PermissionDeniedError):
         review_fixture.attachment_service.create_attachment_from_public_link(
@@ -598,6 +602,7 @@ def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
             original_filename="submitted.txt",
             content_type="text/plain",
             content=b"submitted",
+            actor_name="Публичный пользователь",
         )
 
     approved = service.approve_for_actor(
@@ -647,7 +652,10 @@ def test_request_changes_requires_comment_reopens_same_token_and_resubmits(
         review_enabled=True,
         max_attachment_uploads=1,
     )
-    service.submit_for_review(raw_token=token.raw_token)
+    service.submit_for_review(
+        raw_token=token.raw_token,
+        actor_name="Публичный пользователь",
+    )
 
     with pytest.raises(PublicLinkError):
         service.request_changes_for_actor(
@@ -673,6 +681,7 @@ def test_request_changes_requires_comment_reopens_same_token_and_resubmits(
         raw_token=token.raw_token,
         field_id=review_fixture.text_field_id,
         value="Исправленное значение",
+        actor_name="Публичный пользователь",
     )
     uploaded = review_fixture.attachment_service.create_attachment_from_public_link(
         actor_public_link_id=token.public_link.id,
@@ -680,10 +689,14 @@ def test_request_changes_requires_comment_reopens_same_token_and_resubmits(
         original_filename="correction.txt",
         content_type="text/plain",
         content=b"correction",
+        actor_name="Публичный пользователь",
     )
     assert uploaded.title == "correction.txt"
 
-    resubmitted = service.submit_for_review(raw_token=token.raw_token)
+    resubmitted = service.submit_for_review(
+        raw_token=token.raw_token,
+        actor_name="Публичный пользователь",
+    )
     assert resubmitted.id == token.public_link.id
     assert resubmitted.status == "submitted"
     assert resubmitted.review_comment is None
@@ -706,9 +719,15 @@ def test_invalid_transitions_expiry_precedence_and_forbidden_reviewer(
             actor_user_id=review_fixture.admin_id,
             public_link_id=token.public_link.id,
         )
-    service.submit_for_review(raw_token=token.raw_token)
+    service.submit_for_review(
+        raw_token=token.raw_token,
+        actor_name="Публичный пользователь",
+    )
     with pytest.raises(PublicLinkTransitionError):
-        service.submit_for_review(raw_token=token.raw_token)
+        service.submit_for_review(
+            raw_token=token.raw_token,
+            actor_name="Публичный пользователь",
+        )
     with pytest.raises(PermissionDeniedError):
         service.review_diff_for_actor(
             actor_user_id=review_fixture.outsider_id,
@@ -756,11 +775,13 @@ def test_review_diff_uses_typed_values_safe_attachment_metadata_and_audit_timest
         raw_token=token.raw_token,
         field_id=review_fixture.text_field_id,
         value="Изменённое значение",
+        actor_name="Публичный пользователь",
     )
     service.edit_card_field_with_token(
         raw_token=token.raw_token,
         field_id=review_fixture.number_field_id,
         value=Decimal("2.50"),
+        actor_name="Публичный пользователь",
     )
     new_attachment = review_fixture.attachment_service.create_attachment_from_public_link(
         actor_public_link_id=token.public_link.id,
@@ -769,6 +790,7 @@ def test_review_diff_uses_typed_values_safe_attachment_metadata_and_audit_timest
         content_type="text/plain",
         content=b"added bytes",
         title="Добавленное вложение",
+        actor_name="Публичный пользователь",
     )
     review_fixture.attachment_service.archive_attachment_for_actor(
         actor_user_id=review_fixture.admin_id,
@@ -847,6 +869,7 @@ def test_review_diff_matches_synthetic_non_repeatable_instance_to_first_saved_in
         field_id=empty_field.id,
         value="Первое заполнение",
         block_instance_id=None,
+        actor_name="Публичный пользователь",
     )
     review = service.review_diff_for_actor(
         actor_user_id=review_fixture.admin_id,
@@ -913,6 +936,7 @@ def test_review_attachment_diffs_have_stable_change_and_uuid_order(
             original_filename=f"added-{index}.txt",
             content_type="text/plain",
             content=f"added-{index}".encode(),
+            actor_name="Публичный пользователь",
         )
         for index in range(2)
     ]
@@ -1038,7 +1062,10 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
         ]
         public_link_service = PublicLinkService(setup_session)
         for token in tokens[3:]:
-            public_link_service.submit_for_review(raw_token=token.raw_token)
+            public_link_service.submit_for_review(
+                raw_token=token.raw_token,
+                actor_name="Публичный пользователь",
+            )
         for token in tokens:
             token.public_link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         link_ids = [token.public_link.id for token in tokens]
@@ -1142,6 +1169,7 @@ def test_direct_attachment_expiry_uses_persist_marker_and_one_system_audit(
             original_filename="expired-direct.txt",
             content_type="text/plain",
             content=b"must not persist",
+            actor_name="Публичный пользователь",
         )
 
     assert token.public_link.status == "expired"
@@ -1175,7 +1203,10 @@ def test_direct_submitted_attachment_expiry_precedes_readonly_for_list_and_uploa
         for _ in range(2)
     ]
     for token in tokens:
-        service.submit_for_review(raw_token=token.raw_token)
+        service.submit_for_review(
+            raw_token=token.raw_token,
+            actor_name="Публичный пользователь",
+        )
     db_session.flush()
 
     with pytest.raises(PublicLinkSubmittedReadOnlyError):
@@ -1190,6 +1221,7 @@ def test_direct_submitted_attachment_expiry_precedes_readonly_for_list_and_uploa
             original_filename="submitted-direct.txt",
             content_type="text/plain",
             content=b"must not persist",
+            actor_name="Публичный пользователь",
         )
 
     for token in tokens:
@@ -1208,6 +1240,7 @@ def test_direct_submitted_attachment_expiry_precedes_readonly_for_list_and_uploa
             original_filename="submitted-expired-direct.txt",
             content_type="text/plain",
             content=b"must not persist",
+            actor_name="Публичный пользователь",
         )
 
     for token in tokens:

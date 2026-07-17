@@ -336,6 +336,7 @@ async def create_public_link_attachment(
     description: Annotated[str | None, Form()] = None,
 ) -> PublicLinkAttachmentRead:
     try:
+        actor_name = normalize_public_actor_name(actor_name)
         public_link = PublicLinkService(session).validate_public_attachment_token(
             raw_token=raw_token,
         )
@@ -346,7 +347,7 @@ async def create_public_link_attachment(
         )
         attachment = service.create_attachment_from_public_link(
             actor_public_link_id=public_link.id,
-            actor_display_name=normalize_public_actor_name(actor_name),
+            actor_name=actor_name,
             card_id=public_link.card_id,
             original_filename=file.filename or "attachment",
             content_type=file.content_type or "application/octet-stream",

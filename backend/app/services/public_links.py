@@ -299,11 +299,9 @@ class PublicLinkService:
         self,
         *,
         raw_token: str,
-        actor_name: str | None = None,
+        actor_name: str,
     ) -> CardPublicLink:
-        actor_display_name = (
-            normalize_public_actor_name(actor_name) if actor_name is not None else None
-        )
+        actor_display_name = normalize_public_actor_name(actor_name)
         public_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_not_expired(public_link)
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
@@ -636,11 +634,9 @@ class PublicLinkService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
-        actor_name: str | None = None,
+        actor_name: str,
     ) -> FieldValue:
-        actor_display_name = (
-            normalize_public_actor_name(actor_name) if actor_name is not None else None
-        )
+        actor_display_name = normalize_public_actor_name(actor_name)
         public_link = self._editable_public_link(raw_token, lock_for_update=True)
         self._require_field_edit_usage_available(public_link)
         card, field = self._resolve_public_edit_field(

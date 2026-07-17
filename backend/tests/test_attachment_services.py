@@ -732,6 +732,7 @@ def test_public_link_can_upload_list_and_download_attachment_with_audit(
         content_type="text/plain",
         content=b"public",
         title="Public evidence",
+        actor_name="Публичный пользователь",
     )
 
     listed = attachment_service.list_attachments_from_public_link(
@@ -827,6 +828,7 @@ def test_public_link_attachment_upload_limit_blocks_upload_only(
             original_filename="blocked-upload.txt",
             content_type="text/plain",
             content=b"blocked",
+            actor_name="Публичный пользователь",
         )
 
     listed = attachment_service.list_attachments_from_public_link(
@@ -865,6 +867,7 @@ def test_public_link_attachment_upload_increments_only_attachment_upload_counter
         original_filename="counter.txt",
         content_type="text/plain",
         content=b"counter",
+        actor_name="Публичный пользователь",
     )
     attachment_service.list_attachments_from_public_link(
         actor_public_link_id=public_token.public_link.id,
@@ -918,6 +921,7 @@ def test_public_link_attachment_upload_quota_refreshes_stale_two_session_state(
                 original_filename="first.txt",
                 content_type="text/plain",
                 content=b"first",
+                actor_name="Публичный пользователь",
             )
             first_session.commit()
 
@@ -931,6 +935,7 @@ def test_public_link_attachment_upload_quota_refreshes_stale_two_session_state(
                     original_filename="second.txt",
                     content_type="text/plain",
                     content=b"second",
+                    actor_name="Публичный пользователь",
                 )
             second_session.rollback()
         finally:
@@ -977,6 +982,7 @@ def test_public_link_attachment_workflow_respects_edit_link_state(
             original_filename="blocked.txt",
             content_type="text/plain",
             content=b"blocked",
+            actor_name="Публичный пользователь",
         )
 
 
@@ -1029,6 +1035,7 @@ def test_public_link_attachment_workflow_rejects_inactive_links_and_wrong_cards(
             original_filename="expired.txt",
             content_type="text/plain",
             content=b"expired",
+            actor_name="Публичный пользователь",
         )
 
 
@@ -1072,6 +1079,7 @@ def test_public_link_attachment_workflow_rejects_archived_and_superseded_cards(
             original_filename="superseded-public.txt",
             content_type="text/plain",
             content=b"superseded-public",
+            actor_name="Публичный пользователь",
         )
 
     context["card"].public_edit_enabled = True
@@ -1084,6 +1092,7 @@ def test_public_link_attachment_workflow_rejects_archived_and_superseded_cards(
             original_filename="blocked.txt",
             content_type="text/plain",
             content=b"blocked",
+            actor_name="Публичный пользователь",
         )
 
 
@@ -1395,6 +1404,7 @@ def test_public_link_cannot_edit_file_ref_fields(
             raw_token=public_token.raw_token,
             field_id=field.id,
             value=attachment.id,
+            actor_name="Публичный пользователь",
         )
 
     assert public_token.public_link.used_count == 0

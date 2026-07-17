@@ -337,6 +337,7 @@ def test_public_link_field_audit_credits_link_creator_and_records_diff(
         raw_token=created.raw_token,
         field_id=context["public_field"].id,
         value="public serial",
+        actor_name="Публичный пользователь",
     )
 
     event = db_session.scalars(
@@ -387,6 +388,7 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
         raw_token=created.raw_token,
         field_id=context["public_field"].id,
         value="SN-PUBLIC",
+        actor_name="Публичный пользователь",
     )
 
     assert value.value_text == "SN-PUBLIC"
@@ -398,6 +400,7 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
             raw_token=created.raw_token,
             field_id=context["private_field"].id,
             value="hidden",
+            actor_name="Публичный пользователь",
         )
 
     context["card"].public_edit_enabled = False
@@ -407,6 +410,7 @@ def test_public_link_edits_only_public_editable_fields_and_respects_card_toggle(
             raw_token=created.raw_token,
             field_id=context["public_field"].id,
             value="blocked",
+            actor_name="Публичный пользователь",
         )
 
 
@@ -437,6 +441,7 @@ def test_public_link_text_value_rejects_regex_and_preserves_old_value(
             raw_token=created.raw_token,
             field_id=context["public_field"].id,
             value="АБВ",
+            actor_name="Публичный пользователь",
         )
 
     assert str(exc_info.value) == "Введите две буквы"
@@ -503,6 +508,7 @@ def test_public_link_preview_includes_visible_static_text_without_editing(
             raw_token=created.raw_token,
             field_id=static_field.id,
             value="changed",
+            actor_name="Публичный пользователь",
         )
 
 
@@ -609,6 +615,7 @@ def test_public_link_uses_card_organization_effective_reference_list(
         raw_token=created.raw_token,
         field_id=public_select_field.id,
         value=source_item.id,
+        actor_name="Публичный пользователь",
     )
 
     assert [option.id for option in preview_field.options] == [source_item.id]
@@ -618,6 +625,7 @@ def test_public_link_uses_card_organization_effective_reference_list(
             raw_token=created.raw_token,
             field_id=public_select_field.id,
             value=root_item.id,
+            actor_name="Публичный пользователь",
         )
 
 
