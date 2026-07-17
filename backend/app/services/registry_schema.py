@@ -658,7 +658,7 @@ class RegistrySchemaService:
         description: str | None = None,
         position: int = 0,
         required_mode: str = "not_required",
-        validation_json: dict[str, object] | None = None,
+        validation_json: dict[str, object] | list[dict[str, object]] | None = None,
         options_source_type: str | None = None,
         options_source_id: UUID | None = None,
         options_config_json: dict[str, object] | None = None,
@@ -763,7 +763,9 @@ class RegistrySchemaService:
         field_type: str | object = UNSET_FIELD_UPDATE,
         position: int | None = None,
         required_mode: str | None = None,
-        validation_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
+        validation_json: (
+            dict[str, object] | list[dict[str, object]] | None | object
+        ) = UNSET_FIELD_UPDATE,
         options_source_type: str | None | object = UNSET_FIELD_UPDATE,
         options_source_id: UUID | None | object = UNSET_FIELD_UPDATE,
         options_config_json: dict[str, object] | None | object = UNSET_FIELD_UPDATE,
@@ -818,8 +820,8 @@ class RegistrySchemaService:
         candidate_validation = (
             field.validation_json if validation_json is UNSET_FIELD_UPDATE else validation_json
         )
-        if not isinstance(candidate_validation, (dict, type(None))):
-            raise RegistrySchemaError("Text validation must be an object.")
+        if not isinstance(candidate_validation, (dict, list, type(None))):
+            raise RegistrySchemaError("Text validation must be an object or a list of conditions.")
         effective_validation = self._normalize_validation_for_field(
             field_type=effective_field_type,
             validation_json=candidate_validation,
@@ -1551,9 +1553,9 @@ class RegistrySchemaService:
     def _normalize_validation_for_field(
         *,
         field_type: str,
-        validation_json: dict[str, object] | None,
+        validation_json: dict[str, object] | list[dict[str, object]] | None,
         reject_non_text_validation: bool = True,
-    ) -> dict[str, str] | None:
+    ) -> list[dict[str, str]] | None:
         if field_type != "text":
             if reject_non_text_validation and validation_json is not None:
                 raise RegistrySchemaError("Text validation is available only for text fields.")

@@ -39,10 +39,19 @@ def test_public_link_preview_field_exposes_text_validation_rule() -> None:
     [
         None,
         {"kind": "russian_text", "message": "Use Russian letters"},
+        [
+            {"kind": "russian_text", "message": "Use Russian letters", "input_mode": "show_error"},
+            {
+                "kind": "regex",
+                "pattern": "[A-Z]{1,12}",
+                "message": "Use capitals",
+                "input_mode": "block_input",
+            },
+        ],
     ],
 )
 def test_public_preview_endpoint_projections_include_text_validation(
-    validation_json: dict[str, str] | None,
+    validation_json: dict[str, str] | list[dict[str, str]] | None,
 ) -> None:
     field = PublicPreviewField(
         field_id=uuid4(),

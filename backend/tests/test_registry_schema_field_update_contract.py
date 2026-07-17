@@ -379,7 +379,19 @@ def test_field_update_service_persists_reference_visibility_and_static_text_with
 
 
 def test_field_schema_payloads_expose_validation_json() -> None:
-    validation = {"kind": "russian_text", "message": "Use Russian letters"}
+    validation = [
+        {
+            "kind": "russian_text",
+            "message": "Use Russian letters",
+            "input_mode": "show_error",
+        },
+        {
+            "kind": "regex",
+            "pattern": "[А-Яа-яЁё -]{1,256}",
+            "message": "Do not use digits or symbols",
+            "input_mode": "block_input",
+        },
+    ]
     field = _field(block_id=uuid4())
     field.validation_json = validation
 

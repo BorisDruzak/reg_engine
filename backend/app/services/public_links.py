@@ -85,7 +85,7 @@ class PublicPreviewField:
     value: object | None
     options_source_type: str | None
     options_source_id: UUID | None
-    validation_json: dict[str, Any] | None = None
+    validation_json: dict[str, Any] | list[dict[str, Any]] | None = None
     options_config_json: dict[str, Any] | None = None
     display_config_json: dict[str, Any] | None = None
     public_editable: bool = False

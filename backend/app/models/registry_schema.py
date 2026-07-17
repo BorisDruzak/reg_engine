@@ -125,7 +125,10 @@ class FormField(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
         String, nullable=False, server_default="not_required"
     )
     default_value_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    validation_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    validation_json: Mapped[dict[str, Any] | list[dict[str, Any]] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
     options_source_type: Mapped[str | None] = mapped_column(String, nullable=True)
     options_source_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     options_config_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
