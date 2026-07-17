@@ -167,6 +167,7 @@ class TabularCardExchangeService:
                     FormBlock.archived_at.is_(None),
                     FormField.archived_at.is_(None),
                     FormField.is_active.is_(True),
+                    FormField.is_exportable.is_(True),
                 )
                 .order_by(FormBlock.position, FormField.position, FormField.id)
             )
@@ -209,6 +210,7 @@ class TabularCardExchangeService:
                         )
                         for field in fields
                         if field.id in self._template_field_ids(template)
+                        and self._is_exportable_field(field)
                     ],
                 }
                 for template in templates
@@ -356,6 +358,7 @@ class TabularCardExchangeService:
                     FormBlock.archived_at.is_(None),
                     FormField.archived_at.is_(None),
                     FormField.is_active.is_(True),
+                    FormField.is_exportable.is_(True),
                 )
             )
         }
@@ -674,7 +677,7 @@ class TabularCardExchangeService:
 
         column = 3
         for item in configuration.fields:
-            if item.field.field_type == "multi_select":
+            if not self._is_exportable_field(item.field) or item.field.field_type == "multi_select":
                 continue
             labels = configuration.reference_labels.get(item.field.id)
             if not labels:
@@ -796,7 +799,7 @@ class TabularCardExchangeService:
         columns: list[TabularWorkbookColumn] = []
         labels = {"days": "дни", "months": "месяцы", "years": "годы"}
         for item in fields:
-            if item.field.field_type == "multi_select":
+            if not self._is_exportable_field(item.field) or item.field.field_type == "multi_select":
                 continue
             if item.field.field_type == "work_experience":
                 columns.extend(
@@ -827,7 +830,15 @@ class TabularCardExchangeService:
         }
 
     def _is_supported_field(self, field: FormField, block: FormBlock) -> bool:
-        return field.field_type in TABULAR_XLSX_SUPPORTED_FIELD_TYPES and not block.is_repeatable
+        return (
+            self._is_exportable_field(field)
+            and field.field_type in TABULAR_XLSX_SUPPORTED_FIELD_TYPES
+            and not block.is_repeatable
+        )
+
+    @staticmethod
+    def _is_exportable_field(field: FormField) -> bool:
+        return getattr(field, "is_exportable", True) is True
 
     def _template_field_ids(self, template: CardTemplate) -> set[UUID]:
         result: set[UUID] = set()

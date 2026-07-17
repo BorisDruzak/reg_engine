@@ -204,6 +204,150 @@ def test_tabular_xlsx_request_defaults_to_strict_and_accepts_enrichment_metadata
     assert enrich.work_experience_as_of_date == date(2026, 7, 17)
 
 
+def test_tabular_xlsx_options_omit_non_exportable_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    block = SimpleNamespace(id=uuid4(), title="Основные сведения", is_repeatable=False)
+    exportable_field = SimpleNamespace(
+        id=uuid4(),
+        block_id=block.id,
+        label="Публичное поле",
+        field_type="text",
+        is_exportable=True,
+    )
+    non_exportable_field = SimpleNamespace(
+        id=uuid4(),
+        block_id=block.id,
+        label="Скрытое поле",
+        field_type="text",
+        is_exportable=False,
+    )
+    template = SimpleNamespace(
+        id=uuid4(),
+        name="Карточка",
+        field_schema_json={"field_ids": [str(exportable_field.id), str(non_exportable_field.id)]},
+    )
+    organization = SimpleNamespace(id=uuid4(), name="Организация", code="org")
+
+    class AllowCardsManage:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def has_permission(self, *_args: object, **_kwargs: object) -> bool:
+            return True
+
+    class OptionsSession:
+        def __init__(self) -> None:
+            self._results = iter(
+                ([block], [exportable_field, non_exportable_field], [template], [organization])
+            )
+
+        def scalars(self, _statement: object) -> object:
+            return iter(next(self._results))
+
+    monkeypatch.setattr(import_export, "PermissionService", AllowCardsManage)
+
+    result = import_export.TabularCardExchangeService(OptionsSession()).options_for_actor(
+        actor_user_id=actor_user_id,
+        registry_id=registry_id,
+    )
+
+    assert result["templates"][0]["fields"] == [
+        {
+            "id": str(exportable_field.id),
+            "label": "Публичное поле",
+            "block_title": "Основные сведения",
+            "field_type": "text",
+            "supported": True,
+            "unsupported_reason": None,
+        }
+    ]
+
+
+def test_tabular_xlsx_omits_non_exportable_field_from_template_metadata_and_export(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    organization_id = uuid4()
+    exportable_field = SimpleNamespace(
+        id=uuid4(), label="Публичное поле", field_type="text", is_exportable=True
+    )
+    non_exportable_field = SimpleNamespace(
+        id=uuid4(), label="Скрытое поле", field_type="text", is_exportable=False
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Карточка"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=exportable_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Публичное поле",
+            ),
+            import_export.TabularWorkbookField(
+                field=non_exportable_field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Скрытое поле",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Организация", code="org"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    card = SimpleNamespace(id=uuid4(), organization_id=organization_id, display_name="Карточка 1")
+
+    class ExportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(
+                blocks={
+                    "main": SimpleNamespace(
+                        instances=[
+                            SimpleNamespace(
+                                fields={
+                                    "public": SimpleNamespace(
+                                        field_id=exportable_field.id, value="Видимое значение"
+                                    ),
+                                    "private": SimpleNamespace(
+                                        field_id=non_exportable_field.id, value="Секретное значение"
+                                    ),
+                                }
+                            )
+                        ]
+                    )
+                }
+            )
+
+    monkeypatch.setattr(import_export, "CardService", ExportCardService)
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=actor_user_id,
+        configuration=configuration,
+        cards=[card],
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=True)
+    sheet = workbook["Карточки"]
+    metadata = json.loads(workbook["_registry_engine"]["B1"].value)
+
+    assert [cell.value for cell in sheet[1]] == ["№ п/п", "Название карточки", "Публичное поле"]
+    assert [cell.value for cell in sheet[2]] == [1, "Карточка 1", "Видимое значение"]
+    assert metadata["field_columns"] == [
+        {
+            "field_id": str(exportable_field.id),
+            "header": "Публичное поле",
+            "field_type": "text",
+            "work_experience_component": None,
+        }
+    ]
+
+
 def test_tabular_xlsx_enrichment_plans_once_then_creates_one_global_reference_for_repeated_labels(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
