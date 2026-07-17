@@ -148,6 +148,30 @@ describe("FieldEditorControl hints", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  test("accepts a non-digit draft with an anchored negated digit condition", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <FieldEditorControl
+        fieldType="text"
+        label="ФИО"
+        options={[]}
+        value=""
+        validation={{
+          kind: "regex",
+          pattern: "^[^0-9]+$",
+          message: "Не допускаются цифры",
+          input_mode: "block_input",
+        }}
+        onChange={onChange}
+      />,
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "ФИО" }), "Ста");
+
+    expect(onChange).toHaveBeenLastCalledWith("Ста");
+  });
+
   test("renders one visual work-experience mask used by card creation and saved edits", () => {
     render(
       <FieldEditorControl

@@ -48,7 +48,7 @@ def _normalize_text_validation_condition(value: object) -> dict[str, str]:
         return {"kind": kind, "message": message, "input_mode": input_mode}
     if kind == "regex":
         _require_keys(value, {"kind", "pattern", "message"}, {"input_mode"})
-        pattern = _require_string(value, "pattern")
+        pattern = _require_string(value, "pattern").strip()
         message = _require_string(value, "message")
         _validate_portable_regex(pattern)
         return {

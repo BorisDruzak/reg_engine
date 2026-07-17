@@ -99,4 +99,26 @@ describe("validateTextDraft regex safety", () => {
       messages: ["Только русские буквы", "Цифры запрещены"],
     });
   });
+
+  test("allows non-digits for an anchored negated digit class", () => {
+    expect(
+      validateTextDraft("Ста", {
+        kind: "regex",
+        pattern: "^[^0-9]+$",
+        message: "Не допускаются цифры",
+        input_mode: "block_input",
+      }),
+    ).toEqual({ valid: true });
+  });
+
+  test("trims accidental outer whitespace before evaluating a regex condition", () => {
+    expect(
+      validateTextDraft("Ста", {
+        kind: "regex",
+        pattern: " ^[^0-9]+$ ",
+        message: "Не допускаются цифры",
+        input_mode: "block_input",
+      }),
+    ).toEqual({ valid: true });
+  });
 });

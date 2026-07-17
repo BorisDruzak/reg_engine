@@ -30,10 +30,18 @@ export function normalizeTextValidationConditions(
 ): TextValidationCondition[] {
   if (validation == null) return [];
   const conditions = Array.isArray(validation) ? validation : [validation];
-  return conditions.map((condition) => ({
-    ...condition,
-    input_mode: condition.input_mode ?? "show_error",
-  }));
+  return conditions.map((condition) =>
+    condition.kind === "regex"
+      ? {
+          ...condition,
+          pattern: condition.pattern.trim(),
+          input_mode: condition.input_mode ?? "show_error",
+        }
+      : {
+          ...condition,
+          input_mode: condition.input_mode ?? "show_error",
+        },
+  );
 }
 
 function conditionIsValid(value: string, validation: TextValidationCondition) {

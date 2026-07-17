@@ -16,6 +16,23 @@ def test_normalize_legacy_rule_to_show_error_condition_list() -> None:
     ]
 
 
+def test_normalize_trims_accidental_outer_regex_whitespace() -> None:
+    assert normalize_text_validation(
+        {
+            "kind": "regex",
+            "pattern": " ^[^0-9]+$ ",
+            "message": "Digits are forbidden",
+        }
+    ) == [
+        {
+            "kind": "regex",
+            "pattern": "^[^0-9]+$",
+            "message": "Digits are forbidden",
+            "input_mode": "show_error",
+        }
+    ]
+
+
 def test_every_text_validation_condition_contributes_its_message() -> None:
     conditions = [
         {"kind": "russian_text", "message": "Только русский", "input_mode": "show_error"},
