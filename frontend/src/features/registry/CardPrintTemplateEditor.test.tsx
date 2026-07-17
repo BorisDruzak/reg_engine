@@ -215,7 +215,7 @@ test("sends a configured text validation rule when creating a field in the layou
   await user.click(
     await screen.findByRole("button", { name: "Создать поле в блоке Основной блок" }),
   );
-  await user.click(screen.getByText("Проверка значения"));
+  await user.click(screen.getByRole("button", { name: "Создать условие" }));
   await user.selectOptions(screen.getByLabelText("Тип проверки"), "russian_text");
   await user.clear(screen.getByLabelText("Подсказка при ошибке"));
   await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите текст русскими буквами");
@@ -223,10 +223,13 @@ test("sends a configured text validation rule when creating a field in the layou
 
   await waitFor(() => expect(api.createdFieldPayloads).toHaveLength(1));
   expect(api.createdFieldPayloads[0]).toMatchObject({
-    validation_json: {
-      kind: "russian_text",
-      message: "Введите текст русскими буквами",
-    },
+    validation_json: [
+      {
+        kind: "russian_text",
+        message: "Введите текст русскими буквами",
+        input_mode: "show_error",
+      },
+    ],
   });
 });
 
@@ -819,7 +822,7 @@ test("sends the portable default regex validation payload for an existing field 
   renderEditor();
 
   await user.click(await screen.findByTestId("layout-field-field-field-1"));
-  await user.click(screen.getByText("Проверка значения"));
+  await user.click(screen.getByRole("button", { name: "Создать условие" }));
   await user.selectOptions(screen.getByLabelText("Тип проверки"), "regex");
   await user.clear(screen.getByLabelText("Подсказка при ошибке"));
   await user.type(screen.getByLabelText("Подсказка при ошибке"), "Введите нужный формат");
@@ -827,11 +830,14 @@ test("sends the portable default regex validation payload for an existing field 
 
   await waitFor(() => expect(api.updatedFieldPayloads).toHaveLength(1));
   expect(api.updatedFieldPayloads[0]).toMatchObject({
-    validation_json: {
-      kind: "regex",
-      pattern: "[^\\r\\n]{1,256}",
-      message: "Введите нужный формат",
-    },
+    validation_json: [
+      {
+        kind: "regex",
+        pattern: "[^\\r\\n]{1,256}",
+        message: "Введите нужный формат",
+        input_mode: "show_error",
+      },
+    ],
   });
 
   await user.click(await screen.findByTestId("layout-field-field-field-1"));

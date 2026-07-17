@@ -683,6 +683,37 @@ beforeEach(() => {
       if (url.endsWith("/api/v1/public-links/preview")) {
         return jsonResponse(currentPublicPreview());
       }
+      if (
+        pathname === "/api/v1/audit-events" &&
+        requestUrl.searchParams.get("scope") === "card_history"
+      ) {
+        return jsonResponse({
+          items: [
+            {
+              id: "66666666-6666-4666-8666-666666666667",
+              actor_type: "user",
+              actor_user_id: "11111111-1111-4111-8111-111111111111",
+              actor_public_link_id: null,
+              actor_display_name: "Системный администратор",
+              card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              card_display_name: "Карточка актива",
+              card_lifecycle_status: "active",
+              action: "create",
+              object_type: "card",
+              object_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              old_data_json: null,
+              new_data_json: null,
+              history_display: "standalone",
+              history_description: "Карточка создана",
+              source: "api",
+              ip_address: null,
+              user_agent: null,
+              request_id: "request-card-history-1",
+              created_at: "2026-06-28T12:00:00Z",
+            },
+          ],
+        });
+      }
       if (url.endsWith("/api/v1/public-links/edit")) {
         const payload = JSON.parse(String(init?.body)) as {
           raw_token: string;
@@ -2924,6 +2955,7 @@ test("logs in and renders authenticated admin workspace", async () => {
   const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
+  await user.tab();
   await waitFor(() => {
     expect(
       vi
@@ -3283,6 +3315,7 @@ test("preserves and saves a non-repeatable block through its production UUID ins
   expect(status).toHaveValue("drafted");
   await user.clear(status);
   await user.type(status, "published");
+  await user.tab();
 
   await waitFor(() => {
     const updateCall = vi
@@ -3323,6 +3356,7 @@ test("refreshes list-display values after saving an inline block", async () => {
   const status = within(mainBlock).getByLabelText("Статус");
   await user.clear(status);
   await user.type(status, "published");
+  await user.tab();
   await waitFor(() => {
     expect(
       vi
@@ -3439,6 +3473,7 @@ test("renders static text schema fields without sending them in block saves", as
   const statusInput = within(mainBlock).getByLabelText("Статус");
   await user.clear(statusInput);
   await user.type(statusInput, "published");
+  await user.tab();
 
   await waitFor(() => {
     const bulkCall = vi
@@ -3490,6 +3525,7 @@ test("marks a card tab dirty while an inline block draft is open", async () => {
   );
   expect(screen.queryByText("Есть несохраненные изменения")).not.toBeInTheDocument();
 
+  await user.tab();
   await waitFor(() => {
     expect(
       vi
@@ -8057,8 +8093,10 @@ test("edits a public-link card without authentication", async () => {
 
   const statusInput = await screen.findByLabelText("Публичный статус");
   expect(statusInput).toHaveValue("drafted");
+  await user.type(screen.getByLabelText("ФИО"), "Публичный исполнитель");
   await user.clear(statusInput);
   await user.type(statusInput, "submitted");
+  await user.tab();
 
   expect(await screen.findByText("Все изменения сохранены")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Вложения" })).not.toBeInTheDocument();
@@ -8076,6 +8114,7 @@ test("edits a public-link card without authentication", async () => {
           field_id?: string;
           value?: unknown;
           block_instance_id?: unknown;
+          actor_name?: unknown;
         };
         return (
           url.endsWith("/api/v1/public-links/edit") &&
@@ -8084,7 +8123,8 @@ test("edits a public-link card without authentication", async () => {
           body.raw_token === "public-token" &&
           body.field_id === "99999999-9999-4999-8999-999999999997" &&
           body.value === "submitted" &&
-          body.block_instance_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+          body.block_instance_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc" &&
+          body.actor_name === "Публичный исполнитель"
         );
       }),
     ).toBe(true);

@@ -80,9 +80,11 @@ describe("SingleStageCardCreation", () => {
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
     const experienceControl = screen.getByRole("group", { name: "Стаж работы" });
     expect(experienceControl).toBeInTheDocument();
-    const experienceInput = screen.getByRole("textbox", { name: "Стаж работы" });
-    expect(experienceInput).toHaveValue("0 дней 0 месяцев 0 лет");
-    expect(experienceInput).toBeDisabled();
+    for (const part of ["дни", "месяцы", "годы"]) {
+      const experienceInput = screen.getByRole("textbox", { name: `Стаж работы, ${part}` });
+      expect(experienceInput).toHaveValue("0");
+      expect(experienceInput).toBeDisabled();
+    }
     expect(experienceControl.closest(".single-stage-card-creation-field")).toHaveClass(
       "is-required-missing",
     );
