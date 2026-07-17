@@ -7,6 +7,7 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import FormField, OrganizationClosure, ReferenceItem, ReferenceList
@@ -329,8 +330,29 @@ class ReferenceListService:
             label=cleaned_display,
             created_by=actor_user_id,
         )
-        self.session.add(item)
-        self.session.flush()
+        try:
+            # The stable code is unique per list. Keep a concurrent duplicate
+            # insert inside a savepoint so the surrounding import transaction
+            # can reuse the winner instead of becoming unusable.
+            with self.session.begin_nested():
+                self.session.add(item)
+                self.session.flush()
+        except IntegrityError:
+            items = self.list_items(list_id)
+            if any(existing_item.parent_id is not None for existing_item in items):
+                raise ReferenceListError(
+                    "Hierarchical reference lists cannot be enriched by import."
+                ) from None
+            matches = [
+                existing_item
+                for existing_item in items
+                if self._normalize_import_label(existing_item.label)[0] == normalized_label
+            ]
+            if len(matches) > 1:
+                raise ReferenceListError("Import reference label is ambiguous.") from None
+            if matches:
+                return matches[0]
+            raise
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="create",

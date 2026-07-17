@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from contextlib import nullcontext
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from io import BytesIO
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import app.services.audit as audit_module
@@ -443,6 +445,9 @@ def test_global_import_reference_creation_requires_edit_permission_and_uses_stab
         def add(self, item: object) -> None:
             created.append(item)
 
+        def begin_nested(self):  # type: ignore[no-untyped-def]
+            return nullcontext()
+
         def flush(self) -> None:
             pass
 
@@ -470,6 +475,68 @@ def test_global_import_reference_creation_requires_edit_permission_and_uses_stab
     assert item.label == "New value"
     assert item.code.startswith("import-")
     assert created == [item]
+
+
+def test_global_import_reference_creation_reuses_item_created_by_concurrent_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    list_id = uuid4()
+    concurrent_item = SimpleNamespace(
+        id=uuid4(),
+        list_id=list_id,
+        parent_id=None,
+        label="Ready for review",
+        is_active=True,
+        archived_at=None,
+    )
+    reference_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=None,
+        scope_mode="global",
+        is_active=True,
+        archived_at=None,
+    )
+    created: list[object] = []
+    audits: list[object] = []
+
+    class Session:
+        def add(self, item: object) -> None:
+            created.append(item)
+
+        def begin_nested(self):  # type: ignore[no-untyped-def]
+            return nullcontext()
+
+        def flush(self) -> None:
+            raise IntegrityError("INSERT", {}, Exception("duplicate reference code"))
+
+    class Audit:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **kwargs: object) -> None:
+            audits.append(kwargs)
+
+    service = ReferenceListService(cast(Session, Session()))
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: reference_list)
+    monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
+    monkeypatch.setattr(
+        service,
+        "list_items",
+        lambda _list_id: [] if not created else [concurrent_item],
+    )
+    monkeypatch.setattr("app.services.references.AuditService", Audit)
+
+    item = service.create_global_import_item_for_actor(
+        actor_user_id=actor_user_id,
+        list_id=list_id,
+        normalized_label="ready for review",
+        display_label="Ready for review",
+    )
+
+    assert item is concurrent_item
+    assert len(created) == 1
+    assert audits == []
 
 
 def test_global_import_reference_resolution_rejects_non_global_list_and_missing_edit_permission(
