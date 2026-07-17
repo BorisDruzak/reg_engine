@@ -7,6 +7,27 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-17 public card creator and public audit actor integration is ready
+  for disposable-database migration verification, not release proof. Migration
+  `0033_card_creator_public_actor_name` adds nullable
+  `cards.public_creator_name` and `audit_events.actor_display_name`. Every
+  public mutation now requires a normalized ФИО; public creation snapshots it
+  as the immutable card creator, while public edits, review submission, and
+  attachment actions snapshot it in audit events. The ФИО is a claimed,
+  unauthenticated value, not an authenticated identity. The base block and
+  card list show the creator, and the audit UI shows the public executor; both
+  public surfaces guard field mutation until ФИО is entered. Focused command
+  `pytest backend/tests/test_api_phase_1g.py backend/tests/test_audit_schema.py backend/tests/test_public_link_review_lifecycle.py backend/tests/test_card_creation_links.py backend/tests/test_api_phase_2b_attachments.py backend/tests/test_api_card_change_notifications.py -q`
+  is blocked from the current PATH by missing `regex`; its repository-venv
+  equivalent passed `23 passed, 52 skipped, 1 warning` (all skips need
+  `TEST_DATABASE_URL`). The specified frontend Vitest command passed `63/63`;
+  `scripts/typecheck.ps1` passed. `scripts/check.ps1 -SkipRemote` remains red
+  because Ruff format would reformat existing `app/models/audit.py` and
+  `app/models/card.py`. Before release, verify migration `0033` on a
+  disposable `_test` database, then take a fresh production backup, complete
+  data/schema preflight, apply the migration, and obtain deployment/browser
+  proof.
+
 - 2026-07-17 follow-up `01d8bfaf` fixes the card-field activation race: a
   click used to activate the text editor and then give native focus back to
   the focusable field container, leaving the caret outside the textarea. The
