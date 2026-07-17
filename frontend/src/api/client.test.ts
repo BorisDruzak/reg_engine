@@ -80,9 +80,11 @@ test("sends XLSX v2 creation options only with the template download", async () 
 
   const [[templateUrl, templateInit], [previewUrl, previewInit], [commitUrl, commitInit]] =
     fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit]>;
-  expect(String(templateUrl).endsWith("/registries/registry-1/tabular-xlsx-card-exchange/import-template")).toBe(
-    true,
-  );
+  expect(
+    String(templateUrl).endsWith(
+      "/registries/registry-1/tabular-xlsx-card-exchange/import-template",
+    ),
+  ).toBe(true);
   expect(JSON.parse(String(templateInit.body))).toMatchObject({
     import_mode: "enrich_global_references",
     work_experience_as_of_date: "2026-07-17",
