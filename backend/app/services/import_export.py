@@ -466,7 +466,7 @@ class TabularCardExchangeService:
             ),
             *(column.header for column in columns),
         ]
-        sheet.append(headers)
+        sheet.append([self._safe_export_cell_value(header) for header in headers])
         self._style_header_row(sheet, len(headers))
         sheet.freeze_panes = "A2"
 
@@ -531,7 +531,7 @@ class TabularCardExchangeService:
             if configuration.include_organization_column:
                 row.append(organization_label)
             row.extend(None for _ in self._workbook_columns(configuration.fields))
-            sheet.append(row)
+            sheet.append([self._safe_export_cell_value(value) for value in row])
 
     def _style_header_row(self, sheet: Any, column_count: int) -> None:
         openpyxl = _openpyxl()
@@ -658,7 +658,11 @@ class TabularCardExchangeService:
         metadata_sheet["B1"] = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
         metadata_sheet["A2"] = "organizations"
         for row, organization in enumerate(configuration.organizations, start=3):
-            metadata_sheet.cell(row=row, column=1, value=self._organization_label(organization))
+            metadata_sheet.cell(
+                row=row,
+                column=1,
+                value=self._safe_export_cell_value(self._organization_label(organization)),
+            )
         self._define_named_range(
             workbook,
             self._organization_choices_name(),
@@ -672,7 +676,11 @@ class TabularCardExchangeService:
                 continue
             metadata_sheet.cell(row=2, column=column, value=str(item.field.id))
             for row, label in enumerate(labels, start=3):
-                metadata_sheet.cell(row=row, column=column, value=label)
+                metadata_sheet.cell(
+                    row=row,
+                    column=column,
+                    value=self._safe_export_cell_value(label),
+                )
             column_letter = _openpyxl().utils.get_column_letter(column)
             self._define_named_range(
                 workbook,

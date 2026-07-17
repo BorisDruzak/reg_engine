@@ -1435,6 +1435,62 @@ def test_tabular_xlsx_export_escapes_formula_leading_text_and_marks_it_as_text(
     assert sheet["C2"].number_format == "@"
 
 
+def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cells() -> None:
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Поле", field_type="select")
+    reference_labels = {
+        "=Формула": uuid4(),
+        "+Плюс": uuid4(),
+        "-Минус": uuid4(),
+        "@Адрес": uuid4(),
+    }
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="+Значение справочника",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="-Организация", code="@code"),),
+        include_organization_column=True,
+        fixed_organization_id=None,
+        organization_labels={},
+        reference_labels={field.id: reference_labels},
+        unit_organization_ids={},
+        title_header="=Название карточки",
+    )
+
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=None,
+    )
+
+    workbook = load_workbook(filename=BytesIO(content), data_only=False)
+    sheet = workbook["Карточки"]
+    metadata_sheet = workbook["_registry_engine"]
+    metadata = json.loads(metadata_sheet["B1"].value)
+
+    assert sheet["B1"].value == "'=Название карточки"
+    assert sheet["D1"].value == "'+Значение справочника"
+    assert sheet["C2"].value == "'-Организация (@code)"
+    assert metadata_sheet["A3"].value == "'-Организация (@code)"
+    assert [metadata_sheet.cell(row=row, column=3).value for row in range(3, 7)] == [
+        "'=Формула",
+        "'+Плюс",
+        "'-Минус",
+        "'@Адрес",
+    ]
+    assert metadata["title_header"] == "=Название карточки"
+    assert metadata["field_columns"][0]["header"] == "+Значение справочника"
+    assert metadata["organizations"] == [
+        {"id": str(organization_id), "label": "-Организация (@code)"}
+    ]
+
+
 @pytest.mark.parametrize(
     ("setting_name", "setting_value", "workbook_setup"),
     [
