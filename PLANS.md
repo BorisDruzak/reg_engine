@@ -32,7 +32,7 @@ not a hardcoded employee registry.
   src/features/registry/ImportExportPanel.test.tsx` passed `9`; and the
   backend portion of `scripts/test.ps1` passed `456`, with `275` skips and the
   existing Starlette/httpx deprecation warning. The new real API tests safely
-  skipped (`9 skipped`) because `TEST_DATABASE_URL` is unset, so PostgreSQL
+  skipped (`10 skipped`) because `TEST_DATABASE_URL` is unset, so PostgreSQL
   strict/enrichment/403/atomic proof remains required against a disposable
   database ending in `_test`. `scripts/lint.ps1` passed with no errors and the
   existing `FilledCardLayout.tsx` Hook-dependency warning. `git diff --check`
