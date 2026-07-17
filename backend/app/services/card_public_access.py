@@ -149,7 +149,7 @@ class CardPublicAccessService:
         return [
             (block, field_model)
             for block, field_model in active_fields
-            if self._field_access(settings_by_field_id.get(field_model.id), field_model)[0]
+            if self._field_access(settings_by_field_id.get(field_model.id), block, field_model)[0]
         ]
 
     def public_editable_schema_rows_for_card(
@@ -164,26 +164,30 @@ class CardPublicAccessService:
             (block, field_model)
             for block, field_model in self._active_template_fields(card)
             if (
-                self._field_access(settings_by_field_id.get(field_model.id), field_model)[0]
-                and self._field_access(settings_by_field_id.get(field_model.id), field_model)[1]
+                self._field_access(settings_by_field_id.get(field_model.id), block, field_model)[0]
+                and self._field_access(
+                    settings_by_field_id.get(field_model.id), block, field_model
+                )[1]
             )
         ]
 
     def is_field_publicly_editable(self, *, card: Card, field_id: UUID) -> bool:
         if not card.public_edit_enabled:
             return False
-        field_model = next(
+        field_row = next(
             (
-                field_model
-                for _, field_model in self._active_template_fields(card)
+                (block, field_model)
+                for block, field_model in self._active_template_fields(card)
                 if field_model.id == field_id
             ),
             None,
         )
-        if field_model is None:
+        if field_row is None:
             return False
+        block, field_model = field_row
         public_visible, public_editable = self._field_access(
             self._settings_by_field_id(card.id).get(field_id),
+            block,
             field_model,
         )
         return public_visible and public_editable
@@ -204,13 +208,13 @@ class CardPublicAccessService:
                 CardPublicFieldSettingRead(
                     field_id=field_model.id,
                     public_visible=self._field_access(
-                        settings_by_field_id.get(field_model.id), field_model
+                        settings_by_field_id.get(field_model.id), block, field_model
                     )[0],
                     public_editable=self._field_access(
-                        settings_by_field_id.get(field_model.id), field_model
+                        settings_by_field_id.get(field_model.id), block, field_model
                     )[1],
                 )
-                for _, field_model in fields
+                for block, field_model in fields
             ],
         )
 
@@ -274,10 +278,19 @@ class CardPublicAccessService:
     @staticmethod
     def _field_access(
         setting: CardPublicFieldSetting | None,
+        block: FormBlock,
         field_model: FormField,
     ) -> tuple[bool, bool]:
         if setting is None:
-            return default_public_field_access(field_model.field_type)
+            default_visible, default_editable = default_public_field_access(field_model.field_type)
+            public_visible = block.public_visible and field_model.public_visible and default_visible
+            return (
+                public_visible,
+                public_visible
+                and block.public_editable
+                and field_model.public_editable
+                and default_editable,
+            )
         return setting.public_visible, setting.public_editable
 
     def _validate_field_updates(

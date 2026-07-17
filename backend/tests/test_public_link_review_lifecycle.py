@@ -571,12 +571,15 @@ def test_unconfigured_schema_hidden_field_stays_private_across_public_surfaces(
         ],
     }
     db_session.flush()
-    assert db_session.scalar(
-        select(CardPublicFieldSetting).where(
-            CardPublicFieldSetting.card_id == card.id,
-            CardPublicFieldSetting.field_id == review_fixture.hidden_field_id,
+    assert (
+        db_session.scalar(
+            select(CardPublicFieldSetting).where(
+                CardPublicFieldSetting.card_id == card.id,
+                CardPublicFieldSetting.field_id == review_fixture.hidden_field_id,
+            )
         )
-    ) is None
+        is None
+    )
 
     service = PublicLinkService(db_session)
     token = service.create_public_link_for_actor(
