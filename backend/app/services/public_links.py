@@ -459,8 +459,26 @@ class PublicLinkService:
 
         baseline = public_link.baseline_snapshot_json
         current = self._review_snapshot(public_link, include_internal=True)
-        baseline_fields = self._snapshot_items_by_key(baseline, "fields", self._field_snapshot_key)
-        current_fields = self._snapshot_items_by_key(current, "fields", self._field_snapshot_key)
+        eligible_field_ids = {
+            str(field_model.id)
+            for _, field_model in CardPublicAccessService(
+                self.session
+            ).public_editable_schema_rows_for_card(card)
+        }
+        baseline_fields = {
+            key: item
+            for key, item in self._snapshot_items_by_key(
+                baseline, "fields", self._field_snapshot_key
+            ).items()
+            if str(item.get("field_id")) in eligible_field_ids
+        }
+        current_fields = {
+            key: item
+            for key, item in self._snapshot_items_by_key(
+                current, "fields", self._field_snapshot_key
+            ).items()
+            if str(item.get("field_id")) in eligible_field_ids
+        }
         changed_at_by_value_id = self._field_change_timestamps(public_link.id)
         fields: list[PublicLinkReviewFieldDiff] = []
         changed_field_count = 0
