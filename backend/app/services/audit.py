@@ -225,6 +225,7 @@ class AuditService:
             actor_user_id=actor_user_id,
             actor_public_link_id=None,
             actor_reference_edit_link_id=None,
+            actor_display_name=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -242,6 +243,7 @@ class AuditService:
         self,
         *,
         actor_public_link_id: UUID,
+        actor_display_name: str | None = None,
         action: str,
         object_type: str,
         object_id: UUID | None = None,
@@ -257,6 +259,7 @@ class AuditService:
             actor_user_id=None,
             actor_public_link_id=actor_public_link_id,
             actor_reference_edit_link_id=None,
+            actor_display_name=actor_display_name,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -289,6 +292,7 @@ class AuditService:
             actor_user_id=None,
             actor_public_link_id=None,
             actor_reference_edit_link_id=actor_reference_edit_link_id,
+            actor_display_name=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -320,6 +324,7 @@ class AuditService:
             actor_user_id=None,
             actor_public_link_id=None,
             actor_reference_edit_link_id=None,
+            actor_display_name=None,
             action=action,
             object_type=object_type,
             object_id=object_id,
@@ -414,7 +419,11 @@ class AuditService:
                 event=event,
                 object_id=None if scope == "card_history" else event.object_id,
                 actor_display_name=(
-                    "Публичная ссылка" if event.actor_type == "public_link" else actor_display_name
+                    event.actor_display_name
+                    if event.actor_type == "public_link" and event.actor_display_name
+                    else "Публичная ссылка"
+                    if event.actor_type == "public_link"
+                    else actor_display_name
                 ),
                 attributed_user_display_name=attributed_user_display_name,
                 card_display_name=card_display_name,
@@ -537,6 +546,7 @@ class AuditService:
         actor_user_id: UUID | None,
         actor_public_link_id: UUID | None,
         actor_reference_edit_link_id: UUID | None,
+        actor_display_name: str | None,
         action: str,
         object_type: str,
         object_id: UUID | None,
@@ -557,6 +567,7 @@ class AuditService:
             actor_user_id=actor_user_id,
             actor_public_link_id=actor_public_link_id,
             actor_reference_edit_link_id=actor_reference_edit_link_id,
+            actor_display_name=actor_display_name,
             action=action,
             object_type=object_type,
             object_id=object_id,

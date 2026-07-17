@@ -435,6 +435,65 @@ def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
     assert denied.status_code == 403, denied.text
 
 
+def test_card_reads_creator_display_name_for_internal_and_public_creation(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase1g-card-creator-system@example.test",
+        is_superuser=True,
+    )
+    system_admin.display_name = "Системный администратор"
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase1g-card-creator", "name": "Card creator organization"},
+        actor_id=system_admin.id,
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        UUID(organization["id"])
+    )
+    internal = _post_json(
+        api_client,
+        f"/api/v1/registries/{registry.id}/cards",
+        {"organization_id": organization["id"], "display_name": "Internal creator card"},
+        actor_id=system_admin.id,
+    )
+    public_card = CardService(db_session).create_card(
+        registry_id=registry.id,
+        organization_id=UUID(organization["id"]),
+        display_name="Public creator card",
+        created_by=None,
+    )
+    public_card.public_creator_name = "Иванов Иван Иванович"
+    db_session.flush()
+
+    internal_read = api_client.get(
+        f"/api/v1/cards/{internal['id']}",
+        headers=_actor_headers(system_admin.id),
+    )
+    public_read = api_client.get(
+        f"/api/v1/cards/{public_card.id}",
+        headers=_actor_headers(system_admin.id),
+    )
+    listed = api_client.get(
+        f"/api/v1/registries/{registry.id}/cards",
+        headers=_actor_headers(system_admin.id),
+    )
+
+    assert internal_read.status_code == 200, internal_read.text
+    assert public_read.status_code == 200, public_read.text
+    assert listed.status_code == 200, listed.text
+    assert internal_read.json()["creator_display_name"] == "Системный администратор"
+    assert public_read.json()["creator_display_name"] == "Иванов Иван Иванович"
+    creator_names_by_card_id = {
+        item["id"]: item["creator_display_name"] for item in listed.json()["items"]
+    }
+    assert creator_names_by_card_id[internal["id"]] == "Системный администратор"
+    assert creator_names_by_card_id[str(public_card.id)] == "Иванов Иван Иванович"
+
+
 def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
     api_client: TestClient,
     db_session: Session,

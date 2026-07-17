@@ -42,6 +42,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     actor_reference_edit_link_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("reference_edit_links.id")
     )
+    actor_display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     action: Mapped[str] = mapped_column(String, nullable=False)
     object_type: Mapped[str] = mapped_column(String, nullable=False)
     object_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)

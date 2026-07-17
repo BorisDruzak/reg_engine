@@ -149,6 +149,7 @@ class CardRead:
     can_manage: bool = False
     blocks: dict[str, CardBlockRead] = field(default_factory=dict)
     fields: dict[str, CardFieldRead] = field(default_factory=dict)
+    creator_display_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1333,6 +1334,7 @@ class CardService:
             card_template_name=self._card_template_name(card),
             organization_id=card.organization_id,
             display_name=card.display_name,
+            creator_display_name=self.creator_display_name_for_card(card),
             can_manage=permissions.has_permission(
                 actor_user_id,
                 "cards.manage",
@@ -1741,6 +1743,17 @@ class CardService:
     def _card_template_name(self, card: Card) -> str | None:
         template = self.session.get(CardTemplate, card.card_template_id)
         return template.name if template is not None else None
+
+    def creator_display_name_for_card(self, card: Card) -> str | None:
+        if card.public_creator_name:
+            return card.public_creator_name
+        return self._user_display_name_for_id(card.created_by)
+
+    def _user_display_name_for_id(self, user_id: UUID | None) -> str | None:
+        if user_id is None:
+            return None
+        user = self.session.get(User, user_id)
+        return user.display_name if user is not None else None
 
     def _apply_card_template_defaults(
         self,

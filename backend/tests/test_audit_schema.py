@@ -3,6 +3,7 @@ from ipaddress import ip_address
 from types import SimpleNamespace
 from uuid import uuid4
 
+from app.models import AuditEvent
 from app.schemas.audit import AuditEventRead
 
 
@@ -27,3 +28,27 @@ def test_audit_event_read_serializes_database_ip_address_objects() -> None:
     payload = AuditEventRead.model_validate(event)
 
     assert payload.ip_address == "198.51.100.25"
+
+
+def test_audit_schema_serializes_public_actor_display_name() -> None:
+    event = AuditEvent(
+        id=uuid4(),
+        actor_type="public_link",
+        actor_user_id=None,
+        actor_public_link_id=uuid4(),
+        actor_display_name="Иванов Иван Иванович",
+        action="public_link.update",
+        object_type="field_value",
+        object_id=uuid4(),
+        old_data_json=None,
+        new_data_json={"field": "value"},
+        source="public_link",
+        ip_address=None,
+        user_agent=None,
+        request_id=None,
+        created_at=datetime.now(UTC),
+    )
+
+    payload = AuditEventRead.model_validate(event)
+
+    assert payload.actor_display_name == "Иванов Иван Иванович"

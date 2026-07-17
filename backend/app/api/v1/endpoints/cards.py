@@ -709,6 +709,7 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
         card_template_name=card_read.card_template_name,
         organization_id=card_read.organization_id,
         display_name=card_read.display_name,
+        creator_display_name=card_read.creator_display_name,
         can_manage=card_read.can_manage,
         blocks={
             block_code: CardBlockRead(
@@ -767,6 +768,7 @@ def _card_to_summary(card: Card, card_service: CardService) -> CardSummaryRead:
         organization_id=card.organization_id,
         org_unit_id=card.org_unit_id,
         display_name=card.display_name,
+        creator_display_name=card_service.creator_display_name_for_card(card),
         lifecycle_status=card.lifecycle_status,
         public_view_enabled=card.public_view_enabled,
         public_edit_enabled=card.public_edit_enabled,

@@ -69,6 +69,7 @@ class CardSummaryRead(BaseModel):
     organization_id: UUID
     org_unit_id: UUID | None
     display_name: str
+    creator_display_name: str | None = None
     lifecycle_status: str
     public_view_enabled: bool
     public_edit_enabled: bool
@@ -211,6 +212,7 @@ class CardRead(BaseModel):
     card_template_name: str | None = None
     organization_id: UUID
     display_name: str
+    creator_display_name: str | None = None
     can_manage: bool
     blocks: dict[str, CardBlockRead]
     fields: dict[str, CardFieldRead]
