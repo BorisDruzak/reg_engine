@@ -18,8 +18,12 @@ not a hardcoded employee registry.
   creation from an existing value, enrichment preview/commit with normalized
   deduplication, a missing reference-edit permission returning the generic
   Russian 403, and an invalid enrichment commit leaving no card or reference
-  item behind. The integration correction preserves the service/API boundary:
-  a `PermissionDeniedError` during reference planning is no longer converted
+  item behind. A strict unknown choice is rejected through the API without a
+  mutation, and a late injected field-write failure is covered to verify that
+  card creation has begun before its card and enriched reference item roll
+  back.
+  The integration correction preserves the service/API boundary: a
+  `PermissionDeniedError` during reference planning is no longer converted
   into a row-validation error and reaches the standard safe 403 mapper.
 
   Fresh local evidence: `backend\\.venv\\Scripts\\python.exe -m pytest
@@ -28,7 +32,7 @@ not a hardcoded employee registry.
   src/features/registry/ImportExportPanel.test.tsx` passed `9`; and the
   backend portion of `scripts/test.ps1` passed `456`, with `275` skips and the
   existing Starlette/httpx deprecation warning. The new real API tests safely
-  skipped (`7 skipped`) because `TEST_DATABASE_URL` is unset, so PostgreSQL
+  skipped (`9 skipped`) because `TEST_DATABASE_URL` is unset, so PostgreSQL
   strict/enrichment/403/atomic proof remains required against a disposable
   database ending in `_test`. `scripts/lint.ps1` passed with no errors and the
   existing `FilledCardLayout.tsx` Hook-dependency warning. `git diff --check`

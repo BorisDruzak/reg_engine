@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
+import app.services.import_export as import_export_module
 from app.core.config import get_settings
 from app.main import create_app
 from app.models import AccessGrant, Card, Permission, ReferenceItem, Role, User, role_permissions
@@ -495,6 +496,62 @@ def test_tabular_xlsx_strict_mode_creates_cards_only_for_existing_global_referen
     )
 
 
+def test_tabular_xlsx_strict_mode_rejects_unknown_reference_choice_without_mutation(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    context = _context(db_session)
+    reference_context = _add_global_reference_select_field(db_session, context)
+    headers = _actor_headers(context["scoped"].id)
+    template_response = api_client.post(
+        _url(context, "import-template"),
+        json=_reference_selection(context, reference_context, import_mode="strict"),
+        headers=headers,
+    )
+    assert template_response.status_code == 200, template_response.text
+    workbook = load_workbook(io.BytesIO(template_response.content))
+    sheet = workbook["Карточки"]
+    sheet["B2"] = "Строгая карточка с неизвестным значением"
+    sheet["C2"] = "Несуществующий статус"
+    content = io.BytesIO()
+    workbook.save(content)
+
+    preview = _upload_xlsx(
+        api_client,
+        url=_url(context, "import/preview"),
+        content=content.getvalue(),
+        headers=headers,
+    )
+    committed = _upload_xlsx(
+        api_client,
+        url=_url(context, "import/commit"),
+        content=content.getvalue(),
+        headers=headers,
+    )
+
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["summary"]["invalid_rows"] == 1
+    assert preview.json()["summary"]["would_create_cards"] == 0
+    assert preview.json()["summary"]["would_create_reference_items"] == 0
+    assert committed.status_code == 400, committed.text
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(Card)
+            .where(Card.display_name == "Строгая карточка с неизвестным значением")
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ReferenceItem)
+            .where(ReferenceItem.list_id == reference_context["reference_list"].id)
+        )
+        == 1
+    )
+
+
 def test_tabular_xlsx_enrichment_creates_exactly_previewed_global_references_and_cards(
     api_client: TestClient,
     db_session: Session,
@@ -662,6 +719,86 @@ def test_tabular_xlsx_invalid_enrichment_commit_leaves_no_cards_or_reference_ite
             .where(
                 ReferenceItem.list_id == reference_context["reference_list"].id,
                 ReferenceItem.label == "Атомарный новый статус",
+            )
+        )
+        == 0
+    )
+
+
+def test_tabular_xlsx_enrichment_rolls_back_late_card_write_failure_via_api(
+    api_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(db_session)
+    reference_context = _add_global_reference_select_field(db_session, context)
+    _grant_reference_edit_permission(db_session, context)
+    headers = _actor_headers(context["scoped"].id)
+    template_response = api_client.post(
+        _url(context, "import-template"),
+        json=_reference_selection(
+            context,
+            reference_context,
+            import_mode="enrich_global_references",
+        ),
+        headers=headers,
+    )
+    assert template_response.status_code == 200, template_response.text
+    workbook = load_workbook(io.BytesIO(template_response.content))
+    sheet = workbook["Карточки"]
+    sheet["B2"] = "Карточка позднего отката"
+    sheet["C2"] = "Статус позднего отката"
+    content = io.BytesIO()
+    workbook.save(content)
+
+    preview = _upload_xlsx(
+        api_client,
+        url=_url(context, "import/preview"),
+        content=content.getvalue(),
+        headers=headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["summary"]["would_create_reference_items"] == 1
+
+    class FailingLateFieldWriteService(CardService):
+        created_card_ids: list[UUID] = []
+
+        def create_card_for_actor(self, **kwargs: object) -> Card:
+            card = super().create_card_for_actor(**kwargs)
+            type(self).created_card_ids.append(card.id)
+            return card
+
+        def set_field_value_for_actor(self, **_kwargs: object) -> None:
+            raise RuntimeError("forced XLSX field write failure")
+
+    monkeypatch.setattr(import_export_module, "CardService", FailingLateFieldWriteService)
+
+    committed = _upload_xlsx(
+        api_client,
+        url=_url(context, "import/commit"),
+        content=content.getvalue(),
+        headers=headers,
+    )
+
+    assert committed.status_code == 500, committed.text
+    assert committed.json() == {"detail": "Internal service error."}
+    assert FailingLateFieldWriteService.created_card_ids
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(Card)
+            .where(Card.display_name == "Карточка позднего отката")
+        )
+        == 0
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ReferenceItem)
+            .where(
+                ReferenceItem.list_id == reference_context["reference_list"].id,
+                ReferenceItem.label == "Статус позднего отката",
             )
         )
         == 0
