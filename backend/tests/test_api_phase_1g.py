@@ -1317,7 +1317,12 @@ def test_public_link_api_hardening(
 
     invalid_token = api_client.post(
         "/api/v1/public-links/edit",
-        json={"raw_token": "invalid-token", "field_id": str(uuid4()), "value": "blocked"},
+        json={
+            "raw_token": "invalid-token",
+            "field_id": str(uuid4()),
+            "value": "blocked",
+            "actor_name": "Публичный пользователь",
+        },
     )
     assert invalid_token.status_code in {400, 403}, invalid_token.text
     assert "field" not in invalid_token.json()["detail"].lower()
@@ -1335,12 +1340,22 @@ def test_public_link_api_hardening(
 
     first_edit = api_client.post(
         "/api/v1/public-links/edit",
-        json={"raw_token": public_link["raw_token"], "field_id": field["id"], "value": "first"},
+        json={
+            "raw_token": public_link["raw_token"],
+            "field_id": field["id"],
+            "value": "first",
+            "actor_name": "Публичный пользователь",
+        },
     )
     assert first_edit.status_code == 200, first_edit.text
     second_edit = api_client.post(
         "/api/v1/public-links/edit",
-        json={"raw_token": public_link["raw_token"], "field_id": field["id"], "value": "second"},
+        json={
+            "raw_token": public_link["raw_token"],
+            "field_id": field["id"],
+            "value": "second",
+            "actor_name": "Публичный пользователь",
+        },
     )
     assert second_edit.status_code == 403, second_edit.text
 

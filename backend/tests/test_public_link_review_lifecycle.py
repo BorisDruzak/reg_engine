@@ -26,6 +26,7 @@ from app.main import create_app
 from app.models import (
     AuditEvent,
     Card,
+    CardPublicFieldSetting,
     CardPublicLink,
     CardTemplate,
     FieldValue,
@@ -115,6 +116,7 @@ class ReviewFixture:
     card_id: UUID
     text_field_id: UUID
     number_field_id: UUID
+    hidden_field_id: UUID
     hidden_value: str
     attachment_service: AttachmentService
     initial_attachment_id: UUID
@@ -253,6 +255,7 @@ def review_fixture(db_session: Session, tmp_path: Path) -> ReviewFixture:
         card_id=card.id,
         text_field_id=text_field.id,
         number_field_id=number_field.id,
+        hidden_field_id=hidden_field.id,
         hidden_value=hidden_value,
         attachment_service=attachment_service,
         initial_attachment_id=initial_attachment.id,
@@ -550,6 +553,56 @@ def test_review_link_creation_captures_safe_baseline(
     )
     assert opted_in.review_enabled is True
     assert opted_in.baseline_snapshot_json is not None
+
+
+def test_unconfigured_schema_hidden_field_stays_private_across_public_surfaces(
+    db_session: Session,
+    review_fixture: ReviewFixture,
+) -> None:
+    card = db_session.get(Card, review_fixture.card_id)
+    assert card is not None
+    template = db_session.get(CardTemplate, card.card_template_id)
+    assert template is not None
+    template.field_schema_json = {
+        **template.field_schema_json,
+        "field_ids": [
+            *template.field_schema_json["field_ids"],
+            str(review_fixture.hidden_field_id),
+        ],
+    }
+    db_session.flush()
+    assert db_session.scalar(
+        select(CardPublicFieldSetting).where(
+            CardPublicFieldSetting.card_id == card.id,
+            CardPublicFieldSetting.field_id == review_fixture.hidden_field_id,
+        )
+    ) is None
+
+    service = PublicLinkService(db_session)
+    token = service.create_public_link_for_actor(
+        actor_user_id=review_fixture.admin_id,
+        card_id=card.id,
+        review_enabled=True,
+    )
+    preview = service.preview_public_link(raw_token=token.raw_token)
+    submitted = service.submit_for_review(
+        raw_token=token.raw_token,
+        actor_name="Публичный пользователь",
+    )
+
+    serialized_preview = json.dumps(asdict(preview), ensure_ascii=False, default=str)
+    serialized_baseline = json.dumps(
+        token.public_link.baseline_snapshot_json,
+        ensure_ascii=False,
+    )
+    assert str(review_fixture.hidden_field_id) not in serialized_preview
+    assert review_fixture.hidden_value not in serialized_preview
+    assert str(review_fixture.hidden_field_id) not in serialized_baseline
+    assert review_fixture.hidden_value not in serialized_baseline
+    assert submitted.submission_summary_json == {
+        "completed_public_fields": 2,
+        "total_public_fields": 2,
+    }
 
 
 def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(

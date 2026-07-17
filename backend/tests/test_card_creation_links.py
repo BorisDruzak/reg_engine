@@ -471,7 +471,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
         )
     )
     assert field_value is not None
-    assert field_value.value_text == "Первая карточка"
+    assert field_value.value_text == "Изменено вторым посетителем"
 
     with pytest.raises(CardCreationLinkError):
         service.create_card_from_public_link(
