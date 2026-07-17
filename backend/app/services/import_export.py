@@ -52,7 +52,11 @@ TABULAR_XLSX_SHEET_TITLE = "Карточки"
 TABULAR_XLSX_METADATA_SHEET_TITLE = "_registry_engine"
 TABULAR_XLSX_TEMPLATE_ROW_COUNT = 100
 TABULAR_XLSX_MAX_ZIP_ENTRIES = 1_000
-WORK_EXPERIENCE_COMPONENTS = ("days", "months", "years")
+WORK_EXPERIENCE_COMPONENTS: tuple[
+    Literal["days", "months", "years"],
+    Literal["days", "months", "years"],
+    Literal["days", "months", "years"],
+] = ("days", "months", "years")
 WORK_EXPERIENCE_PARTIAL_ERROR = (
     "заполните дни, месяцы и годы стажа либо оставьте все три значения пустыми."
 )
@@ -1180,17 +1184,21 @@ class TabularCardExchangeService:
                     )
                     fields_by_id = {item.field.id: item for item in configuration.fields}
                     for field_id, value in row["values"].items():
-                        kwargs: dict[str, object] = {
-                            "actor_user_id": actor_user_id,
-                            "card_id": card.id,
-                            "field_id": field_id,
-                            "value": value,
-                        }
                         if fields_by_id[field_id].field.field_type == "work_experience":
-                            kwargs["work_experience_as_of_date"] = (
-                                configuration.work_experience_as_of_date
+                            card_service.set_field_value_for_actor(
+                                actor_user_id=actor_user_id,
+                                card_id=card.id,
+                                field_id=field_id,
+                                value=value,
+                                work_experience_as_of_date=configuration.work_experience_as_of_date,
                             )
-                        card_service.set_field_value_for_actor(**kwargs)
+                        else:
+                            card_service.set_field_value_for_actor(
+                                actor_user_id=actor_user_id,
+                                card_id=card.id,
+                                field_id=field_id,
+                                value=value,
+                            )
                         field_values_written += 1
                 AuditService(self.session).record_user_event(
                     actor_user_id=actor_user_id,
@@ -1468,6 +1476,14 @@ class TabularCardExchangeService:
                     if workbook_field is not None
                     else None
                 )
+                raw_reference_list_id = (
+                    getattr(workbook_field.field, "options_source_id", None)
+                    if workbook_field is not None
+                    else None
+                )
+                reference_list_id = (
+                    raw_reference_list_id if isinstance(raw_reference_list_id, UUID) else None
+                )
                 organization_aware_resolution = isinstance(options_config, dict) and (
                     options_config.get("reference_resolution") == "by_card_organization"
                     or options_config.get("allow_owner_override") is True
@@ -1476,7 +1492,7 @@ class TabularCardExchangeService:
                     workbook_field is None
                     or getattr(workbook_field.field, "options_source_type", None)
                     != "reference_list"
-                    or getattr(workbook_field.field, "options_source_id", None) is None
+                    or reference_list_id is None
                     or organization_aware_resolution
                 ):
                     row["errors"].append(
@@ -1487,7 +1503,7 @@ class TabularCardExchangeService:
                 try:
                     resolution = reference_service.resolve_or_plan_global_import_item_for_actor(
                         actor_user_id=actor_user_id,
-                        list_id=workbook_field.field.options_source_id,
+                        list_id=reference_list_id,
                         raw_label=value.raw_label,
                     )
                 except ReferenceListError as exc:
@@ -1501,11 +1517,11 @@ class TabularCardExchangeService:
                     else:
                         row["values"][field_id] = resolution.reference_item_id
                     continue
-                key = (workbook_field.field.options_source_id, resolution.normalized_label)
+                key = (reference_list_id, resolution.normalized_label)
                 planned_by_key.setdefault(
                     key,
                     _PlannedGlobalImportReference(
-                        list_id=workbook_field.field.options_source_id,
+                        list_id=reference_list_id,
                         normalized_label=resolution.normalized_label,
                         display_label=resolution.display_label,
                         field_label=workbook_field.header,
@@ -1514,7 +1530,7 @@ class TabularCardExchangeService:
                 row["values"][field_id] = _PendingGlobalImportReference(
                     field_id=field_id,
                     raw_label=resolution.normalized_label,
-                    list_id=workbook_field.field.options_source_id,
+                    list_id=reference_list_id,
                 )
         return list(planned_by_key.values())
 
