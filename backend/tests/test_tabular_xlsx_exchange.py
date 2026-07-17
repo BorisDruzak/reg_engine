@@ -64,6 +64,73 @@ def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None
     assert metadata["title_required"] is True
 
 
+def test_tabular_xlsx_metadata_deduplicates_work_experience_field_for_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(id=uuid4(), label="Стаж", field_type="work_experience")
+    template = SimpleNamespace(id=uuid4(), name="Сведения")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=template,
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Стаж",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+        work_experience_as_of_date=date(2026, 7, 17),
+    )
+    service = import_export.TabularCardExchangeService(MagicMock())
+    raw_columns = [
+        {
+            "field_id": str(column.workbook_field.field.id),
+            "header": column.header,
+            "field_type": column.workbook_field.field.field_type,
+            "work_experience_component": column.work_experience_component,
+        }
+        for column in service._workbook_columns(configuration.fields)  # noqa: SLF001
+    ]
+    captured_field_ids: list[list[object]] = []
+
+    def configuration_for_actor(**kwargs: object) -> import_export.TabularWorkbookConfiguration:
+        captured_field_ids.append(list(kwargs["field_ids"]))
+        return configuration
+
+    monkeypatch.setattr(service, "_configuration_for_actor", configuration_for_actor)
+
+    assert (
+        service._configuration_from_metadata(  # noqa: SLF001
+            actor_user_id=uuid4(),
+            registry_id=registry_id,
+            metadata={
+                "format_version": import_export.TABULAR_XLSX_FORMAT_VERSION,
+                "importable": True,
+                "import_mode": "strict",
+                "work_experience_as_of_date": "2026-07-17",
+                "title_header": import_export.DEFAULT_CARD_TITLE_LABEL,
+                "title_required": True,
+                "registry_id": str(registry_id),
+                "card_template_id": str(template.id),
+                "field_columns": raw_columns,
+                "organizations": [{"id": str(organization_id), "label": "Администрация (admin)"}],
+                "include_organization_column": False,
+                "fixed_organization_id": str(organization_id),
+            },
+        )
+        is configuration
+    )
+    assert captured_field_ids == [[field.id]]
+
+
 def test_tabular_xlsx_export_defaults_v2_as_of_date_when_omitted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

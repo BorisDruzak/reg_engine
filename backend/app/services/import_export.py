@@ -1680,7 +1680,7 @@ class TabularCardExchangeService:
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             card_template_id=template_id,
-            field_ids=field_ids,
+            field_ids=list(dict.fromkeys(field_ids)),
             organization_ids=organization_ids,
             include_organization_column=include_organization_column,
             fixed_organization_id=fixed_organization_id,
