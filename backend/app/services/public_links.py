@@ -168,6 +168,13 @@ def hash_public_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
+def normalize_public_actor_name(actor_name: str) -> str:
+    normalized = " ".join(actor_name.split())
+    if not normalized or len(normalized) > 200:
+        raise PublicLinkError("Сначала укажите ФИО.")
+    return normalized
+
+
 class PublicLinkService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -288,7 +295,15 @@ class PublicLinkService:
         )
         return public_link
 
-    def submit_for_review(self, *, raw_token: str) -> CardPublicLink:
+    def submit_for_review(
+        self,
+        *,
+        raw_token: str,
+        actor_name: str | None = None,
+    ) -> CardPublicLink:
+        actor_display_name = (
+            normalize_public_actor_name(actor_name) if actor_name is not None else None
+        )
         public_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_not_expired(public_link)
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
@@ -305,6 +320,7 @@ class PublicLinkService:
         public_link.submission_summary_json = self._submission_summary(public_link)
         AuditService(self.session).record_public_link_event(
             actor_public_link_id=public_link.id,
+            actor_display_name=actor_display_name,
             action="public_link.submit",
             object_type="card_public_link",
             object_id=public_link.id,
@@ -620,7 +636,11 @@ class PublicLinkService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
+        actor_name: str | None = None,
     ) -> FieldValue:
+        actor_display_name = (
+            normalize_public_actor_name(actor_name) if actor_name is not None else None
+        )
         public_link = self._editable_public_link(raw_token, lock_for_update=True)
         self._require_field_edit_usage_available(public_link)
         card, field = self._resolve_public_edit_field(
@@ -630,6 +650,7 @@ class PublicLinkService:
 
         field_value = CardService(self.session).set_field_value_from_public_link(
             actor_public_link_id=public_link.id,
+            actor_display_name=actor_display_name,
             attributed_user_id=public_link.created_by,
             card_id=card.id,
             field_id=field.id,

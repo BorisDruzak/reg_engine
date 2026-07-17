@@ -154,6 +154,7 @@ def create_card_draft_from_creation_link(
         created = CardCreationLinkService(session).create_draft_from_public_link(
             raw_token=payload.raw_token,
             organization_id=payload.organization_id,
+            actor_name=payload.actor_name,
         )
     except Exception as exc:
         _raise_public_creation_link_http_error(exc)
@@ -184,6 +185,7 @@ def first_save_card_from_creation_link(
         created = CardCreationLinkService(session).create_card_from_public_link(
             raw_token=payload.raw_token,
             organization_id=payload.organization_id,
+            actor_name=payload.actor_name,
             field_id=payload.field_id,
             value=value,
             block_instance_id=payload.block_instance_id,

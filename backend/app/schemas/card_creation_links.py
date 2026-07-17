@@ -2,13 +2,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
 from app.schemas.public_links import PublicLinkPreviewBlockRead
+from app.services.public_links import normalize_public_actor_name
 
 
 class CardCreationLinkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     card_template_id: UUID
     organization_ids: list[UUID] = Field(min_length=1)
 
@@ -48,6 +51,8 @@ class CardCreationLinkCardListRead(BaseModel):
 
 
 class CardCreationLinkPublicPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str = Field(min_length=1)
     organization_id: UUID | None = None
 
@@ -62,16 +67,32 @@ class CardCreationLinkPublicPreviewRead(BaseModel):
 
 
 class CardCreationLinkFirstSaveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str = Field(min_length=1)
+    actor_name: str
     organization_id: UUID
     field_id: UUID
     value: Any
     block_instance_id: UUID | None = None
 
+    @field_validator("actor_name")
+    @classmethod
+    def normalize_actor_name(cls, value: str) -> str:
+        return normalize_public_actor_name(value)
+
 
 class CardCreationLinkDraftCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str = Field(min_length=1)
+    actor_name: str
     organization_id: UUID
+
+    @field_validator("actor_name")
+    @classmethod
+    def normalize_actor_name(cls, value: str) -> str:
+        return normalize_public_actor_name(value)
 
 
 class CardCreationLinkFirstSaveRead(BaseModel):

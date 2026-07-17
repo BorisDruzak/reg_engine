@@ -237,7 +237,8 @@ class CardChangeNotificationService:
             if effective_actor_user_id is not None:
                 recipients.discard(effective_actor_user_id)
             actor_display_name = self._notification_actor_display_name(
-                effective_actor_user_id=effective_actor_user_id
+                actor_display_name=event.actor_display_name,
+                effective_actor_user_id=effective_actor_user_id,
             )
             change = self._notification_change(presentation=presentations[event.id])
             for recipient_id in recipients:
@@ -262,8 +263,11 @@ class CardChangeNotificationService:
     def _notification_actor_display_name(
         self,
         *,
+        actor_display_name: str | None,
         effective_actor_user_id: UUID | None,
     ) -> str:
+        if actor_display_name:
+            return actor_display_name
         if effective_actor_user_id is None:
             return "Система"
         user = self.session.get(User, effective_actor_user_id)

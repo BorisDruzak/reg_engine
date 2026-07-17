@@ -462,9 +462,20 @@ def test_api_public_link_attachment_upload_list_and_download(
         card_id=context["card"].id,
     )
 
+    missing_name = api_client.post(
+        "/api/v1/public-links/attachments/upload",
+        data={"raw_token": public_token.raw_token, "title": "Без имени"},
+        files={"file": ("missing-name.txt", b"public bytes", "text/plain")},
+    )
+    assert missing_name.status_code == 422, missing_name.text
+
     upload_response = api_client.post(
         "/api/v1/public-links/attachments/upload",
-        data={"raw_token": public_token.raw_token, "title": "Public evidence"},
+        data={
+            "raw_token": public_token.raw_token,
+            "title": "Public evidence",
+            "actor_name": "  Сидоров   Сидор  Сидорович ",
+        },
         files={"file": ("public.txt", b"public bytes", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -510,6 +521,9 @@ def test_api_public_link_attachment_upload_list_and_download(
         "attachment_download",
     }
     assert {event.actor_type for event in audit_events} == {"public_link"}
+    assert {
+        event.actor_display_name for event in audit_events if event.action == "attachment_create"
+    } == {"Сидоров Сидор Сидорович"}
 
 
 def test_api_public_link_attachment_workflows_ignore_field_edit_usage_limit(
@@ -529,7 +543,11 @@ def test_api_public_link_attachment_workflows_ignore_field_edit_usage_limit(
 
     upload_response = api_client.post(
         "/api/v1/public-links/attachments/upload",
-        data={"raw_token": public_token.raw_token, "title": "After field limit"},
+        data={
+            "raw_token": public_token.raw_token,
+            "title": "After field limit",
+            "actor_name": "Публичный пользователь",
+        },
         files={"file": ("after-limit.txt", b"after-limit", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -597,7 +615,7 @@ def test_api_public_link_attachment_upload_respects_card_public_edit_toggle(
 
     response = api_client.post(
         "/api/v1/public-links/attachments/upload",
-        data={"raw_token": public_token.raw_token},
+        data={"raw_token": public_token.raw_token, "actor_name": "Публичный пользователь"},
         files={"file": ("blocked.txt", b"blocked", "text/plain")},
     )
 

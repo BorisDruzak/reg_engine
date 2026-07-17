@@ -2,12 +2,15 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.card_template_layouts import CardTemplateFormLayoutRead
+from app.services.public_links import normalize_public_actor_name
 
 
 class PublicLinkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     expires_in_days: int = Field(default=7, ge=1, le=30)
     max_attachment_uploads: int | None = Field(default=None, ge=0)
     review_enabled: bool = True
@@ -53,10 +56,14 @@ class PublicLinkListRead(BaseModel):
 
 
 class PublicLinkPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str
 
 
 class PublicLinkAttachmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str
 
 
@@ -137,12 +144,32 @@ class PublicLinkEditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     raw_token: str
+    actor_name: str
     field_id: UUID
     value: Any
     block_instance_id: UUID | None = None
 
+    @field_validator("actor_name")
+    @classmethod
+    def normalize_actor_name(cls, value: str) -> str:
+        return normalize_public_actor_name(value)
+
 
 class PublicLinkSubmitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    raw_token: str = Field(min_length=1)
+    actor_name: str
+
+    @field_validator("actor_name")
+    @classmethod
+    def normalize_actor_name(cls, value: str) -> str:
+        return normalize_public_actor_name(value)
+
+
+class PublicLinkStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     raw_token: str = Field(min_length=1)
 
 

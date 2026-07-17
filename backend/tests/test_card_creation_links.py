@@ -23,6 +23,11 @@ from app.models import (
     FieldValue,
     User,
 )
+from app.schemas.card_creation_links import (
+    CardCreationLinkCreate,
+    CardCreationLinkDraftCreateRequest,
+    CardCreationLinkFirstSaveRequest,
+)
 from app.services.card_creation_links import (
     CardCreationLinkError,
     CardCreationLinkService,
@@ -43,6 +48,46 @@ def test_creation_link_token_cipher_keeps_raw_token_out_of_stored_value() -> Non
     assert ciphertext != raw_token
     assert raw_token not in ciphertext
     assert cipher.decrypt(ciphertext) == raw_token
+
+
+@pytest.mark.parametrize(
+    "request_type,payload",
+    [
+        (
+            CardCreationLinkDraftCreateRequest,
+            {"raw_token": "creation-token", "organization_id": uuid4()},
+        ),
+        (
+            CardCreationLinkFirstSaveRequest,
+            {
+                "raw_token": "creation-token",
+                "organization_id": uuid4(),
+                "field_id": uuid4(),
+                "value": "Значение",
+            },
+        ),
+    ],
+)
+def test_public_creation_mutation_requests_require_normalized_actor_name(
+    request_type: type[CardCreationLinkDraftCreateRequest] | type[CardCreationLinkFirstSaveRequest],
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError):
+        request_type.model_validate(payload)
+
+    validated = request_type.model_validate({**payload, "actor_name": "  Иванов   Иван  "})
+    assert validated.actor_name == "Иванов Иван"
+
+
+def test_authenticated_creation_link_admin_request_rejects_actor_name() -> None:
+    with pytest.raises(ValueError):
+        CardCreationLinkCreate.model_validate(
+            {
+                "card_template_id": uuid4(),
+                "organization_ids": [uuid4()],
+                "actor_name": "Не для администратора",
+            }
+        )
 
 
 def test_creation_link_history_allows_a_nonarchived_inactive_template(
@@ -353,6 +398,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
         organization_id=source_organization.id,
         field_id=field.id,
         value="Первая карточка",
+        actor_name="Иванов Иван Иванович",
     )
 
     assert created.card.organization_id == source_organization.id
@@ -362,6 +408,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     assert child_link.expires_at is None
     assert child_link.review_enabled is False
     assert child_link.created_by == admin.id
+    assert created.card.public_creator_name == "Иванов Иван Иванович"
     field_events = list(
         db_session.scalars(
             select(AuditEvent).where(
@@ -373,6 +420,7 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     )
     assert len(field_events) == 1
     assert field_events[0].attributed_user_id == admin.id
+    assert field_events[0].actor_display_name == "Иванов Иван Иванович"
     assert field_events[0].retention_class == "card_history"
     assert db_session.scalar(select(func.count()).select_from(Card)) == 1
     relation = db_session.scalar(
@@ -380,6 +428,23 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
     )
     assert relation is not None
     assert created.child_raw_token not in relation.child_token_ciphertext
+
+    PublicLinkService(db_session).edit_card_field_with_token(
+        raw_token=created.child_raw_token,
+        field_id=field.id,
+        value="Изменено вторым посетителем",
+        actor_name="Сидоров Сидор Сидорович",
+    )
+    assert created.card.public_creator_name == "Иванов Иван Иванович"
+    latest_field_event = db_session.scalar(
+        select(AuditEvent)
+        .where(AuditEvent.card_id == created.card.id)
+        .where(AuditEvent.object_type == "field_value")
+        .where(AuditEvent.action == "public_link.update")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    )
+    assert latest_field_event is not None
+    assert latest_field_event.actor_display_name == "Сидоров Сидор Сидорович"
 
     service.close_for_actor(
         actor_user_id=admin.id,
@@ -429,11 +494,21 @@ def test_public_creation_link_api_creates_draft_after_organization_choice(
         organization_ids=[source_organization.id],
     )
 
+    missing_name = api_client.post(
+        "/api/v1/public/card-creation-links/create-draft",
+        json={
+            "raw_token": creation_link.raw_token,
+            "organization_id": str(source_organization.id),
+        },
+    )
+    assert missing_name.status_code == 422, missing_name.text
+
     created = api_client.post(
         "/api/v1/public/card-creation-links/create-draft",
         json={
             "raw_token": creation_link.raw_token,
             "organization_id": str(source_organization.id),
+            "actor_name": "  Иванов   Иван  Иванович ",
         },
     )
 
@@ -450,6 +525,9 @@ def test_public_creation_link_api_creates_draft_after_organization_choice(
     child_link = db_session.get(CardPublicLink, relation.child_public_link_id)
     assert child_link is not None
     assert child_link.expires_at is None
+    created_card = db_session.get(Card, UUID(created.json()["card_id"]))
+    assert created_card is not None
+    assert created_card.public_creator_name == "Иванов Иван Иванович"
 
 
 def test_public_creation_link_api_creates_only_after_first_value(
@@ -499,6 +577,7 @@ def test_public_creation_link_api_creates_only_after_first_value(
             "organization_id": str(source_organization.id),
             "field_id": str(field.id),
             "value": " ",
+            "actor_name": "Иванов Иван Иванович",
         },
     )
 
@@ -512,6 +591,7 @@ def test_public_creation_link_api_creates_only_after_first_value(
             "organization_id": str(source_organization.id),
             "field_id": str(field.id),
             "value": "Создано через API",
+            "actor_name": "Иванов Иван Иванович",
         },
     )
 

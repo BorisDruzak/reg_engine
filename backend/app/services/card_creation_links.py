@@ -32,6 +32,7 @@ from app.services.public_links import (
     PublicPreviewField,
     PublicPreviewOption,
     hash_public_token,
+    normalize_public_actor_name,
 )
 from app.services.references import ReferenceListError, ReferenceListService
 
@@ -338,7 +339,11 @@ class CardCreationLinkService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
+        actor_name: str | None = None,
     ) -> CardCreationLinkPublicCardValue:
+        actor_display_name = (
+            normalize_public_actor_name(actor_name) if actor_name is not None else None
+        )
         creation_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_public_link_open(creation_link)
         template = self._active_template(
@@ -374,6 +379,7 @@ class CardCreationLinkService:
             template=template,
             organization=organization,
             initial_field=(field_model, value, block_instance_id),
+            actor_display_name=actor_display_name,
         )
 
     def create_draft_from_public_link(
@@ -381,7 +387,11 @@ class CardCreationLinkService:
         *,
         raw_token: str,
         organization_id: UUID,
+        actor_name: str | None = None,
     ) -> CardCreationLinkPublicCardValue:
+        actor_display_name = (
+            normalize_public_actor_name(actor_name) if actor_name is not None else None
+        )
         creation_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_public_link_open(creation_link)
         template = self._active_template(
@@ -399,6 +409,7 @@ class CardCreationLinkService:
             template=template,
             organization=organization,
             initial_field=None,
+            actor_display_name=actor_display_name,
         )
 
     def _create_public_card(
@@ -408,6 +419,7 @@ class CardCreationLinkService:
         template: CardTemplate,
         organization: Organization,
         initial_field: tuple[FormField, object, UUID | None] | None,
+        actor_display_name: str | None,
     ) -> CardCreationLinkPublicCardValue:
         card_service = CardService(self.session)
 
@@ -419,6 +431,7 @@ class CardCreationLinkService:
                 public_view_enabled=True,
                 public_edit_enabled=True,
                 created_by=None,
+                public_creator_name=actor_display_name,
             )
             child_raw_token = secrets.token_urlsafe(32)
             child_public_link = CardPublicLink(
@@ -437,6 +450,7 @@ class CardCreationLinkService:
                 field_model, value, block_instance_id = initial_field
                 card_service.set_field_value_from_public_link(
                     actor_public_link_id=child_public_link.id,
+                    actor_display_name=actor_display_name,
                     attributed_user_id=creation_link.created_by,
                     card_id=card.id,
                     field_id=field_model.id,
@@ -453,7 +467,9 @@ class CardCreationLinkService:
             )
             self.session.flush()
             audit_service = AuditService(self.session)
-            audit_service.record_system_event(
+            audit_service.record_public_link_event(
+                actor_public_link_id=child_public_link.id,
+                actor_display_name=actor_display_name,
                 action="public_creation_link.create_card",
                 object_type="card",
                 object_id=card.id,
@@ -466,7 +482,9 @@ class CardCreationLinkService:
                     "card_template_id": str(template.id),
                 },
             )
-            audit_service.record_system_event(
+            audit_service.record_public_link_event(
+                actor_public_link_id=child_public_link.id,
+                actor_display_name=actor_display_name,
                 action="public_creation_link.create_child_link",
                 object_type="card_public_link",
                 object_id=child_public_link.id,

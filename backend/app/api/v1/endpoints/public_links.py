@@ -39,6 +39,7 @@ from app.schemas.public_links import (
     PublicLinkReviewFieldDiffRead,
     PublicLinkReviewRead,
     PublicLinkSafeStatusRead,
+    PublicLinkStatusRequest,
     PublicLinkSubmitRequest,
     PublicLinkTokenRead,
 )
@@ -49,6 +50,7 @@ from app.services.public_links import (
     PublicLinkReviewDiff,
     PublicLinkSafeStatus,
     PublicLinkService,
+    normalize_public_actor_name,
 )
 
 router = APIRouter(tags=["public-links"])
@@ -132,7 +134,7 @@ def submit_public_link_for_review(
 ) -> PublicLinkSafeStatusRead:
     service = PublicLinkService(session)
     try:
-        service.submit_for_review(raw_token=payload.raw_token)
+        service.submit_for_review(raw_token=payload.raw_token, actor_name=payload.actor_name)
         safe_status = service.safe_status(raw_token=payload.raw_token)
     except Exception as exc:
         raise_service_http_error(exc)
@@ -141,7 +143,7 @@ def submit_public_link_for_review(
 
 @router.post("/public-links/status", response_model=PublicLinkSafeStatusRead)
 def read_public_link_safe_status(
-    payload: PublicLinkSubmitRequest,
+    payload: PublicLinkStatusRequest,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> PublicLinkSafeStatusRead:
     try:
@@ -286,6 +288,7 @@ def edit_card_field_with_public_link(
     try:
         field_value = service.edit_card_field_with_token(
             raw_token=payload.raw_token,
+            actor_name=payload.actor_name,
             field_id=payload.field_id,
             value=value,
             block_instance_id=payload.block_instance_id,
@@ -328,6 +331,7 @@ async def create_public_link_attachment(
     session: Annotated[Session, Depends(get_db_session)],
     file: Annotated[UploadFile, File()],
     raw_token: Annotated[str, Form()],
+    actor_name: Annotated[str, Form()],
     title: Annotated[str | None, Form()] = None,
     description: Annotated[str | None, Form()] = None,
 ) -> PublicLinkAttachmentRead:
@@ -342,6 +346,7 @@ async def create_public_link_attachment(
         )
         attachment = service.create_attachment_from_public_link(
             actor_public_link_id=public_link.id,
+            actor_display_name=normalize_public_actor_name(actor_name),
             card_id=public_link.card_id,
             original_filename=file.filename or "attachment",
             content_type=file.content_type or "application/octet-stream",

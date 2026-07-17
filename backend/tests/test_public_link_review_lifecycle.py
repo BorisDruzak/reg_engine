@@ -14,6 +14,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import Depends
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
@@ -33,6 +34,11 @@ from app.models import (
     User,
 )
 from app.schemas.cards import CardPublicAccessUpdate, CardPublicFieldSettingUpdate
+from app.schemas.public_links import (
+    PublicLinkCreate,
+    PublicLinkEditRequest,
+    PublicLinkSubmitRequest,
+)
 from app.services.attachments import AttachmentService, LocalFilesystemAttachmentStorage
 from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.card_public_access import CardPublicAccessService
@@ -337,6 +343,7 @@ def test_public_token_edit_dispatches_one_notification_to_overlapping_subscriber
         raw_token=token.raw_token,
         field_id=review_fixture.text_field_id,
         value="Новое значение по токену",
+        actor_name="Петров Пётр Петрович",
     )
 
     event = db_session.scalars(
@@ -351,7 +358,7 @@ def test_public_token_edit_dispatches_one_notification_to_overlapping_subscriber
     assert notifications.list_for_actor(actor_user_id=creator.id, limit=20)[1] == []
     recipient_notifications = notifications.list_for_actor(actor_user_id=recipient.id, limit=20)[1]
     assert len(recipient_notifications) == 1
-    assert recipient_notifications[0].actor_display_name == creator.display_name
+    assert recipient_notifications[0].actor_display_name == "Петров Пётр Петрович"
     assert recipient_notifications[0].changes_json == [
         {
             "label": "Наименование",
@@ -563,7 +570,10 @@ def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
     )
     assert _read_text_value(db_session, review_fixture) == "Новое значение"
 
-    submitted = service.submit_for_review(raw_token=token.raw_token)
+    submitted = service.submit_for_review(
+        raw_token=token.raw_token,
+        actor_name="Петров Пётр Петрович",
+    )
     assert submitted.status == "submitted"
     assert submitted.can_edit is False
     assert submitted.submitted_at is not None
@@ -621,6 +631,7 @@ def test_direct_edit_submit_approve_closes_access_and_preserves_card_value(
     assert events_by_action.keys() >= {"create", "public_link.submit", "public_link.approve"}
     assert events_by_action["public_link.submit"].actor_type == "public_link"
     assert events_by_action["public_link.submit"].source == "public_link"
+    assert events_by_action["public_link.submit"].actor_display_name == "Петров Пётр Петрович"
     assert events_by_action["public_link.approve"].actor_type == "user"
     assert events_by_action["public_link.approve"].actor_user_id == review_fixture.admin_id
 
@@ -1038,15 +1049,20 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
 
     edit_response = transactional_api_client.post(
         "/api/v1/public-links/edit",
-        json={"raw_token": raw_tokens[0], "field_id": str(field_id), "value": "blocked"},
+        json={
+            "raw_token": raw_tokens[0],
+            "field_id": str(field_id),
+            "value": "blocked",
+            "actor_name": "Публичный пользователь",
+        },
     )
     submit_response = transactional_api_client.post(
         "/api/v1/public-links/submit",
-        json={"raw_token": raw_tokens[1]},
+        json={"raw_token": raw_tokens[1], "actor_name": "Публичный пользователь"},
     )
     attachment_response = transactional_api_client.post(
         "/api/v1/public-links/attachments/upload",
-        data={"raw_token": raw_tokens[2]},
+        data={"raw_token": raw_tokens[2], "actor_name": "Публичный пользователь"},
         files={"file": ("blocked.txt", b"blocked", "text/plain")},
     )
     submitted_attachment_list_response = transactional_api_client.post(
@@ -1055,7 +1071,7 @@ def test_expiry_denials_commit_only_expiry_state_and_one_audit(
     )
     submitted_attachment_upload_response = transactional_api_client.post(
         "/api/v1/public-links/attachments/upload",
-        data={"raw_token": raw_tokens[4]},
+        data={"raw_token": raw_tokens[4], "actor_name": "Публичный пользователь"},
         files={"file": ("submitted-expired.txt", b"blocked", "text/plain")},
     )
     ordinary_response = transactional_api_client.post("/_test/ordinary-denied")
@@ -1408,6 +1424,32 @@ def _actor_headers(actor_id: UUID) -> dict[str, str]:
     return {"X-Actor-User-Id": str(actor_id)}
 
 
+@pytest.mark.parametrize(
+    "request_type,payload",
+    [
+        (
+            PublicLinkEditRequest,
+            {"raw_token": "public-token", "field_id": uuid4(), "value": "Значение"},
+        ),
+        (PublicLinkSubmitRequest, {"raw_token": "public-token"}),
+    ],
+)
+def test_public_json_mutation_requests_require_normalized_actor_name(
+    request_type: type[PublicLinkEditRequest] | type[PublicLinkSubmitRequest],
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        request_type.model_validate(payload)
+
+    validated = request_type.model_validate({**payload, "actor_name": "  Петров   Пётр  "})
+    assert validated.actor_name == "Петров Пётр"
+
+
+def test_authenticated_public_link_admin_request_rejects_actor_name() -> None:
+    with pytest.raises(ValidationError):
+        PublicLinkCreate.model_validate({"actor_name": "Не для администратора"})
+
+
 def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
     openapi = create_app().openapi()
     paths = set(openapi["paths"])
@@ -1430,11 +1472,83 @@ def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
     public_edit_schema = openapi["components"]["schemas"]["PublicLinkEditRequest"]
     assert set(public_edit_schema["properties"]) == {
         "raw_token",
+        "actor_name",
         "field_id",
         "value",
         "block_instance_id",
     }
     assert public_edit_schema["additionalProperties"] is False
+
+
+def test_public_field_edit_requires_and_snapshots_normalized_actor_name(
+    migrated_test_engine: Engine,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    admin_headers = _actor_headers(review_api_fixture.admin_id)
+    created = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201, created.text
+    raw_token = created.json()["raw_token"]
+
+    missing_name = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Значение без имени",
+        },
+    )
+    assert missing_name.status_code == 422, missing_name.text
+
+    updated = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": raw_token,
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Значение с именем",
+            "actor_name": "  Петров   Пётр  Петрович ",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+
+    with Session(migrated_test_engine) as verify_session:
+        event = verify_session.scalar(
+            select(AuditEvent)
+            .where(AuditEvent.actor_public_link_id == UUID(created.json()["id"]))
+            .where(AuditEvent.object_type == "field_value")
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        )
+        assert event is not None
+        assert event.actor_display_name == "Петров Пётр Петрович"
+
+
+@pytest.mark.parametrize("actor_name", ["   ", "А" * 201])
+def test_public_json_actor_name_rejects_blank_and_overlong_values(
+    actor_name: str,
+    transactional_api_client: TestClient,
+    review_api_fixture: ReviewApiFixture,
+) -> None:
+    created = transactional_api_client.post(
+        f"/api/v1/cards/{review_api_fixture.card_id}/public-links",
+        json={},
+        headers=_actor_headers(review_api_fixture.admin_id),
+    )
+    assert created.status_code == 201, created.text
+
+    response = transactional_api_client.post(
+        "/api/v1/public-links/edit",
+        json={
+            "raw_token": created.json()["raw_token"],
+            "field_id": str(review_api_fixture.field_id),
+            "value": "Не должно сохраниться",
+            "actor_name": actor_name,
+        },
+    )
+    assert response.status_code == 422, response.text
 
 
 def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inputs(
@@ -1466,6 +1580,7 @@ def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inp
             "raw_token": raw_token,
             "field_id": str(review_api_fixture.field_id),
             "value": "Публичное значение поля",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert field_update.status_code == 200, field_update.text
@@ -1485,6 +1600,7 @@ def test_public_field_value_api_preserves_card_metadata_and_rejects_metadata_inp
             "raw_token": raw_token,
             "field_id": str(review_api_fixture.field_id),
             "value": "Недопустимое изменение метаданных",
+            "actor_name": "Публичный пользователь",
             "organization_id": str(organization_id),
             "card_template_id": str(card_template_id),
         },
@@ -1602,6 +1718,7 @@ def test_active_links_ignore_stored_allowlists_and_follow_card_settings(
             "raw_token": partial["raw_token"],
             "field_id": str(review_api_fixture.off_template_field_id),
             "value": "Недопустимое значение вне шаблона",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert denied_partial_edit.status_code == 403, denied_partial_edit.text
@@ -1636,6 +1753,7 @@ def test_active_links_ignore_stored_allowlists_and_follow_card_settings(
             "raw_token": legacy["raw_token"],
             "field_id": str(review_api_fixture.off_template_block_field_id),
             "value": "Недопустимое ручное значение",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert denied_manual_edit.status_code == 403, denied_manual_edit.text
@@ -1973,6 +2091,7 @@ def test_public_preview_keeps_static_text_only_for_selected_blocks_and_legacy_li
             "raw_token": explicit_token,
             "field_id": str(selected_static_id),
             "value": "Нельзя изменить",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert denied_static_edit.status_code == 403, denied_static_edit.text
@@ -2014,19 +2133,20 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
             "raw_token": raw_token,
             "field_id": str(review_api_fixture.field_id),
             "value": "Первое значение API",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert edit_response.status_code == 200, edit_response.text
 
     submitted_response = transactional_api_client.post(
         "/api/v1/public-links/submit",
-        json={"raw_token": raw_token},
+        json={"raw_token": raw_token, "actor_name": "Публичный пользователь"},
     )
     assert submitted_response.status_code == 200, submitted_response.text
     assert submitted_response.json()["status"] == "submitted"
     duplicate_submit = transactional_api_client.post(
         "/api/v1/public-links/submit",
-        json={"raw_token": raw_token},
+        json={"raw_token": raw_token, "actor_name": "Публичный пользователь"},
     )
     assert duplicate_submit.status_code == 409, duplicate_submit.text
     assert duplicate_submit.json()["detail"] == ("Недопустимый переход состояния публичной ссылки.")
@@ -2041,6 +2161,7 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
             "raw_token": raw_token,
             "field_id": str(review_api_fixture.field_id),
             "value": "Не должно сохраниться",
+            "actor_name": "Публичный пользователь",
         },
     )
     submitted_attachments = transactional_api_client.post(
@@ -2116,13 +2237,14 @@ def test_public_link_lifecycle_api_flow_and_closed_status_privacy(
             "raw_token": raw_token,
             "field_id": str(review_api_fixture.field_id),
             "value": "Исправленное значение API",
+            "actor_name": "Публичный пользователь",
         },
     )
     assert second_edit.status_code == 200, second_edit.text
     assert (
         transactional_api_client.post(
             "/api/v1/public-links/submit",
-            json={"raw_token": raw_token},
+            json={"raw_token": raw_token, "actor_name": "Публичный пользователь"},
         ).status_code
         == 200
     )

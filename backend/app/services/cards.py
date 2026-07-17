@@ -341,6 +341,7 @@ class CardService:
             old_status=old_status,
             actor_user_id=actor_user_id,
             actor_public_link_id=None,
+            actor_display_name=None,
             attributed_user_id=None,
         )
 
@@ -501,6 +502,7 @@ class CardService:
         public_view_enabled: bool = True,
         public_edit_enabled: bool = True,
         created_by: UUID | None = None,
+        public_creator_name: str | None = None,
         apply_template_defaults: bool = True,
     ) -> Card:
         self._validate_org_unit_for_organization(org_unit_id, organization_id)
@@ -523,6 +525,7 @@ class CardService:
             public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
             created_by=created_by,
+            public_creator_name=public_creator_name,
             updated_by=created_by,
         )
         self.session.add(card)
@@ -1128,6 +1131,7 @@ class CardService:
         self,
         *,
         actor_public_link_id: UUID,
+        actor_display_name: str | None = None,
         attributed_user_id: UUID | None = None,
         card_id: UUID,
         field_id: UUID,
@@ -1166,6 +1170,7 @@ class CardService:
         self.session.flush()
         AuditService(self.session).record_public_link_event(
             actor_public_link_id=actor_public_link_id,
+            actor_display_name=actor_display_name,
             action="public_link.update",
             object_type="field_value",
             object_id=field_value.id,
@@ -1178,6 +1183,7 @@ class CardService:
         self.synchronize_card_lifecycle(
             card,
             actor_public_link_id=actor_public_link_id,
+            actor_display_name=actor_display_name,
             attributed_user_id=attributed_user_id,
         )
         return field_value
@@ -2058,6 +2064,7 @@ class CardService:
         *,
         actor_user_id: UUID | None = None,
         actor_public_link_id: UUID | None = None,
+        actor_display_name: str | None = None,
         attributed_user_id: UUID | None = None,
         audit_transition: bool = True,
     ) -> bool:
@@ -2079,6 +2086,7 @@ class CardService:
                 old_status=old_status,
                 actor_user_id=actor_user_id,
                 actor_public_link_id=actor_public_link_id,
+                actor_display_name=actor_display_name,
                 attributed_user_id=attributed_user_id,
             )
         return True
@@ -2090,6 +2098,7 @@ class CardService:
         old_status: str,
         actor_user_id: UUID | None,
         actor_public_link_id: UUID | None,
+        actor_display_name: str | None,
         attributed_user_id: UUID | None,
     ) -> None:
         event_data = {
@@ -2100,6 +2109,7 @@ class CardService:
         if actor_public_link_id is not None:
             audit_service.record_public_link_event(
                 actor_public_link_id=actor_public_link_id,
+                actor_display_name=actor_display_name,
                 action="lifecycle_sync",
                 object_type="card",
                 object_id=card.id,

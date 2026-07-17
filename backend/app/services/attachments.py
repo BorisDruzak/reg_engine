@@ -249,6 +249,7 @@ class AttachmentService:
         description: str | None,
         audit_actor_user_id: UUID | None,
         audit_public_link_id: UUID | None,
+        audit_actor_display_name: str | None = None,
     ) -> CardAttachment:
         self._validate_attachment_content(content)
         self._validate_content_type(content_type)
@@ -292,6 +293,7 @@ class AttachmentService:
             self._record_attachment_audit(
                 actor_user_id=audit_actor_user_id,
                 actor_public_link_id=audit_public_link_id,
+                actor_display_name=audit_actor_display_name,
                 action="attachment_create",
                 object_id=attachment.id,
                 new_data_json={
@@ -415,6 +417,7 @@ class AttachmentService:
         content: bytes,
         title: str | None = None,
         description: str | None = None,
+        actor_display_name: str | None = None,
     ) -> CardAttachment:
         public_link = self._get_public_attachment_link(
             actor_public_link_id,
@@ -435,6 +438,7 @@ class AttachmentService:
             description=description,
             audit_actor_user_id=None,
             audit_public_link_id=public_link.id,
+            audit_actor_display_name=actor_display_name,
         )
         public_link.attachment_upload_count += 1
         self.session.flush()
@@ -665,6 +669,7 @@ class AttachmentService:
         *,
         actor_user_id: UUID | None,
         actor_public_link_id: UUID | None,
+        actor_display_name: str | None = None,
         action: str,
         object_id: UUID,
         new_data_json: dict[str, object],
@@ -673,6 +678,7 @@ class AttachmentService:
         if actor_public_link_id is not None:
             audit_service.record_public_link_event(
                 actor_public_link_id=actor_public_link_id,
+                actor_display_name=actor_display_name,
                 action=action,
                 object_type="card_attachment",
                 object_id=object_id,
