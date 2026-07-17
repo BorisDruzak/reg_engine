@@ -487,12 +487,14 @@ button {
 
 .notification-popover {
   position: absolute;
-  z-index: 16;
+  z-index: 240;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   top: calc(100% + 8px);
   right: 0;
   width: min(420px, calc(100vw - 32px));
   max-height: min(560px, calc(100vh - 110px));
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid #d9dee7;
   border-radius: 10px;
   padding: 12px;
@@ -522,7 +524,13 @@ button {
 
 .notification-list {
   display: grid;
-  margin: 0 -12px -12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.notification-popover-content {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .notification-row {
@@ -576,7 +584,7 @@ button {
 
 .notification-popover .data-empty,
 .notification-popover .data-alert {
-  margin: 12px 0 0;
+  margin: 12px;
 }
 
 .stack {
@@ -2725,7 +2733,7 @@ tr:last-child td {
 }
 
 .filled-card-layout .card-layout-field-node:has(.searchable-choice-picker.is-open) {
-  z-index: 8;
+  z-index: 40;
   overflow: visible;
 }
 
@@ -3032,7 +3040,7 @@ tr:last-child td {
 }
 
 .searchable-choice-picker.is-open {
-  z-index: 8;
+  z-index: 40;
 }
 
 .searchable-choice-picker-trigger {

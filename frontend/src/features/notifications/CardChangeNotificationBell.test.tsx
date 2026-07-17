@@ -119,6 +119,31 @@ describe("CardChangeNotificationBell", () => {
     expect(screen.getByText("Новых уведомлений нет")).toBeVisible();
   });
 
+  test("dismisses the panel on an outside pointer interaction", async () => {
+    const user = userEvent.setup();
+    renderBell();
+
+    await user.click(await screen.findByRole("button", { name: "Уведомления: 1 непрочитанное" }));
+    expect(screen.getByRole("dialog", { name: "Уведомления" })).toBeVisible();
+
+    await user.pointer({ target: document.body, keys: "[MouseLeft]" });
+
+    expect(screen.queryByRole("dialog", { name: "Уведомления" })).not.toBeInTheDocument();
+  });
+
+  test("keeps panel interactions available and dismisses it with Escape", async () => {
+    const user = userEvent.setup();
+    renderBell();
+
+    await user.click(await screen.findByRole("button", { name: "Уведомления: 1 непрочитанное" }));
+    await user.click(screen.getByRole("button", { name: "Отметить все прочитанными" }));
+    expect(screen.getByRole("dialog", { name: "Уведомления" })).toBeVisible();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", { name: "Уведомления" })).not.toBeInTheDocument();
+  });
+
   test("shows a safely mapped error when the inbox is inaccessible", async () => {
     const user = userEvent.setup();
     failInbox = true;

@@ -247,9 +247,13 @@ describe("FieldEditorControl hints", () => {
 
     expect(picker).toHaveClass("is-open");
     expect(globalStyles).toContain(".searchable-choice-picker.is-open");
+    expect(globalStyles).toContain(".searchable-choice-picker.is-open {\n  z-index: 40;");
     expect(globalStyles).toContain("position: absolute;");
     expect(globalStyles).toContain(
       ".filled-card-layout .card-layout-field-node:has(.searchable-choice-picker.is-open)",
+    );
+    expect(globalStyles).toContain(
+      ".filled-card-layout .card-layout-field-node:has(.searchable-choice-picker.is-open) {\n  z-index: 40;",
     );
     expect(globalStyles).toContain(
       ".filled-card-layout .card-web-layout-canvas:has(.searchable-choice-picker.is-open)",

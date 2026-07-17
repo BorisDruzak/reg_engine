@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-17 15:24:25 +05:00
+- Generated: 2026-07-17 15:46:02 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -299,6 +299,7 @@
 - `docs/superpowers/plans/2026-07-16-text-field-validation.md`
 - `docs/superpowers/plans/2026-07-17-card-creator-public-identity.md`
 - `docs/superpowers/plans/2026-07-17-multiple-text-validation-conditions.md`
+- `docs/superpowers/plans/2026-07-17-notification-popover-and-picker-layering.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -352,6 +353,7 @@
 - `docs/superpowers/specs/2026-07-16-text-field-validation-design.md`
 - `docs/superpowers/specs/2026-07-17-card-creator-public-identity-design.md`
 - `docs/superpowers/specs/2026-07-17-multiple-text-validation-conditions-design.md`
+- `docs/superpowers/specs/2026-07-17-notification-popover-and-picker-layering-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`

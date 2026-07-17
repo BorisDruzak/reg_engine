@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   listCardChangeNotifications,
@@ -21,6 +21,7 @@ export function CardChangeNotificationBell({
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
   const queryKey = inboxQueryKey(token);
   const inboxQuery = useQuery({
     queryKey,
@@ -46,6 +47,28 @@ export function CardChangeNotificationBell({
   const bellLabel = notificationBellLabel(unreadCount);
   const error = inboxQuery.error ?? markReadMutation.error ?? markAllReadMutation.error;
 
+  useEffect(() => {
+    if (!open) return;
+
+    const dismissOnOutsidePointer = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !shellRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", dismissOnOutsidePointer);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOnOutsidePointer);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [open]);
+
   async function handleOpenNotification(notificationId: string, cardId: string) {
     try {
       await markReadMutation.mutateAsync(notificationId);
@@ -57,7 +80,7 @@ export function CardChangeNotificationBell({
   }
 
   return (
-    <div className="notification-bell-shell">
+    <div ref={shellRef} className="notification-bell-shell">
       <button
         type="button"
         className="notification-bell"
@@ -87,43 +110,45 @@ export function CardChangeNotificationBell({
               Отметить все прочитанными
             </button>
           </header>
-          {error ? (
-            <p className="data-alert" role="alert">
-              {errorText(error)}
-            </p>
-          ) : null}
-          {inboxQuery.isLoading ? <p className="data-empty">Загрузка уведомлений...</p> : null}
-          {!inboxQuery.isLoading && !error && (inboxQuery.data?.items.length ?? 0) === 0 ? (
-            <p className="data-empty">Новых уведомлений нет</p>
-          ) : null}
-          {!inboxQuery.isLoading && !error && (inboxQuery.data?.items.length ?? 0) > 0 ? (
-            <div className="notification-list">
-              {inboxQuery.data?.items.map((notification) => (
-                <button
-                  type="button"
-                  key={notification.id}
-                  className={
-                    notification.read_at ? "notification-row" : "notification-row is-unread"
-                  }
-                  disabled={markReadMutation.isPending}
-                  onClick={() => handleOpenNotification(notification.id, notification.card_id)}
-                >
-                  <strong>{notification.card_display_name}</strong>
-                  <span className="notification-row-meta">{notification.actor_display_name}</span>
-                  {notification.changes.map((change, index) => (
-                    <span
-                      className="notification-change"
-                      key={`${notification.id}:${change.label}:${index}`}
-                    >
-                      <b>{change.label}</b>
-                      <span>Было: {formatNotificationValue(change.before)}</span>
-                      <span>Стало: {formatNotificationValue(change.after)}</span>
-                    </span>
-                  ))}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <div className="notification-popover-content">
+            {error ? (
+              <p className="data-alert" role="alert">
+                {errorText(error)}
+              </p>
+            ) : null}
+            {inboxQuery.isLoading ? <p className="data-empty">Загрузка уведомлений...</p> : null}
+            {!inboxQuery.isLoading && !error && (inboxQuery.data?.items.length ?? 0) === 0 ? (
+              <p className="data-empty">Новых уведомлений нет</p>
+            ) : null}
+            {!inboxQuery.isLoading && !error && (inboxQuery.data?.items.length ?? 0) > 0 ? (
+              <div className="notification-list">
+                {inboxQuery.data?.items.map((notification) => (
+                  <button
+                    type="button"
+                    key={notification.id}
+                    className={
+                      notification.read_at ? "notification-row" : "notification-row is-unread"
+                    }
+                    disabled={markReadMutation.isPending}
+                    onClick={() => handleOpenNotification(notification.id, notification.card_id)}
+                  >
+                    <strong>{notification.card_display_name}</strong>
+                    <span className="notification-row-meta">{notification.actor_display_name}</span>
+                    {notification.changes.map((change, index) => (
+                      <span
+                        className="notification-change"
+                        key={`${notification.id}:${change.label}:${index}`}
+                      >
+                        <b>{change.label}</b>
+                        <span>Было: {formatNotificationValue(change.before)}</span>
+                        <span>Стало: {formatNotificationValue(change.after)}</span>
+                      </span>
+                    ))}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </section>
       ) : null}
     </div>
