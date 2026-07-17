@@ -1325,11 +1325,21 @@ class TabularCardExchangeService:
                 if not isinstance(value, _PendingGlobalImportReference):
                     continue
                 workbook_field = fields_by_id.get(field_id)
+                options_config = (
+                    getattr(workbook_field.field, "options_config_json", None)
+                    if workbook_field is not None
+                    else None
+                )
+                organization_aware_resolution = isinstance(options_config, dict) and (
+                    options_config.get("reference_resolution") == "by_card_organization"
+                    or options_config.get("allow_owner_override") is True
+                )
                 if (
                     workbook_field is None
                     or getattr(workbook_field.field, "options_source_type", None)
                     != "reference_list"
                     or getattr(workbook_field.field, "options_source_id", None) is None
+                    or organization_aware_resolution
                 ):
                     row["errors"].append(
                         f"{workbook_field.header if workbook_field is not None else field_id}: "

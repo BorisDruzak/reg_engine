@@ -417,6 +417,206 @@ def test_tabular_xlsx_enrichment_rejects_select_without_reference_list_configura
     assert preview["summary"]["would_create_reference_items"] == 0
 
 
+@pytest.mark.parametrize(
+    "options_config_json",
+    [
+        {"reference_resolution": "by_card_organization"},
+        {"allow_owner_override": True},
+    ],
+)
+def test_tabular_xlsx_enrichment_rejects_organization_aware_reference_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    options_config_json: dict[str, object],
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    field = SimpleNamespace(
+        id=uuid4(),
+        field_type="select",
+        label="Status",
+        options_source_type="reference_list",
+        options_source_id=uuid4(),
+        options_config_json=options_config_json,
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Cards"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field, block=SimpleNamespace(id=uuid4()), header="Status"
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Administration", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={field.id: {}},
+        unit_organization_ids={},
+        import_mode="enrich_global_references",
+        work_experience_as_of_date=date(2026, 7, 17),
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки", "Status"])
+    sheet.append([1, "Organization aware", "unknown"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+
+    class References:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def resolve_or_plan_global_import_item_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(
+                status="create",
+                normalized_label="unknown",
+                display_label="unknown",
+                reference_item_id=None,
+            )
+
+    class ImportCards:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "ReferenceListService", References)
+    monkeypatch.setattr(import_export, "CardService", ImportCards)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    preview = service.preview_import_xlsx_for_actor(
+        actor_user_id=uuid4(), registry_id=registry_id, xlsx_content=content.getvalue()
+    )
+
+    assert preview["rows"][0]["status"] == "invalid"
+    assert preview["summary"]["would_create_reference_items"] == 0
+    assert preview["new_reference_items"] == []
+
+
+def test_tabular_xlsx_enrichment_rolls_back_created_references_and_cards_after_write_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    registry_id = uuid4()
+    organization_id = uuid4()
+    reference_list_id = uuid4()
+    field = SimpleNamespace(
+        id=uuid4(),
+        field_type="select",
+        label="Status",
+        options_source_type="reference_list",
+        options_source_id=reference_list_id,
+        options_config_json={},
+    )
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Cards"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field, block=SimpleNamespace(id=uuid4()), header="Status"
+            ),
+        ),
+        organizations=(SimpleNamespace(id=organization_id, name="Administration", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={field.id: {}},
+        unit_organization_ids={},
+        import_mode="enrich_global_references",
+        work_experience_as_of_date=date(2026, 7, 17),
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки", "Status"])
+    sheet.append([1, "First", "new status"])
+    sheet.append([2, "Second", "new status"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+    persisted_references: list[object] = []
+    persisted_cards: list[object] = []
+    transactions: list[object] = []
+
+    class Transaction:
+        def __enter__(self) -> object:
+            return self
+
+        def __exit__(self, exc_type: object, _exc: object, _traceback: object) -> bool:
+            if exc_type is not None:
+                persisted_references.clear()
+                persisted_cards.clear()
+            return False
+
+    class ImportSession:
+        def begin_nested(self) -> object:
+            transaction = Transaction()
+            transactions.append(transaction)
+            return transaction
+
+    class References:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def resolve_or_plan_global_import_item_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(
+                status="create",
+                normalized_label="new status",
+                display_label="new status",
+                reference_item_id=None,
+            )
+
+        def create_global_import_item_for_actor(self, **_kwargs: object) -> object:
+            item = SimpleNamespace(id=uuid4())
+            persisted_references.append(item)
+            return item
+
+    class ImportCards:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+        def create_card_for_actor(self, **_kwargs: object) -> object:
+            if persisted_cards:
+                raise RuntimeError("simulated card write failure")
+            card = SimpleNamespace(id=uuid4())
+            persisted_cards.append(card)
+            return card
+
+        def set_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    class Audit:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    service = import_export.TabularCardExchangeService(ImportSession())
+    monkeypatch.setattr(import_export, "ReferenceListService", References)
+    monkeypatch.setattr(import_export, "CardService", ImportCards)
+    monkeypatch.setattr(import_export, "AuditService", Audit)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    with pytest.raises(RuntimeError, match="write failure"):
+        service.commit_import_xlsx_for_actor(
+            actor_user_id=actor_user_id,
+            registry_id=registry_id,
+            xlsx_content=content.getvalue(),
+        )
+
+    assert len(transactions) == 1
+    assert persisted_references == []
+    assert persisted_cards == []
+
+
 def test_tabular_xlsx_rejects_legacy_v1_metadata() -> None:
     with pytest.raises(import_export.ImportExportServiceError, match="Версия XLSX-шаблона"):
         import_export.TabularCardExchangeService(MagicMock())._configuration_from_metadata(
