@@ -7,7 +7,19 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-17 XLSX creation-only import Task 5 integration checkpoint is local
+- 2026-07-17 XLSX creation-only import is pushed and deployed at `7e60c642`.
+  A headed browser validation downloaded the real enrichment template, filled
+  one row, previewed it as valid, created one test card (`Проверка импорта
+  2026`) and three planned global reference values, then downloaded the
+  browser export. The exported `registry-cards.xlsx` contains that row with
+  all 9 values, including work experience `1` day, `2` months, and `3` years.
+  Live validation exposed and fixed a metadata reconstruction defect: the
+  three columns of one `work_experience` field were incorrectly treated as
+  duplicate selected fields on import. The regression test now verifies that
+  metadata deduplicates field IDs only for configuration, while retaining the
+  strict column-shape check.
+
+- The initial 2026-07-17 XLSX creation-only import Task 5 integration checkpoint was local
   only; no migration, push, deployment, or browser proof was performed. The
   v2 workbook creates new schema-driven cards only. `strict` accepts existing
   reference-list values and never plans reference items; `enrich_global_references`
