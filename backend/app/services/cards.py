@@ -1000,6 +1000,7 @@ class CardService:
         block_instance_id: UUID | None = None,
         synchronize_lifecycle: bool = True,
         notification_batch: list[AuditEvent] | None = None,
+        work_experience_as_of_date: date | None = None,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -1019,6 +1020,7 @@ class CardService:
             registry_id=card.registry_id,
             organization_id=card.organization_id,
             actor_user_id=actor_user_id,
+            work_experience_as_of_date=work_experience_as_of_date,
         )
         self._ensure_required_assignment_is_not_empty(field_model, assignment)
         block_instance = self._resolve_block_instance_for_value(
@@ -2210,6 +2212,7 @@ class CardService:
         organization_id: UUID | None = None,
         actor_user_id: UUID | None = None,
         public_context: bool = False,
+        work_experience_as_of_date: date | None = None,
     ) -> _FieldAssignment:
         if field_model.field_type == "text":
             if not isinstance(value, str):
@@ -2249,7 +2252,10 @@ class CardService:
         if field_model.field_type == "work_experience":
             try:
                 experience = parse_work_experience(value)
-                anchor_date = anchor_for_experience(experience, date.today())
+                anchor_date = anchor_for_experience(
+                    experience,
+                    work_experience_as_of_date or date.today(),
+                )
             except ValueError as exc:
                 raise InvalidFieldValueError(str(exc)) from exc
             return _FieldAssignment(value_json={"anchor_date": anchor_date.isoformat()})

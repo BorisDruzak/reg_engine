@@ -1047,7 +1047,7 @@ def test_tabular_xlsx_exports_readable_organization_and_unit_values(
     assert str(department_id) not in {sheet["D2"].value, sheet["E2"].value}
 
 
-def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor_metadata(
+def test_tabular_xlsx_round_trips_work_experience_as_three_columns_with_batch_as_of_date(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     actor_user_id = uuid4()
@@ -1071,13 +1071,13 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         organization_labels={},
         reference_labels={},
         unit_organization_ids={},
+        work_experience_as_of_date=date(2024, 6, 30),
     )
     card = SimpleNamespace(
         id=uuid4(),
         organization_id=organization_id,
         display_name="Карточка для проверки стажа",
     )
-    display = "16 дней 3 месяца 9 лет"
 
     class ExportCardService:
         def __init__(self, _session: object) -> None:
@@ -1097,7 +1097,6 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
                                             "days": 16,
                                             "months": 3,
                                             "years": 9,
-                                            "display": display,
                                         },
                                     )
                                 }
@@ -1117,22 +1116,21 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
 
     workbook = load_workbook(filename=BytesIO(content), data_only=True)
     sheet = workbook["Карточки"]
-    values = [
-        cell.value
-        for worksheet in workbook.worksheets
-        for row in worksheet.iter_rows()
-        for cell in row
-        if isinstance(cell.value, str)
+    assert [cell.value for cell in sheet[1][:5]] == [
+        "№ п/п",
+        "Название карточки",
+        "Стаж: дни",
+        "Стаж: месяцы",
+        "Стаж: годы",
     ]
-    assert sheet["C2"].value == display
-    assert sheet["C2"].number_format == "General"
-    assert not any("anchor_date" in value or "2016-04-29" in value for value in values)
+    assert [sheet[cell].value for cell in ("C2", "D2", "E2")] == [16, 3, 9]
+    assert [sheet[cell].number_format for cell in ("C2", "D2", "E2")] == ["0", "0", "0"]
 
     class ImportSession:
         def begin_nested(self) -> object:
             return nullcontext()
 
-    written_values: list[object] = []
+    set_value_calls: list[dict[str, object]] = []
 
     class ImportCardService:
         def __init__(self, _session: object) -> None:
@@ -1141,8 +1139,8 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         def create_card_for_actor(self, **_kwargs: object) -> object:
             return SimpleNamespace(id=uuid4())
 
-        def set_field_value_for_actor(self, *, value: object, **_kwargs: object) -> None:
-            written_values.append(value)
+        def set_field_value_for_actor(self, **kwargs: object) -> None:
+            set_value_calls.append(kwargs)
 
         def validate_field_value_for_actor(self, **_kwargs: object) -> None:
             pass
@@ -1180,7 +1178,11 @@ def test_tabular_xlsx_round_trips_work_experience_as_display_text_without_anchor
         "field_values_written": 1,
         "created_reference_items": 0,
     }
-    assert written_values == [{"days": 16, "months": 3, "years": 9}]
+    assert len(set_value_calls) == 1
+    assert set_value_calls[0]["actor_user_id"] == actor_user_id
+    assert set_value_calls[0]["field_id"] == field.id
+    assert set_value_calls[0]["value"] == {"days": 16, "months": 3, "years": 9}
+    assert set_value_calls[0]["work_experience_as_of_date"] == date(2024, 6, 30)
 
 
 def test_tabular_xlsx_preview_and_commit_report_text_validation_error(
@@ -1267,7 +1269,7 @@ def test_tabular_xlsx_preview_and_commit_report_text_validation_error(
     assert exc_info.value.preview["rows"][0]["errors"] == ["ФИО: Введите ФИО русскими буквами"]
 
 
-def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
+def test_tabular_xlsx_requires_all_or_none_work_experience_columns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry_id = uuid4()
@@ -1293,14 +1295,25 @@ def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Стаж"])
-    sheet.append([1, "Проверка стажа", "9 лет 3 месяца 16 дней"])
+    sheet.append(["№ п/п", "Название карточки", "Стаж: дни", "Стаж: месяцы", "Стаж: годы"])
+    sheet.append([1, "Без стажа", None, None, None])
+    sheet.append([2, "Неполный стаж", 16, None, 9])
+    sheet.append([3, "Полный стаж", 16, 3, 9])
     metadata_sheet = workbook.create_sheet("_registry_engine")
     metadata_sheet["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
 
     service = import_export.TabularCardExchangeService(MagicMock())
+
+    class ImportCardService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(import_export, "CardService", ImportCardService)
     monkeypatch.setattr(
         service,
         "_configuration_from_metadata",
@@ -1313,10 +1326,178 @@ def test_tabular_xlsx_rejects_malformed_work_experience_display_text(
         xlsx_content=content.getvalue(),
     )
 
-    assert preview["rows"][0]["status"] == "invalid"
-    assert preview["rows"][0]["errors"] == [
-        "Стаж: укажите стаж строго в формате «16 дней 3 месяца 9 лет»."
+    assert preview["rows"][0]["status"] == "valid"
+    assert preview["rows"][0]["values"] == {}
+    assert preview["rows"][1]["status"] == "invalid"
+    assert preview["rows"][1]["errors"] == [
+        "Стаж: заполните дни, месяцы и годы стажа либо оставьте все три значения пустыми."
     ]
+    assert preview["rows"][2]["status"] == "valid"
+    assert preview["rows"][2]["values"] == {field.id: {"days": 16, "months": 3, "years": 9}}
+
+
+def test_tabular_xlsx_rejects_formulas_in_visible_data_cells(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки"])
+    sheet.append([1, "=1+1"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    content = BytesIO()
+    workbook.save(content)
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    with pytest.raises(import_export.ImportExportServiceError, match="формул"):
+        service.preview_import_xlsx_for_actor(
+            actor_user_id=uuid4(),
+            registry_id=registry_id,
+            xlsx_content=content.getvalue(),
+        )
+
+
+def test_tabular_xlsx_export_escapes_formula_leading_text_and_marks_it_as_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    field = SimpleNamespace(id=uuid4(), label="Комментарий", field_type="text")
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=uuid4(),
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(
+            import_export.TabularWorkbookField(
+                field=field,
+                block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
+                header="Комментарий",
+            ),
+        ),
+        organizations=(SimpleNamespace(id=uuid4(), name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=uuid4(),
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    card = SimpleNamespace(
+        id=uuid4(),
+        organization_id=configuration.fixed_organization_id,
+        display_name='=HYPERLINK("https://example.test")',
+    )
+
+    class CardReader:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def read_card_for_actor(self, **_kwargs: object) -> object:
+            return SimpleNamespace(
+                blocks={
+                    "main": SimpleNamespace(
+                        instances=[
+                            SimpleNamespace(
+                                fields={
+                                    "comment": SimpleNamespace(
+                                        field_id=field.id,
+                                        value="=2+2",
+                                    )
+                                }
+                            )
+                        ]
+                    )
+                }
+            )
+
+    monkeypatch.setattr(import_export, "CardService", CardReader)
+    content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
+        actor_user_id=uuid4(),
+        configuration=configuration,
+        cards=[card],
+    )
+
+    sheet = load_workbook(filename=BytesIO(content), data_only=False)["Карточки"]
+    assert sheet["B2"].value == '\'=HYPERLINK("https://example.test")'
+    assert sheet["C2"].value == "'=2+2"
+    assert sheet["B2"].number_format == "@"
+    assert sheet["C2"].number_format == "@"
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "setting_value", "workbook_setup"),
+    [
+        ("max_import_sheets", 2, lambda workbook, sheet: workbook.create_sheet("Лишний")),
+        (
+            "max_import_columns",
+            2,
+            lambda _workbook, sheet: sheet.cell(row=1, column=3, value="Лишняя"),
+        ),
+        (
+            "max_import_cells",
+            2,
+            lambda _workbook, sheet: sheet.cell(row=2, column=2, value="Название"),
+        ),
+        ("max_import_uncompressed_bytes", 1, lambda _workbook, _sheet: None),
+    ],
+)
+def test_tabular_xlsx_rejects_configured_workbook_limits_before_row_parsing(
+    monkeypatch: pytest.MonkeyPatch,
+    setting_name: str,
+    setting_value: int,
+    workbook_setup: object,
+) -> None:
+    registry_id = uuid4()
+    organization_id = uuid4()
+    configuration = import_export.TabularWorkbookConfiguration(
+        registry_id=registry_id,
+        template=SimpleNamespace(id=uuid4(), name="Сведения"),
+        fields=(),
+        organizations=(SimpleNamespace(id=organization_id, name="Администрация", code="admin"),),
+        include_organization_column=False,
+        fixed_organization_id=organization_id,
+        organization_labels={},
+        reference_labels={},
+        unit_organization_ids={},
+    )
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Карточки"
+    sheet.append(["№ п/п", "Название карточки"])
+    workbook.create_sheet("_registry_engine")["B1"] = "{}"
+    workbook_setup(workbook, sheet)
+    content = BytesIO()
+    workbook.save(content)
+    settings = SimpleNamespace(
+        max_import_rows=10_000,
+        max_import_sheets=8,
+        max_import_columns=200,
+        max_import_cells=500_000,
+        max_import_uncompressed_bytes=50 * 1024 * 1024,
+    )
+    setattr(settings, setting_name, setting_value)
+
+    service = import_export.TabularCardExchangeService(MagicMock())
+    monkeypatch.setattr(import_export, "get_settings", lambda: settings)
+    monkeypatch.setattr(service, "_configuration_from_metadata", lambda **_kwargs: configuration)
+
+    with pytest.raises(import_export.ImportExportServiceError, match="лимит"):
+        service.preview_import_xlsx_for_actor(
+            actor_user_id=uuid4(),
+            registry_id=registry_id,
+            xlsx_content=content.getvalue(),
+        )
 
 
 def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_foreign_unit(

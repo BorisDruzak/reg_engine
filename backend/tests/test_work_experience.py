@@ -11,6 +11,7 @@ from app.domain.work_experience import (
     parse_work_experience_display,
     serialize_experience,
 )
+from app.services.cards import CardService
 
 
 @pytest.mark.parametrize(
@@ -184,3 +185,15 @@ def test_experience_round_trip_on_the_same_date_preserves_entered_duration() -> 
     anchor = anchor_for_experience(entered, today=today)
 
     assert experience_for_anchor(anchor, today=today) == entered
+
+
+def test_card_service_uses_explicit_work_experience_as_of_date() -> None:
+    field = type("WorkExperienceField", (), {"field_type": "work_experience"})()
+
+    assignment = CardService(object())._coerce_field_assignment(
+        field,
+        {"days": 16, "months": 3, "years": 9},
+        work_experience_as_of_date=date(2024, 6, 30),
+    )
+
+    assert assignment.value_json == {"anchor_date": "2015-03-14"}

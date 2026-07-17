@@ -1,4 +1,5 @@
 import json
+import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -12,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.domain.work_experience import parse_work_experience_display
 from app.models import (
     Card,
     CardTemplate,
@@ -51,6 +51,11 @@ TABULAR_XLSX_FORMAT_VERSION = "tabular_card_xlsx_v2"
 TABULAR_XLSX_SHEET_TITLE = "Карточки"
 TABULAR_XLSX_METADATA_SHEET_TITLE = "_registry_engine"
 TABULAR_XLSX_TEMPLATE_ROW_COUNT = 100
+TABULAR_XLSX_MAX_ZIP_ENTRIES = 1_000
+WORK_EXPERIENCE_COMPONENTS = ("days", "months", "years")
+WORK_EXPERIENCE_PARTIAL_ERROR = (
+    "заполните дни, месяцы и годы стажа либо оставьте все три значения пустыми."
+)
 
 
 def tabular_xlsx_title_header(card_title_label: object | None) -> str:
@@ -87,6 +92,13 @@ class TabularWorkbookField:
     field: FormField
     block: FormBlock
     header: str
+
+
+@dataclass(frozen=True)
+class TabularWorkbookColumn:
+    workbook_field: TabularWorkbookField
+    header: str
+    work_experience_component: Literal["days", "months", "years"] | None = None
 
 
 @dataclass(frozen=True)
@@ -446,12 +458,13 @@ class TabularCardExchangeService:
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         sheet.title = TABULAR_XLSX_SHEET_TITLE
+        columns = self._workbook_columns(configuration.fields)
         headers = [
             *tabular_xlsx_fixed_headers(
                 configuration.include_organization_column,
                 configuration.title_header,
             ),
-            *(item.header for item in configuration.fields),
+            *(column.header for column in columns),
         ]
         sheet.append(headers)
         self._style_header_row(sheet, len(headers))
@@ -479,14 +492,16 @@ class TabularCardExchangeService:
                         )
                     )
                 row.extend(
-                    self._display_value(
-                        values_by_field.get(item.field.id),
-                        item.field,
-                        configuration.reference_labels.get(item.field.id, {}),
+                    self._safe_export_cell_value(
+                        self._display_column_value(
+                            values_by_field.get(item.workbook_field.field.id),
+                            item,
+                            configuration.reference_labels.get(item.workbook_field.field.id, {}),
+                        )
                     )
-                    for item in configuration.fields
+                    for item in columns
                 )
-                sheet.append(row)
+                sheet.append([self._safe_export_cell_value(value) for value in row])
 
         self._write_metadata_sheet(
             workbook,
@@ -515,7 +530,7 @@ class TabularCardExchangeService:
             row: list[object] = [ordinal, None]
             if configuration.include_organization_column:
                 row.append(organization_label)
-            row.extend(None for _ in configuration.fields)
+            row.extend(None for _ in self._workbook_columns(configuration.fields))
             sheet.append(row)
 
     def _style_header_row(self, sheet: Any, column_count: int) -> None:
@@ -572,13 +587,15 @@ class TabularCardExchangeService:
             for cell in row:
                 cell.border = border
                 cell.alignment = openpyxl.styles.Alignment(vertical="top", wrap_text=True)
-                if cell.column == 2:
+                if cell.column != 1:
                     cell.number_format = "@"
 
-        for index, item in enumerate(configuration.fields, start=fixed_column_count + 1):
+        for index, column in enumerate(
+            self._workbook_columns(configuration.fields), start=fixed_column_count + 1
+        ):
             letter = openpyxl.utils.get_column_letter(index)
-            sheet.column_dimensions[letter].width = max(16, min(36, len(item.header) + 6))
-            number_format = self._number_format_for_field(item.field)
+            sheet.column_dimensions[letter].width = max(16, min(36, len(column.header) + 6))
+            number_format = self._number_format_for_column(column)
             for row in range(2, last_row + 1):
                 cell = sheet.cell(row=row, column=index)
                 cell.border = border
@@ -587,7 +604,7 @@ class TabularCardExchangeService:
                     cell.number_format = number_format
             self._add_field_validation(
                 sheet,
-                item,
+                column.workbook_field,
                 last_row,
                 configuration,
                 column=index,
@@ -619,11 +636,12 @@ class TabularCardExchangeService:
             "card_template_id": str(configuration.template.id),
             "field_columns": [
                 {
-                    "field_id": str(item.field.id),
-                    "header": item.header,
-                    "field_type": item.field.field_type,
+                    "field_id": str(column.workbook_field.field.id),
+                    "header": column.header,
+                    "field_type": column.workbook_field.field.field_type,
+                    "work_experience_component": column.work_experience_component,
                 }
-                for item in configuration.fields
+                for column in self._workbook_columns(configuration.fields)
             ],
             "organizations": [
                 {"id": str(organization.id), "label": self._organization_label(organization)}
@@ -752,6 +770,31 @@ class TabularCardExchangeService:
             "date": 'DD"."MM"."YYYY',
             "datetime": "DD.MM.YYYY HH:MM",
         }.get(field.field_type)
+
+    def _number_format_for_column(self, column: TabularWorkbookColumn) -> str:
+        if column.work_experience_component is not None:
+            return "0"
+        return self._number_format_for_field(column.workbook_field.field) or "@"
+
+    def _workbook_columns(
+        self,
+        fields: Sequence[TabularWorkbookField],
+    ) -> tuple[TabularWorkbookColumn, ...]:
+        columns: list[TabularWorkbookColumn] = []
+        labels = {"days": "дни", "months": "месяцы", "years": "годы"}
+        for item in fields:
+            if item.field.field_type == "work_experience":
+                columns.extend(
+                    TabularWorkbookColumn(
+                        workbook_field=item,
+                        header=f"{item.header}: {labels[component]}",
+                        work_experience_component=component,
+                    )
+                    for component in WORK_EXPERIENCE_COMPONENTS
+                )
+            else:
+                columns.append(TabularWorkbookColumn(workbook_field=item, header=item.header))
+        return tuple(columns)
 
     def _field_option(self, *, field: FormField, block: FormBlock) -> dict[str, Any]:
         supported = self._is_supported_field(field, block)
@@ -980,15 +1023,23 @@ class TabularCardExchangeService:
                     values.setdefault(field.field_id, field.value)
         return values
 
-    def _display_value(
+    def _display_column_value(
         self,
         value: object | None,
-        field: FormField,
+        column: TabularWorkbookColumn,
         reference_labels: dict[str, UUID],
     ) -> object | None:
         if value is None:
             return None
         labels_by_id = {item_id: label for label, item_id in reference_labels.items()}
+        field = column.workbook_field.field
+        if column.work_experience_component is not None and isinstance(value, dict):
+            component = value.get(column.work_experience_component)
+            return (
+                component
+                if isinstance(component, int) and not isinstance(component, bool)
+                else None
+            )
         if field.field_type == "bool":
             return "Да" if value else "Нет"
         if field.field_type in {"select", "organization_ref", "org_unit_ref"} and isinstance(
@@ -997,9 +1048,11 @@ class TabularCardExchangeService:
             return labels_by_id.get(value, "")
         if field.field_type == "multi_select" and isinstance(value, list):
             return "; ".join(labels_by_id.get(item, "") for item in value if item in labels_by_id)
-        if field.field_type == "work_experience" and isinstance(value, dict):
-            display = value.get("display")
-            return display if isinstance(display, str) else None
+        return value
+
+    def _safe_export_cell_value(self, value: object | None) -> object | None:
+        if isinstance(value, str) and value[:1] in {"=", "+", "-", "@"}:
+            return f"'{value}"
         return value
 
     def preview_import_xlsx_for_actor(
@@ -1117,13 +1170,19 @@ class TabularCardExchangeService:
                         card_template_id=configuration.template.id,
                         display_name=row["display_name"],
                     )
+                    fields_by_id = {item.field.id: item for item in configuration.fields}
                     for field_id, value in row["values"].items():
-                        card_service.set_field_value_for_actor(
-                            actor_user_id=actor_user_id,
-                            card_id=card.id,
-                            field_id=field_id,
-                            value=value,
-                        )
+                        kwargs: dict[str, object] = {
+                            "actor_user_id": actor_user_id,
+                            "card_id": card.id,
+                            "field_id": field_id,
+                            "value": value,
+                        }
+                        if fields_by_id[field_id].field.field_type == "work_experience":
+                            kwargs["work_experience_as_of_date"] = (
+                                configuration.work_experience_as_of_date
+                            )
+                        card_service.set_field_value_for_actor(**kwargs)
                         field_values_written += 1
                 AuditService(self.session).record_user_event(
                     actor_user_id=actor_user_id,
@@ -1166,6 +1225,20 @@ class TabularCardExchangeService:
         list[dict[str, Any]],
         list[_PlannedGlobalImportReference],
     ]:
+        self._inspect_xlsx_manifest(xlsx_content)
+        try:
+            formula_workbook = _openpyxl().load_workbook(
+                BytesIO(xlsx_content),
+                read_only=True,
+                data_only=False,
+            )
+        except Exception as exc:
+            raise ImportExportServiceError("Не удалось прочитать XLSX-файл.") from exc
+        try:
+            self._validate_workbook_structure(formula_workbook)
+            self._reject_visible_data_formulas(formula_workbook)
+        finally:
+            formula_workbook.close()
         try:
             workbook = _openpyxl().load_workbook(
                 BytesIO(xlsx_content),
@@ -1205,12 +1278,13 @@ class TabularCardExchangeService:
                     configuration.title_header,
                 )
             )
+            columns = self._workbook_columns(configuration.fields)
             expected_headers = [
                 *tabular_xlsx_fixed_headers(
                     configuration.include_organization_column,
                     configuration.title_header,
                 ),
-                *(field.header for field in configuration.fields),
+                *(column.header for column in columns),
             ]
             if headers[: len(expected_headers)] != expected_headers or any(
                 value for value in headers[len(expected_headers) :]
@@ -1255,7 +1329,28 @@ class TabularCardExchangeService:
                         )
                     )
                 parsed_values: dict[UUID, object] = {}
-                for item, raw_value in zip(configuration.fields, field_values, strict=True):
+                field_column_offset = 0
+                for item in configuration.fields:
+                    if item.field.field_type == "work_experience":
+                        raw_components = field_values[
+                            field_column_offset : field_column_offset
+                            + len(WORK_EXPERIENCE_COMPONENTS)
+                        ]
+                        field_column_offset += len(WORK_EXPERIENCE_COMPONENTS)
+                        if all(self._is_blank_cell(value) for value in raw_components):
+                            continue
+                        if any(self._is_blank_cell(value) for value in raw_components):
+                            errors.append(f"{item.header}: {WORK_EXPERIENCE_PARTIAL_ERROR}")
+                            continue
+                        try:
+                            parsed_values[item.field.id] = self._parse_work_experience_components(
+                                raw_components
+                            )
+                        except ImportExportServiceError as exc:
+                            errors.append(f"{item.header}: {exc}")
+                        continue
+                    raw_value = field_values[field_column_offset]
+                    field_column_offset += 1
                     if self._is_blank_cell(raw_value):
                         continue
                     try:
@@ -1306,6 +1401,41 @@ class TabularCardExchangeService:
             return configuration, rows, planned_references
         finally:
             workbook.close()
+
+    def _inspect_xlsx_manifest(self, xlsx_content: bytes) -> None:
+        settings = get_settings()
+        try:
+            with zipfile.ZipFile(BytesIO(xlsx_content)) as archive:
+                entries = archive.infolist()
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise ImportExportServiceError("Не удалось прочитать XLSX-файл.") from exc
+        if len(entries) > TABULAR_XLSX_MAX_ZIP_ENTRIES:
+            raise ImportExportServiceError("Превышен лимит файлов в XLSX-архиве.")
+        if sum(entry.file_size for entry in entries) > settings.max_import_uncompressed_bytes:
+            raise ImportExportServiceError("Превышен лимит распакованного размера XLSX-файла.")
+
+    def _validate_workbook_structure(self, workbook: Any) -> None:
+        settings = get_settings()
+        if len(workbook.sheetnames) > settings.max_import_sheets:
+            raise ImportExportServiceError("Превышен лимит листов XLSX.")
+        total_cells = 0
+        for sheet in workbook.worksheets:
+            max_column = sheet.max_column or 0
+            max_row = sheet.max_row or 0
+            if max_column > settings.max_import_columns:
+                raise ImportExportServiceError("Превышен лимит столбцов XLSX.")
+            total_cells += max_row * max_column
+            if total_cells > settings.max_import_cells:
+                raise ImportExportServiceError("Превышен лимит ячеек XLSX.")
+
+    def _reject_visible_data_formulas(self, workbook: Any) -> None:
+        if TABULAR_XLSX_SHEET_TITLE not in workbook.sheetnames:
+            return
+        for row in workbook[TABULAR_XLSX_SHEET_TITLE].iter_rows():
+            if any(cell.data_type == "f" for cell in row):
+                raise ImportExportServiceError(
+                    "XLSX не должен содержать формулы в данных карточек."
+                )
 
     def _plan_global_import_references(
         self,
@@ -1508,11 +1638,12 @@ class TabularCardExchangeService:
             )
         expected_columns = [
             {
-                "field_id": str(item.field.id),
-                "header": item.header,
-                "field_type": item.field.field_type,
+                "field_id": str(column.workbook_field.field.id),
+                "header": column.header,
+                "field_type": column.workbook_field.field.field_type,
+                "work_experience_component": column.work_experience_component,
             }
-            for item in configuration.fields
+            for column in self._workbook_columns(configuration.fields)
         ]
         if raw_columns != expected_columns:
             raise ImportExportServiceError("Поля XLSX были изменены после скачивания шаблона.")
@@ -1593,19 +1724,23 @@ class TabularCardExchangeService:
             ):
                 raise ImportExportServiceError("подразделение недоступно выбранной организации.")
             return org_unit_id
-        if field.field_type == "work_experience":
-            try:
-                experience = parse_work_experience_display(str(raw_value))
-            except ValueError as exc:
-                raise ImportExportServiceError(
-                    "укажите стаж строго в формате «16 дней 3 месяца 9 лет»."
-                ) from exc
-            return {
-                "days": experience.days,
-                "months": experience.months,
-                "years": experience.years,
-            }
         raise ImportExportServiceError("тип поля не поддерживается в XLSX.")
+
+    def _parse_work_experience_components(self, values: Sequence[object]) -> dict[str, int]:
+        parsed: dict[str, int] = {}
+        for component, raw_value in zip(WORK_EXPERIENCE_COMPONENTS, values, strict=True):
+            if isinstance(raw_value, bool):
+                raise ImportExportServiceError("укажите стаж целыми неотрицательными числами.")
+            try:
+                value = int(str(raw_value))
+            except (TypeError, ValueError) as exc:
+                raise ImportExportServiceError(
+                    "укажите стаж целыми неотрицательными числами."
+                ) from exc
+            if str(value) != str(raw_value).strip() or value < 0:
+                raise ImportExportServiceError("укажите стаж целыми неотрицательными числами.")
+            parsed[component] = value
+        return parsed
 
     def _parse_date_text(self, value: str) -> date:
         for pattern in ("%d.%m.%Y", "%Y-%m-%d"):

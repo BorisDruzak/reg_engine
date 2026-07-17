@@ -45,6 +45,26 @@ class Settings(BaseSettings):
         validation_alias="REG_ENGINE_MAX_IMPORT_ROWS",
         gt=0,
     )
+    max_import_uncompressed_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        validation_alias="REG_ENGINE_MAX_IMPORT_UNCOMPRESSED_BYTES",
+        gt=0,
+    )
+    max_import_sheets: int = Field(
+        default=8,
+        validation_alias="REG_ENGINE_MAX_IMPORT_SHEETS",
+        gt=0,
+    )
+    max_import_columns: int = Field(
+        default=200,
+        validation_alias="REG_ENGINE_MAX_IMPORT_COLUMNS",
+        gt=0,
+    )
+    max_import_cells: int = Field(
+        default=500_000,
+        validation_alias="REG_ENGINE_MAX_IMPORT_CELLS",
+        gt=0,
+    )
     attachment_allowed_types: str = Field(
         default="",
         validation_alias="REG_ENGINE_ATTACHMENT_ALLOWED_TYPES",

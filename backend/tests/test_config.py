@@ -28,6 +28,28 @@ def test_database_url_is_read_when_provided(monkeypatch) -> None:
     assert settings.database_url == database_url
 
 
+@pytest.mark.parametrize(
+    ("variable", "attribute", "value"),
+    [
+        ("REG_ENGINE_MAX_IMPORT_UNCOMPRESSED_BYTES", "max_import_uncompressed_bytes", 123_456),
+        ("REG_ENGINE_MAX_IMPORT_SHEETS", "max_import_sheets", 7),
+        ("REG_ENGINE_MAX_IMPORT_COLUMNS", "max_import_columns", 321),
+        ("REG_ENGINE_MAX_IMPORT_CELLS", "max_import_cells", 654_321),
+    ],
+)
+def test_xlsx_import_limits_read_positive_environment_values(
+    monkeypatch,
+    variable: str,
+    attribute: str,
+    value: int,
+) -> None:
+    monkeypatch.setenv(variable, str(value))
+
+    settings = Settings(_env_file=None)
+
+    assert getattr(settings, attribute) == value
+
+
 def test_production_like_app_rejects_default_auth_secret(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
