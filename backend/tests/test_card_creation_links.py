@@ -437,15 +437,19 @@ def test_first_public_save_creates_card_and_indefinite_child_link(
         actor_name="Сидоров Сидор Сидорович",
     )
     assert created.card.public_creator_name == "Иванов Иван Иванович"
-    latest_field_event = db_session.scalar(
-        select(AuditEvent)
-        .where(AuditEvent.card_id == created.card.id)
-        .where(AuditEvent.object_type == "field_value")
-        .where(AuditEvent.action == "public_link.update")
-        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+    second_edit_event = next(
+        event
+        for event in db_session.scalars(
+            select(AuditEvent).where(
+                AuditEvent.card_id == created.card.id,
+                AuditEvent.object_type == "field_value",
+                AuditEvent.action == "public_link.update",
+            )
+        )
+        if event.new_data_json is not None
+        and event.new_data_json.get("value") == "Изменено вторым посетителем"
     )
-    assert latest_field_event is not None
-    assert latest_field_event.actor_display_name == "Сидоров Сидор Сидорович"
+    assert second_edit_event.actor_display_name == "Сидоров Сидор Сидорович"
 
     service.close_for_actor(
         actor_user_id=admin.id,
