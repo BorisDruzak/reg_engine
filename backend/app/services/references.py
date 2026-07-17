@@ -272,19 +272,19 @@ class ReferenceListService:
             reference_list.owner_organization_id is not None
             or getattr(reference_list, "scope_mode", "global") != "global"
         ):
-            raise ReferenceListError("Only global reference lists can be enriched by import.")
+            raise ReferenceListError("Импорт может пополнять только глобальные справочники.")
 
         normalized_label, display_label = self._normalize_import_label(raw_label)
         items = self.list_items(list_id)
         if any(item.parent_id is not None for item in items):
-            raise ReferenceListError("Hierarchical reference lists cannot be enriched by import.")
+            raise ReferenceListError("Импорт не может пополнять иерархические справочники.")
         matches = [
             item
             for item in items
             if self._normalize_import_label(item.label)[0] == normalized_label
         ]
         if len(matches) > 1:
-            raise ReferenceListError("Import reference label is ambiguous.")
+            raise ReferenceListError("Значение справочника в импорте неоднозначно.")
         if matches:
             return ImportReferenceResolution(
                 status="existing",
@@ -313,14 +313,14 @@ class ReferenceListService:
             reference_list.owner_organization_id is not None
             or getattr(reference_list, "scope_mode", "global") != "global"
         ):
-            raise ReferenceListError("Only global reference lists can be enriched by import.")
+            raise ReferenceListError("Импорт может пополнять только глобальные справочники.")
         if any(item.parent_id is not None for item in self.list_items(list_id)):
-            raise ReferenceListError("Hierarchical reference lists cannot be enriched by import.")
+            raise ReferenceListError("Импорт не может пополнять иерархические справочники.")
 
         expected_normalized, cleaned_display = self._normalize_import_label(display_label)
         if normalized_label != expected_normalized:
             raise ReferenceListError(
-                "Import reference label normalization does not match the display label."
+                "Нормализованное значение справочника не соответствует отображаемому значению."
             )
         code = f"import-{sha256(normalized_label.encode('utf-8')).hexdigest()[:16]}"
         item = ReferenceItem(
@@ -341,7 +341,7 @@ class ReferenceListService:
             items = self.list_items(list_id)
             if any(existing_item.parent_id is not None for existing_item in items):
                 raise ReferenceListError(
-                    "Hierarchical reference lists cannot be enriched by import."
+                    "Импорт не может пополнять иерархические справочники."
                 ) from None
             matches = [
                 existing_item
@@ -349,7 +349,7 @@ class ReferenceListService:
                 if self._normalize_import_label(existing_item.label)[0] == normalized_label
             ]
             if len(matches) > 1:
-                raise ReferenceListError("Import reference label is ambiguous.") from None
+                raise ReferenceListError("Значение справочника в импорте неоднозначно.") from None
             if matches:
                 return matches[0]
             raise
@@ -726,7 +726,7 @@ class ReferenceListService:
     def _normalize_import_label(raw_label: object) -> tuple[str, str]:
         display_label = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(raw_label))).strip()
         if not display_label:
-            raise ReferenceListError("Import reference label cannot be blank.")
+            raise ReferenceListError("Значение справочника для импорта не может быть пустым.")
         return display_label.casefold(), display_label
 
     def _get_active_reference_item(self, item_id: UUID) -> ReferenceItem:

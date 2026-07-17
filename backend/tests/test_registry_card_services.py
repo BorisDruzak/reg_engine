@@ -411,7 +411,10 @@ def test_global_import_reference_resolution_plans_or_rejects_ambiguous_and_hiera
 
     duplicate = SimpleNamespace(id=uuid4(), parent_id=None, label="Duplicate")
     monkeypatch.setattr(service, "list_items", lambda _list_id: [duplicate, duplicate])
-    with pytest.raises(ReferenceListError, match="ambiguous"):
+    with pytest.raises(
+        ReferenceListError,
+        match="^Значение справочника в импорте неоднозначно\\.$",
+    ):
         service.resolve_or_plan_global_import_item_for_actor(
             actor_user_id=actor_user_id,
             list_id=list_id,
@@ -420,7 +423,10 @@ def test_global_import_reference_resolution_plans_or_rejects_ambiguous_and_hiera
 
     child_item = SimpleNamespace(id=uuid4(), parent_id=uuid4(), label="Child")
     monkeypatch.setattr(service, "list_items", lambda _list_id: [child_item])
-    with pytest.raises(ReferenceListError, match="Hierarchical"):
+    with pytest.raises(
+        ReferenceListError,
+        match="^Импорт не может пополнять иерархические справочники\\.$",
+    ):
         service.resolve_or_plan_global_import_item_for_actor(
             actor_user_id=actor_user_id,
             list_id=list_id,
@@ -554,7 +560,10 @@ def test_global_import_reference_resolution_rejects_non_global_list_and_missing_
     monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: local_list)
     monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
 
-    with pytest.raises(ReferenceListError, match="global"):
+    with pytest.raises(
+        ReferenceListError,
+        match="^Импорт может пополнять только глобальные справочники\\.$",
+    ):
         service.resolve_or_plan_global_import_item_for_actor(
             actor_user_id=actor_user_id,
             list_id=list_id,
@@ -569,7 +578,10 @@ def test_global_import_reference_resolution_rejects_non_global_list_and_missing_
         archived_at=None,
     )
     monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: global_list)
-    with pytest.raises(ReferenceListError, match="global"):
+    with pytest.raises(
+        ReferenceListError,
+        match="^Импорт может пополнять только глобальные справочники\\.$",
+    ):
         service.resolve_or_plan_global_import_item_for_actor(
             actor_user_id=actor_user_id,
             list_id=list_id,
