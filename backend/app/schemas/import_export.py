@@ -47,6 +47,12 @@ class TabularCardImportPreviewSummaryRead(BaseModel):
     valid_rows: int
     invalid_rows: int
     would_create_cards: int
+    would_create_reference_items: int
+
+
+class TabularCardImportReferenceItemRead(BaseModel):
+    field_label: str
+    label: str
 
 
 class TabularCardImportPreviewRowRead(BaseModel):
@@ -61,12 +67,14 @@ class TabularCardImportPreviewRead(BaseModel):
     format_version: str
     registry_id: str
     summary: TabularCardImportPreviewSummaryRead
+    new_reference_items: list[TabularCardImportReferenceItemRead]
     rows: list[TabularCardImportPreviewRowRead]
 
 
 class TabularCardImportCommitSummaryRead(BaseModel):
     created_cards: int
     field_values_written: int
+    created_reference_items: int
 
 
 class TabularCardImportCommitRead(BaseModel):

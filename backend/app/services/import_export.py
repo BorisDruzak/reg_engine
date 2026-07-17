@@ -31,6 +31,7 @@ from app.services.cards import (
     InvalidFieldValueError,
 )
 from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.references import ReferenceListError, ReferenceListService
 
 TABULAR_XLSX_ORDINAL_HEADER = "№ п/п"
 TABULAR_XLSX_ORGANIZATION_HEADER = "Организация"
@@ -102,6 +103,21 @@ class TabularWorkbookConfiguration:
     import_mode: Literal["strict", "enrich_global_references"] = "strict"
     work_experience_as_of_date: date | None = None
     title_header: str = DEFAULT_CARD_TITLE_LABEL
+
+
+@dataclass(frozen=True)
+class _PendingGlobalImportReference:
+    field_id: UUID
+    raw_label: str
+    list_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class _PlannedGlobalImportReference:
+    list_id: UUID
+    normalized_label: str
+    display_label: str
+    field_label: str
 
 
 class TabularCardExchangeService:
@@ -993,11 +1009,19 @@ class TabularCardExchangeService:
         registry_id: UUID,
         xlsx_content: bytes,
     ) -> dict[str, Any]:
-        configuration, rows = self._read_import_workbook(
+        configuration, rows, planned_references = self._read_import_workbook(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             xlsx_content=xlsx_content,
         )
+        return self._import_preview_payload(configuration, rows, planned_references)
+
+    def _import_preview_payload(
+        self,
+        configuration: TabularWorkbookConfiguration,
+        rows: list[dict[str, Any]],
+        planned_references: list[_PlannedGlobalImportReference],
+    ) -> dict[str, Any]:
         preview_rows = [
             {
                 "row_number": row["row_number"],
@@ -1019,7 +1043,12 @@ class TabularCardExchangeService:
                 "valid_rows": len(preview_rows) - invalid_rows,
                 "invalid_rows": invalid_rows,
                 "would_create_cards": len(preview_rows) - invalid_rows,
+                "would_create_reference_items": len(planned_references),
             },
+            "new_reference_items": [
+                {"field_label": item.field_label, "label": item.display_label}
+                for item in planned_references
+            ],
             "rows": preview_rows,
         }
 
@@ -1030,23 +1059,53 @@ class TabularCardExchangeService:
         registry_id: UUID,
         xlsx_content: bytes,
     ) -> dict[str, Any]:
-        configuration, rows = self._read_import_workbook(
+        configuration, rows, planned_references = self._read_import_workbook(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             xlsx_content=xlsx_content,
         )
-        preview = self.preview_import_xlsx_for_actor(
-            actor_user_id=actor_user_id,
-            registry_id=registry_id,
-            xlsx_content=xlsx_content,
-        )
+        preview = self._import_preview_payload(configuration, rows, planned_references)
         if preview["summary"]["invalid_rows"]:
             raise TabularCardImportValidationError(preview)
 
         card_service = CardService(self.session)
         field_values_written = 0
+        created_reference_items = 0
         try:
             with self.session.begin_nested():
+                configuration, rows, planned_references = self._read_import_workbook(
+                    actor_user_id=actor_user_id,
+                    registry_id=registry_id,
+                    xlsx_content=xlsx_content,
+                )
+                transaction_preview = self._import_preview_payload(
+                    configuration, rows, planned_references
+                )
+                if transaction_preview["summary"]["invalid_rows"]:
+                    raise TabularCardImportValidationError(transaction_preview)
+                reference_service = ReferenceListService(self.session)
+                created_reference_ids: dict[tuple[UUID, str], UUID] = {}
+                for planned_reference in planned_references:
+                    item = reference_service.create_global_import_item_for_actor(
+                        actor_user_id=actor_user_id,
+                        list_id=planned_reference.list_id,
+                        normalized_label=planned_reference.normalized_label,
+                        display_label=planned_reference.display_label,
+                    )
+                    created_reference_ids[
+                        (planned_reference.list_id, planned_reference.normalized_label)
+                    ] = item.id
+                created_reference_items = len(created_reference_ids)
+                self._replace_pending_reference_values(rows, created_reference_ids)
+                self._validate_import_rows(
+                    actor_user_id=actor_user_id,
+                    registry_id=registry_id,
+                    configuration=configuration,
+                    rows=rows,
+                )
+                final_preview = self._import_preview_payload(configuration, rows, [])
+                if final_preview["summary"]["invalid_rows"]:
+                    raise TabularCardImportValidationError(final_preview)
                 for row in rows:
                     organization_id = row["organization_id"]
                     if not isinstance(organization_id, UUID):
@@ -1079,6 +1138,8 @@ class TabularCardExchangeService:
                         "organization_count": len(configuration.organizations),
                         "created_cards": len(rows),
                         "field_values_written": field_values_written,
+                        "import_mode": configuration.import_mode,
+                        "created_reference_items": created_reference_items,
                     },
                 )
         except Exception:
@@ -1090,6 +1151,7 @@ class TabularCardExchangeService:
             "summary": {
                 "created_cards": len(rows),
                 "field_values_written": field_values_written,
+                "created_reference_items": created_reference_items,
             },
         }
 
@@ -1099,7 +1161,11 @@ class TabularCardExchangeService:
         actor_user_id: UUID,
         registry_id: UUID,
         xlsx_content: bytes,
-    ) -> tuple[TabularWorkbookConfiguration, list[dict[str, Any]]]:
+    ) -> tuple[
+        TabularWorkbookConfiguration,
+        list[dict[str, Any]],
+        list[_PlannedGlobalImportReference],
+    ]:
         try:
             workbook = _openpyxl().load_workbook(
                 BytesIO(xlsx_content),
@@ -1154,7 +1220,6 @@ class TabularCardExchangeService:
                 )
 
             rows: list[dict[str, Any]] = []
-            card_service = CardService(self.session)
             max_rows = get_settings().max_import_rows
             for row_number, values in enumerate(
                 sheet.iter_rows(min_row=2, values_only=True),
@@ -1194,27 +1259,29 @@ class TabularCardExchangeService:
                     if self._is_blank_cell(raw_value):
                         continue
                     try:
-                        parsed_values[item.field.id] = self._parse_import_value(
-                            raw_value,
-                            item.field,
-                            configuration.reference_labels.get(item.field.id, {}),
-                            organization_id=organization_id,
-                            unit_organization_ids=configuration.unit_organization_ids,
-                        )
+                        if (
+                            configuration.import_mode == "enrich_global_references"
+                            and item.field.field_type == "select"
+                        ):
+                            raw_label = self._normalized_label(raw_value)
+                            if raw_label is None:
+                                raise ImportExportServiceError(
+                                    "значение отсутствует в справочнике."
+                                )
+                            parsed_values[item.field.id] = _PendingGlobalImportReference(
+                                field_id=item.field.id,
+                                raw_label=raw_label,
+                            )
+                        else:
+                            parsed_values[item.field.id] = self._parse_import_value(
+                                raw_value,
+                                item.field,
+                                configuration.reference_labels.get(item.field.id, {}),
+                                organization_id=organization_id,
+                                unit_organization_ids=configuration.unit_organization_ids,
+                            )
                     except ImportExportServiceError as exc:
                         errors.append(f"{item.header}: {exc}")
-                    else:
-                        if isinstance(organization_id, UUID):
-                            try:
-                                card_service.validate_field_value_for_actor(
-                                    actor_user_id=actor_user_id,
-                                    registry_id=registry_id,
-                                    organization_id=organization_id,
-                                    field_id=item.field.id,
-                                    value=parsed_values[item.field.id],
-                                )
-                            except InvalidFieldValueError as exc:
-                                errors.append(f"{item.header}: {exc}")
                 rows.append(
                     {
                         "row_number": row_number,
@@ -1225,9 +1292,131 @@ class TabularCardExchangeService:
                         "errors": errors,
                     }
                 )
-            return configuration, rows
+            planned_references = self._plan_global_import_references(
+                actor_user_id=actor_user_id,
+                configuration=configuration,
+                rows=rows,
+            )
+            self._validate_import_rows(
+                actor_user_id=actor_user_id,
+                registry_id=registry_id,
+                configuration=configuration,
+                rows=rows,
+            )
+            return configuration, rows, planned_references
         finally:
             workbook.close()
+
+    def _plan_global_import_references(
+        self,
+        *,
+        actor_user_id: UUID,
+        configuration: TabularWorkbookConfiguration,
+        rows: list[dict[str, Any]],
+    ) -> list[_PlannedGlobalImportReference]:
+        if configuration.import_mode != "enrich_global_references":
+            return []
+
+        fields_by_id = {item.field.id: item for item in configuration.fields}
+        planned_by_key: dict[tuple[UUID, str], _PlannedGlobalImportReference] = {}
+        reference_service = ReferenceListService(self.session)
+        for row in rows:
+            for field_id, value in list(row["values"].items()):
+                if not isinstance(value, _PendingGlobalImportReference):
+                    continue
+                workbook_field = fields_by_id.get(field_id)
+                if (
+                    workbook_field is None
+                    or getattr(workbook_field.field, "options_source_type", None)
+                    != "reference_list"
+                    or getattr(workbook_field.field, "options_source_id", None) is None
+                ):
+                    row["errors"].append(
+                        f"{workbook_field.header if workbook_field is not None else field_id}: "
+                        "для пополнения требуется глобальный справочник."
+                    )
+                    continue
+                try:
+                    resolution = reference_service.resolve_or_plan_global_import_item_for_actor(
+                        actor_user_id=actor_user_id,
+                        list_id=workbook_field.field.options_source_id,
+                        raw_label=value.raw_label,
+                    )
+                except (ReferenceListError, PermissionDeniedError) as exc:
+                    row["errors"].append(f"{workbook_field.header}: {exc}")
+                    continue
+                if resolution.status == "existing":
+                    if resolution.reference_item_id is None:
+                        row["errors"].append(
+                            f"{workbook_field.header}: значение справочника не определено."
+                        )
+                    else:
+                        row["values"][field_id] = resolution.reference_item_id
+                    continue
+                key = (workbook_field.field.options_source_id, resolution.normalized_label)
+                planned_by_key.setdefault(
+                    key,
+                    _PlannedGlobalImportReference(
+                        list_id=workbook_field.field.options_source_id,
+                        normalized_label=resolution.normalized_label,
+                        display_label=resolution.display_label,
+                        field_label=workbook_field.header,
+                    ),
+                )
+                row["values"][field_id] = _PendingGlobalImportReference(
+                    field_id=field_id,
+                    raw_label=resolution.normalized_label,
+                    list_id=workbook_field.field.options_source_id,
+                )
+        return list(planned_by_key.values())
+
+    def _replace_pending_reference_values(
+        self,
+        rows: list[dict[str, Any]],
+        created_reference_ids: dict[tuple[UUID, str], UUID],
+    ) -> None:
+        for row in rows:
+            for field_id, value in list(row["values"].items()):
+                if not isinstance(value, _PendingGlobalImportReference):
+                    continue
+                item_id = (
+                    created_reference_ids.get((value.list_id, value.raw_label))
+                    if value.list_id is not None
+                    else None
+                )
+                if item_id is None:
+                    row["errors"].append("Значение справочника не было создано.")
+                else:
+                    row["values"][field_id] = item_id
+
+    def _validate_import_rows(
+        self,
+        *,
+        actor_user_id: UUID,
+        registry_id: UUID,
+        configuration: TabularWorkbookConfiguration,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        card_service = CardService(self.session)
+        fields_by_id = {item.field.id: item for item in configuration.fields}
+        for row in rows:
+            organization_id = row["organization_id"]
+            if not isinstance(organization_id, UUID):
+                continue
+            for field_id, value in row["values"].items():
+                if isinstance(value, _PendingGlobalImportReference):
+                    continue
+                workbook_field = fields_by_id[field_id]
+                try:
+                    card_service.validate_field_value_for_actor(
+                        actor_user_id=actor_user_id,
+                        registry_id=registry_id,
+                        organization_id=organization_id,
+                        field_id=field_id,
+                        value=value,
+                    )
+                except InvalidFieldValueError as exc:
+                    row["errors"].append(f"{workbook_field.header}: {exc}")
 
     def _configuration_from_metadata(
         self,

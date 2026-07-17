@@ -1,4 +1,9 @@
+import re
+import unicodedata
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -14,6 +19,14 @@ class ReferenceListError(ValueError):
 
 
 UNSET_OWNER_ORGANIZATION = object()
+
+
+@dataclass(frozen=True)
+class ImportReferenceResolution:
+    status: Literal["existing", "create"]
+    normalized_label: str
+    display_label: str
+    reference_item_id: UUID | None = None
 
 
 class ReferenceListService:
@@ -241,6 +254,94 @@ class ReferenceListService:
             object_type="reference_item",
             object_id=item.id,
             new_data_json={"list_id": str(list_id), "code": code, "label": label},
+        )
+        return item
+
+    def resolve_or_plan_global_import_item_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        list_id: UUID,
+        raw_label: object,
+    ) -> ImportReferenceResolution:
+        """Resolve one flat global reference value without mutating the list."""
+        reference_list = self._get_active_reference_list(list_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
+        if (
+            reference_list.owner_organization_id is not None
+            or getattr(reference_list, "scope_mode", "global") != "global"
+        ):
+            raise ReferenceListError("Only global reference lists can be enriched by import.")
+
+        normalized_label, display_label = self._normalize_import_label(raw_label)
+        items = self.list_items(list_id)
+        if any(item.parent_id is not None for item in items):
+            raise ReferenceListError("Hierarchical reference lists cannot be enriched by import.")
+        matches = [
+            item
+            for item in items
+            if self._normalize_import_label(item.label)[0] == normalized_label
+        ]
+        if len(matches) > 1:
+            raise ReferenceListError("Import reference label is ambiguous.")
+        if matches:
+            return ImportReferenceResolution(
+                status="existing",
+                normalized_label=normalized_label,
+                display_label=display_label,
+                reference_item_id=matches[0].id,
+            )
+        return ImportReferenceResolution(
+            status="create",
+            normalized_label=normalized_label,
+            display_label=display_label,
+        )
+
+    def create_global_import_item_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        list_id: UUID,
+        normalized_label: str,
+        display_label: str,
+    ) -> ReferenceItem:
+        """Create a root item planned by the XLSX import in an eligible global list."""
+        reference_list = self._get_active_reference_list(list_id)
+        self._require_reference_edit_permission(actor_user_id, reference_list)
+        if (
+            reference_list.owner_organization_id is not None
+            or getattr(reference_list, "scope_mode", "global") != "global"
+        ):
+            raise ReferenceListError("Only global reference lists can be enriched by import.")
+        if any(item.parent_id is not None for item in self.list_items(list_id)):
+            raise ReferenceListError("Hierarchical reference lists cannot be enriched by import.")
+
+        expected_normalized, cleaned_display = self._normalize_import_label(display_label)
+        if normalized_label != expected_normalized:
+            raise ReferenceListError(
+                "Import reference label normalization does not match the display label."
+            )
+        code = f"import-{sha256(normalized_label.encode('utf-8')).hexdigest()[:16]}"
+        item = ReferenceItem(
+            list_id=list_id,
+            parent_id=None,
+            code=code,
+            label=cleaned_display,
+            created_by=actor_user_id,
+        )
+        self.session.add(item)
+        self.session.flush()
+        AuditService(self.session).record_user_event(
+            actor_user_id=actor_user_id,
+            action="create",
+            object_type="reference_item",
+            object_id=item.id,
+            new_data_json={
+                "list_id": str(list_id),
+                "code": code,
+                "label": cleaned_display,
+                "source": "xlsx_import",
+            },
         )
         return item
 
@@ -598,6 +699,13 @@ class ReferenceListService:
         ):
             raise ReferenceListError("Reference list was not found.")
         return reference_list
+
+    @staticmethod
+    def _normalize_import_label(raw_label: object) -> tuple[str, str]:
+        display_label = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(raw_label))).strip()
+        if not display_label:
+            raise ReferenceListError("Import reference label cannot be blank.")
+        return display_label.casefold(), display_label
 
     def _get_active_reference_item(self, item_id: UUID) -> ReferenceItem:
         item = self.session.get(ReferenceItem, item_id)

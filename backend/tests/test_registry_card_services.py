@@ -52,7 +52,7 @@ from app.services.cards import (
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError
 from app.services.public_links import PublicLinkService
-from app.services.references import ReferenceListService
+from app.services.references import ReferenceListError, ReferenceListService
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
 
 
@@ -340,6 +340,183 @@ def _phase_1d_context(db_session: Session) -> dict[str, Any]:
         "sibling": sibling,
         "registry": registry,
     }
+
+
+def test_global_import_reference_resolution_normalizes_and_preserves_existing_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Import matching is tolerant, but never rewrites a stored display label."""
+    actor_user_id = uuid4()
+    list_id = uuid4()
+    existing_item = SimpleNamespace(
+        id=uuid4(),
+        parent_id=None,
+        label="Ready for review",
+        is_active=True,
+        archived_at=None,
+    )
+    reference_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=None,
+        is_active=True,
+        archived_at=None,
+    )
+    service = ReferenceListService(cast(Session, object()))
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: reference_list)
+    monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "list_items", lambda _list_id: [existing_item])
+
+    resolution = service.resolve_or_plan_global_import_item_for_actor(
+        actor_user_id=actor_user_id,
+        list_id=list_id,
+        raw_label="  READY\u00a0 FOR   REVIEW  ",
+    )
+
+    assert resolution.status == "existing"
+    assert resolution.reference_item_id == existing_item.id
+    assert resolution.display_label == "READY FOR REVIEW"
+
+
+def test_global_import_reference_resolution_plans_or_rejects_ambiguous_and_hierarchical_lists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    list_id = uuid4()
+    reference_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=None,
+        is_active=True,
+        archived_at=None,
+    )
+    service = ReferenceListService(cast(Session, object()))
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: reference_list)
+    monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "list_items", lambda _list_id: [])
+
+    planned = service.resolve_or_plan_global_import_item_for_actor(
+        actor_user_id=actor_user_id,
+        list_id=list_id,
+        raw_label="  New   value ",
+    )
+
+    assert planned.status == "create"
+    assert planned.normalized_label == "new value"
+    assert planned.display_label == "New value"
+
+    duplicate = SimpleNamespace(id=uuid4(), parent_id=None, label="Duplicate")
+    monkeypatch.setattr(service, "list_items", lambda _list_id: [duplicate, duplicate])
+    with pytest.raises(ReferenceListError, match="ambiguous"):
+        service.resolve_or_plan_global_import_item_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=list_id,
+            raw_label="duplicate",
+        )
+
+    child_item = SimpleNamespace(id=uuid4(), parent_id=uuid4(), label="Child")
+    monkeypatch.setattr(service, "list_items", lambda _list_id: [child_item])
+    with pytest.raises(ReferenceListError, match="Hierarchical"):
+        service.resolve_or_plan_global_import_item_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=list_id,
+            raw_label="new value",
+        )
+
+
+def test_global_import_reference_creation_requires_edit_permission_and_uses_stable_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    list_id = uuid4()
+    reference_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=None,
+        is_active=True,
+        archived_at=None,
+    )
+    created: list[object] = []
+
+    class Session:
+        def add(self, item: object) -> None:
+            created.append(item)
+
+        def flush(self) -> None:
+            pass
+
+    class Audit:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        def record_user_event(self, **_kwargs: object) -> None:
+            pass
+
+    service = ReferenceListService(cast(Session, Session()))
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: reference_list)
+    monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
+    monkeypatch.setattr(service, "list_items", lambda _list_id: [])
+    monkeypatch.setattr("app.services.references.AuditService", Audit)
+
+    item = service.create_global_import_item_for_actor(
+        actor_user_id=actor_user_id,
+        list_id=list_id,
+        normalized_label="new value",
+        display_label="New value",
+    )
+
+    assert item.parent_id is None
+    assert item.label == "New value"
+    assert item.code.startswith("import-")
+    assert created == [item]
+
+
+def test_global_import_reference_resolution_rejects_non_global_list_and_missing_edit_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    actor_user_id = uuid4()
+    list_id = uuid4()
+    service = ReferenceListService(cast(Session, object()))
+    local_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=uuid4(),
+        is_active=True,
+        archived_at=None,
+    )
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: local_list)
+    monkeypatch.setattr(service, "_require_reference_edit_permission", lambda *_args: None)
+
+    with pytest.raises(ReferenceListError, match="global"):
+        service.resolve_or_plan_global_import_item_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=list_id,
+            raw_label="New value",
+        )
+
+    global_list = SimpleNamespace(
+        id=list_id,
+        owner_organization_id=None,
+        scope_mode="organization",
+        is_active=True,
+        archived_at=None,
+    )
+    monkeypatch.setattr(service, "_get_active_reference_list", lambda _list_id: global_list)
+    with pytest.raises(ReferenceListError, match="global"):
+        service.resolve_or_plan_global_import_item_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=list_id,
+            raw_label="New value",
+        )
+
+    global_list.scope_mode = "global"
+
+    def deny_edit(*_args: object) -> None:
+        raise PermissionDeniedError("reference edit is required")
+
+    monkeypatch.setattr(service, "_require_reference_edit_permission", deny_edit)
+    with pytest.raises(PermissionDeniedError, match="reference edit"):
+        service.resolve_or_plan_global_import_item_for_actor(
+            actor_user_id=actor_user_id,
+            list_id=list_id,
+            raw_label="New value",
+        )
 
 
 def test_registry_schema_is_not_duplicated_per_organization(db_session: Session) -> None:
