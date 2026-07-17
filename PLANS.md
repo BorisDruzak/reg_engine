@@ -7,6 +7,14 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-17 follow-up `cfc52e86` prevents accidental leading or trailing
+  whitespace from making a regex condition reject every value. The backend
+  canonicalizes regex patterns on save, and the frontend trims legacy patterns
+  before evaluating them, so existing saved rules recover after refresh. The
+  focused backend and frontend tests pass; the commit is pushed and deployed
+  with frontend asset `index-umcpXe7u.js`, a healthy API, and same-origin
+  frontend smoke check.
+
 - 2026-07-17 multiple text-validation conditions are implemented locally in
   commits `02689a63`, `646ada52`, and `b5088e25`. A text field now stores a
   canonical ordered list of conditions; legacy one-object rules remain accepted
