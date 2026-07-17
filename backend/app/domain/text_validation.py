@@ -25,58 +25,79 @@ class TextValidationError(ValueError):
     """Raised when a text-validation rule or value is invalid."""
 
 
-def normalize_text_validation(value: object) -> dict[str, str] | None:
-    """Return a strict, portable text-validation rule for persistence."""
+def normalize_text_validation(value: object) -> list[dict[str, str]] | None:
+    """Return canonical ordered text-validation conditions for persistence."""
     if value is None:
         return None
-    if not isinstance(value, Mapping):
-        raise TextValidationError("Text validation must be an object.")
+    raw_conditions = [value] if isinstance(value, Mapping) else value
+    if not isinstance(raw_conditions, list) or not raw_conditions:
+        raise TextValidationError("Text validation must be a non-empty list.")
+    return [_normalize_text_validation_condition(condition) for condition in raw_conditions]
 
+
+def _normalize_text_validation_condition(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        raise TextValidationError("Text validation condition must be an object.")
     kind = value.get("kind")
+    input_mode = value.get("input_mode", "show_error")
+    if input_mode not in {"show_error", "block_input"}:
+        raise TextValidationError("Text validation input mode is unsupported.")
     if kind == "russian_text":
-        _require_exact_keys(value, {"kind", "message"})
+        _require_keys(value, {"kind", "message"}, {"input_mode"})
         message = _require_string(value, "message")
-        return {"kind": kind, "message": message}
+        return {"kind": kind, "message": message, "input_mode": input_mode}
     if kind == "regex":
-        _require_exact_keys(value, {"kind", "pattern", "message"})
+        _require_keys(value, {"kind", "pattern", "message"}, {"input_mode"})
         pattern = _require_string(value, "pattern")
         message = _require_string(value, "message")
         _validate_portable_regex(pattern)
-        return {"kind": kind, "pattern": pattern, "message": message}
+        return {
+            "kind": kind,
+            "pattern": pattern,
+            "message": message,
+            "input_mode": input_mode,
+        }
 
     raise TextValidationError("Unsupported text validation kind.")
 
 
-def validate_text_value(value: str, validation: Mapping[str, object] | None) -> None:
+def validate_text_value(value: str, validation: object) -> None:
     """Raise the configured message when a non-empty text value violates its rule."""
     if _is_ecmascript_blank(value) or validation is None:
         return
 
-    normalized = normalize_text_validation(validation)
-    if normalized is None:
+    conditions = normalize_text_validation(validation)
+    if conditions is None:
         return
+    failures: list[str] = []
+    for condition in conditions:
+        if _condition_is_valid(value, condition):
+            continue
+        failures.append(condition["message"])
+    if failures:
+        raise TextValidationError("\n".join(failures))
+
+
+def _condition_is_valid(value: str, condition: Mapping[str, str]) -> bool:
     if _contains_non_bmp_or_surrogate(value):
-        raise TextValidationError(normalized["message"])
-    if normalized["kind"] == "russian_text":
-        valid = RUSSIAN_TEXT_PATTERN.fullmatch(value) is not None
-    else:
-        try:
-            valid = (
-                regex.fullmatch(
-                    normalized["pattern"],
-                    value,
-                    timeout=_REGEX_MATCH_TIMEOUT_SECONDS,
-                )
-                is not None
+        return False
+    if condition["kind"] == "russian_text":
+        return RUSSIAN_TEXT_PATTERN.fullmatch(value) is not None
+    try:
+        return (
+            regex.fullmatch(
+                condition["pattern"],
+                value,
+                timeout=_REGEX_MATCH_TIMEOUT_SECONDS,
             )
-        except TimeoutError as exc:
-            raise TextValidationError(normalized["message"]) from exc
-    if not valid:
-        raise TextValidationError(normalized["message"])
+            is not None
+        )
+    except TimeoutError:
+        return False
 
 
-def _require_exact_keys(value: Mapping[object, object], expected: set[str]) -> None:
-    if set(value) != expected:
+def _require_keys(value: Mapping[object, object], expected: set[str], optional: set[str]) -> None:
+    if not expected.issubset(value) or not set(value).issubset(expected | optional):
         raise TextValidationError("Text validation contains unsupported or missing keys.")
 
 

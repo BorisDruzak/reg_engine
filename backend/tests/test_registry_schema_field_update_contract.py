@@ -429,8 +429,9 @@ def test_text_field_validation_is_persisted_and_included_in_field_audit(
         validation_json=validation,
     )
 
-    assert field.validation_json == validation
-    assert audit_events[-1]["new_data_json"]["validation_json"] == validation
+    expected_validation = [{**validation, "input_mode": "show_error"}]
+    assert field.validation_json == expected_validation
+    assert audit_events[-1]["new_data_json"]["validation_json"] == expected_validation
 
 
 def test_schema_rejects_text_validation_for_non_text_field(

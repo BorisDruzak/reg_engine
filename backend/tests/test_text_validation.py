@@ -10,6 +10,27 @@ from app.domain.text_validation import (
 )
 
 
+def test_normalize_legacy_rule_to_show_error_condition_list() -> None:
+    assert normalize_text_validation({"kind": "russian_text", "message": "Русский"}) == [
+        {"kind": "russian_text", "message": "Русский", "input_mode": "show_error"}
+    ]
+
+
+def test_every_text_validation_condition_contributes_its_message() -> None:
+    conditions = [
+        {"kind": "russian_text", "message": "Только русский", "input_mode": "show_error"},
+        {
+            "kind": "regex",
+            "pattern": "[А-Яа-яЁё -]{1,256}",
+            "message": "Без цифр и знаков",
+            "input_mode": "block_input",
+        },
+    ]
+
+    with pytest.raises(TextValidationError, match="Только русский\\nБез цифр и знаков"):
+        validate_text_value("Ста1!", conditions)
+
+
 def test_russian_text_allows_cyrillic_spaces_and_hyphens() -> None:
     rule = normalize_text_validation({"kind": "russian_text", "message": "Только русский"})
 
@@ -217,7 +238,7 @@ def test_normalize_accepts_inline_editor_default_regex_payload() -> None:
         "message": "Введите значение в нужном формате",
     }
 
-    assert normalize_text_validation(payload) == payload
+    assert normalize_text_validation(payload) == [{**payload, "input_mode": "show_error"}]
 
 
 @pytest.mark.parametrize(
