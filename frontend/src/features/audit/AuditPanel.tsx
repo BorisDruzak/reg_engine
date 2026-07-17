@@ -184,7 +184,10 @@ function HistoryEventRow({
   event: AuditEventRead;
   onSelectCard: (cardId: string) => void;
 }) {
-  const actor = event.actor_display_name || actorTypeLabel(event.actor_type);
+  const actor =
+    event.actor_type === "public_link" && event.actor_display_name
+      ? `Публичный пользователь: ${event.actor_display_name}`
+      : event.actor_display_name || actorTypeLabel(event.actor_type);
   const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
   const isStandalone = event.history_display === "standalone" && Boolean(event.history_description);
   const cardId = event.card_id;

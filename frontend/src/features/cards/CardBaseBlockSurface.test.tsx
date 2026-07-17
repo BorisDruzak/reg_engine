@@ -40,4 +40,20 @@ describe("CardBaseBlockSurface", () => {
     expect(access).not.toHaveAttribute("open");
     expect(screen.queryByText("Настройки доступа")).not.toBeVisible();
   });
+
+  test("renders the server-provided creator in the authenticated base block", () => {
+    render(
+      <CardBaseBlockSurface
+        id="card-base-block"
+        mode="admin"
+        organization={{ label: "Организация", value: "Администрация" }}
+        template={{ label: "Шаблон", value: "Муниципальный служащий" }}
+        displayName={{ label: "Карточка", value: "Карточка" }}
+        creator={{ label: "Создатель", value: "Иванов Иван Иванович" }}
+      />,
+    );
+
+    expect(screen.getByText("Создатель")).toBeVisible();
+    expect(screen.getByText("Иванов Иван Иванович")).toBeVisible();
+  });
 });

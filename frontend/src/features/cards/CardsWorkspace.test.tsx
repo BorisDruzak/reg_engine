@@ -651,6 +651,7 @@ describe("CardsWorkspace", () => {
     const baseBlock = await screen.findByLabelText("Базовый блок");
     expect(within(baseBlock).getByText("Шаблон", { selector: "output" })).toBeInTheDocument();
     expect(within(baseBlock).getByText(organizationUnitCard.display_name)).toBeInTheDocument();
+    expect(within(baseBlock).getByText("Не указан")).toBeInTheDocument();
     expect(
       within(baseBlock).queryByRole("combobox", { name: "Организация карточки" }),
     ).not.toBeInTheDocument();
@@ -673,6 +674,26 @@ describe("CardsWorkspace", () => {
     expect(
       within(accessDetails!).getByRole("button", { name: "Публичная ссылка" }),
     ).toBeInTheDocument();
+  });
+
+  test("renders the server-provided creator in the selected card and card list detail", async () => {
+    const creatorDisplayName = "Иванов Иван Иванович";
+    localStorage.setItem(
+      "reg_engine.card_tabs.v1",
+      JSON.stringify({ activeTab: "card:card-org-unit", openCardIds: ["card-org-unit"] }),
+    );
+    renderWorkspace({
+      cards: [{ ...organizationUnitCardSummary, creator_display_name: creatorDisplayName }],
+      card: { ...organizationUnitCard, creator_display_name: creatorDisplayName },
+      selectedCardId: organizationUnitCard.id,
+    });
+
+    const baseBlock = await screen.findByLabelText("Базовый блок");
+    expect(within(baseBlock).getByText("Создатель")).toBeVisible();
+    expect(within(baseBlock).getByText(creatorDisplayName)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Список карточек" }));
+    expect(screen.getByText(new RegExp(`Создатель: ${creatorDisplayName}`))).toBeVisible();
   });
 
   test("hides saved-card public access controls from users without management rights", async () => {

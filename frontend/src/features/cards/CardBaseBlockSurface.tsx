@@ -14,6 +14,7 @@ export type CardBaseBlockSurfaceProps = {
   organization: CardBaseValue;
   template: CardBaseValue;
   displayName: CardBaseValue;
+  creator?: CardBaseValue;
   headerAction?: ReactNode;
   publicAccessContent?: ReactNode;
   footer?: ReactNode;
@@ -32,6 +33,7 @@ export function CardBaseBlockSurface({
   organization,
   template,
   displayName,
+  creator,
   headerAction,
   publicAccessContent,
   footer,
@@ -52,6 +54,7 @@ export function CardBaseBlockSurface({
         <CardBaseBlockRow value={organization} editable={isCreation} disabled={disabled} />
         <CardBaseBlockRow value={template} editable={isCreation} disabled={disabled} />
         <CardBaseBlockRow value={displayName} editable={isCreation} disabled={disabled} />
+        {creator ? <CardBaseBlockRow value={creator} editable={false} disabled={disabled} /> : null}
       </div>
       {publicAccessContent ? (
         <details className="card-base-public-access">

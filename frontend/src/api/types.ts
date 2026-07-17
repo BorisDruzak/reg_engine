@@ -409,6 +409,7 @@ export type CardSummaryRead = {
   organization_id: string;
   org_unit_id: string | null;
   display_name: string;
+  creator_display_name?: string | null;
   lifecycle_status: string;
   public_view_enabled: boolean;
   public_edit_enabled: boolean;
@@ -622,6 +623,7 @@ export type CardRead = {
   card_template_name?: string | null;
   organization_id: string;
   display_name: string;
+  creator_display_name?: string | null;
   can_manage: boolean;
   blocks: Record<string, CardBlockRead>;
   fields: Record<string, CardFieldRead>;

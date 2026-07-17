@@ -551,7 +551,9 @@ export function CardsWorkspace({
           field.display_value === undefined ? field.value : field.display_value,
         )}`,
     );
-    return [baseDetail, ...selectedFieldDetails].join(" / ");
+    return [baseDetail, `Создатель: ${item.creator_display_name || "Не указан"}`, ...selectedFieldDetails].join(
+      " / ",
+    );
   }
 
   const selectedCardBaseBlock =
@@ -849,6 +851,7 @@ function CardBaseBlock({
       organization={{ label: uiText.organization, value: organizationName }}
       template={{ label: "Шаблон", value: templateName }}
       displayName={{ label: uiText.card, value: card.display_name }}
+      creator={{ label: "Создатель", value: card.creator_display_name || "Не указан" }}
       headerAction={<CardChangeNotificationToggle cardId={card.id} token={token} />}
       publicAccessContent={
         canManage ? (

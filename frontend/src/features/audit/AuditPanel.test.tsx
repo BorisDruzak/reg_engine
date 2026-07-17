@@ -153,6 +153,23 @@ test("renders create and archive as standalone history events without a fabricat
   expect(screen.queryByText("Нет значения → Изменено")).not.toBeInTheDocument();
 });
 
+test("labels a public audit event with its snapshot executor", async () => {
+  const actorDisplayName = "Петров Пётр Петрович";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({ items: [{ ...historyEvent, actor_display_name: actorDisplayName }] }),
+    ),
+  );
+
+  renderAuditPanel();
+
+  expect(
+    await screen.findByText(`Публичный пользователь: ${actorDisplayName}`),
+  ).toBeVisible();
+  expect(screen.getByText("Ссылку создал: Системный администратор")).toBeVisible();
+});
+
 function renderAuditPanel() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
