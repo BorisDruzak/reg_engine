@@ -7,6 +7,20 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-17 follow-up `01d8bfaf` fixes the card-field activation race: a
+  click used to activate the text editor and then give native focus back to
+  the focusable field container, leaving the caret outside the textarea. The
+  activation pointer event now prevents that container focus handoff. A
+  regression starts in a choice field, clicks a text field, and asserts that
+  the textarea owns focus. Focused card/editor tests pass (`44` tests), the
+  card-layout suite passes (`69` tests), TypeScript and the production build
+  pass, and ESLint has no errors (the pre-existing `FilledCardLayout.tsx`
+  hook-dependency warning remains). The commit is pushed and deployed with
+  frontend asset `index-DxxH4PNp.js`; backend health and same-origin frontend
+  smoke checks pass. Live proof opened «Группа должностей», then
+  «Замещаемая должность» without changing a value and confirmed that the
+  active element is that field's `TEXTAREA`.
+
 - 2026-07-17 follow-up `cfc52e86` prevents accidental leading or trailing
   whitespace from making a regex condition reject every value. The backend
   canonicalizes regex patterns on save, and the frontend trims legacy patterns
