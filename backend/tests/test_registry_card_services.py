@@ -2,6 +2,7 @@ import os
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -11,12 +12,14 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 import app.services.audit as audit_module
 import app.services.cards as cards_module
+import app.services.import_export as import_export_module
 from app.api.dependencies import get_db_session
 from app.core.config import get_settings
 from app.main import create_app
@@ -35,6 +38,7 @@ from app.models import (
     FormField,
     Organization,
     Permission,
+    ReferenceItem,
     Registry,
     Role,
     User,
@@ -517,6 +521,97 @@ def test_global_import_reference_resolution_rejects_non_global_list_and_missing_
             list_id=list_id,
             raw_label="New value",
         )
+
+
+def test_xlsx_enrichment_rolls_back_real_postgresql_reference_and_card_writes(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _phase_1d_context(db_session)
+    schema_service = RegistrySchemaService(db_session)
+    reference_service = ReferenceListService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="xlsx-enrichment-rollback",
+        title="XLSX enrichment rollback",
+    )
+    reference_list = reference_service.create_reference_list_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="xlsx-enrichment-rollback-statuses",
+        name="XLSX enrichment rollback statuses",
+    )
+    field = schema_service.create_field_for_actor(
+        actor_user_id=context["system_admin"].id,
+        block_id=block.id,
+        code="xlsx_enrichment_rollback_status",
+        label="Status",
+        field_type="select",
+        options_source_type="reference_list",
+        options_source_id=reference_list.id,
+    )
+    template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        code="xlsx-enrichment-rollback-template",
+        name="XLSX enrichment rollback template",
+        field_schema_json={"field_ids": [str(field.id)]},
+    )
+    service = import_export_module.TabularCardExchangeService(db_session)
+    template_content = service.import_template_xlsx_for_actor(
+        actor_user_id=context["system_admin"].id,
+        registry_id=context["registry"].id,
+        card_template_id=template.id,
+        field_ids=[field.id],
+        organization_ids=[context["child"].id],
+        import_mode="enrich_global_references",
+    )
+    workbook = load_workbook(BytesIO(template_content))
+    sheet = workbook["Карточки"]
+    sheet["B2"] = "Rollback card one"
+    sheet["C2"] = "New rollback status"
+    sheet["B3"] = "Rollback card two"
+    sheet["C3"] = "New rollback status"
+    content = BytesIO()
+    workbook.save(content)
+
+    class FailingSecondCardWriteService(CardService):
+        created_card_count = 0
+
+        def create_card_for_actor(self, **kwargs: object) -> Card:
+            type(self).created_card_count += 1
+            if type(self).created_card_count == 2:
+                raise RuntimeError("forced later XLSX card write failure")
+            return super().create_card_for_actor(**kwargs)
+
+    monkeypatch.setattr(import_export_module, "CardService", FailingSecondCardWriteService)
+
+    with pytest.raises(RuntimeError, match="later XLSX card write failure"):
+        service.commit_import_xlsx_for_actor(
+            actor_user_id=context["system_admin"].id,
+            registry_id=context["registry"].id,
+            xlsx_content=content.getvalue(),
+        )
+
+    db_session.expire_all()
+    assert (
+        db_session.scalars(
+            select(Card).where(Card.display_name.in_(["Rollback card one", "Rollback card two"]))
+        ).all()
+        == []
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ReferenceItem)
+            .where(
+                ReferenceItem.list_id == reference_list.id,
+                ReferenceItem.label == "New rollback status",
+            )
+        )
+        == 0
+    )
 
 
 def test_registry_schema_is_not_duplicated_per_organization(db_session: Session) -> None:
