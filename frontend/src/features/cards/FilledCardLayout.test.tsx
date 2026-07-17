@@ -517,6 +517,19 @@ describe("FilledCardLayout", () => {
     );
   });
 
+  test("places the caret in a text field after switching from a choice field", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<EditableFilledCard saveValues={saveValues} />);
+
+    await user.click(screen.getByTestId("filled-field-layout-status"));
+    expect(screen.getByRole("searchbox", { name: "Поиск варианта" })).toHaveFocus();
+
+    await user.click(screen.getByTestId("filled-field-layout-last-name"));
+
+    expect(screen.getByRole("textbox", { name: "Фамилия" })).toHaveFocus();
+  });
+
   test("keeps a date draft unsaved until its field loses focus", async () => {
     vi.useFakeTimers();
     const saveValues = vi.fn().mockResolvedValue(undefined);

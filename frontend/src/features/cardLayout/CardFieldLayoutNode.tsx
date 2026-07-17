@@ -388,6 +388,7 @@ export function CardFieldLayoutNode({
       aria-describedby={completionDescriptionId}
       onPointerDownCapture={(event) => {
         if (fieldActivatable && fieldActivationContext && !isInteractiveTarget(event.target)) {
+          event.preventDefault();
           onActivateField?.(fieldActivationContext);
         }
       }}
