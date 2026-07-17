@@ -7,6 +7,28 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-17 multiple text-validation conditions are implemented locally in
+  commits `02689a63`, `646ada52`, and `b5088e25`. A text field now stores a
+  canonical ordered list of conditions; legacy one-object rules remain accepted
+  and are normalized to a one-item list with `input_mode: "show_error"`.
+  Every condition is enforced by the backend (including card values, public
+  links, and imports), while the schema editor lets an administrator add,
+  change, and remove conditions independently. Conditions use AND semantics.
+  At entry time, `show_error` retains an invalid draft with a red outline and
+  stacked transient messages; `block_input` rejects the whole typed or pasted
+  attempt without saving a partial value. The API and public-link projection
+  expose the list unchanged. No migration is required because
+  `form_fields.validation_json` is already JSONB. Local backend verification
+  passes (`415 passed`, `264 skipped`, with the existing Starlette/httpx
+  deprecation warning); the focused frontend suite passes `99` tests,
+  TypeScript and production Vite build pass, and ESLint has no errors (the
+  existing `FilledCardLayout.tsx` hook-dependency warning remains). The full
+  frontend Vitest run also exposes an unrelated stale expectation in
+  `SingleStageCardCreation.test.tsx`: it expects the former single `Стаж
+  работы` textbox while the current work-experience editor renders three
+  segmented inputs. This validation change does not touch that component.
+  Push/deploy and browser proof remain pending.
+
 - 2026-07-16 saved-card choice-popup overlay is released in `aab7dd59`.
   `SearchableChoicePicker` now marks its existing open state, and its search
   list is absolutely positioned above the card canvas. Only the containing
