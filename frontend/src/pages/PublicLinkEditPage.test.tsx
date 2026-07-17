@@ -55,6 +55,44 @@ afterEach(() => {
 });
 
 describe("PublicLinkEditPage", () => {
+  test("blocks public field activation until FIO is provided", async () => {
+    renderPage();
+
+    const input = await screen.findByRole("textbox", { name: "Публичный статус" });
+    fireEvent.pointerDown(input);
+
+    expect(await screen.findByRole("status", { name: "ФИО" })).toHaveTextContent(
+      "Сначала укажите ФИО",
+    );
+    expect(editCalls()).toHaveLength(0);
+  });
+
+  test("sends normalized FIO when a public field is autosaved", async () => {
+    renderPage();
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "ФИО" }), {
+      target: { value: "  Иванов   Иван Иванович  " },
+    });
+    const input = screen.getByRole("textbox", { name: "Публичный статус" });
+    fireEvent.change(input, { target: { value: "Подтверждено" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(editCalls()).toHaveLength(1));
+    expect(editCalls()[0]?.body).toMatchObject({ actor_name: "Иванов Иван Иванович" });
+  });
+
+  test("keeps the public editor FIO only in page state after remount", async () => {
+    const page = renderPage();
+    const actorName = await screen.findByRole("textbox", { name: "ФИО" });
+    fireEvent.change(actorName, { target: { value: "Иванов Иван Иванович" } });
+    expect(actorName).toHaveValue("Иванов Иван Иванович");
+
+    page.unmount();
+    renderPage();
+
+    expect(await screen.findByRole("textbox", { name: "ФИО" })).toHaveValue("");
+  });
+
   test("uses the shared card workspace width so the public canvas stays within it", () => {
     expect(globalStyles).toContain(".public-main {\n  width: min(72rem, 100%);");
   });
@@ -183,7 +221,10 @@ describe("PublicLinkEditPage", () => {
     };
     renderPage();
 
-    const input = await screen.findByRole("textbox", { name: "ФИО" });
+    const input = (await screen.findAllByRole("textbox", { name: "ФИО" })).find(
+      (candidate) => candidate.tagName === "TEXTAREA",
+    );
+    if (!input) throw new Error("Missing card field FIO input");
     fireEvent.change(input, { target: { value: "Иван 2" } });
     fireEvent.blur(input);
 
@@ -717,8 +758,8 @@ function renderPage(setup?: (queryClient: QueryClient) => void, strict = false) 
       </MemoryRouter>
     </QueryClientProvider>
   );
-  render(strict ? <StrictMode>{page}</StrictMode> : page);
-  return queryClient;
+  const result = render(strict ? <StrictMode>{page}</StrictMode> : page);
+  return Object.assign(queryClient, { unmount: result.unmount });
 }
 
 async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {

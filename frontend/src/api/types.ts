@@ -882,6 +882,20 @@ export type CardCreationLinkFirstSaveRead = {
   child_raw_token: string;
 };
 
+export type PublicActorName = string;
+
+export type CardCreationLinkFirstSavePayload = {
+  organization_id: string;
+  field_id: string;
+  value: unknown;
+  block_instance_id?: string | null;
+};
+
+export type PublicLinkAttachmentUploadPayload = {
+  file: File;
+  title?: string;
+};
+
 export type PublicLinkAttachmentRead = {
   id: string;
   card_id: string;

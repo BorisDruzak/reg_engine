@@ -14,6 +14,7 @@ import type {
   CardCreationLinkCardListRead,
   CardCreationLinkCreatePayload,
   CardCreationLinkFirstSaveRead,
+  CardCreationLinkFirstSavePayload,
   CardCreationLinkListRead,
   CardCreationLinkPublicPreviewRead,
   CardCreationLinkRead,
@@ -83,6 +84,7 @@ import type {
   PublicLinkTokenRead,
   PublicLinkAttachmentListRead,
   PublicLinkAttachmentRead,
+  PublicLinkAttachmentUploadPayload,
   PublicReferenceItemRead,
   PublicReferenceListRead,
   PublicReferenceWorkspaceRead,
@@ -92,6 +94,7 @@ import type {
   ReferenceEditLinkTokenRead,
   PermissionListRead,
   PublicLinkPreviewRead,
+  PublicActorName,
   ReferenceItemCreatePayload,
   ReferenceItemListRead,
   RegistryListRead,
@@ -936,36 +939,36 @@ export async function readPublicCardCreationLinkPreview(
 
 export async function firstSaveCardFromCreationLink(
   rawToken: string,
-  payload: {
-    organization_id: string;
-    field_id: string;
-    value: unknown;
-    block_instance_id?: string | null;
-  },
+  actorName: PublicActorName,
+  payload: CardCreationLinkFirstSavePayload,
 ) {
   return apiRequest<CardCreationLinkFirstSaveRead>(
     "/api/v1/public/card-creation-links/first-save",
     {
       method: "POST",
-      body: { raw_token: rawToken, ...payload },
+      body: { raw_token: rawToken, actor_name: actorName, ...payload },
     },
   );
 }
 
-export async function createCardDraftFromCreationLink(rawToken: string, organizationId: string) {
+export async function createCardDraftFromCreationLink(
+  rawToken: string,
+  actorName: PublicActorName,
+  organizationId: string,
+) {
   return apiRequest<CardCreationLinkFirstSaveRead>(
     "/api/v1/public/card-creation-links/create-draft",
     {
       method: "POST",
-      body: { raw_token: rawToken, organization_id: organizationId },
+      body: { raw_token: rawToken, actor_name: actorName, organization_id: organizationId },
     },
   );
 }
 
-export async function submitPublicLink(rawToken: string) {
+export async function submitPublicLink(rawToken: string, actorName: PublicActorName) {
   return apiRequest<PublicLinkSafeStatusRead>("/api/v1/public-links/submit", {
     method: "POST",
-    body: { raw_token: rawToken },
+    body: { raw_token: rawToken, actor_name: actorName },
   });
 }
 
@@ -978,6 +981,7 @@ export async function getPublicLinkStatus(rawToken: string) {
 
 export async function updatePublicLinkFieldValue(
   rawToken: string,
+  actorName: PublicActorName,
   fieldId: string,
   value: unknown,
   blockInstanceId: string | null,
@@ -986,6 +990,7 @@ export async function updatePublicLinkFieldValue(
     method: "POST",
     body: {
       raw_token: rawToken,
+      actor_name: actorName,
       field_id: fieldId,
       value,
       block_instance_id: blockInstanceId,
@@ -1002,10 +1007,12 @@ export async function listPublicLinkAttachments(rawToken: string) {
 
 export async function uploadPublicLinkAttachment(
   rawToken: string,
-  payload: { file: File; title?: string },
+  actorName: PublicActorName,
+  payload: PublicLinkAttachmentUploadPayload,
 ) {
   const formData = new FormData();
   formData.append("raw_token", rawToken);
+  formData.append("actor_name", actorName);
   formData.append("file", payload.file);
   if (payload.title?.trim()) {
     formData.append("title", payload.title.trim());

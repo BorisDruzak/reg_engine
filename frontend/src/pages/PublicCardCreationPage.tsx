@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { createCardDraftFromCreationLink, readPublicCardCreationLinkPreview } from "@/api/client";
@@ -11,6 +11,16 @@ export function PublicCardCreationPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
   const navigate = useNavigate();
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [actorName, setActorName] = useState("");
+  const [actorHint, setActorHint] = useState<string | null>(null);
+  const actorHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const normalizedActorName = actorName.trim().replace(/\s+/g, " ");
+  useEffect(
+    () => () => {
+      if (actorHintTimeoutRef.current) clearTimeout(actorHintTimeoutRef.current);
+    },
+    [],
+  );
   const previewQuery = useQuery({
     queryKey: ["public-card-creation-preview", rawToken],
     queryFn: () => readPublicCardCreationLinkPreview(rawToken),
@@ -19,15 +29,23 @@ export function PublicCardCreationPage() {
   const preview = previewQuery.data;
   const createDraftMutation = useMutation({
     mutationFn: (selectedOrganizationId: string) =>
-      createCardDraftFromCreationLink(rawToken, selectedOrganizationId),
+      createCardDraftFromCreationLink(rawToken, normalizedActorName, selectedOrganizationId),
     onSuccess: (created) => {
       navigate(`/public/edit/${created.child_raw_token}`, { replace: true });
     },
   });
 
+  function requireActorName() {
+    if (normalizedActorName) return true;
+    setActorHint("Сначала укажите ФИО");
+    if (actorHintTimeoutRef.current) clearTimeout(actorHintTimeoutRef.current);
+    actorHintTimeoutRef.current = setTimeout(() => setActorHint(null), 3000);
+    return false;
+  }
+
   function selectOrganization(selectedOrganizationId: string) {
     setOrganizationId(selectedOrganizationId || null);
-    if (selectedOrganizationId) {
+    if (selectedOrganizationId && requireActorName()) {
       createDraftMutation.mutate(selectedOrganizationId);
     }
   }
@@ -58,6 +76,24 @@ export function PublicCardCreationPage() {
               </div>
               <span>После выбора откроется новая карточка для заполнения.</span>
             </header>
+
+            <label className="field-editor-control">
+              <span>ФИО</span>
+              <input
+                aria-label="ФИО"
+                autoComplete="name"
+                value={actorName}
+                onChange={(event) => {
+                  setActorName(event.currentTarget.value);
+                  setActorHint(null);
+                }}
+              />
+            </label>
+            {actorHint && (
+              <p className="inline-alert" role="status" aria-label="ФИО">
+                {actorHint}
+              </p>
+            )}
 
             <label className="field-editor-control public-card-creation-organization">
               <span>{uiText.cardOrganization}</span>

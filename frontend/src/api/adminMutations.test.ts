@@ -19,6 +19,7 @@ import {
   createAccessGrant,
   createCard,
   createCardBlockInstance,
+  createCardDraftFromCreationLink,
   createFormBlock,
   createFormField,
   createOrganization,
@@ -33,6 +34,7 @@ import {
   getCardChangeNotificationSubscription,
   getPublicLinkReview,
   getPublicLinkStatus,
+  firstSaveCardFromCreationLink,
   requestPublicLinkChanges,
   startPublicLinkReviewCycle,
   submitPublicLink,
@@ -50,6 +52,8 @@ import {
   updateReportTemplate,
   updateUser,
   updatePublicLinkChangeNotificationSubscription,
+  updatePublicLinkFieldValue,
+  uploadPublicLinkAttachment,
 } from "./client";
 import type { PublicLinkRead, PublicLinkReviewRead, PublicLinkSafeStatusRead } from "./types";
 
@@ -589,6 +593,7 @@ test("admin mutation API client uses backend routes with bearer auth and JSON bo
 
 test("public link review clients keep public tokens in JSON and admin auth in headers", async () => {
   const rawToken = "raw-public-review-token";
+  const actorName = "Иванов Иван Иванович";
   const safeStatus = {
     status: "submitted",
     can_edit: false,
@@ -605,7 +610,7 @@ test("public link review clients keep public tokens in JSON and admin auth in he
   }[] = [
     {
       name: "submit public link",
-      action: () => submitPublicLink(rawToken),
+      action: () => submitPublicLink(rawToken, actorName),
       path: "/api/v1/public-links/submit",
     },
     {
@@ -624,7 +629,11 @@ test("public link review clients keep public tokens in JSON and admin auth in he
     expect(String(input), item.name).not.toContain(rawToken);
     expect(init?.method, item.name).toBe("POST");
     expect((init?.headers as Record<string, string>).Authorization, item.name).toBeUndefined();
-    expect(JSON.parse(String(init?.body)), item.name).toEqual({ raw_token: rawToken });
+    expect(JSON.parse(String(init?.body)), item.name).toEqual(
+      item.name === "submit public link"
+        ? { raw_token: rawToken, actor_name: actorName }
+        : { raw_token: rawToken },
+    );
   }
 
   const review = {
@@ -716,4 +725,68 @@ test("public link review clients keep public tokens in JSON and admin auth in he
       expect(init?.body, item.name).toBeUndefined();
     }
   }
+});
+
+test("public write clients serialize the public editor FIO", async () => {
+  const rawToken = "raw-public-token";
+  const actorName = "Иванов  Иван Иванович";
+  const jsonCases = [
+    {
+      action: () => createCardDraftFromCreationLink(rawToken, actorName, "organization-id"),
+      expected: {
+        raw_token: rawToken,
+        actor_name: actorName,
+        organization_id: "organization-id",
+      },
+    },
+    {
+      action: () =>
+        firstSaveCardFromCreationLink(rawToken, actorName, {
+          organization_id: "organization-id",
+          field_id: "field-id",
+          value: "Значение",
+          block_instance_id: null,
+        }),
+      expected: {
+        raw_token: rawToken,
+        actor_name: actorName,
+        organization_id: "organization-id",
+        field_id: "field-id",
+        value: "Значение",
+        block_instance_id: null,
+      },
+    },
+    {
+      action: () => updatePublicLinkFieldValue(rawToken, actorName, "field-id", "Значение", null),
+      expected: {
+        raw_token: rawToken,
+        actor_name: actorName,
+        field_id: "field-id",
+        value: "Значение",
+        block_instance_id: null,
+      },
+    },
+    {
+      action: () => submitPublicLink(rawToken, actorName),
+      expected: { raw_token: rawToken, actor_name: actorName },
+    },
+  ];
+
+  for (const item of jsonCases) {
+    vi.mocked(fetch).mockClear();
+    await item.action();
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual(item.expected);
+  }
+
+  vi.mocked(fetch).mockClear();
+  await uploadPublicLinkAttachment(rawToken, actorName, {
+    file: new File(["contents"], "evidence.txt", { type: "text/plain" }),
+    title: "Подтверждение",
+  });
+  const [, uploadInit] = vi.mocked(fetch).mock.calls[0];
+  const formData = uploadInit?.body as FormData;
+  expect(formData.get("raw_token")).toBe(rawToken);
+  expect(formData.get("actor_name")).toBe(actorName);
+  expect(formData.get("title")).toBe("Подтверждение");
 });

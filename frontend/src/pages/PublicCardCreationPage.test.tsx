@@ -23,6 +23,9 @@ describe("PublicCardCreationPage", () => {
   test("creates a draft and continues with a child link immediately after organization selection", async () => {
     renderCreationPage();
 
+    fireEvent.change(await screen.findByRole("textbox", { name: "ФИО" }), {
+      target: { value: "Иванов Иван Иванович" },
+    });
     const organizationSelect = await screen.findByRole("combobox");
     expect(fetchCalls.map((call) => call.path)).toEqual([
       "/api/v1/public/card-creation-links/preview",
@@ -38,11 +41,37 @@ describe("PublicCardCreationPage", () => {
     expect(await screen.findByText("Открыта дочерняя ссылка")).toBeInTheDocument();
     expect(fetchCalls.at(-1)?.body).toMatchObject({
       raw_token: rawToken,
+      actor_name: "Иванов Иван Иванович",
       organization_id: "organization-1",
     });
     expect(fetchCalls.map((call) => call.path)).not.toContain(
       "/api/v1/public/card-creation-links/first-save",
     );
+  });
+
+  test("blocks public card creation until FIO is provided", async () => {
+    renderCreationPage();
+
+    fireEvent.change(await screen.findByRole("combobox"), {
+      target: { value: "organization-1" },
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Сначала укажите ФИО");
+    expect(fetchCalls.map((call) => call.path)).not.toContain(
+      "/api/v1/public/card-creation-links/create-draft",
+    );
+  });
+
+  test("keeps the public editor FIO only in page state after remount", async () => {
+    const page = renderCreationPage();
+    const actorName = await screen.findByRole("textbox", { name: "ФИО" });
+    fireEvent.change(actorName, { target: { value: "Иванов Иван Иванович" } });
+    expect(actorName).toHaveValue("Иванов Иван Иванович");
+
+    page.unmount();
+    renderCreationPage();
+
+    expect(await screen.findByRole("textbox", { name: "ФИО" })).toHaveValue("");
   });
 });
 

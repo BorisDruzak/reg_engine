@@ -39,6 +39,10 @@ import {
 export function PublicLinkEditPage() {
   const { rawToken = "" } = useParams<{ rawToken: string }>();
   const queryClient = useQueryClient();
+  const [actorName, setActorName] = useState("");
+  const [actorHint, setActorHint] = useState<string | null>(null);
+  const actorHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const normalizedActorName = actorName.trim().replace(/\s+/g, " ");
   const [lifecycleRefreshing, setLifecycleRefreshing] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<{
     message: string;
@@ -66,6 +70,21 @@ export function PublicLinkEditPage() {
     queryFn: () => readPublicLinkPreview(rawToken),
     enabled: Boolean(rawToken && editableStatus),
   });
+
+  useEffect(
+    () => () => {
+      if (actorHintTimeoutRef.current) clearTimeout(actorHintTimeoutRef.current);
+    },
+    [],
+  );
+
+  function requireActorName() {
+    if (normalizedActorName) return true;
+    setActorHint("Сначала укажите ФИО");
+    if (actorHintTimeoutRef.current) clearTimeout(actorHintTimeoutRef.current);
+    actorHintTimeoutRef.current = setTimeout(() => setActorHint(null), 3000);
+    return false;
+  }
 
   useEffect(() => {
     if (!rawToken || !statusQuery.data || editableStatus) return;
@@ -155,10 +174,30 @@ export function PublicLinkEditPage() {
               </div>
             </header>
 
+            <label className="field-editor-control">
+              <span>ФИО</span>
+              <input
+                aria-label="ФИО"
+                autoComplete="name"
+                value={actorName}
+                onChange={(event) => {
+                  setActorName(event.currentTarget.value);
+                  setActorHint(null);
+                }}
+              />
+            </label>
+            {actorHint && (
+              <p className="inline-alert" role="status" aria-label="ФИО">
+                {actorHint}
+              </p>
+            )}
+
             <PublicEditableCard
+              actorName={normalizedActorName}
               onLifecycleDenial={handleLifecycleDenial}
               onPreviewRefresh={() => void previewQuery.refetch()}
               preview={previewQuery.data}
+              requireActorName={requireActorName}
               rawToken={rawToken}
               status={statusQuery.data}
             />
@@ -175,23 +214,27 @@ export function PublicLinkEditPage() {
 type PublicFieldSaveState = "idle" | "saving" | "saved" | "error";
 
 function PublicEditableCard({
+  actorName,
   preview,
   rawToken,
   status,
   onLifecycleDenial,
   onPreviewRefresh,
+  requireActorName,
 }: {
+  actorName: string;
   preview: PublicLinkPreviewRead;
   rawToken: string;
   status: PublicLinkSafeStatusRead;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onPreviewRefresh: () => void;
+  requireActorName: () => boolean;
 }) {
   const [confirmedFieldValues, setConfirmedFieldValues] = useState(() =>
     publicConfirmedFieldValues(preview),
   );
   const saveFieldValue: PublicFieldValueSaver = ({ fieldId, value, blockInstanceId }) =>
-    updatePublicLinkFieldValue(rawToken, fieldId, value, blockInstanceId);
+    updatePublicLinkFieldValue(rawToken, actorName, fieldId, value, blockInstanceId);
   const baseBlock = (
     <CardBaseBlockSurface
       id="public-card-base-block"
@@ -238,6 +281,7 @@ function PublicEditableCard({
           }}
           preview={preview}
           onFieldSaveStateChange={() => undefined}
+          requireActorName={requireActorName}
           saveFieldValue={saveFieldValue}
           beforeContent={baseBlock}
           navigatorAction={navigatorAction}
@@ -307,6 +351,7 @@ export function PublicCardLayout({
   saveFieldValue,
   beforeContent,
   navigatorAction,
+  requireActorName,
 }: {
   preview: PublicCardPreview;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
@@ -316,6 +361,7 @@ export function PublicCardLayout({
   saveFieldValue: PublicFieldValueSaver;
   beforeContent?: ReactNode;
   navigatorAction?: ReactNode;
+  requireActorName: () => boolean;
 }) {
   const layout = useMemo(() => publicCardTemplateLayout(preview), [preview]);
   const surfaces = useMemo(() => publicCardSurfaces(preview, layout), [layout, preview]);
@@ -382,6 +428,7 @@ export function PublicCardLayout({
             onFieldSaveStateChange={onFieldSaveStateChange}
             onFieldValueConfirmed={onFieldValueConfirmed}
             saveFieldValue={saveFieldValue}
+            requireActorName={requireActorName}
             surface={surface}
           />
         ))}
@@ -442,6 +489,7 @@ function PublicCardLayoutSurface({
   onFieldValueConfirmed,
   saveFieldValue,
   completions,
+  requireActorName,
 }: {
   surface: PublicCardSurface;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
@@ -449,6 +497,7 @@ function PublicCardLayoutSurface({
   onFieldValueConfirmed: (fieldKey: string, value: unknown) => void;
   saveFieldValue: PublicFieldValueSaver;
   completions: CompletionResult | undefined;
+  requireActorName: () => boolean;
 }) {
   return (
     <section className="public-card-layout-surface">
@@ -515,6 +564,7 @@ function PublicCardLayoutSurface({
               onLifecycleDenial={onLifecycleDenial}
               onSaveConfirmed={onFieldValueConfirmed}
               onSaveStateChange={onFieldSaveStateChange}
+              requireActorName={requireActorName}
               saveFieldValue={saveFieldValue}
             />
           );
@@ -695,6 +745,7 @@ function PublicFieldEditor({
   onSaveStateChange,
   onSaveConfirmed,
   saveFieldValue,
+  requireActorName,
 }: {
   fieldKey: string;
   blockInstanceId: string | null;
@@ -703,6 +754,7 @@ function PublicFieldEditor({
   onSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
   onSaveConfirmed: (fieldKey: string, value: unknown) => void;
   saveFieldValue: PublicFieldValueSaver;
+  requireActorName: () => boolean;
 }) {
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
   const [localError, setLocalError] = useState<string | null>(null);
@@ -789,6 +841,16 @@ function PublicFieldEditor({
   return (
     <div
       className="public-inline-field-control"
+      onPointerDownCapture={(event) => {
+        if (requireActorName()) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onKeyDownCapture={(event) => {
+        if (requireActorName() || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
         if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
