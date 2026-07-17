@@ -27,7 +27,12 @@ not a hardcoded employee registry.
   `SingleStageCardCreation.test.tsx`: it expects the former single `Стаж
   работы` textbox while the current work-experience editor renders three
   segmented inputs. This validation change does not touch that component.
-  Push/deploy and browser proof remain pending.
+  The checkpoint is pushed and deployed at `594e97ad`; the server checkout,
+  API health check, PostgreSQL/storage checks, and same-origin frontend smoke
+  check pass. The served frontend assets are `index-B8WIQ9et.js` and
+  `index-C-MicRPQ.css`. The open browser tab had loaded its pre-deployment
+  bundle, so no user card or schema field was changed while checking it; a
+  normal page refresh loads the published controls.
 
 - 2026-07-16 saved-card choice-popup overlay is released in `aab7dd59`.
   `SearchableChoicePicker` now marks its existing open state, and its search
