@@ -286,9 +286,7 @@ class CardPublicAccessService:
             public_visible = block.public_visible and field_model.public_visible and default_visible
             return (
                 public_visible,
-                public_visible
-                and field_model.public_editable
-                and default_editable,
+                public_visible and field_model.public_editable and default_editable,
             )
         return setting.public_visible, setting.public_editable
 
