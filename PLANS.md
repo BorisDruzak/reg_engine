@@ -17,8 +17,11 @@ not a hardcoded employee registry.
   overlay layer. Local verification passes: backend `426 passed, 270 skipped,
   1 warning`; frontend `419 passed, 32 skipped`; typecheck and production build
   pass; ESLint has no errors and retains the existing `FilledCardLayout.tsx`
-  hook-dependency warning. Push, frontend deployment, and browser proof are
-  the remaining release steps.
+  hook-dependency warning. The change is pushed and deployed with frontend
+  assets `index-CteoFY_Y.js` and `index-xBukw-H4.css`; same-origin smoke and
+  API health checks pass. Browser proof confirms outside-click dismissal, a
+  notification panel at layer `240` with a scrollable row list, and both
+  public-access pickers open at layer `40` with absolute popups.
 
 - 2026-07-17 card creator and public audit actor integration is released in
   `6b37b393`. Migration `0033_card_creator_actor_name` adds nullable
