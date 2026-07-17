@@ -1490,7 +1490,7 @@ class TabularCardExchangeService:
                         list_id=workbook_field.field.options_source_id,
                         raw_label=value.raw_label,
                     )
-                except (ReferenceListError, PermissionDeniedError) as exc:
+                except ReferenceListError as exc:
                     row["errors"].append(f"{workbook_field.header}: {exc}")
                     continue
                 if resolution.status == "existing":

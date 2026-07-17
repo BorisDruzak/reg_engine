@@ -7,6 +7,41 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-07-17 XLSX creation-only import Task 5 integration checkpoint is local
+  only; no migration, push, deployment, or browser proof was performed. The
+  v2 workbook creates new schema-driven cards only. `strict` accepts existing
+  reference-list values and never plans reference items; `enrich_global_references`
+  is limited to active global flat reference lists and atomically creates only
+  the deduplicated previewed values. `multi_select`, repeated blocks,
+  non-global or organization-aware reference resolution, update/upsert, and
+  binary import remain excluded. PostgreSQL API regressions now cover strict
+  creation from an existing value, enrichment preview/commit with normalized
+  deduplication, a missing reference-edit permission returning the generic
+  Russian 403, and an invalid enrichment commit leaving no card or reference
+  item behind. The integration correction preserves the service/API boundary:
+  a `PermissionDeniedError` during reference planning is no longer converted
+  into a row-validation error and reaches the standard safe 403 mapper.
+
+  Fresh local evidence: `backend\\.venv\\Scripts\\python.exe -m pytest
+  backend/tests/test_tabular_xlsx_exchange.py -k "enrich or strict or title or
+  metadata" -v` passed `11`; `pnpm -C frontend test:run
+  src/features/registry/ImportExportPanel.test.tsx` passed `9`; and the
+  backend portion of `scripts/test.ps1` passed `456`, with `275` skips and the
+  existing Starlette/httpx deprecation warning. The new real API tests safely
+  skipped (`7 skipped`) because `TEST_DATABASE_URL` is unset, so PostgreSQL
+  strict/enrichment/403/atomic proof remains required against a disposable
+  database ending in `_test`. `scripts/lint.ps1` passed with no errors and the
+  existing `FilledCardLayout.tsx` Hook-dependency warning. `git diff --check`
+  passed. The aggregate frontend test runner did not return a final summary in
+  this local host, so it is not claimed as passed. `scripts/format.ps1 -Check`
+  still reports pre-existing frontend Prettier drift in `src/api/client.test.ts`,
+  `src/features/audit/AuditPanel.test.tsx`, `src/features/audit/AuditPanel.tsx`,
+  `src/features/cards/CardsWorkspace.tsx`, and
+  `src/features/cards/FieldEditorControl.test.tsx`; backend Ruff format is
+  clean. `scripts/typecheck.ps1` is blocked by nine existing `mypy` errors in
+  `app/services/import_export.py` (lines 799, 1193, and 1490-1508), outside
+  this Task 5 integration scope.
+
 - 2026-07-17 notification and searchable-choice overlays are corrected
   locally. The notification bell now dismisses its panel on an outside pointer
   interaction or `Escape`, while interactions inside remain available. The
