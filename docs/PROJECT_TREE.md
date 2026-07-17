@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-15 21:46:59 +05:00
+- Generated: 2026-07-17 15:24:25 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -24,6 +24,7 @@
 - `.env.example`
 - `.github/workflows/ci.yml`
 - `.gitignore`
+- `.playwright-cli/page-2026-07-16T20-11-16-831Z.yml`
 - `.pre-commit-config.yaml`
 - `.superpowers/sdd/2026-07-14-embedded-actions-report.md`
 - `.superpowers/sdd/2026-07-14-inline-card-template-name-edit-report.md`
@@ -43,6 +44,7 @@
 - `backend/app/api/v1/endpoints/attachments.py`
 - `backend/app/api/v1/endpoints/audit.py`
 - `backend/app/api/v1/endpoints/auth.py`
+- `backend/app/api/v1/endpoints/card_change_notifications.py`
 - `backend/app/api/v1/endpoints/card_creation_links.py`
 - `backend/app/api/v1/endpoints/card_template_layouts.py`
 - `backend/app/api/v1/endpoints/cards.py`
@@ -56,6 +58,7 @@
 - `backend/app/api/v1/endpoints/reports.py`
 - `backend/app/api/v1/router.py`
 - `backend/app/cli/__init__.py`
+- `backend/app/cli/audit_retention.py`
 - `backend/app/cli/bootstrap.py`
 - `backend/app/cli/phase6f.py`
 - `backend/app/core/__init__.py`
@@ -64,6 +67,7 @@
 - `backend/app/core/logging.py`
 - `backend/app/domain/__init__.py`
 - `backend/app/domain/constants.py`
+- `backend/app/domain/text_validation.py`
 - `backend/app/domain/work_experience.py`
 - `backend/app/frontend.py`
 - `backend/app/main.py`
@@ -76,6 +80,7 @@
 - `backend/app/models/audit.py`
 - `backend/app/models/base.py`
 - `backend/app/models/card.py`
+- `backend/app/models/card_change_notification.py`
 - `backend/app/models/card_creation_link.py`
 - `backend/app/models/document.py`
 - `backend/app/models/identity.py`
@@ -91,6 +96,7 @@
 - `backend/app/schemas/attachments.py`
 - `backend/app/schemas/audit.py`
 - `backend/app/schemas/auth.py`
+- `backend/app/schemas/card_change_notifications.py`
 - `backend/app/schemas/card_creation_links.py`
 - `backend/app/schemas/card_template_layouts.py`
 - `backend/app/schemas/cards.py`
@@ -106,6 +112,7 @@
 - `backend/app/services/audit.py`
 - `backend/app/services/auth.py`
 - `backend/app/services/bootstrap.py`
+- `backend/app/services/card_change_notifications.py`
 - `backend/app/services/card_creation_links.py`
 - `backend/app/services/card_print.py`
 - `backend/app/services/card_public_access.py`
@@ -154,10 +161,14 @@
 - `backend/migrations/versions/0028_org_unit_hierarchy.py`
 - `backend/migrations/versions/0029_public_reference_edit_links.py`
 - `backend/migrations/versions/0030_work_experience_field.py`
+- `backend/migrations/versions/0031_card_audit_history.py`
+- `backend/migrations/versions/0032_card_change_notifications.py`
+- `backend/migrations/versions/0033_card_creator_public_actor_name.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
 - `backend/tests/test_access_management_phase_1j.py`
+- `backend/tests/test_api_card_change_notifications.py`
 - `backend/tests/test_api_phase_1f.py`
 - `backend/tests/test_api_phase_1g.py`
 - `backend/tests/test_api_phase_2b_attachments.py`
@@ -166,10 +177,14 @@
 - `backend/tests/test_api_phase_3_import_export.py`
 - `backend/tests/test_api_phase_4_reports.py`
 - `backend/tests/test_attachment_services.py`
+- `backend/tests/test_audit_retention.py`
+- `backend/tests/test_audit_retention_cli.py`
+- `backend/tests/test_audit_retention_timer_script.py`
 - `backend/tests/test_audit_schema.py`
 - `backend/tests/test_auth_phase_1i.py`
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
+- `backend/tests/test_card_change_notification_services.py`
 - `backend/tests/test_card_creation_links.py`
 - `backend/tests/test_card_print_layout_services.py`
 - `backend/tests/test_card_public_access.py`
@@ -196,6 +211,7 @@
 - `backend/tests/test_required_field_payloads.py`
 - `backend/tests/test_schema_constraints.py`
 - `backend/tests/test_tabular_xlsx_exchange.py`
+- `backend/tests/test_text_validation.py`
 - `backend/tests/test_three_role_access_migration.py`
 - `backend/tests/test_user_access_login.py`
 - `backend/tests/test_work_experience.py`
@@ -268,8 +284,21 @@
 - `docs/superpowers/plans/2026-07-14-unified-card-presentation.md`
 - `docs/superpowers/plans/2026-07-15-card-draft-guidance.md`
 - `docs/superpowers/plans/2026-07-15-explicit-card-draft-workflow.md`
+- `docs/superpowers/plans/2026-07-15-work-experience-date-mask.md`
 - `docs/superpowers/plans/2026-07-15-work-experience-field.md`
+- `docs/superpowers/plans/2026-07-15-work-experience-segmented-input.md`
+- `docs/superpowers/plans/2026-07-15-work-experience-single-control.md`
 - `docs/superpowers/plans/2026-07-15-work-experience-single-line-editor.md`
+- `docs/superpowers/plans/2026-07-16-card-audit-general-history.md`
+- `docs/superpowers/plans/2026-07-16-card-audit-history.md`
+- `docs/superpowers/plans/2026-07-16-card-change-notifications.md`
+- `docs/superpowers/plans/2026-07-16-card-choice-popup-overlay.md`
+- `docs/superpowers/plans/2026-07-16-card-field-editor-state-indicators.md`
+- `docs/superpowers/plans/2026-07-16-direct-card-field-switch.md`
+- `docs/superpowers/plans/2026-07-16-notification-quiet-refresh.md`
+- `docs/superpowers/plans/2026-07-16-text-field-validation.md`
+- `docs/superpowers/plans/2026-07-17-card-creator-public-identity.md`
+- `docs/superpowers/plans/2026-07-17-multiple-text-validation-conditions.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -308,8 +337,21 @@
 - `docs/superpowers/specs/2026-07-14-unified-card-presentation-design.md`
 - `docs/superpowers/specs/2026-07-15-card-draft-guidance-design.md`
 - `docs/superpowers/specs/2026-07-15-explicit-card-draft-design.md`
+- `docs/superpowers/specs/2026-07-15-work-experience-date-mask-design.md`
 - `docs/superpowers/specs/2026-07-15-work-experience-field-design.md`
+- `docs/superpowers/specs/2026-07-15-work-experience-segmented-input-design.md`
+- `docs/superpowers/specs/2026-07-15-work-experience-single-control-design.md`
 - `docs/superpowers/specs/2026-07-15-work-experience-single-line-editor-design.md`
+- `docs/superpowers/specs/2026-07-16-card-audit-general-history-design.md`
+- `docs/superpowers/specs/2026-07-16-card-audit-history-design.md`
+- `docs/superpowers/specs/2026-07-16-card-change-notifications-design.md`
+- `docs/superpowers/specs/2026-07-16-card-choice-popup-overlay-design.md`
+- `docs/superpowers/specs/2026-07-16-card-field-editor-state-indicators-design.md`
+- `docs/superpowers/specs/2026-07-16-direct-card-field-switch-design.md`
+- `docs/superpowers/specs/2026-07-16-notification-quiet-refresh-design.md`
+- `docs/superpowers/specs/2026-07-16-text-field-validation-design.md`
+- `docs/superpowers/specs/2026-07-17-card-creator-public-identity-design.md`
+- `docs/superpowers/specs/2026-07-17-multiple-text-validation-conditions-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -343,6 +385,8 @@
 - `frontend/src/components/common/dataUtils.ts`
 - `frontend/src/components/layout/.gitkeep`
 - `frontend/src/features/access/AccessGrantsTable.tsx`
+- `frontend/src/features/audit/AuditPanel.test.tsx`
+- `frontend/src/features/audit/AuditPanel.tsx`
 - `frontend/src/features/audit/AuditTable.tsx`
 - `frontend/src/features/auth/LoginScreen.test.tsx`
 - `frontend/src/features/auth/LoginScreen.tsx`
@@ -358,6 +402,7 @@
 - `frontend/src/features/cardLayout/CardLayoutRenderer.tsx`
 - `frontend/src/features/cardLayout/CardWebLayoutCanvas.tsx`
 - `frontend/src/features/cardLayout/InlineBlockEditor.tsx`
+- `frontend/src/features/cardLayout/InlineFieldEditor.test.tsx`
 - `frontend/src/features/cardLayout/InlineFieldEditor.tsx`
 - `frontend/src/features/cardLayout/InlineReferenceEditor.test.tsx`
 - `frontend/src/features/cardLayout/InlineReferenceEditor.tsx`
@@ -372,6 +417,8 @@
 - `frontend/src/features/cards/CardBaseBlockSurface.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.test.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.tsx`
+- `frontend/src/features/cards/CardChangeNotificationToggle.test.tsx`
+- `frontend/src/features/cards/CardChangeNotificationToggle.tsx`
 - `frontend/src/features/cards/cardCompletion.test.ts`
 - `frontend/src/features/cards/cardCompletion.ts`
 - `frontend/src/features/cards/CardCreationLinksPanel.test.tsx`
@@ -402,11 +449,16 @@
 - `frontend/src/features/cards/SearchableChoicePicker.tsx`
 - `frontend/src/features/cards/SingleStageCardCreation.test.tsx`
 - `frontend/src/features/cards/SingleStageCardCreation.tsx`
+- `frontend/src/features/cards/textValidation.test.ts`
+- `frontend/src/features/cards/textValidation.ts`
+- `frontend/src/features/cards/TextValidationPopover.tsx`
 - `frontend/src/features/cards/useBlockEditor.ts`
 - `frontend/src/features/cards/workExperience.test.ts`
 - `frontend/src/features/cards/workExperience.ts`
 - `frontend/src/features/cards/WorkExperienceEditor.test.tsx`
 - `frontend/src/features/cards/WorkExperienceEditor.tsx`
+- `frontend/src/features/notifications/CardChangeNotificationBell.test.tsx`
+- `frontend/src/features/notifications/CardChangeNotificationBell.tsx`
 - `frontend/src/features/organizations/.gitkeep`
 - `frontend/src/features/organizations/OrganizationsTable.test.tsx`
 - `frontend/src/features/organizations/OrganizationsTable.tsx`
@@ -463,6 +515,7 @@
 - `pnpm-lock.yaml`
 - `pnpm-workspace.yaml`
 - `README.md`
+- `scripts/audit-retention.ps1`
 - `scripts/bootstrap.ps1`
 - `scripts/check.ps1`
 - `scripts/deploy.ps1`

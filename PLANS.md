@@ -7,7 +7,29 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-07-17 public card creator and public audit actor integration is ready
+- 2026-07-17 card creator and public audit actor integration is released in
+  `6b37b393`. Migration `0033_card_creator_actor_name` adds nullable
+  `cards.public_creator_name` and `audit_events.actor_display_name`. Every
+  public mutation requires a normalized ФИО: public creation snapshots it as
+  the immutable card creator, while later public edits, review submission, and
+  attachment actions snapshot the claimed, unauthenticated executor in the
+  individual audit event. The base block and card list show the creator, while
+  the audit UI shows the executor separately from the link creator. Both
+  public surfaces block mutation until ФИО is provided, without storing it in
+  browser storage. The repository-venv disposable-database gate passed,
+  including public-link lifecycle, audit, attachment, and legacy hidden-field
+  privacy cases; the focused frontend Vitest suite passed `63/63`, TypeScript
+  passed, and `scripts/check.ps1 -SkipRemote` passed with `426 passed,
+  270 skipped, 1 warning` (the existing Starlette/httpx deprecation warning).
+  A fresh production backup and schema preflight completed before Alembic
+  advanced production from `0032_card_change_notifications` to
+  `0033_card_creator_actor_name`; both new columns and the head revision were
+  confirmed afterward. The API health check and same-origin frontend smoke
+  check pass after frontend deployment. Live browser proof refreshed the
+  published bundle and confirmed the creator in both the base block and card
+  list.
+
+- Superseded pre-release note: public card creator and public audit actor integration is ready
   for disposable-database migration verification, not release proof. Migration
   `0033_card_creator_public_actor_name` adds nullable
   `cards.public_creator_name` and `audit_events.actor_display_name`. Every
