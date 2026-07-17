@@ -2427,6 +2427,12 @@ tr:last-child td {
   border-color: #83c7b6;
 }
 
+.card-base-block:has(.searchable-choice-picker.is-open) {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+
 .card-base-block-header {
   display: flex;
   align-items: flex-start;

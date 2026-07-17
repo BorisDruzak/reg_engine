@@ -258,6 +258,9 @@ describe("FieldEditorControl hints", () => {
     expect(globalStyles).toContain(
       ".filled-card-layout .card-web-layout-canvas:has(.searchable-choice-picker.is-open)",
     );
+    expect(globalStyles).toContain(
+      ".card-base-block:has(.searchable-choice-picker.is-open) {\n  position: relative;\n  z-index: 40;\n  overflow: visible;",
+    );
   });
 
   test("filters server-supplied single choices and never exposes a free-text value", async () => {
