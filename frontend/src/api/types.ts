@@ -574,6 +574,12 @@ export type TabularCardImportPreviewSummaryRead = {
   valid_rows: number;
   invalid_rows: number;
   would_create_cards: number;
+  would_create_reference_items: number;
+};
+
+export type TabularCardImportReferenceItemRead = {
+  field_label: string;
+  label: string;
 };
 
 export type TabularCardImportPreviewRowRead = {
@@ -588,6 +594,7 @@ export type TabularCardImportPreviewRead = {
   format_version: string;
   registry_id: string;
   summary: TabularCardImportPreviewSummaryRead;
+  new_reference_items: TabularCardImportReferenceItemRead[];
   rows: TabularCardImportPreviewRowRead[];
 };
 

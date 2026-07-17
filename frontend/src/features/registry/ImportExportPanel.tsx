@@ -36,6 +36,10 @@ export function ImportExportPanel({
   const [fixedOrganizationId, setFixedOrganizationId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [activeOperation, setActiveOperation] = useState<"export" | "import">("export");
+  const [importMode, setImportMode] = useState<"strict" | "enrich_global_references">("strict");
+  const [workExperienceAsOfDate, setWorkExperienceAsOfDate] = useState(() =>
+    localIsoDate(new Date()),
+  );
   const initializedTemplateKey = useRef<string | null>(null);
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
@@ -99,6 +103,8 @@ export function ImportExportPanel({
       ? {
           ...exportPayload,
           fixed_organization_id: effectiveFixedOrganizationId,
+          import_mode: importMode,
+          work_experience_as_of_date: workExperienceAsOfDate || undefined,
         }
       : null;
 
@@ -330,6 +336,37 @@ export function ImportExportPanel({
             <section className="xlsx-operation" aria-labelledby="tabular-xlsx-import">
               <h4 id="tabular-xlsx-import">{uiText.tabularXlsxImportTitle}</h4>
               <p className="muted-text">{uiText.tabularXlsxImportDescription}</p>
+              <label className="field-editor-control">
+                <span>{uiText.tabularXlsxImportMode}</span>
+                <select
+                  aria-label={uiText.tabularXlsxImportMode}
+                  value={importMode}
+                  onChange={(event) => {
+                    setImportMode(event.currentTarget.value as typeof importMode);
+                    resetConfigurationFeedback();
+                  }}
+                >
+                  <option value="strict">{uiText.tabularXlsxImportModeStrict}</option>
+                  <option value="enrich_global_references">
+                    {uiText.tabularXlsxImportModeEnrich}
+                  </option>
+                </select>
+                {importMode === "enrich_global_references" && (
+                  <small className="muted-text">{uiText.tabularXlsxImportModeEnrichHelp}</small>
+                )}
+              </label>
+              <label className="field-editor-control">
+                <span>{uiText.tabularXlsxExperienceAsOfDate}</span>
+                <input
+                  aria-label={uiText.tabularXlsxExperienceAsOfDate}
+                  type="date"
+                  value={workExperienceAsOfDate}
+                  onChange={(event) => {
+                    setWorkExperienceAsOfDate(event.currentTarget.value);
+                    resetConfigurationFeedback();
+                  }}
+                />
+              </label>
               {needsImportOrganizationChoice && (
                 <label className="field-editor-control">
                   <span>{uiText.tabularXlsxImportOrganization}</span>
@@ -408,6 +445,18 @@ function ImportPreview({ preview }: { preview: TabularCardImportPreviewRead }) {
   return (
     <div className="import-export-result">
       <strong>{formatImportSummary(preview)}</strong>
+      {preview.summary.would_create_reference_items > 0 && (
+        <div className="import-export-reference-plan">
+          <strong>{formatReferenceItemSummary(preview)}</strong>
+          <ul className="file-action-list">
+            {preview.new_reference_items.map((item) => (
+              <li key={`${item.field_label}:${item.label}`}>
+                {item.field_label}: {item.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ul className="file-action-list">
         {preview.rows.map((row) => (
           <li key={row.row_number}>
@@ -463,6 +512,18 @@ function formatCommitSummary(result: TabularCardImportCommitRead) {
   return uiText.tabularXlsxCommitSummary
     .replace("{created}", String(result.summary.created_cards))
     .replace("{values}", String(result.summary.field_values_written));
+}
+
+function formatReferenceItemSummary(preview: TabularCardImportPreviewRead) {
+  return uiText.tabularXlsxReferenceItemsPlanned.replace(
+    "{count}",
+    String(preview.summary.would_create_reference_items),
+  );
+}
+
+function localIsoDate(value: Date) {
+  const offsetMilliseconds = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offsetMilliseconds).toISOString().slice(0, 10);
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string) {

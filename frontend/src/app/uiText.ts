@@ -406,6 +406,13 @@ export const uiText = {
   tabularXlsxImportTitle: "Импорт карточек",
   tabularXlsxImportDescription:
     "Скачайте шаблон, заполните его и создайте новые карточки после проверки.",
+  tabularXlsxImportMode: "Режим создания карточек",
+  tabularXlsxImportModeStrict: "Строгое создание карточек",
+  tabularXlsxImportModeEnrich: "Создание с пополнением глобальных справочников",
+  tabularXlsxImportModeEnrichHelp:
+    "Свободные значения для допустимых глобальных справочников будут добавлены при импорте.",
+  tabularXlsxExperienceAsOfDate: "Дата актуальности стажа",
+  tabularXlsxReferenceItemsPlanned: "Будет добавлено элементов справочников: {count}",
   downloadCardList: "Скачать список",
   downloadImportTemplate: "Скачать шаблон импорта",
   tabularXlsxDownloaded: "XLSX-файл скачан",
