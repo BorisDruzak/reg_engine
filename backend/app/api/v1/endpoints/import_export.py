@@ -165,14 +165,14 @@ async def _read_xlsx_import_payload(request: Request) -> CardImportPayload:
     form = await request.form()
     uploaded = form.get("file")
     if not isinstance(uploaded, UploadFile):
-        raise HTTPException(status_code=400, detail="XLSX import file is required.")
+        raise HTTPException(status_code=400, detail="Выберите XLSX-файл для импорта.")
     max_bytes = get_settings().max_import_bytes
     content = await uploaded.read(max_bytes + 1)
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"Import file exceeds REG_ENGINE_MAX_IMPORT_BYTES={max_bytes}.",
+            detail="Размер XLSX-файла превышает допустимый лимит.",
         )
     if not content:
-        raise HTTPException(status_code=400, detail="XLSX import file is empty.")
+        raise HTTPException(status_code=400, detail="XLSX-файл не содержит данных.")
     return CardImportPayload(content=content)

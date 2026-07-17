@@ -42,9 +42,10 @@ not a hardcoded employee registry.
   `src/features/audit/AuditPanel.test.tsx`, `src/features/audit/AuditPanel.tsx`,
   `src/features/cards/CardsWorkspace.tsx`, and
   `src/features/cards/FieldEditorControl.test.tsx`; backend Ruff format is
-  clean. `scripts/typecheck.ps1` is blocked by nine existing `mypy` errors in
-  `app/services/import_export.py` (lines 799, 1193, and 1490-1508), outside
-  this Task 5 integration scope.
+  clean. `scripts/typecheck.ps1` passed after the XLSX import annotations were
+  corrected. The remaining local limitations are the unavailable disposable
+  PostgreSQL proof, the existing frontend Hook-dependency warning, and the
+  five pre-existing frontend Prettier-drift files listed above.
 
 - 2026-07-17 notification and searchable-choice overlays are corrected
   locally. The notification bell now dismisses its panel on an outside pointer

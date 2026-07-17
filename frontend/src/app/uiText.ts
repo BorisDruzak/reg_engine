@@ -423,6 +423,9 @@ export const uiText = {
   tabularXlsxCanCommit: "Файл можно импортировать",
   tabularXlsxImported: "Карточки импортированы",
   importXlsxRequired: "Выберите XLSX-файл",
+  tabularXlsxImportFileMissing: "Выберите XLSX-файл для импорта.",
+  tabularXlsxImportFileEmpty: "XLSX-файл не содержит данных.",
+  tabularXlsxImportFileTooLarge: "Размер XLSX-файла превышает допустимый лимит.",
   importXlsxPreviewStale: "XLSX-файл изменился после проверки",
   tabularXlsxPreviewRequired: "Сначала проверьте XLSX-файл",
   tabularXlsxSummary: "Всего строк: {total} / корректных: {valid} / ошибок: {invalid}",
@@ -765,6 +768,11 @@ export function apiErrorMessageLabel(message: string) {
     "Internal service error.": uiText.internalServiceError,
     "Invalid bearer token.": uiText.bearerTokenInvalid,
     "Invalid email or password.": uiText.invalidEmailOrPassword,
+    "XLSX import file is required.": uiText.tabularXlsxImportFileMissing,
+    "XLSX import file is empty.": uiText.tabularXlsxImportFileEmpty,
+    "Выберите XLSX-файл для импорта.": uiText.tabularXlsxImportFileMissing,
+    "XLSX-файл не содержит данных.": uiText.tabularXlsxImportFileEmpty,
+    "Размер XLSX-файла превышает допустимый лимит.": uiText.tabularXlsxImportFileTooLarge,
     "Not Found": uiText.notFound,
     "Organization code already exists.": uiText.organizationCodeAlreadyExists,
     "Карточка уже отправлена на проверку. Редактирование временно недоступно.":
@@ -779,6 +787,9 @@ export function apiErrorMessageLabel(message: string) {
   };
   if (message.startsWith("Unsupported field type:")) {
     return "Неподдерживаемый тип поля.";
+  }
+  if (/^Import file exceeds REG_ENGINE_MAX_IMPORT_BYTES=\d+\.$/.test(message)) {
+    return uiText.tabularXlsxImportFileTooLarge;
   }
   if (
     /^(select|card_ref|user_ref|organization_ref|org_unit_ref|registry_ref|file_ref) fields require a UUID string\.$/.test(
@@ -813,8 +824,6 @@ function isSafeTabularXlsxError(message: string) {
       "XLSX-шаблон относится к другому реестру.",
       "Поля XLSX были изменены после скачивания шаблона.",
       "Список организаций XLSX был изменён или устарел.",
-      "XLSX import file is required.",
-      "XLSX import file is empty.",
     ].includes(message) ||
     /^Поле «[^»]+» нельзя использовать в табличном XLSX\.$/.test(message) ||
     /^Превышен лимит строк XLSX: \d+\.$/.test(message)

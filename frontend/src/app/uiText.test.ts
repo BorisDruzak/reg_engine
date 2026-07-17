@@ -34,6 +34,15 @@ describe("uiText", () => {
     expect(apiErrorMessageLabel("Поле «Ссылка» нельзя использовать в табличном XLSX.")).toBe(
       "Поле «Ссылка» нельзя использовать в табличном XLSX.",
     );
+    expect(apiErrorMessageLabel("XLSX import file is required.")).toBe(
+      uiText.tabularXlsxImportFileMissing,
+    );
+    expect(apiErrorMessageLabel("XLSX import file is empty.")).toBe(
+      uiText.tabularXlsxImportFileEmpty,
+    );
+    expect(apiErrorMessageLabel("Import file exceeds REG_ENGINE_MAX_IMPORT_BYTES=1048576.")).toBe(
+      uiText.tabularXlsxImportFileTooLarge,
+    );
   });
 
   test("explains known invalid reference field values in Russian", () => {
