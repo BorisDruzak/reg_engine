@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { uiText } from "@/app/uiText";
 
@@ -32,6 +32,7 @@ export function SearchableChoicePicker({
   const [isOpen, setIsOpen] = useState(() => openOnMount && !disabled);
   const [search, setSearch] = useState("");
   const listboxId = useId();
+  const pickerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const usesListbox = mode === "single";
   const selectedIds = useMemo(
@@ -48,6 +49,18 @@ export function SearchableChoicePicker({
     return options.filter((option) => option.label.toLocaleLowerCase().includes(normalizedSearch));
   }, [options, search]);
   const triggerLabel = selectedOptions.length > 0 ? null : hint || uiText.empty;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const dismissOnOutsidePointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !pickerRef.current?.contains(event.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("pointerdown", dismissOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", dismissOnOutsidePointer);
+  }, [isOpen]);
 
   function closePopup(restoreFocus = false) {
     setIsOpen(false);
@@ -72,6 +85,7 @@ export function SearchableChoicePicker({
 
   return (
     <div
+      ref={pickerRef}
       className={`searchable-choice-picker${isOpen ? " is-open" : ""}`}
       role="group"
       aria-label={label}

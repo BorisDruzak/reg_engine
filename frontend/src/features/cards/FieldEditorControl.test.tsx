@@ -332,6 +332,29 @@ describe("FieldEditorControl hints", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
+  test("closes the choice popup when the user presses anywhere outside it", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <FieldEditorControl
+          fieldType="select"
+          label="Статус"
+          options={options}
+          value=""
+          onChange={vi.fn()}
+        />
+        <button type="button">Другая область карточки</button>
+      </>,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Статус" }));
+    expect(screen.getByRole("listbox", { name: "Статус" })).toBeVisible();
+
+    await user.pointer({ target: screen.getByRole("button", { name: "Другая область карточки" }), keys: "[MouseLeft]" });
+
+    expect(screen.queryByRole("listbox", { name: "Статус" })).not.toBeInTheDocument();
+  });
+
   test("toggles multiple controlled choices by keyboard and renders selected chips", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
