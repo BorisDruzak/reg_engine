@@ -6010,8 +6010,7 @@ Status: pushed, deployed, and server-verified on 2026-07-16.
 
 #### User-profile audit payload and empty card-workspace templates
 
-Status: implementation complete and fully tested locally; release deployment
-pending.
+Status: pushed, deployed, and server-verified on 2026-07-27.
 
 - Updating a user role profile with organization roots previously sent raw UUID
   instances to the PostgreSQL JSON audit column and returned HTTP 500. The
@@ -6032,3 +6031,7 @@ pending.
   32 skipped; frontend typecheck; focused Ruff/Prettier; and git diff --check.
   The existing FilledCardLayout.tsx hook-dependency ESLint warning remains
   unrelated.
+- Release commit ae9f5da4 is pushed to main. The server checkout fast-forwarded,
+  frontend assets index-QQ5VV3qo.js and index-IljxobDC.css were deployed, the
+  API service restarted, and same-origin frontend/API smoke checks plus the
+  final server check passed.
