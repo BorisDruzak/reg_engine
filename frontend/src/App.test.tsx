@@ -3018,6 +3018,22 @@ test("opens the empty card workspace when a stored card was removed", async () =
   });
 });
 
+test("loads card templates before an authorized administrator creates the first card", async () => {
+  cardItems = [];
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.click(await screen.findByRole("tab", { name: "Создать карточку" }));
+
+  expect(await screen.findByLabelText("Шаблон карточки")).toHaveValue(
+    "71717171-7171-4171-8171-717171717171",
+  );
+});
+
 test("restores persisted card filters without opening a hidden card", async () => {
   addSecondCardFixture();
   cardItems = cardItems.map((item) =>

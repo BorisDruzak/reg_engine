@@ -491,6 +491,54 @@ def test_system_admin_creates_subordinate_user_profile_with_multiple_scope_roots
     assert payload["can_manage_access"] is False
 
 
+def test_system_admin_updates_subordinate_user_profile_with_json_safe_audit(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    BootstrapService(db_session).seed_defaults()
+    system_admin = _create_user(db_session, "profile-update-system@example.test", is_superuser=True)
+    subordinate = _create_user(db_session, "profile-update-subordinate@example.test")
+    root = OrganizationService(db_session).create_root_for_actor(
+        actor_user_id=system_admin.id,
+        code="profile-update-root",
+        name="Profile update root",
+    )
+    subordinate_role = db_session.scalars(
+        select(Role).where(Role.code == "subordinate_organization_administrator")
+    ).one()
+    _grant_access(
+        db_session,
+        user_id=subordinate.id,
+        role_id=subordinate_role.id,
+        organization_id=root.id,
+        include_descendants=True,
+        created_by=system_admin.id,
+    )
+    headers = _auth_headers(api_client, "profile-update-system@example.test")
+
+    response = api_client.patch(
+        f"/api/v1/users/{subordinate.id}",
+        json={
+            "display_name": "Updated profile administrator",
+            "role_code": "subordinate_organization_administrator",
+            "organization_ids": [str(root.id)],
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    event = db_session.scalars(
+        select(AuditEvent).where(
+            AuditEvent.object_type == "user_role_profile",
+            AuditEvent.object_id == subordinate.id,
+        )
+    ).one()
+    assert event.new_data_json == {
+        "role_code": "subordinate_organization_administrator",
+        "organization_ids": [str(root.id)],
+    }
+
+
 def test_non_superuser_cannot_enable_access_management_or_assign_global_role(
     api_client: TestClient,
     db_session: Session,

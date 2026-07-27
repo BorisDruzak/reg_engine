@@ -6007,3 +6007,28 @@ Status: pushed, deployed, and server-verified on 2026-07-16.
   passed. Browser verification opened an existing field without changing its
   value and confirmed `is-editor-active`, border color `rgb(15, 102, 208)`,
   the expected blue halo, and zero console errors.
+
+#### User-profile audit payload and empty card-workspace templates
+
+Status: implementation complete and fully tested locally; release deployment
+pending.
+
+- Updating a user role profile with organization roots previously sent raw UUID
+  instances to the PostgreSQL JSON audit column and returned HTTP 500. The
+  audit-service persistence boundary now recursively serializes UUID, date,
+  decimal, dataclass, mapping, and sequence values before creating any audit
+  event.
+- The Cards workspace previously waited for an existing manageable card before
+  loading its schema. An authorized administrator with an empty card list could
+  therefore open Создать карточку without any available templates. It now
+  loads the accessible default-registry schema as soon as the empty list is
+  known, while retaining the existing no-schema-probe path for read-only users
+  with visible cards.
+- TDD evidence: both new tests first failed for the reported conditions and
+  then passed. The focused user-profile HTTP regression requires a disposable
+  TEST_DATABASE_URL and is skipped locally because none is configured; the
+  direct audit-service regression exercises the real serialization boundary.
+- Fresh checks passed: backend 465 passed, 278 skipped; frontend 425 passed,
+  32 skipped; frontend typecheck; focused Ruff/Prettier; and git diff --check.
+  The existing FilledCardLayout.tsx hook-dependency ESLint warning remains
+  unrelated.

@@ -162,13 +162,15 @@ export function HomePage() {
     queryFn: () => readCard(token, activeCardId),
     enabled: Boolean(token && activeCardId && activeSection === "cards"),
   });
+  const canLoadCardWorkflowSchema =
+    activeSection === "cards" &&
+    (Boolean(cardReadQuery.data?.can_manage) ||
+      (cardsQuery.isSuccess && visibleCards.length === 0));
   const registrySchemaQuery = useQuery({
     queryKey: ["registry-schema", token, schemaRegistryId],
     queryFn: () => getRegistrySchema(token, schemaRegistryId),
     enabled: Boolean(
-      token &&
-      schemaRegistryId &&
-      (needsRegistrySchema || (activeSection === "cards" && cardReadQuery.data?.can_manage)),
+      token && schemaRegistryId && (needsRegistrySchema || canLoadCardWorkflowSchema),
     ),
   });
   const usersQuery = useQuery({
@@ -515,10 +517,7 @@ export function HomePage() {
             organizationsQuery.error,
             activeSection === "organizations" ? organizationTreeQuery.error : null,
             registriesQuery.error,
-            activeSection === "registries" ||
-            (activeSection === "cards" && cardReadQuery.data?.can_manage)
-              ? registrySchemaQuery.error
-              : null,
+            needsRegistrySchema || canLoadCardWorkflowSchema ? registrySchemaQuery.error : null,
             activeSection === "cards" ? cardsQuery.error : null,
             activeSection === "cards" ? cardReadQuery.error : null,
             activeSection === "users" ? usersQuery.error : null,

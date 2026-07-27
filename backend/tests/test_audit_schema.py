@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.models import AuditEvent
 from app.schemas.audit import AuditEventRead
+from app.services.audit import AuditService
 
 
 def test_audit_event_read_serializes_database_ip_address_objects() -> None:
@@ -52,3 +53,31 @@ def test_audit_schema_serializes_public_actor_display_name() -> None:
     payload = AuditEventRead.model_validate(event)
 
     assert payload.actor_display_name == "Иванов Иван Иванович"
+
+
+def test_audit_service_serializes_uuid_values_in_event_data() -> None:
+    class RecordingSession:
+        info: dict[str, object] = {}
+
+        def __init__(self) -> None:
+            self.event: AuditEvent | None = None
+
+        def add(self, event: AuditEvent) -> None:
+            self.event = event
+
+        def flush(self) -> None:
+            return None
+
+    organization_id = uuid4()
+    session = RecordingSession()
+
+    AuditService(session).record_user_event(  # type: ignore[arg-type]
+        actor_user_id=uuid4(),
+        action="update",
+        object_type="user_role_profile",
+        object_id=uuid4(),
+        new_data_json={"organization_ids": [organization_id]},
+    )
+
+    assert session.event is not None
+    assert session.event.new_data_json == {"organization_ids": [str(organization_id)]}

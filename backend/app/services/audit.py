@@ -562,6 +562,14 @@ class AuditService:
 
         metadata = self._request_metadata()
         resolved_source = (metadata.get("source") or "api") if source == "api" else source
+        safe_old_data_json = cast(
+            dict[str, Any] | None,
+            _json_safe_audit_value(old_data_json),
+        )
+        safe_new_data_json = cast(
+            dict[str, Any] | None,
+            _json_safe_audit_value(new_data_json),
+        )
         event = AuditEvent(
             actor_type=actor_type,
             actor_user_id=actor_user_id,
@@ -574,8 +582,8 @@ class AuditService:
             card_id=card_id,
             attributed_user_id=attributed_user_id,
             retention_class=retention_class,
-            old_data_json=old_data_json,
-            new_data_json=new_data_json,
+            old_data_json=safe_old_data_json,
+            new_data_json=safe_new_data_json,
             source=resolved_source,
             ip_address=metadata.get("ip_address"),
             user_agent=metadata.get("user_agent"),
