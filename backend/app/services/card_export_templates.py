@@ -198,6 +198,8 @@ class CardExportTemplateService:
         kind: str,
         configuration: dict[str, Any],
     ) -> tuple[dict[str, Any], list[FormField], FormField]:
+        configuration = dict(configuration)
+        configuration.pop("organization_ids", None)
         try:
             parsed: CardListExportConfiguration | PersonnelChangesExportConfiguration
             if kind == "card_list":
@@ -218,12 +220,6 @@ class CardExportTemplateService:
             raise ImportExportServiceError(
                 "Заполните корректно все параметры шаблона выгрузки."
             ) from exc
-        permissions = PermissionService(self.session)
-        if any(
-            not permissions.can_see_organization(actor, organization_id, registry_id=registry_id)
-            for organization_id in parsed.organization_ids
-        ):
-            raise PermissionDeniedError("Нет прав на выбранную организацию.")
         if len(set(field_ids)) != len(field_ids):
             raise ImportExportServiceError("Поля шаблона выгрузки не должны повторяться.")
         template = self.session.get(CardTemplate, card_template_id)
@@ -293,7 +289,7 @@ class CardExportTemplateService:
         *,
         actor_user_id: UUID,
         template_id: UUID,
-        organization_id: UUID | None = None,
+        organization_ids: list[UUID],
         period_from: date | None = None,
         period_to: date | None = None,
     ) -> bytes:
@@ -318,8 +314,8 @@ class CardExportTemplateService:
             raise ImportExportServiceError(
                 "Укажите корректный период выгрузки: начало и окончание включительно."
             )
-        organizations = self._saved_organizations_for_actor(
-            actor_user_id, template.registry_id, configuration["organization_ids"]
+        organizations = self._requested_organizations_for_actor(
+            actor_user_id, template.registry_id, organization_ids
         )
         book = _openpyxl().Workbook()
         if template.export_kind == "card_list":
@@ -370,13 +366,14 @@ class CardExportTemplateService:
         book.save(output)
         return output.getvalue()
 
-    def _saved_organizations_for_actor(
-        self, actor: UUID, registry_id: UUID, organization_ids: list[str]
+    def _requested_organizations_for_actor(
+        self, actor: UUID, registry_id: UUID, organization_ids: list[UUID]
     ) -> list[Organization]:
+        if not organization_ids or len(set(organization_ids)) != len(organization_ids):
+            raise ImportExportServiceError("Выберите одну или несколько организаций для выгрузки.")
         permissions = PermissionService(self.session)
         organizations: list[Organization] = []
-        for raw_organization_id in organization_ids:
-            organization_id = UUID(raw_organization_id)
+        for organization_id in organization_ids:
             organization = self.session.get(Organization, organization_id)
             if organization is None or not permissions.can_see_organization(
                 actor, organization_id, registry_id=registry_id

@@ -173,7 +173,7 @@ def add_card(ctx, ordinal, fio, appointed, *, organization=None, template=None):
     return card
 
 
-def template_payload(ctx, kind="card_list", *, organization_ids=None):
+def template_payload(ctx, kind="card_list"):
     mapping = {
         "position_field_id": str(ctx.fields[1].id),
         "structural_unit_field_id": str(ctx.fields[2].id),
@@ -186,23 +186,19 @@ def template_payload(ctx, kind="card_list", *, organization_ids=None):
         "export_kind": kind,
         "card_template_id": str(ctx.template.id),
         "configuration_json": (
-            {
-                **mapping,
-                "organization_ids": [str(item) for item in (organization_ids or [ctx.org.id])],
-            }
+            mapping
             if kind == "personnel_changes"
             else {
                 "field_ids": [str(ctx.fields[2].id), str(ctx.fields[0].id)],
-                "organization_ids": [str(item) for item in (organization_ids or [ctx.org.id])],
             }
         ),
     }
 
 
-def create_template(ctx, kind="card_list", *, payload=None, organization_ids=None):
+def create_template(ctx, kind="card_list", *, payload=None):
     response = ctx.client.post(
         f"/api/v1/registries/{ctx.registry.id}/card-export-templates",
-        json=payload or template_payload(ctx, kind, organization_ids=organization_ids),
+        json=payload or template_payload(ctx, kind),
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -211,7 +207,7 @@ def create_template(ctx, kind="card_list", *, payload=None, organization_ids=Non
 def download(ctx, template, **overrides):
     return ctx.client.post(
         f"/api/v1/card-export-templates/{template['id']}/download",
-        json={"organization_id": str(ctx.org.id), **overrides},
+        json={"organization_ids": [str(ctx.org.id)], **overrides},
     )
 
 
@@ -225,55 +221,74 @@ def workbook(response):
     return load_workbook(BytesIO(response.content))
 
 
-def test_export_template_persists_multiple_organizations(export_context):
+def test_export_template_does_not_persist_organizations(export_context):
     ctx = export_context
-    payload = template_payload(ctx)
-    payload["configuration_json"]["organization_ids"] = [str(ctx.org.id), str(ctx.child.id)]
+    template = create_template(ctx)
 
-    template = create_template(ctx, payload=payload)
-
-    assert template["configuration_json"]["organization_ids"] == [
-        str(ctx.org.id),
-        str(ctx.child.id),
-    ]
+    assert "organization_ids" not in template["configuration_json"]
 
 
-def test_export_template_rejects_duplicate_organizations(export_context):
+def test_download_rejects_empty_or_duplicate_request_organizations(export_context):
     ctx = export_context
-    payload = template_payload(ctx)
-    payload["configuration_json"]["organization_ids"] = [str(ctx.org.id), str(ctx.org.id)]
+    template = create_template(ctx)
+    path = f"/api/v1/card-export-templates/{template['id']}/download"
 
-    response = ctx.client.post(
-        f"/api/v1/registries/{ctx.registry.id}/card-export-templates", json=payload
+    assert ctx.client.post(path, json={}).status_code == 422
+    assert (
+        ctx.client.post(
+            path,
+            json={"organization_ids": [str(ctx.org.id), str(ctx.org.id)]},
+        ).status_code
+        == 422
     )
 
-    assert response.status_code in {400, 422}, response.text
-    assert ctx.session.scalars(select(CardExportTemplate)).all() == []
-    assert ctx.session.scalars(select(AuditEvent)).all() == []
+
+def test_download_ignores_legacy_saved_organizations(export_context):
+    ctx = export_context
+    add_card(ctx, 11, "Бета", date(2026, 9, 1), organization=ctx.child)
+    template = create_template(ctx)
+    stored = ctx.session.get(CardExportTemplate, UUID(template["id"]))
+    stored.configuration_json = {
+        **stored.configuration_json,
+        "organization_ids": [str(ctx.child.id)],
+    }
+    ctx.session.flush()
+
+    sheet = workbook(download(ctx, template, organization_ids=[str(ctx.org.id)])).active
+
+    assert [row[2] for row in list(sheet.values)[1:]] == ["Альфа"]
 
 
-def test_card_list_export_combines_saved_organizations_without_organization_column(export_context):
+def test_card_list_export_combines_request_organizations_without_organization_column(
+    export_context,
+):
     ctx = export_context
     add_card(ctx, 11, "Бета", date(2026, 9, 1), organization=ctx.child)
     add_card(ctx, 12, "Аарон", date(2026, 9, 1), organization=ctx.child)
-    template = create_template(ctx, organization_ids=[ctx.org.id, ctx.child.id])
+    template = create_template(ctx)
 
-    sheet = workbook(download(ctx, template)).active
+    sheet = workbook(
+        download(ctx, template, organization_ids=[str(ctx.org.id), str(ctx.child.id)])
+    ).active
 
     assert sheet.title == "Карточки"
     assert list(sheet.values)[0] == ("№ п/п", "Подразделение", "ФИО")
     assert [row[2] for row in list(sheet.values)[1:]] == ["Аарон", "Альфа", "Бета"]
 
 
-def test_personnel_export_creates_one_sheet_per_saved_organization(export_context):
+def test_personnel_export_creates_one_sheet_per_request_organization(export_context):
     ctx = export_context
-    template = create_template(
-        ctx,
-        "personnel_changes",
-        organization_ids=[ctx.org.id, ctx.child.id],
-    )
+    template = create_template(ctx, "personnel_changes")
 
-    book = workbook(download(ctx, template, period_from="2026-09-01", period_to="2026-09-30"))
+    book = workbook(
+        download(
+            ctx,
+            template,
+            organization_ids=[str(ctx.org.id), str(ctx.child.id)],
+            period_from="2026-09-01",
+            period_to="2026-09-30",
+        )
+    )
 
     assert len(book.worksheets) == 2
     assert all(sheet["A1"].value == "Сведения о кадровых изменениях" for sheet in book.worksheets)
@@ -575,9 +590,6 @@ def test_personnel_export_requires_valid_inclusive_period(export_context, period
 def test_export_template_permissions_rechecked_on_every_operation(export_context):
     ctx = export_context
     template = create_template(ctx)
-    inaccessible_payload = template_payload(ctx, organization_ids=[ctx.child.id])
-    inaccessible_payload["code"] = "child_export"
-    inaccessible_template = create_template(ctx, payload=inaccessible_payload)
     ctx.app.dependency_overrides[get_actor_user_id] = lambda: ctx.viewer.id
     path = f"/api/v1/card-export-templates/{template['id']}"
     assert ctx.client.patch(path, json={"name": "Запрещено"}).status_code == 403
@@ -589,7 +601,7 @@ def test_export_template_permissions_rechecked_on_every_operation(export_context
         ).status_code
         == 403
     )
-    assert download(ctx, inaccessible_template).status_code == 403
+    assert download(ctx, template, organization_ids=[str(ctx.child.id)]).status_code == 403
     assert download(ctx, template).status_code == 200
     ctx.fields[2].is_exportable = False
     ctx.session.flush()

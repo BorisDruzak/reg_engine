@@ -24,6 +24,7 @@ ActorDependency = Annotated[UUID, Depends(get_actor_user_id)]
 
 def _read(template: CardExportTemplate) -> CardExportTemplateRead:
     configuration = dict(template.configuration_json)
+    configuration.pop("organization_ids", None)
     return CardExportTemplateRead(
         id=template.id,
         registry_id=template.registry_id,
