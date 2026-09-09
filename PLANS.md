@@ -7,11 +7,11 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-09-10 request-scoped XLSX export organization selection is implemented
-  locally. The active plan is
+- 2026-09-10 request-scoped XLSX export organization selection is implemented,
+  pushed, and deployed at `13f37bc0`. The active plan is
   `docs/superpowers/plans/2026-09-10-export-run-organization-selection.md`.
 
-  Delivered contract awaiting release:
+  Delivered contract:
   - `Шаблоны выгрузки` now create, edit, and archive only the column layout or
     personnel mapping. They contain neither organizations, dates, nor a
     download action.
@@ -26,7 +26,7 @@ not a hardcoded employee registry.
   - Ordinary exports retain the single combined sheet; personnel exports retain
     separate sheets per requested organization.
 
-  Local verification:
+  Verification and release evidence:
   - `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_card_export_templates.py -q`:
     **44 passed**, with the existing Starlette/httpx deprecation warning.
   - `npm --prefix frontend test -- --run src/features/registry/ImportExportPanel.test.tsx src/api/client.test.ts`:
@@ -35,6 +35,10 @@ not a hardcoded employee registry.
     `FilledCardLayout.tsx` hook-dependency warning. The full Vitest command did
     not return a final summary in this desktop environment and left its child
     processes running; they were stopped, so no full-suite pass is claimed.
+  - The frontend production build published `index-gOom0Wea.js` and
+    `index-DNTBfoV1.css`. The server checkout fast-forwarded to `13f37bc0`,
+    `reg-engine.service` restarted successfully, and the healthcheck plus
+    same-origin frontend/API smoke checks passed.
 
 - 2026-09-09 card identity, durable events, dismissal and persisted XLSX
   templates are implemented and deployed through Task 8. Tasks 1–8, their
