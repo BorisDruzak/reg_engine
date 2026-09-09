@@ -39,7 +39,7 @@ def test_phase_2c_architecture_defines_schema_service_and_tests() -> None:
         "docx_text_v1",
         "output_filename_template",
         "DocumentService",
-        "{{ card.display_name }}",
+        "{{ card.display_value }}",
         "{{ fields.<block_code>.<field_code> }}",
         "storage prefix `generated_documents`",
         "archive, not physical delete",

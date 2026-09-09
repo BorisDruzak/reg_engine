@@ -433,7 +433,6 @@ test("admin mutation API client uses backend routes with bearer auth and JSON bo
         createCard(token, "registry-id", {
           organization_id: "organization-id",
           org_unit_id: null,
-          display_name: "Карточка",
           public_view_enabled: false,
           public_edit_enabled: true,
         }),
@@ -442,17 +441,16 @@ test("admin mutation API client uses backend routes with bearer auth and JSON bo
       body: {
         organization_id: "organization-id",
         org_unit_id: null,
-        display_name: "Карточка",
         public_view_enabled: false,
         public_edit_enabled: true,
       },
     },
     {
       name: "update card",
-      action: () => updateCard(token, "card-id", { display_name: "Новая карточка" }),
+      action: () => updateCard(token, "card-id", { public_edit_enabled: false }),
       path: "/api/v1/cards/card-id",
       method: "PATCH",
-      body: { display_name: "Новая карточка" },
+      body: { public_edit_enabled: false },
     },
     {
       name: "archive card",

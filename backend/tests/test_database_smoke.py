@@ -499,7 +499,7 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             registry_id=registry_id,
             code="smoke_template",
             name="Smoke template",
-            template_body="Card: {{ card.display_name }}",
+            template_body="Card: {{ card.display_value }}",
             created_by=user_id,
             updated_by=user_id,
         )
@@ -509,7 +509,7 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             template_id=template_id,
             version_number=1,
             template_format="docx_text_v1",
-            template_body="Card: {{ card.display_name }}",
+            template_body="Card: {{ card.display_value }}",
             created_by=user_id,
         )
         _insert_returning_id(

@@ -83,7 +83,7 @@ text into a minimal `.docx` file.
 Supported placeholders:
 
 - `{{ card.id }}`
-- `{{ card.display_name }}`
+- `{{ card.display_value }}`
 - `{{ card.registry_id }}`
 - `{{ card.organization_id }}`
 - `{{ fields.<block_code>.<field_code> }}`
@@ -91,7 +91,7 @@ Supported placeholders:
 Unsupported placeholders fail generation. The renderer does not evaluate Python,
 SQL, shell commands, Jinja expressions, or arbitrary code.
 
-The default output filename template is `{{ card.display_name }}.docx`.
+The default output filename template is `{{ card.display_value }}.docx`.
 
 `file_ref` fields render as safe attachment text only. Active references render
 as attachment title plus original filename when they differ, for example

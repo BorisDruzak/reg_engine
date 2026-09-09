@@ -357,7 +357,7 @@ def test_linked_card_accepts_positioned_dynamic_text_overlays() -> None:
         {
             "id": "card-name",
             "kind": "metadata",
-            "metadata_key": "card.display_name",
+            "metadata_key": "card.display_value",
             "page": 1,
             "x_mm": 20.0,
             "y_mm": 20.0,

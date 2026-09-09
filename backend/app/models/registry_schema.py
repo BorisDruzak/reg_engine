@@ -19,8 +19,6 @@ from app.domain.constants import FIELD_TYPES, REGISTRY_STATUSES, REQUIRED_MODES
 from app.models.base import ArchiveMixin, Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.identity import quoted
 
-DEFAULT_CARD_TITLE_LABEL = "Название карточки"
-
 
 class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     __tablename__ = "registries"
@@ -52,15 +50,6 @@ class Registry(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     is_default_for_owner_tree: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
-    display_name_field_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey(
-            "form_fields.id",
-            name="fk_registries_display_name_field_id_form_fields",
-            use_alter=True,
-        ),
-    )
-    display_name_template: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
 
 

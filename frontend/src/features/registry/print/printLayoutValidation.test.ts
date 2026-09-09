@@ -19,7 +19,7 @@ describe("print layout validation", () => {
       fields,
       blocks,
       "Связанный макет",
-      "{{ card.display_name }}.docx",
+      "{{ card.display_value }}.docx",
     );
     const multiple = validatePrintLayout(
       {
@@ -29,14 +29,14 @@ describe("print layout validation", () => {
       fields,
       blocks,
       "Связанный макет",
-      "{{ card.display_name }}.docx",
+      "{{ card.display_value }}.docx",
     );
     const legacy = validatePrintLayout(
       legacyLayoutWithoutLinkedItem(),
       fields,
       blocks,
       "Прежний макет",
-      "{{ card.display_name }}.docx",
+      "{{ card.display_value }}.docx",
     );
 
     expect(missing).toEqual(
@@ -105,7 +105,7 @@ describe("print layout validation", () => {
       fields,
       blocks,
       "Базовый шаблон: печать",
-      "{{ card.display_name }}.docx",
+      "{{ card.display_value }}.docx",
     );
 
     expect(issues.map((issue) => issue.message).join("\n")).not.toContain(
@@ -160,7 +160,7 @@ describe("print layout validation", () => {
       fields,
       blocks,
       "Базовый шаблон: печать",
-      "{{ card.display_name }}.docx",
+      "{{ card.display_value }}.docx",
     );
 
     expect(issues.map((issue) => issue.message).join("\n")).toContain(

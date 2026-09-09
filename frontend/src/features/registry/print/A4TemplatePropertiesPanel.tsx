@@ -112,10 +112,10 @@ export function A4TemplatePropertiesPanel({
               <label>
                 Данные карточки
                 <select
-                  value={item.metadata_key ?? "card.display_name"}
+                  value={item.metadata_key ?? "card.display_value"}
                   onChange={(event) => onUpdateItem({ metadata_key: event.currentTarget.value })}
                 >
-                  <option value="card.display_name">Название карточки</option>
+                  <option value="card.display_value">ФИО</option>
                   <option value="card.id">ID карточки</option>
                   <option value="registry.name">Название реестра</option>
                   <option value="organization.name">Организация</option>

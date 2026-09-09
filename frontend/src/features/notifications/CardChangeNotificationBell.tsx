@@ -132,7 +132,7 @@ export function CardChangeNotificationBell({
                     disabled={markReadMutation.isPending}
                     onClick={() => handleOpenNotification(notification.id, notification.card_id)}
                   >
-                    <strong>{notification.card_display_name}</strong>
+                    <strong>{notification.card_display_value}</strong>
                     <span className="notification-row-meta">{notification.actor_display_name}</span>
                     {notification.changes.map((change, index) => (
                       <span

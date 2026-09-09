@@ -34,7 +34,7 @@ export function GeneratedDocumentsPanel({
   const [templateDescription, setTemplateDescription] = useState("");
   const [templateBody, setTemplateBody] = useState("");
   const [outputFilenameTemplate, setOutputFilenameTemplate] = useState(
-    "{{ card.display_name }}.docx",
+    "{{ card.display_value }}.docx",
   );
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export function GeneratedDocumentsPanel({
       setTemplateName("");
       setTemplateDescription("");
       setTemplateBody("");
-      setOutputFilenameTemplate("{{ card.display_name }}.docx");
+      setOutputFilenameTemplate("{{ card.display_value }}.docx");
       await queryClient.invalidateQueries({ queryKey: ["document-templates", token, registryId] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },

@@ -17,7 +17,7 @@ let fetchCalls: { method: string; path: string }[];
 type NotificationItem = {
   id: string;
   card_id: string;
-  card_display_name: string;
+  card_display_value: string;
   actor_display_name: string;
   changes: { label: string; before: unknown; after: unknown; description: string | null }[];
   read_at: string | null;
@@ -31,7 +31,7 @@ beforeEach(() => {
       {
         id: notificationId,
         card_id: cardId,
-        card_display_name: "Карточка сотрудника",
+        card_display_value: "Карточка сотрудника",
         actor_display_name: "Иван Петров",
         changes: [
           { label: "Должность", before: "Специалист", after: "Руководитель", description: null },
@@ -48,7 +48,7 @@ beforeEach(() => {
       {
         id: "00000000-0000-4000-8000-000000000003",
         card_id: "00000000-0000-4000-8000-000000000004",
-        card_display_name: "Архивная карточка",
+        card_display_value: "Архивная карточка",
         actor_display_name: "Мария Сидорова",
         changes: [{ label: "Статус", before: "Черновик", after: "Архив", description: null }],
         read_at: "2026-07-16T09:02:00Z",

@@ -196,3 +196,5 @@ def test_card_event_export_metadata_and_title_removal_are_registered() -> None:
     assert "dismissed" in CARD_LIFECYCLE_STATUSES
     assert "display_name" not in Base.metadata.tables["cards"].columns
     assert "card_title_label" not in Base.metadata.tables["registries"].columns
+    assert "display_name_field_id" not in Base.metadata.tables["registries"].columns
+    assert "display_name_template" not in Base.metadata.tables["registries"].columns

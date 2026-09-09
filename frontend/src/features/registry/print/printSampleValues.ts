@@ -1,7 +1,7 @@
 import type { CardPrintLayoutItem, FormFieldRead } from "@/api/types";
 
 export const CARD_PRINT_METADATA_LABELS: Record<string, string> = {
-  "card.display_name": "Название карточки",
+  "card.display_value": "ФИО",
   "card.id": "ID карточки",
   "registry.name": "Название реестра",
   "organization.name": "Организация",
@@ -56,6 +56,9 @@ export function itemDisplayText(
   if (item.kind === "metadata") {
     if (item.metadata_key && metadataValues[item.metadata_key]) {
       return metadataValues[item.metadata_key];
+    }
+    if (item.metadata_key === "card.display_value") {
+      return "Иванов Иван Иванович";
     }
     if (item.metadata_key === "card.id") {
       return "00000000-0000-0000-0000-000000000000";

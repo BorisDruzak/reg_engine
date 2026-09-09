@@ -342,6 +342,52 @@ def test_title_keys_are_removed_from_existing_audit_snapshots() -> None:
     assert "new_data_json - 'display_name'" in sql
 
 
+def test_registry_display_configuration_is_removed_from_migration_head() -> None:
+    sql = _render_upgrade_sql("head")
+    assert "DROP CONSTRAINT fk_registries_display_name_field_id_form_fields" in sql
+    assert "DROP COLUMN display_name_field_id" in sql
+    assert "DROP COLUMN display_name_template" in sql
+
+
+def test_registry_display_configuration_upgrade_downgrade_preserves_registry() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0036_card_display_placeholders")
+        with engine.begin() as connection:
+            registry_id = connection.scalar(
+                text(
+                    "INSERT INTO public.registries (code, name, display_name_template) "
+                    "VALUES ('display-cleanup', 'Реестр', 'Obsolete display setting') RETURNING id"
+                )
+            )
+        _run_online_upgrade(database_url, "head")
+        with engine.connect() as connection:
+            columns = {item["name"] for item in inspect(connection).get_columns("registries")}
+            assert not {"display_name_field_id", "display_name_template"} & columns
+            assert (
+                connection.scalar(
+                    text("SELECT name FROM public.registries WHERE id = :id"), {"id": registry_id}
+                )
+                == "Реестр"
+            )
+        _run_online_downgrade(database_url, "0036_card_display_placeholders")
+        with engine.connect() as connection:
+            columns = {item["name"] for item in inspect(connection).get_columns("registries")}
+            assert {"display_name_field_id", "display_name_template"} <= columns
+            assert (
+                connection.scalar(
+                    text("SELECT display_name_template FROM public.registries WHERE id = :id"),
+                    {"id": registry_id},
+                )
+                is None
+            )
+        _run_online_upgrade(database_url, "head")
+    finally:
+        engine.dispose()
+
+
 def test_card_events_migration_downgrade_maps_dismissed_cards_to_archived() -> None:
     sql = _render_downgrade_sql(
         "0034_card_events_exports_fio",

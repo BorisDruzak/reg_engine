@@ -130,9 +130,9 @@ export function A4TemplatePalette({
       <button
         type="button"
         className="ghost-button"
-        onClick={() => onAddMetadata("card.display_name")}
+        onClick={() => onAddMetadata("card.display_value")}
       >
-        Название карточки
+        ФИО
       </button>
       <button type="button" className="ghost-button" onClick={() => onAddMetadata("registry.name")}>
         Название реестра

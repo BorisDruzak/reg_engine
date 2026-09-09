@@ -27,7 +27,6 @@ const schema: RegistrySchemaRead = {
     code: "registry",
     name: "Реестр",
     description: null,
-    card_title_label: "Наименование карточки",
     lifecycle_status: "active",
     schema_version: 1,
     owner_organization_id: null,

@@ -127,7 +127,6 @@ export type RegistryRead = {
   code: string;
   name: string;
   description: string | null;
-  card_title_label: string;
   lifecycle_status: string;
   schema_version: number;
   owner_organization_id: string | null;
@@ -142,13 +141,11 @@ export type RegistryCreatePayload = {
   code: string;
   name: string;
   description?: string | null;
-  card_title_label?: string;
 };
 
 export type RegistryUpdatePayload = {
   name?: string | null;
   description?: string | null;
-  card_title_label?: string | null;
   lifecycle_status?: string | null;
 };
 
@@ -431,7 +428,6 @@ export type CardFieldFilterPayload = {
 
 export type CardCreatePayload = {
   organization_id: string;
-  display_name?: string | null;
   card_template_id?: string | null;
   org_unit_id?: string | null;
   public_view_enabled?: boolean;
@@ -439,7 +435,6 @@ export type CardCreatePayload = {
 };
 
 export type OrganizationCardCreatePayload = {
-  display_name?: string | null;
   card_template_id?: string | null;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
@@ -478,7 +473,6 @@ export type CardCreationPreviewRead = {
 };
 
 export type CardFirstSavePayload = {
-  display_name?: string | null;
   card_template_id: string;
   public_view_enabled?: boolean;
   public_edit_enabled?: boolean;
@@ -504,7 +498,6 @@ export type CardDraftPublicLinkRead = {
 };
 
 export type CardUpdatePayload = {
-  display_name?: string | null;
   org_unit_id?: string | null;
   lifecycle_status?: string | null;
   public_view_enabled?: boolean | null;
@@ -618,7 +611,6 @@ export type TabularCardImportPreviewRowRead = {
   row_number: number;
   status: "valid" | "invalid";
   organization_label: string | null;
-  display_name: string | null;
   errors: string[];
 };
 
@@ -685,7 +677,7 @@ export type CardChangeNotificationChangeRead = {
 export type CardChangeNotificationRead = {
   id: string;
   card_id: string;
-  card_display_name: string;
+  card_display_value: string;
   actor_display_name: string;
   changes: CardChangeNotificationChangeRead[];
   read_at: string | null;
@@ -1069,7 +1061,7 @@ export type AuditEventRead = {
   actor_display_name?: string | null;
   attributed_user_display_name?: string | null;
   card_id?: string | null;
-  card_display_name?: string | null;
+  card_display_value?: string | null;
   card_lifecycle_status?: string | null;
   action: string;
   object_type: string;
@@ -1185,7 +1177,7 @@ export type CardPrintFlowItem = {
   id: string;
   kind: "field" | "static_text" | "heading" | "metadata" | "page_number" | "print_date";
   field_id?: string;
-  metadata_key?: "card.display_name" | "card.id" | "card.registry_id" | "card.organization_id";
+  metadata_key?: "card.display_value" | "card.id" | "card.registry_id" | "card.organization_id";
   text?: string;
   label?: string;
   show_label?: boolean;

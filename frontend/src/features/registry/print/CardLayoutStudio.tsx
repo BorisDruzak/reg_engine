@@ -63,7 +63,7 @@ import {
 } from "./printLayoutGeometry";
 import { validatePrintLayout } from "./printLayoutValidation";
 
-const DEFAULT_OUTPUT_FILENAME = "{{ card.display_name }}.docx";
+const DEFAULT_OUTPUT_FILENAME = "{{ card.display_value }}.docx";
 const STALE_LAYOUT_MESSAGE =
   "Макет изменён другим пользователем. Обновите данные перед сохранением.";
 
@@ -1447,7 +1447,7 @@ function createPrintOnlyItem(
     divider: "Линия",
     print_date: "Дата печати",
     page_number: "Номер страницы",
-    metadata: "Название карточки",
+    metadata: "ФИО",
   };
   const overlay = isOverlayKind(kind);
   return {
@@ -1464,7 +1464,7 @@ function createPrintOnlyItem(
     height_mm: kind === "divider" ? 1 : 9,
     text: labels[kind],
     label: labels[kind],
-    metadata_key: kind === "metadata" ? "card.display_name" : undefined,
+    metadata_key: kind === "metadata" ? "card.display_value" : undefined,
   };
 }
 

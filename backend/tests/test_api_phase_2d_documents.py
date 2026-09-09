@@ -372,7 +372,7 @@ def test_generated_document_api_supports_phase_2d_workflow(
         json={
             "code": "summary",
             "name": "Сводка",
-            "template_body": "Карточка: {{ card.display_name }}\nПоле: {{ fields.main.title }}",
+            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.title }}",
         },
     )
     assert template_response.status_code == 201, template_response.text
@@ -462,7 +462,7 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
             "name": "Печатная карточка",
             "card_template_id": str(context["card"].card_template_id),
             "layout_json": layout_v1,
-            "output_filename_template": "{{ card.display_name }}-print.docx",
+            "output_filename_template": "{{ card.display_value }}-print.docx",
         },
     )
     assert create_response.status_code == 201, create_response.text
@@ -567,7 +567,7 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
             "name": "Черновой печатный шаблон",
             "card_template_id": str(context["card"].card_template_id),
             "layout_json": unsaved_layout,
-            "output_filename_template": "{{ card.display_name }}-draft.docx",
+            "output_filename_template": "{{ card.display_value }}-draft.docx",
         },
     )
     assert blank_unsaved_docx_response.status_code == 200, blank_unsaved_docx_response.text
@@ -585,7 +585,7 @@ def test_card_print_layout_template_versions_and_generates_pdf_docx(
             "name": "Черновой печатный шаблон",
             "card_template_id": str(context["card"].card_template_id),
             "layout_json": unsaved_layout,
-            "output_filename_template": "{{ card.display_name }}-draft.docx",
+            "output_filename_template": "{{ card.display_value }}-draft.docx",
         },
     )
     assert blank_unsaved_pdf_response.status_code == 200, blank_unsaved_pdf_response.text
@@ -654,7 +654,7 @@ def test_card_template_layout_api_creates_internal_print_view(
             "name": "Основная A4",
             "is_default": True,
             "layout_json": _card_print_layout(field_id),
-            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_filename_template": "{{ card.display_value }}.docx",
         },
     )
 
@@ -687,12 +687,12 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         data={
             "code": "binary-summary",
             "name": "Бинарный шаблон",
-            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_filename_template": "{{ card.display_value }}.docx",
         },
         files={
             "file": (
                 "summary-v1.docx",
-                _binary_docx_bytes("V1 {{ card.display_name }} {{ fields.main.title }}"),
+                _binary_docx_bytes("V1 {{ card.display_value }} {{ fields.main.title }}"),
                 DOCX_CONTENT_TYPE,
             )
         },
@@ -721,7 +721,7 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         files={
             "file": (
                 "summary-v2.docx",
-                _binary_docx_bytes("V2 {{ card.display_name }} {{ fields.main.title }}"),
+                _binary_docx_bytes("V2 {{ card.display_value }} {{ fields.main.title }}"),
                 DOCX_CONTENT_TYPE,
             )
         },
@@ -749,7 +749,7 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
     with ZipFile(BytesIO(download_response.content)) as docx:
         rendered_xml = docx.read("word/document.xml").decode("utf-8")
     assert "V2" in rendered_xml
-    assert "{{ card.display_name }}" not in rendered_xml
+    assert "{{ card.display_value }}" not in rendered_xml
     assert "{{ fields.main.title }}" not in rendered_xml
     assert "V1" not in rendered_xml
 
@@ -780,7 +780,7 @@ def test_generated_document_api_supports_pdf_generation_for_text_template(
         json={
             "code": "summary-pdf",
             "name": "PDF summary",
-            "template_body": "Карточка: {{ card.display_name }}\nПоле: {{ fields.main.title }}",
+            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.title }}",
         },
     )
     assert template_response.status_code == 201, template_response.text

@@ -185,7 +185,7 @@ function HistoryEventRow({
   const field = fieldSnapshot(event.new_data_json) ?? fieldSnapshot(event.old_data_json);
   const isStandalone = event.history_display === "standalone" && Boolean(event.history_description);
   const cardId = event.card_id;
-  const cardDisplayName = event.card_display_name || uiText.card;
+  const cardDisplayName = event.card_display_value || uiText.card;
 
   return (
     <tr

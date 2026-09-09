@@ -509,7 +509,6 @@ export async function createOrganizationCardDraftPublicLink(
   token: string,
   organizationId: string,
   payload: {
-    display_name?: string | null;
     card_template_id: string;
     public_access: CardPublicAccessPayload;
   },

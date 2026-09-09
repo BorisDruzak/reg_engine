@@ -45,7 +45,7 @@ const historyEvent: AuditEventRead = {
   actor_display_name: "Публичная ссылка",
   attributed_user_display_name: "Системный администратор",
   card_id: card.id,
-  card_display_name: card.display_value,
+  card_display_value: card.display_value,
   card_lifecycle_status: card.lifecycle_status,
   action: "update",
   object_type: "field_value",
@@ -102,6 +102,7 @@ test("groups the default active history and applies card, actor, status, and res
   });
   const auditRow = (await screen.findByText("Новая группа")).closest("tr");
   expect(auditRow).not.toBeNull();
+  expect(auditRow).toHaveTextContent("Карточка для аудита");
   await user.click(auditRow!);
   expect(screen.getByLabelText("Карточка")).toHaveValue(card.id);
   expect(screen.getByText(/Группа должностей/)).toBeVisible();

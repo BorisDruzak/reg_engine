@@ -1509,7 +1509,7 @@ function unifiedLayoutPayload(printLayout: CardPrintLayout): CardTemplateLayoutR
     ],
     export_settings: {
       default_print_view_id: saved ? "print-template-1" : "default-a4",
-      output_filename_template: "{{ card.display_name }}.docx",
+      output_filename_template: "{{ card.display_value }}.docx",
       formats: ["docx", "pdf"],
     },
     sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
@@ -1542,7 +1542,7 @@ function printViewFixture(layout: CardPrintLayout, saved: boolean) {
       text: item.text ?? null,
     })),
     layout_json: layout,
-    output_filename_template: "{{ card.display_name }}.docx",
+    output_filename_template: "{{ card.display_value }}.docx",
   };
 }
 
@@ -1714,7 +1714,6 @@ function renderRegistrySchemaEditor() {
             code: "registry",
             name: "Реестр карточек",
             description: null,
-            card_title_label: "Карточка",
             lifecycle_status: "active",
             schema_version: 1,
             owner_organization_id: null,
@@ -1727,7 +1726,6 @@ function renderRegistrySchemaEditor() {
             code: "registry",
             name: "Реестр карточек",
             description: null,
-            card_title_label: "Карточка",
             lifecycle_status: "active",
             schema_version: 1,
             owner_organization_id: null,

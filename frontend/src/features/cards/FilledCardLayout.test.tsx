@@ -82,7 +82,7 @@ const layout: CardTemplateLayoutRead = {
     ],
   },
   print_views: [],
-  export_settings: { output_filename_template: "{{ card.display_name }}.docx", formats: ["docx"] },
+  export_settings: { output_filename_template: "{{ card.display_value }}.docx", formats: ["docx"] },
   sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
 };
 

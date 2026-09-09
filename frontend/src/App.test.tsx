@@ -166,7 +166,6 @@ const apiPayloads = {
         code: "assets",
         name: "Реестр активов",
         description: "Учет активов",
-        card_title_label: "Название карточки",
         lifecycle_status: "active",
         schema_version: 1,
         owner_organization_id: "22222222-2222-4222-8222-222222222222",
@@ -180,7 +179,6 @@ const apiPayloads = {
       code: "assets",
       name: "Реестр активов",
       description: "Учет активов",
-      card_title_label: "Название карточки",
       lifecycle_status: "active",
       schema_version: 1,
       owner_organization_id: "22222222-2222-4222-8222-222222222222",
@@ -429,7 +427,7 @@ const apiPayloads = {
         name: "Сводка карточки",
         description: null,
         template_format: "docx_text_v1",
-        output_filename_template: "{{ card.display_name }}.docx",
+        output_filename_template: "{{ card.display_value }}.docx",
         output_content_type:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         is_active: true,
@@ -696,7 +694,7 @@ beforeEach(() => {
               actor_public_link_id: null,
               actor_display_name: "Системный администратор",
               card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-              card_display_name: "Карточка актива",
+              card_display_value: "Карточка актива",
               card_lifecycle_status: "active",
               action: "create",
               object_type: "card",
@@ -817,7 +815,7 @@ beforeEach(() => {
               created_cards: [
                 {
                   card_id: "bbbb2222-2222-4222-8222-222222222222",
-                  display_name: "Созданная карточка",
+                  display_value: "Созданная карточка",
                   organization_id: "22222222-2222-4222-8222-222222222222",
                   organization_name: "Главная организация",
                   child_public_link_id: "child-link-1",
@@ -834,7 +832,6 @@ beforeEach(() => {
       if (organizationCardMatch) {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
-            display_name?: string;
             card_template_id?: string | null;
             public_access?: {
               public_view_enabled?: boolean;
@@ -1475,7 +1472,7 @@ beforeEach(() => {
                   type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 })
               : isCsvReport
-                ? "id,display_name,lifecycle_status\ncard-1,Отчетная карточка,draft\n"
+                ? "id,display_value,lifecycle_status\ncard-1,Отчетная карточка,draft\n"
                 : '{"format_version":"report_run_v1","cards":[]}',
           {
             status: 200,
@@ -1522,14 +1519,12 @@ beforeEach(() => {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             name?: string | null;
             description?: string | null;
-            card_title_label?: string | null;
             lifecycle_status?: string | null;
           };
           const updated: RegistryRead = {
             ...current,
             name: payload.name ?? current.name,
             description: payload.description ?? current.description,
-            card_title_label: payload.card_title_label ?? current.card_title_label,
             lifecycle_status: payload.lifecycle_status ?? current.lifecycle_status,
           };
           registryItems = registryItems.map((item) => (item.id === registryId ? updated : item));
@@ -1550,14 +1545,12 @@ beforeEach(() => {
             code: string;
             name: string;
             description?: string | null;
-            card_title_label?: string;
           };
           const created: RegistryRead = {
             id: "25252525-2525-4252-8252-252525252525",
             code: payload.code,
             name: payload.name,
             description: payload.description ?? null,
-            card_title_label: payload.card_title_label ?? "Название карточки",
             lifecycle_status: "draft",
             schema_version: 1,
             owner_organization_id: null,
@@ -1668,12 +1661,12 @@ beforeEach(() => {
               page: printLayout.page,
               items: [],
               layout_json: printLayout,
-              output_filename_template: "{{ card.display_name }}.docx",
+              output_filename_template: "{{ card.display_value }}.docx",
             },
           ],
           export_settings: {
             default_print_view_id: "default-a4",
-            output_filename_template: "{{ card.display_name }}.docx",
+            output_filename_template: "{{ card.display_value }}.docx",
             formats: ["docx", "pdf"],
           },
           sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
@@ -1741,7 +1734,7 @@ beforeEach(() => {
             },
             items: [],
             layout_json: null,
-            output_filename_template: "{{ card.display_name }}.docx",
+            output_filename_template: "{{ card.display_value }}.docx",
           },
         });
       }
@@ -1799,7 +1792,6 @@ beforeEach(() => {
         if (init?.method === "POST") {
           const payload = JSON.parse(String(init.body ?? "{}")) as {
             organization_id: string;
-            display_name?: string;
             card_template_id?: string | null;
             org_unit_id?: string | null;
             public_view_enabled?: boolean;
@@ -2170,7 +2162,6 @@ beforeEach(() => {
             return jsonResponse({ detail: "Forbidden" }, { status: 403 });
           }
           const payload = JSON.parse(String(init.body ?? "{}")) as {
-            display_name?: string | null;
             org_unit_id?: string | null;
             lifecycle_status?: string | null;
             public_view_enabled?: boolean | null;
@@ -2820,12 +2811,12 @@ function currentCardPresentation(cardId: string) {
           page,
           items: [],
           layout_json: printLayout,
-          output_filename_template: "{{ card.display_name }}.docx",
+          output_filename_template: "{{ card.display_value }}.docx",
         },
       ],
       export_settings: {
         default_print_view_id: "default-a4",
-        output_filename_template: "{{ card.display_name }}.docx",
+        output_filename_template: "{{ card.display_value }}.docx",
         formats: ["docx", "pdf"],
       },
       sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
@@ -7348,10 +7339,10 @@ test.skip("creates and archives document templates in Russian UI", async () => {
   await user.type(screen.getByLabelText("Название шаблона"), "Акт приема");
   await user.type(screen.getByLabelText("Описание шаблона"), "Документ по карточке");
   fireEvent.change(screen.getByLabelText("Шаблон имени файла"), {
-    target: { value: "{{ card.display_name }}-act.docx" },
+    target: { value: "{{ card.display_value }}-act.docx" },
   });
   fireEvent.change(screen.getByLabelText("Текст шаблона"), {
-    target: { value: "Карточка: {{ card.display_name }}" },
+    target: { value: "Карточка: {{ card.display_value }}" },
   });
   await user.click(screen.getByRole("button", { name: "Создать шаблон" }));
 
@@ -7387,8 +7378,8 @@ test.skip("creates and archives document templates in Russian UI", async () => {
           body.code === "akt_priema" &&
           body.name === "Акт приема" &&
           body.description === "Документ по карточке" &&
-          body.template_body === "Карточка: {{ card.display_name }}" &&
-          body.output_filename_template === "{{ card.display_name }}-act.docx"
+          body.template_body === "Карточка: {{ card.display_value }}" &&
+          body.output_filename_template === "{{ card.display_value }}-act.docx"
         );
       }),
     ).toBe(true);
