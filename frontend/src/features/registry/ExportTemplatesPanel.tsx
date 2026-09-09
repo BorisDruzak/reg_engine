@@ -33,6 +33,14 @@ const emptyMapping: PersonnelExportMapping = {
   appointment_basis_field_id: "",
 };
 
+function configurationFingerprint(configuration: CardExportTemplatePayload["configuration_json"]) {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(configuration).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  );
+}
+
 export function ExportTemplatesPanel({
   token,
   registryId,
@@ -96,7 +104,8 @@ export function ExportTemplatesPanel({
     selected.name !== name.trim() ||
     selected.card_template_id !== cardTemplateId ||
     selected.export_kind !== kind ||
-    JSON.stringify(selected.configuration_json) !== JSON.stringify(configuration);
+    configurationFingerprint(selected.configuration_json) !==
+      configurationFingerprint(configuration);
   const personnel = kind === "personnel_changes";
   const validPeriod = !personnel || Boolean(periodFrom && periodTo && periodFrom <= periodTo);
 

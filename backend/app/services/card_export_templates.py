@@ -330,12 +330,13 @@ class CardExportTemplateService:
                 include_descendant_organizations=False,
                 card_template_ids=[card_template_id],
             )
+            rows = [(card, self._values(actor_user_id, card, [*fields, fio])) for card in cards]
+            rows.sort(key=lambda item: self._fio_sort_key(item[1].get(fio.id), item[0].id))
             sheet = book.active
             sheet.title = "Карточки"
             self._set_sheet_layout(sheet, [10, *([32] * len(fields))])
             self._append(sheet, ["№ п/п", *(f.label for f in fields)], header=True)
-            for ordinal, card in enumerate(cards, 1):
-                values = self._values(actor_user_id, card, fields)
+            for ordinal, (_card, values) in enumerate(rows, 1):
                 self._append(sheet, [ordinal, *(values.get(f.id) for f in fields)])
             sheet.freeze_panes = "B2"
             sheet.auto_filter.ref = sheet.dimensions
@@ -440,6 +441,11 @@ class CardExportTemplateService:
                 )
             result[field.id] = value
         return result
+
+    @classmethod
+    def _fio_sort_key(cls, value: object, card_id: UUID) -> tuple[bool, str, str]:
+        fio = cls._text(value).strip()
+        return (not bool(fio), fio.casefold(), str(card_id))
 
     @staticmethod
     def _text(value: object) -> str:
@@ -555,6 +561,7 @@ class CardExportTemplateService:
         self._heading(sheet, organization)
         self._heading(sheet, f"За период с {start:%d.%m.%Y} по {end:%d.%m.%Y}")
         values = {card.id: self._values(actor, card, [*fields, fio]) for card in cards}
+        cards.sort(key=lambda card: self._fio_sort_key(values[card.id].get(fio.id), card.id))
         position, unit, appointed, basis = fields
         hired = []
         for card in cards:
@@ -562,7 +569,7 @@ class CardExportTemplateService:
             appointed_on = value.get(appointed.id)
             if isinstance(appointed_on, date) and start <= appointed_on <= end:
                 hired.append((appointed_on, card.id, value))
-        hired.sort(key=lambda item: (item[0], item[1]))
+        hired.sort(key=lambda item: self._fio_sort_key(item[2].get(fio.id), item[1]))
         self._heading(sheet, "Вновь приняты", section=True)
         self._append(
             sheet,
@@ -570,7 +577,7 @@ class CardExportTemplateService:
                 "Фамилия, имя, отчество",
                 "Должность / структурное подразделение",
                 None,
-                "Дата и основание назначения",
+                "Дата, основание назначения",
             ],
             header=True,
             merge_middle=True,
@@ -582,7 +589,7 @@ class CardExportTemplateService:
                     value[fio.id] or "Не заполнено",
                     "\n".join(self._text(value[f.id]) for f in (position, unit)),
                     None,
-                    f"{self._text(day)}\n{self._text(value[basis.id])}",
+                    f"{self._text(day)}, {self._text(value[basis.id])}",
                 ],
                 merge_middle=True,
             )
@@ -599,6 +606,13 @@ class CardExportTemplateService:
                 .order_by(CardEvent.occurred_on, CardEvent.card_id, CardEvent.id)
             )
         )
+        events.sort(
+            key=lambda event: (
+                self._fio_sort_key(values[event.card_id].get(fio.id), event.card_id),
+                event.occurred_on,
+                event.id,
+            )
+        )
         for kind, title in (("dismissal", "Уволены"), ("change", "Иные изменения")):
             self._heading(sheet, title, section=True)
             self._append(
@@ -607,7 +621,7 @@ class CardExportTemplateService:
                     "Фамилия, имя, отчество",
                     "Должность" if kind == "dismissal" else "Содержание изменений",
                     "Дата увольнения" if kind == "dismissal" else None,
-                    "Основание" if kind == "dismissal" else "Дата и основание изменений",
+                    "Основание" if kind == "dismissal" else "Дата, основание изменений",
                 ],
                 header=True,
                 merge_middle=kind == "change",
@@ -628,7 +642,7 @@ class CardExportTemplateService:
                         event.occurred_on if kind == "dismissal" else None,
                         event.basis_text
                         if kind == "dismissal"
-                        else f"{event.occurred_on:%d.%m.%Y}\n{event.basis_text}",
+                        else f"{event.occurred_on:%d.%m.%Y}, {event.basis_text}",
                     ],
                     merge_middle=kind == "change",
                 )

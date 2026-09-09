@@ -255,13 +255,14 @@ def test_export_template_rejects_duplicate_organizations(export_context):
 def test_card_list_export_combines_saved_organizations_without_organization_column(export_context):
     ctx = export_context
     add_card(ctx, 11, "Бета", date(2026, 9, 1), organization=ctx.child)
+    add_card(ctx, 12, "Аарон", date(2026, 9, 1), organization=ctx.child)
     template = create_template(ctx, organization_ids=[ctx.org.id, ctx.child.id])
 
     sheet = workbook(download(ctx, template)).active
 
     assert sheet.title == "Карточки"
     assert list(sheet.values)[0] == ("№ п/п", "Подразделение", "ФИО")
-    assert {row[2] for row in list(sheet.values)[1:]} == {"Альфа", "Бета"}
+    assert [row[2] for row in list(sheet.values)[1:]] == ["Аарон", "Альфа", "Бета"]
 
 
 def test_personnel_export_creates_one_sheet_per_saved_organization(export_context):
@@ -276,6 +277,38 @@ def test_personnel_export_creates_one_sheet_per_saved_organization(export_contex
 
     assert len(book.worksheets) == 2
     assert all(sheet["A1"].value == "Сведения о кадровых изменениях" for sheet in book.worksheets)
+
+
+def test_personnel_export_sorts_hires_and_events_by_fio(export_context):
+    ctx = export_context
+    aaron = add_card(ctx, 11, "Аарон", date(2026, 9, 2))
+    add_event(ctx, ctx.card, 101, "change", date(2026, 9, 1), "Первое изменение")
+    add_event(ctx, aaron, 102, "change", date(2026, 9, 2), "Второе изменение")
+    ctx.session.flush()
+
+    sheet = workbook(
+        download(
+            ctx,
+            create_template(ctx, "personnel_changes"),
+            period_from="2026-09-01",
+            period_to="2026-09-30",
+        )
+    ).active
+    sections = {
+        cell.value: cell.row
+        for row in sheet
+        for cell in row
+        if cell.value in {"Вновь приняты", "Иные изменения"}
+    }
+
+    assert [sheet.cell(sections["Вновь приняты"] + row, 1).value for row in (2, 3)] == [
+        "Аарон",
+        "Альфа",
+    ]
+    assert [sheet.cell(sections["Иные изменения"] + row, 1).value for row in (2, 3)] == [
+        "Аарон",
+        "Альфа",
+    ]
 
 
 def test_card_list_export_formats_work_experience_as_one_russian_column(export_context):
@@ -378,10 +411,10 @@ def test_card_list_export_template_keeps_configured_field_order(export_context):
     sheet = book.active
     assert list(sheet.values) == [
         ("№ п/п", "Подразделение", "ФИО"),
-        (1, "Отдел А", "Бета"),
-        (2, "'=1+1", "Альфа"),
+        (1, "'=1+1", "Альфа"),
+        (2, "Отдел А", "Бета"),
     ]
-    assert sheet["B3"].data_type == "s"
+    assert sheet["B2"].data_type == "s"
 
 
 def add_event(ctx, card, key, kind, day, basis, *, changes=True):
@@ -456,8 +489,8 @@ def test_personnel_export_contains_three_merged_sections_and_event_rows(export_c
     hired = sections["Вновь приняты"] + 2
     assert [sheet.cell(hired + i, 1).value for i in range(2)] == ["Альфа", "Бета"]
     assert sheet.cell(hired, 2).value == "Специалист\nОтдел А"
-    assert sheet.cell(hired, 4).value == "01.09.2026\nПриказ № 1"
-    assert sheet.cell(hired - 1, 4).value == "Дата и основание назначения"
+    assert sheet.cell(hired, 4).value == "01.09.2026, Приказ № 1"
+    assert sheet.cell(hired - 1, 4).value == "Дата, основание назначения"
     assert {f"B{hired - 1}:C{hired - 1}", f"B{hired}:C{hired}"} <= {
         str(r) for r in sheet.merged_cells.ranges
     }
@@ -471,8 +504,8 @@ def test_personnel_export_contains_three_merged_sections_and_event_rows(export_c
     assert sheet.cell(dismissed, 3).number_format == "DD.MM.YYYY"
     changed = sections["Иные изменения"] + 2
     assert sheet.cell(changed, 2).value == "Старая подпись: До → После"
-    assert sheet.cell(changed, 4).value == "01.09.2026\nИзменение № 1"
-    assert sheet.cell(changed - 1, 4).value == "Дата и основание изменений"
+    assert sheet.cell(changed, 4).value == "01.09.2026, Изменение № 1"
+    assert sheet.cell(changed - 1, 4).value == "Дата, основание изменений"
     assert f"B{changed}:C{changed}" in {str(r) for r in sheet.merged_cells.ranges}
     text = " ".join(str(cell.value) for row in sheet for cell in row)
     assert "Нельзя" not in text and "Другая организация" not in text and "Вне периода" not in text
@@ -608,7 +641,7 @@ def test_personnel_uses_unfilled_fio_label_and_keeps_long_change_readable(export
         next(cell.row for row in sheet for cell in row if cell.value == "Иные изменения") + 2
     )
     assert sheet.cell(change_row, 1).value == "Не заполнено"
-    assert sheet.row_dimensions[change_row].height >= 135
+    assert sheet.row_dimensions[change_row].height >= 120
 
 
 def test_personnel_event_ties_are_stable_and_archived_cards_are_excluded(export_context):
@@ -630,9 +663,9 @@ def test_personnel_event_ties_are_stable_and_archived_cards_are_excluded(export_
     )
     change_start = next(i for i, row in enumerate(rows) if row[0] == "Иные изменения") + 2
     assert [row[3] for row in rows[change_start:]] == [
-        "01.09.2026\nПервый",
-        "01.09.2026\nВторой",
-        "01.09.2026\nТретий",
+        "01.09.2026, Третий",
+        "01.09.2026, Первый",
+        "01.09.2026, Второй",
     ]
     assert not any("Архив" in str(cell) for row in rows for cell in row)
 

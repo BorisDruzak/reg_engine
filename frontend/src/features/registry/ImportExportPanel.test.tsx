@@ -350,6 +350,28 @@ test("personnel download uses saved organizations and an inclusive valid period"
   revokeUrl.mockRestore();
 });
 
+test("enables personnel download when saved configuration keys have backend order", async () => {
+  const personnel = {
+    ...savedExport,
+    export_kind: "personnel_changes",
+    configuration_json: {
+      organization_ids: ["organization-1"],
+      position_field_id: "mapped-0",
+      structural_unit_field_id: "mapped-1",
+      appointment_date_field_id: "mapped-2",
+      appointment_basis_field_id: "mapped-3",
+    },
+  };
+  api.listCardExportTemplates.mockResolvedValue({ items: [personnel] });
+  const user = await openExports();
+
+  await user.selectOptions(screen.getByLabelText("Сохранённый шаблон выгрузки"), "export-1");
+  await user.type(screen.getByLabelText("Начало периода"), "2026-09-09");
+  await user.type(screen.getByLabelText("Конец периода"), "2026-09-10");
+
+  expect(screen.getByRole("button", { name: "Скачать XLSX" })).toBeEnabled();
+});
+
 test("edits a persisted template and archives it only after explicit confirmation", async () => {
   api.listCardExportTemplates.mockResolvedValue({ items: [savedExport] });
   api.updateCardExportTemplate.mockResolvedValue({ ...savedExport, name: "Обновлённый список" });
