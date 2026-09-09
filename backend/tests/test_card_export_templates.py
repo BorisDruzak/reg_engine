@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import get_actor_user_id, get_db_session
+from app.domain.work_experience import WorkExperience, anchor_for_experience, format_work_experience
 from app.main import create_app
 from app.models import (
     AccessGrant,
@@ -172,7 +173,7 @@ def add_card(ctx, ordinal, fio, appointed, *, organization=None, template=None):
     return card
 
 
-def template_payload(ctx, kind="card_list"):
+def template_payload(ctx, kind="card_list", *, organization_ids=None):
     mapping = {
         "position_field_id": str(ctx.fields[1].id),
         "structural_unit_field_id": str(ctx.fields[2].id),
@@ -184,16 +185,24 @@ def template_payload(ctx, kind="card_list"):
         "name": "Выгрузка",
         "export_kind": kind,
         "card_template_id": str(ctx.template.id),
-        "configuration_json": mapping
-        if kind == "personnel_changes"
-        else {"field_ids": [str(ctx.fields[2].id), str(ctx.fields[0].id)]},
+        "configuration_json": (
+            {
+                **mapping,
+                "organization_ids": [str(item) for item in (organization_ids or [ctx.org.id])],
+            }
+            if kind == "personnel_changes"
+            else {
+                "field_ids": [str(ctx.fields[2].id), str(ctx.fields[0].id)],
+                "organization_ids": [str(item) for item in (organization_ids or [ctx.org.id])],
+            }
+        ),
     }
 
 
-def create_template(ctx, kind="card_list"):
+def create_template(ctx, kind="card_list", *, payload=None, organization_ids=None):
     response = ctx.client.post(
         f"/api/v1/registries/{ctx.registry.id}/card-export-templates",
-        json=template_payload(ctx, kind),
+        json=payload or template_payload(ctx, kind, organization_ids=organization_ids),
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -216,6 +225,79 @@ def workbook(response):
     return load_workbook(BytesIO(response.content))
 
 
+def test_export_template_persists_multiple_organizations(export_context):
+    ctx = export_context
+    payload = template_payload(ctx)
+    payload["configuration_json"]["organization_ids"] = [str(ctx.org.id), str(ctx.child.id)]
+
+    template = create_template(ctx, payload=payload)
+
+    assert template["configuration_json"]["organization_ids"] == [str(ctx.org.id), str(ctx.child.id)]
+
+
+def test_card_list_export_combines_saved_organizations_without_organization_column(export_context):
+    ctx = export_context
+    add_card(ctx, 11, "Бета", date(2026, 9, 1), organization=ctx.child)
+    template = create_template(ctx, organization_ids=[ctx.org.id, ctx.child.id])
+
+    sheet = workbook(download(ctx, template)).active
+
+    assert sheet.title == "Карточки"
+    assert list(sheet.values)[0] == ("№ п/п", "Подразделение", "ФИО")
+    assert {row[2] for row in list(sheet.values)[1:]} == {"Альфа", "Бета"}
+
+
+def test_personnel_export_creates_one_sheet_per_saved_organization(export_context):
+    ctx = export_context
+    template = create_template(
+        ctx,
+        "personnel_changes",
+        organization_ids=[ctx.org.id, ctx.child.id],
+    )
+
+    book = workbook(
+        download(ctx, template, period_from="2026-09-01", period_to="2026-09-30")
+    )
+
+    assert len(book.worksheets) == 2
+    assert all(sheet["A1"].value == "Сведения о кадровых изменениях" for sheet in book.worksheets)
+
+
+def test_card_list_export_formats_work_experience_as_one_russian_column(export_context):
+    ctx = export_context
+    experience = WorkExperience(days=3, months=2, years=5)
+    field = FormField(
+        block_id=ctx.block.id,
+        code="experience",
+        label="Стаж",
+        field_type="work_experience",
+        position=10,
+    )
+    ctx.session.add(field)
+    ctx.session.flush()
+    ctx.template.field_schema_json = {
+        "field_ids": [*ctx.template.field_schema_json["field_ids"], str(field.id)]
+    }
+    instance = ctx.session.scalar(select(CardBlockInstance).where(CardBlockInstance.card_id == ctx.card.id))
+    ctx.session.add(
+        FieldValue(
+            card_id=ctx.card.id,
+            block_instance_id=instance.id,
+            field_id=field.id,
+            value_json={"anchor_date": anchor_for_experience(experience, date.today()).isoformat()},
+        )
+    )
+    ctx.session.flush()
+    payload = template_payload(ctx)
+    payload["configuration_json"]["field_ids"] = [str(ctx.fields[0].id), str(field.id)]
+    template = create_template(ctx, payload=payload)
+
+    sheet = workbook(download(ctx, template)).active
+
+    assert list(sheet.values)[0] == ("№ п/п", "ФИО", "Стаж")
+    assert sheet.cell(2, 3).value == format_work_experience(experience)
+
+
 def test_export_template_crud_persists_order_and_audits_soft_archive(export_context):
     ctx = export_context
     template = create_template(ctx)
@@ -227,7 +309,10 @@ def test_export_template_crud_persists_order_and_audits_soft_archive(export_cont
         f"/api/v1/card-export-templates/{template_id}",
         json={
             "name": "Изменённая выгрузка",
-            "configuration_json": {"field_ids": [str(ctx.fields[0].id), str(ctx.fields[2].id)]},
+            "configuration_json": {
+                "field_ids": [str(ctx.fields[0].id), str(ctx.fields[2].id)],
+                "organization_ids": [str(ctx.org.id)],
+            },
         },
     )
     assert changed.status_code == 200, changed.text
@@ -275,11 +360,11 @@ def test_card_list_export_template_keeps_configured_field_order(export_context):
     assert book.sheetnames == ["Карточки"]
     sheet = book.active
     assert list(sheet.values) == [
-        ("№ п/п", "Организация", "Подразделение", "ФИО"),
-        (1, "Организация А", "Отдел А", "Бета"),
-        (2, "Организация А", "'=1+1", "Альфа"),
+        ("№ п/п", "Подразделение", "ФИО"),
+        (1, "Отдел А", "Бета"),
+        (2, "'=1+1", "Альфа"),
     ]
-    assert sheet["C3"].data_type == "s"
+    assert sheet["B3"].data_type == "s"
 
 
 def add_event(ctx, card, key, kind, day, basis, *, changes=True):
@@ -440,6 +525,9 @@ def test_personnel_export_requires_valid_inclusive_period(export_context, period
 def test_export_template_permissions_rechecked_on_every_operation(export_context):
     ctx = export_context
     template = create_template(ctx)
+    inaccessible_payload = template_payload(ctx, organization_ids=[ctx.child.id])
+    inaccessible_payload["code"] = "child_export"
+    inaccessible_template = create_template(ctx, payload=inaccessible_payload)
     ctx.app.dependency_overrides[get_actor_user_id] = lambda: ctx.viewer.id
     path = f"/api/v1/card-export-templates/{template['id']}"
     assert ctx.client.patch(path, json={"name": "Запрещено"}).status_code == 403
@@ -451,7 +539,7 @@ def test_export_template_permissions_rechecked_on_every_operation(export_context
         ).status_code
         == 403
     )
-    assert download(ctx, template, organization_id=str(ctx.child.id)).status_code == 403
+    assert download(ctx, inaccessible_template).status_code == 403
     assert download(ctx, template).status_code == 200
     ctx.fields[2].is_exportable = False
     ctx.session.flush()
@@ -598,7 +686,7 @@ def test_export_template_resolves_reference_labels_without_raw_ids(export_contex
     template = create_template(ctx)
     ctx.app.dependency_overrides[get_actor_user_id] = lambda: ctx.viewer.id
     sheet = workbook(download(ctx, template)).active
-    assert sheet["C2"].value == expected
+    assert sheet["B2"].value == expected
 
 
 @pytest.mark.parametrize(

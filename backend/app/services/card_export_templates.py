@@ -204,13 +204,27 @@ class CardExportTemplateService:
                 field_ids = parsed.field_ids
             elif kind == "personnel_changes":
                 personnel = PersonnelChangesExportConfiguration.model_validate(configuration)
-                field_ids = list(personnel.model_dump().values())
+                parsed = personnel
+                field_ids = [
+                    personnel.position_field_id,
+                    personnel.structural_unit_field_id,
+                    personnel.appointment_date_field_id,
+                    personnel.appointment_basis_field_id,
+                ]
             else:
                 raise ImportExportServiceError("Неизвестный вид выгрузки.")
         except ValidationError as exc:
             raise ImportExportServiceError(
                 "Заполните корректно все параметры шаблона выгрузки."
             ) from exc
+        permissions = PermissionService(self.session)
+        if any(
+            not permissions.can_see_organization(
+                actor, organization_id, registry_id=registry_id
+            )
+            for organization_id in parsed.organization_ids
+        ):
+            raise PermissionDeniedError("Нет прав на выбранную организацию.")
         if len(set(field_ids)) != len(field_ids):
             raise ImportExportServiceError("Поля шаблона выгрузки не должны повторяться.")
         template = self.session.get(CardTemplate, card_template_id)
@@ -280,17 +294,11 @@ class CardExportTemplateService:
         *,
         actor_user_id: UUID,
         template_id: UUID,
-        organization_id: UUID,
+        organization_id: UUID | None = None,
         period_from: date | None = None,
         period_to: date | None = None,
     ) -> bytes:
         template = self.read_for_actor(actor_user_id=actor_user_id, template_id=template_id)
-        if not PermissionService(self.session).can_see_organization(
-            actor_user_id, organization_id, registry_id=template.registry_id
-        ):
-            raise PermissionDeniedError("Нет прав на выбранную организацию.")
-        organization = self.session.get(Organization, organization_id)
-        assert organization is not None
         configuration = dict(template.configuration_json)
         try:
             card_template_id = UUID(configuration.pop("card_template_id"))
@@ -311,38 +319,92 @@ class CardExportTemplateService:
             raise ImportExportServiceError(
                 "Укажите корректный период выгрузки: начало и окончание включительно."
             )
-        cards = CardService(self.session).list_visible_cards(
-            actor_user_id=actor_user_id,
-            registry_id=template.registry_id,
-            organization_ids=[organization_id],
-            include_descendant_organizations=False,
-            card_template_ids=[card_template_id],
+        organizations = self._saved_organizations_for_actor(
+            actor_user_id, template.registry_id, configuration["organization_ids"]
         )
         book = _openpyxl().Workbook()
-        sheet = book.active
-        widths = (
-            [10, *([32] * (len(fields) + 1))]
-            if template.export_kind == "card_list"
-            else [26, 17, 22, 46]
-        )
-        for index, width in enumerate(widths, 1):
-            sheet.column_dimensions[_openpyxl().utils.get_column_letter(index)].width = width
         if template.export_kind == "card_list":
+            cards = CardService(self.session).list_visible_cards(
+                actor_user_id=actor_user_id,
+                registry_id=template.registry_id,
+                organization_ids=[organization.id for organization in organizations],
+                include_descendant_organizations=False,
+                card_template_ids=[card_template_id],
+            )
+            sheet = book.active
             sheet.title = "Карточки"
-            self._append(sheet, ["№ п/п", "Организация", *(f.label for f in fields)], header=True)
+            self._set_sheet_layout(sheet, [10, *([32] * len(fields))])
+            self._append(sheet, ["№ п/п", *(f.label for f in fields)], header=True)
             for ordinal, card in enumerate(cards, 1):
                 values = self._values(actor_user_id, card, fields)
-                self._append(
-                    sheet, [ordinal, organization.name, *(values.get(f.id) for f in fields)]
-                )
-            sheet.freeze_panes = "C2"
+                self._append(sheet, [ordinal, *(values.get(f.id) for f in fields)])
+            sheet.freeze_panes = "B2"
             sheet.auto_filter.ref = sheet.dimensions
         else:
             assert period_from is not None and period_to is not None
-            sheet.title = "Кадровые изменения"
-            self._personnel(
-                sheet, actor_user_id, organization.name, cards, fields, fio, period_from, period_to
-            )
+            titles: set[str] = set()
+            for ordinal, organization in enumerate(organizations, 1):
+                sheet = book.active if ordinal == 1 else book.create_sheet()
+                sheet.title = self._personnel_sheet_title(organization.name, ordinal, titles)
+                self._set_sheet_layout(sheet, [26, 17, 22, 46])
+                cards = CardService(self.session).list_visible_cards(
+                    actor_user_id=actor_user_id,
+                    registry_id=template.registry_id,
+                    organization_ids=[organization.id],
+                    include_descendant_organizations=False,
+                    card_template_ids=[card_template_id],
+                )
+                self._personnel(
+                    sheet,
+                    actor_user_id,
+                    organization.name,
+                    cards,
+                    fields,
+                    fio,
+                    period_from,
+                    period_to,
+                )
+        for sheet in book.worksheets:
+            self._set_print_options(sheet)
+        output = BytesIO()
+        book.save(output)
+        return output.getvalue()
+
+    def _saved_organizations_for_actor(
+        self, actor: UUID, registry_id: UUID, organization_ids: list[str]
+    ) -> list[Organization]:
+        permissions = PermissionService(self.session)
+        organizations: list[Organization] = []
+        for raw_organization_id in organization_ids:
+            organization_id = UUID(raw_organization_id)
+            organization = self.session.get(Organization, organization_id)
+            if organization is None or not permissions.can_see_organization(
+                actor, organization_id, registry_id=registry_id
+            ):
+                raise PermissionDeniedError("Нет прав на выбранную организацию.")
+            organizations.append(organization)
+        return organizations
+
+    @staticmethod
+    def _personnel_sheet_title(name: str, ordinal: int, existing: set[str]) -> str:
+        sanitized = name.translate(str.maketrans({character: " " for character in "[]:*?/\\"})).strip()
+        base = (sanitized or "Организация")[:31]
+        candidate = base
+        suffix = 2
+        while candidate.casefold() in existing:
+            suffix_text = f" ({suffix})"
+            candidate = f"{base[: 31 - len(suffix_text)]}{suffix_text}"
+            suffix += 1
+        existing.add(candidate.casefold())
+        return candidate
+
+    @staticmethod
+    def _set_sheet_layout(sheet: Any, widths: list[int]) -> None:
+        for index, width in enumerate(widths, 1):
+            sheet.column_dimensions[_openpyxl().utils.get_column_letter(index)].width = width
+
+    @staticmethod
+    def _set_print_options(sheet: Any) -> None:
         sheet.sheet_properties.pageSetUpPr.fitToPage = True
         sheet.page_setup.orientation = "landscape"
         sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
@@ -350,9 +412,6 @@ class CardExportTemplateService:
         sheet.page_setup.fitToHeight = 0
         sheet.print_options.horizontalCentered = True
         sheet.print_area = sheet.dimensions
-        output = BytesIO()
-        book.save(output)
-        return output.getvalue()
 
     def _values(self, actor: UUID, card: Card, fields: list[FormField]) -> dict[UUID, object]:
         cards = CardService(self.session)
@@ -396,7 +455,11 @@ class CardExportTemplateService:
             if {"days", "months", "years"} <= value.keys():
                 from app.domain.work_experience import format_work_experience, parse_work_experience
 
-                return format_work_experience(parse_work_experience(value))
+                return format_work_experience(
+                    parse_work_experience(
+                        {key: value[key] for key in ("days", "months", "years")}
+                    )
+                )
             return "; ".join(
                 f"{key}: {CardExportTemplateService._text(item)}" for key, item in value.items()
             )
