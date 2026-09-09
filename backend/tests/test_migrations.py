@@ -372,7 +372,7 @@ def test_fio_code_normalization_migrates_existing_active_field() -> None:
             )
             block_id = connection.scalar(
                 text(
-                    "INSERT INTO public.form_blocks (registry_id, code, label) "
+                    "INSERT INTO public.form_blocks (registry_id, code, title) "
                     "VALUES (:registry_id, 'main', 'Основной блок') RETURNING id"
                 ),
                 {"registry_id": registry_id},
