@@ -477,6 +477,112 @@ def test_card_event_permissions_are_checked_before_basis_or_mutation(
     assert ctx.session.scalars(select(CardEvent)).all() == []
 
 
+@pytest.mark.parametrize(
+    "operation", ["single", "bulk", "metadata", "dismissal", "block_archive", "validation"]
+)
+def test_dismissed_card_hides_lifecycle_from_unauthorized_actor(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = "dismissed"
+    ctx.session.commit()
+
+    def deny(*_args: Any, **_kwargs: Any) -> None:
+        raise PermissionDeniedError("denied")
+
+    monkeypatch.setattr(ctx.service, "_require_card_permission", deny)
+    operations = {
+        "single": lambda: ctx.service.set_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+        ),
+        "bulk": lambda: ctx.service.set_field_values_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            values=[],
+        ),
+        "metadata": lambda: ctx.service.update_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            public_edit_enabled=True,
+        ),
+        "dismissal": lambda: ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date(2026, 9, 9),
+            basis_text="Приказ",
+        ),
+        "block_archive": lambda: ctx.service.archive_block_instance_for_actor(
+            actor_user_id=ctx.actor_id,
+            block_instance_id=ctx.instance.id,
+        ),
+        "validation": lambda: ctx.service.validate_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            registry_id=ctx.card.registry_id,
+            organization_id=ctx.card.organization_id,
+            field_id=ctx.fields[0].id,
+            value="После",
+        ),
+    }
+    with pytest.raises(PermissionDeniedError):
+        operations[operation]()
+    assert ctx.card.lifecycle_status == "dismissed"
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_card_event_stale_block_archive_does_not_overwrite_or_duplicate(
+    card_event_context: Any,
+) -> None:
+    from sqlalchemy import update
+
+    ctx = card_event_context
+    original_archived_at = datetime(2026, 9, 8, 12, 0)
+    ctx.session.add(
+        CardBlockInstance(
+            id=uuid4(),
+            card_id=ctx.card.id,
+            block_id=ctx.block.id,
+            ordinal=1,
+        )
+    )
+    ctx.session.add(
+        CardEvent(
+            id=uuid4(),
+            card_id=ctx.card.id,
+            event_type="change",
+            occurred_on=date(2026, 9, 8),
+            basis_text="Первое архивирование",
+        )
+    )
+    # A completed concurrent write changes the row while this Session still
+    # holds the active instance in its identity map, before acquiring card lock.
+    ctx.session.execute(
+        update(CardBlockInstance)
+        .where(CardBlockInstance.id == ctx.instance.id)
+        .values(archived_at=original_archived_at)
+        .execution_options(synchronize_session=False)
+    )
+    ctx.session.commit()
+    assert ctx.instance.archived_at is None
+    with pytest.raises(CardServiceError, match="Card block instance was not found"):
+        ctx.service.archive_block_instance_for_actor(
+            actor_user_id=ctx.actor_id,
+            block_instance_id=ctx.instance.id,
+            change_context=_event_change_context(),
+        )
+    stored_archived_at = ctx.session.scalar(
+        select(CardBlockInstance.archived_at).where(
+            CardBlockInstance.id == ctx.instance.id,
+        )
+    )
+    assert stored_archived_at == original_archived_at
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 1
+    assert ctx.session.scalars(select(AuditEvent)).all() == []
+
+
 def test_public_card_event_requires_basis_and_keeps_public_audit_actor(
     card_event_context: Any,
 ) -> None:

@@ -83,19 +83,15 @@ def _active_card_change[**P, R](
     def wrapped(self: "CardService", /, *args: P.args, **kwargs: P.kwargs) -> R:
         card_id = cast(UUID | None, kwargs.get("card_id"))
         if card_id is None:
-            instance = self._get_active_block_instance(cast(UUID, kwargs["block_instance_id"]))
+            instance = self.session.get(CardBlockInstance, cast(UUID, kwargs["block_instance_id"]))
+            if instance is None:
+                raise CardServiceError("Card block instance was not found.")
             card_id = instance.card_id
         if self._event_card_id == card_id:
             return operation(self, *args, **kwargs)
         with self.session.begin_nested():
-            # Lock and refresh before checking lifecycle/basis or reading old values.
-            self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
-            card = self._get_editable_card(card_id)
             actor_id = cast(UUID | None, kwargs.get("actor_user_id"))
-            if actor_id is not None:
-                self._require_card_permission(
-                    actor_id, card.organization_id, registry_id=card.registry_id
-                )
+            card = self._lock_editable_card(card_id, actor_user_id=actor_id)
             business_data = operation.__name__ != "update_card_for_actor" or bool(
                 kwargs.get("update_org_unit")
             )
@@ -1227,16 +1223,19 @@ class CardService:
 
         card_context_id = card_id
         if card_id is not None:
-            card = self._get_editable_card(card_id)
-            if card.registry_id != registry_id:
-                raise CardServiceError("Card does not belong to the import registry.")
-            if card.organization_id != organization_id:
-                raise CardServiceError("Card organization does not match the import row.")
+            card = self.session.get(Card, card_id)
+            if card is None:
+                raise CardServiceError("Card was not found.")
             self._require_card_permission(
                 actor_user_id,
                 card.organization_id,
                 registry_id=card.registry_id,
             )
+            card = self._get_editable_card(card_id)
+            if card.registry_id != registry_id:
+                raise CardServiceError("Card does not belong to the import registry.")
+            if card.organization_id != organization_id:
+                raise CardServiceError("Card organization does not match the import row.")
             card_context_id = card.id
         else:
             self._require_card_permission(
@@ -1573,11 +1572,7 @@ class CardService:
         basis_text: str,
     ) -> Card:
         with self.session.begin_nested():
-            self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
-            card = self._get_editable_card(card_id)
-            self._require_card_permission(
-                actor_user_id, card.organization_id, registry_id=card.registry_id
-            )
+            card = self._lock_editable_card(card_id, actor_user_id=actor_user_id)
             if card.lifecycle_status != "active":
                 raise CardDismissalError("Увольнение доступно только для действующей карточки.")
             context = self._require_change_context(CardChangeContext(basis_text, occurred_on))
@@ -1810,6 +1805,11 @@ class CardService:
         block_instance_id: UUID,
         change_context: CardChangeContext | None = None,
     ) -> CardBlockInstance:
+        # The decorator has acquired the card lock. Another writer may have
+        # archived this instance while we waited, so discard identity-map state.
+        self.session.get(
+            CardBlockInstance, block_instance_id, with_for_update=True, populate_existing=True
+        )
         block_instance = self._get_active_block_instance(block_instance_id)
         card = self._get_editable_card(block_instance.card_id)
         block = self._get_active_block(block_instance.block_id)
@@ -1857,6 +1857,17 @@ class CardService:
             registry_id=registry_id,
         ):
             raise PermissionDeniedError("Actor cannot manage cards in this organization scope.")
+
+    def _lock_editable_card(self, card_id: UUID, *, actor_user_id: UUID | None) -> Card:
+        card = self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+        if card is None:
+            raise CardServiceError("Card was not found.")
+        if actor_user_id is not None:
+            self._require_card_permission(
+                actor_user_id, card.organization_id, registry_id=card.registry_id
+            )
+        # Lifecycle details are visible only after actor authorization.
+        return self._get_editable_card(card_id)
 
     def _get_editable_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)

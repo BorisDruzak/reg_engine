@@ -152,6 +152,38 @@ def test_archive_card_event_api_accepts_optional_change_context(card_event_api: 
     assert response.json()["lifecycle_status"] == "archived"
 
 
+def test_dismissed_card_api_returns_permission_error_without_lifecycle_disclosure(
+    card_event_api: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.permissions import PermissionDeniedError
+
+    client, ctx = card_event_api
+    ctx.card.lifecycle_status = "dismissed"
+    ctx.session.commit()
+
+    def deny(*_args: Any, **_kwargs: Any) -> None:
+        raise PermissionDeniedError("denied")
+
+    monkeypatch.setattr(CardService, "_require_card_permission", deny)
+    requests = [
+        ("PATCH", f"/api/v1/cards/{ctx.card.id}", {"public_edit_enabled": True}),
+        (
+            "POST",
+            f"/api/v1/cards/{ctx.card.id}/dismissal",
+            {
+                "basis_text": "Приказ",
+                "occurred_on": "2026-09-09",
+            },
+        ),
+    ]
+    for method, path, payload in requests:
+        response = client.request(method, path, json=payload)
+        assert response.status_code == 403, response.text
+        assert "Уволенная" not in response.text
+        assert "только для чтения" not in response.text
+
+
 def _require_test_database_url() -> str:
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
