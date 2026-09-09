@@ -7,63 +7,34 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-09-10 XLSX export hotfix is implemented, pushed, and deployed at
-  `e92b1f3d`.
+- 2026-09-10 request-scoped XLSX export organization selection is implemented
+  locally. The active plan is
+  `docs/superpowers/plans/2026-09-10-export-run-organization-selection.md`.
 
-  - Ordinary and personnel-change XLSX rows sort alphabetically by the
-    schema-selected FIO field (empty FIO values follow named cards). Personnel
-    report date and basis values now use a comma separator.
-  - Saved personnel templates no longer appear modified merely because the API
-    returns JSON configuration keys in a different order. This restores the
-    `Скачать XLSX` action for unchanged templates, including template `123`.
-  - The personnel appointment-basis mapping accepts text fields; no date-type
-    requirement exists for it. Production template `123` currently points to
-    the dynamic `Дата рождения` field, so an operator must select the intended
-    text field and save the template once it exists in the card schema.
-  - Focused verification passed: 43 backend export-template tests, 22 frontend
-    import/export tests, backend Ruff, frontend TypeScript and Prettier. ESLint
-    has only the pre-existing `FilledCardLayout.tsx` hook-dependency warning.
-  - Server checkout fast-forwarded to `e92b1f3d`; frontend asset
-    `index-CGw-iYNA.js` was published, `reg-engine.service` restarted, and
-    same-origin frontend/API smoke checks passed.
+  Delivered contract awaiting release:
+  - `Шаблоны выгрузки` now create, edit, and archive only the column layout or
+    personnel mapping. They contain neither organizations, dates, nor a
+    download action.
+  - `Экспорт карточек` first selects the kind, then displays only templates of
+    that kind, chooses one or more accessible organizations (including `Все
+    организации`), and downloads XLSX. `Кадровые изменения` additionally
+    requires an inclusive start and end date.
+  - The API no longer saves organization ids in template configuration. The
+    download request requires unique organization ids and checks access for
+    every requested organization. Legacy saved ids are ignored and are removed
+    at the next template save.
+  - Ordinary exports retain the single combined sheet; personnel exports retain
+    separate sheets per requested organization.
 
-- 2026-09-10 saved organizations in persisted XLSX export templates are
-  implemented and deployed at `4b8aded7`. The active implementation plan is
-  `docs/superpowers/plans/2026-09-10-saved-xlsx-export-organizations.md`.
-
-  Delivered contract:
-  - An export template stores one or more unique accessible organization ids in
-    its JSON configuration. The UI provides a multiple-choice
-    `Организации выгрузки` control and `Все организации`; download no longer
-    accepts a one-time organization choice.
-  - Ordinary `Список карточек` export produces a single `Карточки` sheet for
-    all saved organizations, without an organization column. `Стаж` remains
-    one readable Russian column with days, months, and years.
-  - `Кадровые изменения` produces one sanitized, unique worksheet per saved
-    organization. Its download accepts only inclusive start/end dates.
-  - A legacy template without `organization_ids` remains editable, but cannot
-    be downloaded until an operator selects organizations and saves it once.
-
-  Fresh verification and deployment evidence:
+  Local verification:
   - `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_card_export_templates.py -q`:
-    **42 passed**, with the existing Starlette/httpx deprecation warning.
-  - `npm --prefix frontend test -- --run src/api/client.test.ts src/features/registry/ImportExportPanel.test.tsx`:
-    **26 passed**. The full `scripts/test.ps1` did not return a final summary
-    on this host and left child Vitest processes; they were stopped. It is not
-    claimed as a full-suite pass.
-  - `scripts/lint.ps1`, `scripts/format.ps1 -Check`, and
-    `scripts/typecheck.ps1` passed. ESLint retains the pre-existing
-    `FilledCardLayout.tsx` exhaustive-deps warning. `frontend build` passed
-    with the existing large-chunk advisory.
-  - `scripts/deploy.ps1` updated `/opt/reg_engine` to `4b8aded7` and passed
-    server/database/storage checks. `scripts/deploy-frontend.ps1` published
-    `index-DKXshtD6.js`, restarted `reg-engine.service`, and passed API and
-    same-origin frontend smoke checks.
-  - Production browser inspection confirmed `Организации выгрузки` and
-    `Все организации`, showed all ten accessible organizations after the
-    temporary selection, and confirmed the old per-download organization
-    selector is absent. No production template was saved or downloaded during
-    this visual check, so existing user configuration was not altered.
+    **44 passed**, with the existing Starlette/httpx deprecation warning.
+  - `npm --prefix frontend test -- --run src/features/registry/ImportExportPanel.test.tsx src/api/client.test.ts`:
+    **26 passed**.
+  - Frontend TypeScript and Prettier checks pass; ESLint has only the existing
+    `FilledCardLayout.tsx` hook-dependency warning. The full Vitest command did
+    not return a final summary in this desktop environment and left its child
+    processes running; they were stopped, so no full-suite pass is claimed.
 
 - 2026-09-09 card identity, durable events, dismissal and persisted XLSX
   templates are implemented and deployed through Task 8. Tasks 1–8, their

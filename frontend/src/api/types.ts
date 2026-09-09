@@ -564,11 +564,8 @@ export type PersonnelExportMapping = {
 };
 export type CardListExportConfiguration = {
   field_ids: string[];
-  organization_ids?: string[];
 };
-export type PersonnelExportConfiguration = PersonnelExportMapping & {
-  organization_ids?: string[];
-};
+export type PersonnelExportConfiguration = PersonnelExportMapping;
 export type CardExportTemplatePayload = {
   code: string;
   name: string;
@@ -584,6 +581,7 @@ export type CardExportTemplateRead = CardExportTemplatePayload & {
   archived_at: string | null;
 };
 export type CardExportDownloadPayload = {
+  organization_ids: string[];
   period_from?: string;
   period_to?: string;
 };

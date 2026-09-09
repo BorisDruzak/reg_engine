@@ -5,7 +5,6 @@ import {
   ApiError,
   archiveCardExportTemplate,
   createCardExportTemplate,
-  downloadCardExportTemplate,
   listCardExportTemplates,
   updateCardExportTemplate,
 } from "@/api/client";
@@ -18,7 +17,6 @@ import type {
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
 import { errorText } from "@/components/common/dataUtils";
-import { SearchableChoicePicker } from "@/features/cards/SearchableChoicePicker";
 
 const mappings = [
   ["position_field_id", "Поле должности"],
@@ -65,9 +63,6 @@ export function ExportTemplatesPanel({
   const [cardTemplateId, setCardTemplateId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [mapping, setMapping] = useState<PersonnelExportMapping>(emptyMapping);
-  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
-  const [periodFrom, setPeriodFrom] = useState("");
-  const [periodTo, setPeriodTo] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -76,10 +71,7 @@ export function ExportTemplatesPanel({
   const fioId = cardTemplate?.fio_field_id;
   const selectableFields = fields.filter((field) => field.id !== fioId);
   const orderedIds = fioId ? [fioId, ...fieldIds.filter((id) => id !== fioId)] : fieldIds;
-  const configuration =
-    kind === "card_list"
-      ? { field_ids: orderedIds, organization_ids: organizationIds }
-      : { ...mapping, organization_ids: organizationIds };
+  const configuration = kind === "card_list" ? { field_ids: orderedIds } : mapping;
   const validMapping =
     mappings.every(([key]) =>
       selectableFields.some(
@@ -93,8 +85,6 @@ export function ExportTemplatesPanel({
     cardTemplate &&
     fioId &&
     fields.some((field) => field.id === fioId) &&
-    organizationIds.length > 0 &&
-    organizationIds.every((id) => options.organizations.some((item) => item.id === id)) &&
     (kind === "card_list"
       ? orderedIds.every((id) => fields.some((field) => field.id === id))
       : validMapping),
@@ -107,7 +97,6 @@ export function ExportTemplatesPanel({
     configurationFingerprint(selected.configuration_json) !==
       configurationFingerprint(configuration);
   const personnel = kind === "personnel_changes";
-  const validPeriod = !personnel || Boolean(periodFrom && periodTo && periodFrom <= periodTo);
 
   function clearFeedback() {
     setError(null);
@@ -134,9 +123,6 @@ export function ExportTemplatesPanel({
           }
         : emptyMapping,
     );
-    setOrganizationIds(template?.configuration_json.organization_ids ?? []);
-    setPeriodFrom("");
-    setPeriodTo("");
     clearFeedback();
   }
   function cacheTemplate(template: CardExportTemplateRead) {
@@ -196,32 +182,7 @@ export function ExportTemplatesPanel({
       setError(errorText(failure));
     },
   });
-  const download = useMutation({
-    mutationFn: () =>
-      downloadCardExportTemplate(token, selected!.id, {
-        ...(personnel ? { period_from: periodFrom, period_to: periodTo } : {}),
-      }),
-    onSuccess: ({ blob, filename }) => {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      try {
-        link.href = url;
-        link.download = filename;
-        document.body.append(link);
-        link.click();
-      } finally {
-        link.remove();
-        URL.revokeObjectURL(url);
-      }
-      setError(null);
-      setMessage("XLSX-файл скачан");
-    },
-    onError: (failure) => {
-      setMessage(null);
-      setError(errorText(failure));
-    },
-  });
-  const pending = save.isPending || archive.isPending || download.isPending;
+  const pending = save.isPending || archive.isPending;
 
   function moveField(index: number, direction: number) {
     const next = fieldIds.filter((id) => id !== fioId);
@@ -233,9 +194,7 @@ export function ExportTemplatesPanel({
   return (
     <section className="xlsx-operation" aria-label="Шаблоны выгрузки">
       <h4>Шаблоны выгрузки</h4>
-      <p className="muted-text">
-        Сохраните организации, состав и порядок колонок или настройте отчёт об изменениях.
-      </p>
+      <p className="muted-text">Настройте состав и порядок колонок или отчёт об изменениях.</p>
       {templatesQuery.isLoading && <p>Загрузка шаблонов…</p>}
       {templatesQuery.error && (
         <div>
@@ -318,35 +277,6 @@ export function ExportTemplatesPanel({
               ))}
             </select>
           </label>
-        </div>
-        <div className="field-editor-control">
-          <span>Организации выгрузки</span>
-          <SearchableChoicePicker
-            label="Организации выгрузки"
-            hint="Выберите организации"
-            mode="multiple"
-            options={options.organizations.map((organization) => ({
-              id: organization.id,
-              label: organization.label,
-            }))}
-            value={organizationIds}
-            onChange={(value) => {
-              setOrganizationIds(Array.isArray(value) ? value : []);
-              clearFeedback();
-            }}
-          />
-          <div className="row-actions">
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setOrganizationIds(options.organizations.map((organization) => organization.id));
-                clearFeedback();
-              }}
-            >
-              Все организации
-            </button>
-          </div>
         </div>
         {cardTemplate && (
           <>
@@ -506,54 +436,6 @@ export function ExportTemplatesPanel({
             </div>
           </div>
         )}
-        {personnel && (
-          <div className="template-form">
-            <label className="field-editor-control">
-              <span>Начало периода</span>
-              <input
-                type="date"
-                value={periodFrom}
-                onChange={(event) => {
-                  setPeriodFrom(event.target.value);
-                  clearFeedback();
-                }}
-              />
-            </label>
-            <label className="field-editor-control">
-              <span>Конец периода</span>
-              <input
-                type="date"
-                value={periodTo}
-                onChange={(event) => {
-                  setPeriodTo(event.target.value);
-                  clearFeedback();
-                }}
-              />
-            </label>
-          </div>
-        )}
-        {personnel && (
-          <p className="muted-text">
-            Обе даты включаются в период. Отчёт содержит назначения, изменения и увольнения.
-          </p>
-        )}
-        {personnel && periodFrom && periodTo && !validPeriod && (
-          <p className="inline-alert">Конец периода не может быть раньше начала.</p>
-        )}
-        {dirty && selected && (
-          <p className="muted-text">Сохраните изменения шаблона перед скачиванием.</p>
-        )}
-        <button
-          type="button"
-          className="primary-button"
-          disabled={!selected || dirty || !valid || !validPeriod}
-          onClick={() => {
-            clearFeedback();
-            download.mutate();
-          }}
-        >
-          Скачать XLSX
-        </button>
       </fieldset>
       {pending && <p role="status">Выполняется…</p>}
       {message && (

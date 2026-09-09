@@ -3,12 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   commitTabularXlsxImport,
-  downloadTabularXlsxCards,
+  downloadCardExportTemplate,
   downloadTabularXlsxImportTemplate,
   getTabularXlsxCardExchangeOptions,
+  listCardExportTemplates,
   previewTabularXlsxImport,
 } from "@/api/client";
 import type {
+  CardExportKind,
   TabularCardImportCommitRead,
   TabularCardImportPreviewRead,
   TabularCardWorkbookPayload,
@@ -32,6 +34,11 @@ export function ImportExportPanel({
     queryFn: () => getTabularXlsxCardExchangeOptions(token, selectedRegistryId),
     enabled: Boolean(token && selectedRegistryId),
   });
+  const savedExportsQuery = useQuery({
+    queryKey: ["card-export-templates", token, selectedRegistryId],
+    queryFn: () => listCardExportTemplates(token, selectedRegistryId),
+    enabled: Boolean(token && selectedRegistryId),
+  });
   const [templateId, setTemplateId] = useState("");
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const [fixedOrganizationId, setFixedOrganizationId] = useState("");
@@ -48,10 +55,15 @@ export function ImportExportPanel({
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<TabularCardImportPreviewRead | null>(null);
   const [commitResult, setCommitResult] = useState<TabularCardImportCommitRead | null>(null);
-  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [savedExportKind, setSavedExportKind] = useState<CardExportKind>("card_list");
+  const [savedExportTemplateId, setSavedExportTemplateId] = useState("");
+  const [savedExportOrganizationIds, setSavedExportOrganizationIds] = useState<string[]>([]);
+  const [savedExportPeriodFrom, setSavedExportPeriodFrom] = useState("");
+  const [savedExportPeriodTo, setSavedExportPeriodTo] = useState("");
+  const [savedExportMessage, setSavedExportMessage] = useState<string | null>(null);
+  const [savedExportError, setSavedExportError] = useState<string | null>(null);
 
   const templates = optionsQuery.data?.templates ?? [];
   const effectiveTemplateId =
@@ -77,6 +89,20 @@ export function ImportExportPanel({
   const selectedFieldIds = fieldIds.filter((fieldId) =>
     supportedFields.some((field) => field.id === fieldId),
   );
+  const savedExports = (savedExportsQuery.data?.items ?? []).filter(
+    (template) => template.export_kind === savedExportKind,
+  );
+  const selectedSavedExport =
+    savedExports.find((template) => template.id === savedExportTemplateId) ?? null;
+  const selectedSavedExportOrganizationIds = savedExportOrganizationIds.filter((organizationId) =>
+    optionsQuery.data?.organizations.some((organization) => organization.id === organizationId),
+  );
+  const savedExportPersonnel = selectedSavedExport?.export_kind === "personnel_changes";
+  const savedExportPeriodValid =
+    !savedExportPersonnel ||
+    Boolean(
+      savedExportPeriodFrom && savedExportPeriodTo && savedExportPeriodFrom <= savedExportPeriodTo,
+    );
 
   useEffect(() => {
     if (!effectiveTemplateId || initializedTemplateKey.current === templateFieldKey) {
@@ -92,7 +118,7 @@ export function ImportExportPanel({
       : selectedOrganizationIds.includes(fixedOrganizationId)
         ? fixedOrganizationId
         : "";
-  const exportPayload: TabularCardWorkbookPayload | null =
+  const importWorkbookPayload: TabularCardWorkbookPayload | null =
     selectedTemplate && selectedFieldIds.length && selectedOrganizationIds.length
       ? {
           card_template_id: selectedTemplate.id,
@@ -102,9 +128,9 @@ export function ImportExportPanel({
         }
       : null;
   const importPayload: TabularCardWorkbookPayload | null =
-    exportPayload && effectiveFixedOrganizationId
+    importWorkbookPayload && effectiveFixedOrganizationId
       ? {
-          ...exportPayload,
+          ...importWorkbookPayload,
           fixed_organization_id: effectiveFixedOrganizationId,
           import_mode: importMode,
           work_experience_as_of_date: workExperienceAsOfDate || undefined,
@@ -112,43 +138,28 @@ export function ImportExportPanel({
       : null;
 
   const downloadMutation = useMutation({
-    mutationFn: async (kind: "list" | "template") => {
-      const workbookPayload = kind === "list" ? exportPayload : importPayload;
-      if (!workbookPayload) {
+    mutationFn: async () => {
+      if (!importPayload) {
         throw new Error(
           configurationError(
             Boolean(selectedTemplate),
             selectedOrganizationIds,
             selectedFieldIds,
-            kind === "template",
+            true,
             effectiveFixedOrganizationId,
           ),
         );
       }
-      const download =
-        kind === "list"
-          ? await downloadTabularXlsxCards(token, selectedRegistryId, workbookPayload)
-          : await downloadTabularXlsxImportTemplate(token, selectedRegistryId, workbookPayload);
-      return { kind, ...download };
+      return downloadTabularXlsxImportTemplate(token, selectedRegistryId, importPayload);
     },
-    onSuccess: ({ kind, blob, filename }) => {
+    onSuccess: ({ blob, filename }) => {
       triggerBrowserDownload(blob, filename);
-      if (kind === "list") {
-        setDownloadMessage(uiText.tabularXlsxDownloaded);
-        setDownloadError(null);
-      } else {
-        setImportMessage(uiText.tabularXlsxDownloaded);
-        setImportError(null);
-      }
+      setImportMessage(uiText.tabularXlsxDownloaded);
+      setImportError(null);
     },
-    onError: (error, kind) => {
-      if (kind === "list") {
-        setDownloadMessage(null);
-        setDownloadError(errorText(error));
-      } else {
-        setImportMessage(null);
-        setImportError(errorText(error));
-      }
+    onError: (error) => {
+      setImportMessage(null);
+      setImportError(errorText(error));
     },
   });
   const previewMutation = useMutation({
@@ -196,6 +207,31 @@ export function ImportExportPanel({
       setImportError(errorText(error));
     },
   });
+  const savedExportDownloadMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedSavedExport || !selectedSavedExportOrganizationIds.length) {
+        throw new Error("Выберите шаблон и одну или несколько организаций для выгрузки.");
+      }
+      if (!savedExportPeriodValid) {
+        throw new Error("Укажите корректный период выгрузки: начало и окончание включительно.");
+      }
+      return downloadCardExportTemplate(token, selectedSavedExport.id, {
+        organization_ids: selectedSavedExportOrganizationIds,
+        ...(savedExportPersonnel
+          ? { period_from: savedExportPeriodFrom, period_to: savedExportPeriodTo }
+          : {}),
+      });
+    },
+    onSuccess: ({ blob, filename }) => {
+      triggerBrowserDownload(blob, filename);
+      setSavedExportMessage("XLSX-файл скачан");
+      setSavedExportError(null);
+    },
+    onError: (error) => {
+      setSavedExportMessage(null);
+      setSavedExportError(errorText(error));
+    },
+  });
 
   const hasValidPreview = Boolean(preview) && preview?.summary.invalid_rows === 0;
   const hasStablePreview = hasValidPreview && previewFile === xlsxFile;
@@ -209,12 +245,6 @@ export function ImportExportPanel({
     setImportError(null);
   }
 
-  function resetConfigurationFeedback() {
-    resetPreview();
-    setDownloadMessage(null);
-    setDownloadError(null);
-  }
-
   return (
     <Panel title={uiText.importExport}>
       <section className="template-manager" aria-labelledby="tabular-xlsx-heading">
@@ -222,7 +252,7 @@ export function ImportExportPanel({
         <p className="muted-text">{uiText.tabularXlsxDescription}</p>
         {optionsQuery.isLoading && <p className="muted-text">{uiText.loadingCard}</p>}
         {optionsError && <p className="inline-alert attachment-status">{optionsError}</p>}
-        {activeOperation !== "templates" &&
+        {activeOperation === "import" &&
           !optionsQuery.isLoading &&
           !optionsError &&
           optionsQuery.data && (
@@ -242,7 +272,7 @@ export function ImportExportPanel({
                           setTemplateId(event.currentTarget.value);
                           initializedTemplateKey.current = null;
                           setFieldIds([]);
-                          resetConfigurationFeedback();
+                          resetPreview();
                         }}
                       >
                         <option value="">{uiText.tabularXlsxSelectTemplate}</option>
@@ -266,7 +296,7 @@ export function ImportExportPanel({
                         value={selectedOrganizationIds}
                         onChange={(value) => {
                           setOrganizationIds(Array.isArray(value) ? value : []);
-                          resetConfigurationFeedback();
+                          resetPreview();
                         }}
                       />
                     </div>
@@ -283,7 +313,7 @@ export function ImportExportPanel({
                           value={selectedFieldIds}
                           onChange={(value) => {
                             setFieldIds(Array.isArray(value) ? value : []);
-                            resetConfigurationFeedback();
+                            resetPreview();
                           }}
                         />
                         {unsupportedFields.map((field) => (
@@ -342,21 +372,143 @@ export function ImportExportPanel({
           ) : activeOperation === "export" ? (
             <section className="xlsx-operation" aria-labelledby="tabular-xlsx-export">
               <h4 id="tabular-xlsx-export">{uiText.tabularXlsxExportTitle}</h4>
-              <p className="muted-text">{uiText.tabularXlsxExportDescription}</p>
+              <p className="muted-text">
+                Выберите вид, шаблон и организации для формирования XLSX-файла.
+              </p>
+              {savedExportsQuery.isLoading && <p className="muted-text">Загрузка шаблонов…</p>}
+              {savedExportsQuery.error && (
+                <p role="alert" className="inline-alert attachment-status">
+                  {errorText(savedExportsQuery.error)}
+                </p>
+              )}
+              {!savedExportsQuery.isLoading && !savedExportsQuery.error && (
+                <div className="template-form">
+                  <label className="field-editor-control">
+                    <span>Вид выгрузки</span>
+                    <select
+                      aria-label="Вид выгрузки"
+                      value={savedExportKind}
+                      onChange={(event) => {
+                        setSavedExportKind(event.currentTarget.value as CardExportKind);
+                        setSavedExportTemplateId("");
+                        setSavedExportPeriodFrom("");
+                        setSavedExportPeriodTo("");
+                        setSavedExportMessage(null);
+                        setSavedExportError(null);
+                      }}
+                    >
+                      <option value="card_list">Список карточек</option>
+                      <option value="personnel_changes">Кадровые изменения</option>
+                    </select>
+                  </label>
+                  <label className="field-editor-control">
+                    <span>Шаблон выгрузки</span>
+                    <select
+                      aria-label="Шаблон выгрузки"
+                      value={savedExportTemplateId}
+                      onChange={(event) => {
+                        setSavedExportTemplateId(event.currentTarget.value);
+                        setSavedExportPeriodFrom("");
+                        setSavedExportPeriodTo("");
+                        setSavedExportMessage(null);
+                        setSavedExportError(null);
+                      }}
+                    >
+                      <option value="">Выберите шаблон выгрузки</option>
+                      {savedExports.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="field-editor-control">
+                    <span>Организации выгрузки</span>
+                    <SearchableChoicePicker
+                      label="Организации выгрузки"
+                      hint="Выберите организации"
+                      mode="multiple"
+                      options={(optionsQuery.data?.organizations ?? []).map((organization) => ({
+                        id: organization.id,
+                        label: organization.label,
+                      }))}
+                      value={selectedSavedExportOrganizationIds}
+                      onChange={(value) => {
+                        setSavedExportOrganizationIds(Array.isArray(value) ? value : []);
+                        setSavedExportMessage(null);
+                        setSavedExportError(null);
+                      }}
+                    />
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => {
+                          setSavedExportOrganizationIds(
+                            (optionsQuery.data?.organizations ?? []).map(
+                              (organization) => organization.id,
+                            ),
+                          );
+                          setSavedExportMessage(null);
+                          setSavedExportError(null);
+                        }}
+                      >
+                        Все организации
+                      </button>
+                    </div>
+                  </div>
+                  {savedExportPersonnel && (
+                    <>
+                      <label className="field-editor-control">
+                        <span>Начало периода</span>
+                        <input
+                          aria-label="Начало периода"
+                          type="date"
+                          value={savedExportPeriodFrom}
+                          onChange={(event) => setSavedExportPeriodFrom(event.currentTarget.value)}
+                        />
+                      </label>
+                      <label className="field-editor-control">
+                        <span>Конец периода</span>
+                        <input
+                          aria-label="Конец периода"
+                          type="date"
+                          value={savedExportPeriodTo}
+                          onChange={(event) => setSavedExportPeriodTo(event.currentTarget.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="row-actions">
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={!exportPayload || downloadMutation.isPending}
-                  onClick={() => downloadMutation.mutate("list")}
+                  disabled={
+                    !selectedSavedExport ||
+                    !selectedSavedExportOrganizationIds.length ||
+                    !savedExportPeriodValid ||
+                    savedExportDownloadMutation.isPending
+                  }
+                  onClick={() => savedExportDownloadMutation.mutate()}
                 >
-                  {uiText.downloadCardList}
+                  Скачать XLSX
                 </button>
               </div>
-              {downloadMessage && (
-                <p className="inline-success attachment-status">{downloadMessage}</p>
+              {savedExportPersonnel && (
+                <p className="muted-text">
+                  Обе даты включаются в период. Отчёт содержит назначения, изменения и увольнения.
+                </p>
               )}
-              {downloadError && <p className="inline-alert attachment-status">{downloadError}</p>}
+              {savedExportMessage && (
+                <p className="inline-success attachment-status">{savedExportMessage}</p>
+              )}
+              {savedExportError && (
+                <p role="alert" className="inline-alert attachment-status">
+                  {savedExportError}
+                </p>
+              )}
             </section>
           ) : (
             <section className="xlsx-operation" aria-labelledby="tabular-xlsx-import">
@@ -369,7 +521,7 @@ export function ImportExportPanel({
                   value={importMode}
                   onChange={(event) => {
                     setImportMode(event.currentTarget.value as typeof importMode);
-                    resetConfigurationFeedback();
+                    resetPreview();
                   }}
                 >
                   <option value="strict">{uiText.tabularXlsxImportModeStrict}</option>
@@ -389,7 +541,7 @@ export function ImportExportPanel({
                   value={workExperienceAsOfDate}
                   onChange={(event) => {
                     setWorkExperienceAsOfDate(event.currentTarget.value);
-                    resetConfigurationFeedback();
+                    resetPreview();
                   }}
                 />
               </label>
@@ -401,7 +553,7 @@ export function ImportExportPanel({
                     value={effectiveFixedOrganizationId}
                     onChange={(event) => {
                       setFixedOrganizationId(event.currentTarget.value);
-                      resetConfigurationFeedback();
+                      resetPreview();
                     }}
                   >
                     <option value="">{uiText.tabularXlsxSelectImportOrganization}</option>
@@ -421,7 +573,7 @@ export function ImportExportPanel({
                   type="button"
                   className="ghost-button"
                   disabled={!importPayload || downloadMutation.isPending}
-                  onClick={() => downloadMutation.mutate("template")}
+                  onClick={() => downloadMutation.mutate()}
                 >
                   {uiText.downloadImportTemplate}
                 </button>
