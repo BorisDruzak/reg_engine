@@ -13,7 +13,6 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -42,7 +41,6 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
             "organization_id",
             "lifecycle_status",
         ),
-        Index("ix_cards_display_name_lower", text("lower(display_name)")),
     )
 
     registry_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("registries.id"))
@@ -55,7 +53,6 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     org_unit_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("org_units.id")
     )
-    display_name: Mapped[str] = mapped_column(String, nullable=False)
     lifecycle_status: Mapped[str] = mapped_column(String, nullable=False, server_default="draft")
     public_view_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"

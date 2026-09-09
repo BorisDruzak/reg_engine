@@ -19,7 +19,9 @@ from app.models.card_creation_link import (
     CardCreationLinkCard,
     CardCreationLinkOrganization,
 )
+from app.models.card_event import CardEvent, CardEventChange
 from app.models.document import DocumentTemplate, DocumentTemplateVersion, GeneratedDocument
+from app.models.export_template import CardExportTemplate
 from app.models.identity import Permission, Role, User, role_permissions
 from app.models.organization import AccessGrant, Organization, OrganizationClosure, OrgUnit
 from app.models.public_link import CardPublicLink
@@ -35,6 +37,9 @@ __all__ = [
     "Card",
     "CardChangeNotification",
     "CardChangeNotificationSubscription",
+    "CardEvent",
+    "CardEventChange",
+    "CardExportTemplate",
     "CardCreationLink",
     "CardCreationLinkCard",
     "CardCreationLinkOrganization",

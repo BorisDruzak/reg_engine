@@ -1,5 +1,6 @@
 from sqlalchemy import CheckConstraint, Index, UniqueConstraint
 
+from app.domain.constants import CARD_LIFECYCLE_STATUSES
 from app.models import Base
 
 
@@ -186,3 +187,12 @@ def test_important_indexes_exist() -> None:
 
     for table_name, names in expected_indexes.items():
         assert names <= _index_names(table_name)
+
+
+def test_card_event_export_metadata_and_title_removal_are_registered() -> None:
+    assert {"card_events", "card_event_changes", "card_export_templates"} <= set(
+        Base.metadata.tables
+    )
+    assert "dismissed" in CARD_LIFECYCLE_STATUSES
+    assert "display_name" not in Base.metadata.tables["cards"].columns
+    assert "card_title_label" not in Base.metadata.tables["registries"].columns

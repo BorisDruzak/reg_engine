@@ -77,6 +77,9 @@ EXPECTED_TABLES = {
     "card_creation_links",
     "card_change_notification_subscriptions",
     "card_change_notifications",
+    "card_event_changes",
+    "card_events",
+    "card_export_templates",
     "card_relations",
     "card_templates",
     "cards",
@@ -133,6 +136,7 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "0030_work_experience_field" in sql
     assert "0031_card_audit_history" in sql
     assert "0032_card_change_notifications" in sql
+    assert "0034_card_events_exports_fio" in sql
     assert "owner_organization_id UUID" in sql
     assert "is_default_for_owner_tree BOOLEAN DEFAULT false NOT NULL" in sql
     assert "card_title_label VARCHAR DEFAULT" in sql
@@ -170,6 +174,25 @@ def test_alembic_can_render_core_schema_upgrade_sql() -> None:
     assert "'mcp'" in sql
     assert "ALTER TABLE public.audit_events ALTER COLUMN created_at SET DEFAULT now()" in sql
     assert "CREATE TABLE employees" not in sql
+
+
+def test_card_events_export_templates_and_dismissed_lifecycle_are_migrated() -> None:
+    sql = _render_upgrade_sql("head")
+
+    for table_name in {"card_events", "card_event_changes", "card_export_templates"}:
+        assert f"CREATE TABLE public.{table_name}" in sql or f"CREATE TABLE {table_name}" in sql
+
+    assert "'dismissed'" in sql
+    assert "DROP INDEX public.ix_cards_display_name_lower" in sql
+    assert "DROP COLUMN display_name" in sql
+    assert "DROP COLUMN card_title_label" in sql
+
+
+def test_title_keys_are_removed_from_existing_audit_snapshots() -> None:
+    sql = _render_upgrade_sql("head")
+
+    assert "old_data_json - 'display_name'" in sql
+    assert "new_data_json - 'display_name'" in sql
 
 
 def test_card_public_access_migration_creates_field_scope_table() -> None:

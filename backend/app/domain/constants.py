@@ -1,6 +1,7 @@
 USER_STATUSES = ("active", "disabled", "archived")
 REGISTRY_STATUSES = ("draft", "active", "archived")
-CARD_LIFECYCLE_STATUSES = ("draft", "active", "archived", "superseded")
+CARD_LIFECYCLE_STATUSES = ("draft", "active", "dismissed", "archived", "superseded")
+CARD_EVENT_TYPES = ("change", "dismissal")
 FIELD_TYPES = (
     "text",
     "number",
