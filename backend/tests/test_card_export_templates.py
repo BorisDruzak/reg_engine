@@ -232,7 +232,10 @@ def test_export_template_persists_multiple_organizations(export_context):
 
     template = create_template(ctx, payload=payload)
 
-    assert template["configuration_json"]["organization_ids"] == [str(ctx.org.id), str(ctx.child.id)]
+    assert template["configuration_json"]["organization_ids"] == [
+        str(ctx.org.id),
+        str(ctx.child.id),
+    ]
 
 
 def test_export_template_rejects_duplicate_organizations(export_context):
@@ -269,9 +272,7 @@ def test_personnel_export_creates_one_sheet_per_saved_organization(export_contex
         organization_ids=[ctx.org.id, ctx.child.id],
     )
 
-    book = workbook(
-        download(ctx, template, period_from="2026-09-01", period_to="2026-09-30")
-    )
+    book = workbook(download(ctx, template, period_from="2026-09-01", period_to="2026-09-30"))
 
     assert len(book.worksheets) == 2
     assert all(sheet["A1"].value == "Сведения о кадровых изменениях" for sheet in book.worksheets)
@@ -292,7 +293,9 @@ def test_card_list_export_formats_work_experience_as_one_russian_column(export_c
     ctx.template.field_schema_json = {
         "field_ids": [*ctx.template.field_schema_json["field_ids"], str(field.id)]
     }
-    instance = ctx.session.scalar(select(CardBlockInstance).where(CardBlockInstance.card_id == ctx.card.id))
+    instance = ctx.session.scalar(
+        select(CardBlockInstance).where(CardBlockInstance.card_id == ctx.card.id)
+    )
     ctx.session.add(
         FieldValue(
             card_id=ctx.card.id,

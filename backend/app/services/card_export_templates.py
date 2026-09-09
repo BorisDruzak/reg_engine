@@ -199,6 +199,7 @@ class CardExportTemplateService:
         configuration: dict[str, Any],
     ) -> tuple[dict[str, Any], list[FormField], FormField]:
         try:
+            parsed: CardListExportConfiguration | PersonnelChangesExportConfiguration
             if kind == "card_list":
                 parsed = CardListExportConfiguration.model_validate(configuration)
                 field_ids = parsed.field_ids
@@ -219,9 +220,7 @@ class CardExportTemplateService:
             ) from exc
         permissions = PermissionService(self.session)
         if any(
-            not permissions.can_see_organization(
-                actor, organization_id, registry_id=registry_id
-            )
+            not permissions.can_see_organization(actor, organization_id, registry_id=registry_id)
             for organization_id in parsed.organization_ids
         ):
             raise PermissionDeniedError("Нет прав на выбранную организацию.")
@@ -345,7 +344,7 @@ class CardExportTemplateService:
             titles: set[str] = set()
             for ordinal, organization in enumerate(organizations, 1):
                 sheet = book.active if ordinal == 1 else book.create_sheet()
-                sheet.title = self._personnel_sheet_title(organization.name, ordinal, titles)
+                sheet.title = self._personnel_sheet_title(organization.name, titles)
                 self._set_sheet_layout(sheet, [26, 17, 22, 46])
                 cards = CardService(self.session).list_visible_cards(
                     actor_user_id=actor_user_id,
@@ -386,8 +385,9 @@ class CardExportTemplateService:
         return organizations
 
     @staticmethod
-    def _personnel_sheet_title(name: str, ordinal: int, existing: set[str]) -> str:
-        sanitized = name.translate(str.maketrans({character: " " for character in "[]:*?/\\"})).strip()
+    def _personnel_sheet_title(name: str, existing: set[str]) -> str:
+        invalid_characters: dict[int, str] = {ord(character): " " for character in "[]:*?/\\"}
+        sanitized = name.translate(invalid_characters).strip()
         base = (sanitized or "Организация")[:31]
         candidate = base
         suffix = 2
@@ -456,9 +456,7 @@ class CardExportTemplateService:
                 from app.domain.work_experience import format_work_experience, parse_work_experience
 
                 return format_work_experience(
-                    parse_work_experience(
-                        {key: value[key] for key in ("days", "months", "years")}
-                    )
+                    parse_work_experience({key: value[key] for key in ("days", "months", "years")})
                 )
             return "; ".join(
                 f"{key}: {CardExportTemplateService._text(item)}" for key, item in value.items()
