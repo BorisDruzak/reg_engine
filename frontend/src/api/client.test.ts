@@ -43,15 +43,16 @@ test("uses authenticated persisted export CRUD routes and downloads server-named
     name: "Список",
     export_kind: "card_list" as const,
     card_template_id: "template-1",
-    configuration_json: { field_ids: ["fio", "second", "first"] },
+    configuration_json: {
+      field_ids: ["fio", "second", "first"],
+      organization_ids: ["org-1", "org-2"],
+    },
   };
   await listCardExportTemplates("token", "registry-1");
   await createCardExportTemplate("token", "registry-1", payload);
   await updateCardExportTemplate("token", "export-1", payload);
   await archiveCardExportTemplate("token", "export-1");
-  const result = await downloadCardExportTemplate("token", "export-1", {
-    organization_id: "org-1",
-  });
+  const result = await downloadCardExportTemplate("token", "export-1", {});
   expect(requests.map(({ path, method }) => [path, method])).toEqual([
     ["/api/v1/registries/registry-1/card-export-templates", "GET"],
     ["/api/v1/registries/registry-1/card-export-templates", "POST"],
@@ -61,7 +62,7 @@ test("uses authenticated persisted export CRUD routes and downloads server-named
   ]);
   expect(requests.every((request) => request.auth === "Bearer token")).toBe(true);
   expect(requests[1].body).toEqual(payload);
-  expect(requests[4].body).toEqual({ organization_id: "org-1" });
+  expect(requests[4].body).toEqual({});
   expect(result.filename).toBe("registry-export.xlsx");
   const contents = await new Promise((resolve) => {
     const reader = new FileReader();

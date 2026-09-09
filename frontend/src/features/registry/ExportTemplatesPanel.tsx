@@ -18,6 +18,7 @@ import type {
 } from "@/api/types";
 import { generateTechnicalCode } from "@/app/technicalCode";
 import { errorText } from "@/components/common/dataUtils";
+import { SearchableChoicePicker } from "@/features/cards/SearchableChoicePicker";
 
 const mappings = [
   ["position_field_id", "Поле должности"],
@@ -56,7 +57,7 @@ export function ExportTemplatesPanel({
   const [cardTemplateId, setCardTemplateId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
   const [mapping, setMapping] = useState<PersonnelExportMapping>(emptyMapping);
-  const [organizationId, setOrganizationId] = useState("");
+  const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -67,7 +68,10 @@ export function ExportTemplatesPanel({
   const fioId = cardTemplate?.fio_field_id;
   const selectableFields = fields.filter((field) => field.id !== fioId);
   const orderedIds = fioId ? [fioId, ...fieldIds.filter((id) => id !== fioId)] : fieldIds;
-  const configuration = kind === "card_list" ? { field_ids: orderedIds } : mapping;
+  const configuration =
+    kind === "card_list"
+      ? { field_ids: orderedIds, organization_ids: organizationIds }
+      : { ...mapping, organization_ids: organizationIds };
   const validMapping =
     mappings.every(([key]) =>
       selectableFields.some(
@@ -81,6 +85,8 @@ export function ExportTemplatesPanel({
     cardTemplate &&
     fioId &&
     fields.some((field) => field.id === fioId) &&
+    organizationIds.length > 0 &&
+    organizationIds.every((id) => options.organizations.some((item) => item.id === id)) &&
     (kind === "card_list"
       ? orderedIds.every((id) => fields.some((field) => field.id === id))
       : validMapping),
@@ -111,10 +117,15 @@ export function ExportTemplatesPanel({
     );
     setMapping(
       template && "position_field_id" in template.configuration_json
-        ? template.configuration_json
+        ? {
+            position_field_id: template.configuration_json.position_field_id,
+            structural_unit_field_id: template.configuration_json.structural_unit_field_id,
+            appointment_date_field_id: template.configuration_json.appointment_date_field_id,
+            appointment_basis_field_id: template.configuration_json.appointment_basis_field_id,
+          }
         : emptyMapping,
     );
-    setOrganizationId("");
+    setOrganizationIds(template?.configuration_json.organization_ids ?? []);
     setPeriodFrom("");
     setPeriodTo("");
     clearFeedback();
@@ -179,7 +190,6 @@ export function ExportTemplatesPanel({
   const download = useMutation({
     mutationFn: () =>
       downloadCardExportTemplate(token, selected!.id, {
-        organization_id: organizationId,
         ...(personnel ? { period_from: periodFrom, period_to: periodTo } : {}),
       }),
     onSuccess: ({ blob, filename }) => {
@@ -215,8 +225,7 @@ export function ExportTemplatesPanel({
     <section className="xlsx-operation" aria-label="Шаблоны выгрузки">
       <h4>Шаблоны выгрузки</h4>
       <p className="muted-text">
-        Сохраните состав и порядок колонок или настройте отчёт об изменениях. Организация выбирается
-        перед скачиванием.
+        Сохраните организации, состав и порядок колонок или настройте отчёт об изменениях.
       </p>
       {templatesQuery.isLoading && <p>Загрузка шаблонов…</p>}
       {templatesQuery.error && (
@@ -300,6 +309,35 @@ export function ExportTemplatesPanel({
               ))}
             </select>
           </label>
+        </div>
+        <div className="field-editor-control">
+          <span>Организации выгрузки</span>
+          <SearchableChoicePicker
+            label="Организации выгрузки"
+            hint="Выберите организации"
+            mode="multiple"
+            options={options.organizations.map((organization) => ({
+              id: organization.id,
+              label: organization.label,
+            }))}
+            value={organizationIds}
+            onChange={(value) => {
+              setOrganizationIds(Array.isArray(value) ? value : []);
+              clearFeedback();
+            }}
+          />
+          <div className="row-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setOrganizationIds(options.organizations.map((organization) => organization.id));
+                clearFeedback();
+              }}
+            >
+              Все организации
+            </button>
+          </div>
         </div>
         {cardTemplate && (
           <>
@@ -459,51 +497,32 @@ export function ExportTemplatesPanel({
             </div>
           </div>
         )}
-        <div className="template-form">
-          <label className="field-editor-control">
-            <span>Организация для выгрузки</span>
-            <select
-              value={organizationId}
-              onChange={(event) => {
-                setOrganizationId(event.target.value);
-                clearFeedback();
-              }}
-            >
-              <option value="">Выберите организацию</option>
-              {options.organizations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {personnel && (
-            <>
-              <label className="field-editor-control">
-                <span>Начало периода</span>
-                <input
-                  type="date"
-                  value={periodFrom}
-                  onChange={(event) => {
-                    setPeriodFrom(event.target.value);
-                    clearFeedback();
-                  }}
-                />
-              </label>
-              <label className="field-editor-control">
-                <span>Конец периода</span>
-                <input
-                  type="date"
-                  value={periodTo}
-                  onChange={(event) => {
-                    setPeriodTo(event.target.value);
-                    clearFeedback();
-                  }}
-                />
-              </label>
-            </>
-          )}
-        </div>
+        {personnel && (
+          <div className="template-form">
+            <label className="field-editor-control">
+              <span>Начало периода</span>
+              <input
+                type="date"
+                value={periodFrom}
+                onChange={(event) => {
+                  setPeriodFrom(event.target.value);
+                  clearFeedback();
+                }}
+              />
+            </label>
+            <label className="field-editor-control">
+              <span>Конец периода</span>
+              <input
+                type="date"
+                value={periodTo}
+                onChange={(event) => {
+                  setPeriodTo(event.target.value);
+                  clearFeedback();
+                }}
+              />
+            </label>
+          </div>
+        )}
         {personnel && (
           <p className="muted-text">
             Обе даты включаются в период. Отчёт содержит назначения, изменения и увольнения.
@@ -518,13 +537,7 @@ export function ExportTemplatesPanel({
         <button
           type="button"
           className="primary-button"
-          disabled={
-            !selected ||
-            dirty ||
-            !valid ||
-            !options.organizations.some((item) => item.id === organizationId) ||
-            !validPeriod
-          }
+          disabled={!selected || dirty || !valid || !validPeriod}
           onClick={() => {
             clearFeedback();
             download.mutate();

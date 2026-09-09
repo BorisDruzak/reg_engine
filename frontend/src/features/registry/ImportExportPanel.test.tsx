@@ -142,7 +142,10 @@ const savedExport = {
   name: "Список отдела",
   export_kind: "card_list",
   card_template_id: "template-1",
-  configuration_json: { field_ids: ["fio", "mapped-1", "mapped-0"] },
+  configuration_json: {
+    field_ids: ["fio", "mapped-1", "mapped-0"],
+    organization_ids: ["organization-1"],
+  },
   created_at: "2026-09-09T00:00:00Z",
   updated_at: "2026-09-09T00:00:00Z",
   archived_at: null,
@@ -162,6 +165,7 @@ test("saves ordered card-list fields with non-removable FIO and no title", async
   const user = await openExports();
   await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
   await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   expect(screen.getByLabelText("ФИО (обязательное поле отображения)")).toBeDisabled();
   expect(screen.queryByLabelText("Название карточки")).not.toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("Добавить колонку"), "mapped-0");
@@ -176,7 +180,30 @@ test("saves ordered card-list fields with non-removable FIO and no title", async
       name: "Список отдела",
       export_kind: "card_list",
       card_template_id: "template-1",
-      configuration_json: { field_ids: ["fio", "mapped-1", "mapped-0"] },
+      configuration_json: {
+        field_ids: ["fio", "mapped-1", "mapped-0"],
+        organization_ids: ["organization-1", "organization-2"],
+      },
+    }),
+  );
+});
+
+test("saves multiple organizations selected through the saved export template", async () => {
+  api.createCardExportTemplate.mockResolvedValue(savedExport);
+  const user = await openExports();
+  await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Организации выгрузки" }));
+  await user.click(screen.getByRole("checkbox", { name: "Администрация (admin)" }));
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  expect(api.createCardExportTemplate).toHaveBeenCalledWith(
+    "token",
+    "registry-1",
+    expect.objectContaining({
+      configuration_json: expect.objectContaining({
+        organization_ids: ["organization-1", "organization-2"],
+      }),
     }),
   );
 });
@@ -190,6 +217,7 @@ test("reserves codes of archived templates when creating the same name again", a
   expect(screen.queryByRole("option", { name: "Список отдела" })).not.toBeInTheDocument();
   await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
   await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
   await waitFor(() =>
     expect(api.createCardExportTemplate).toHaveBeenCalledWith(
@@ -208,6 +236,7 @@ test("uses bounded unique export codes for long transliterated names", async () 
   const user = await openExports();
   await user.type(screen.getByLabelText("Название шаблона выгрузки"), "щ".repeat(40));
   await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
   await waitFor(() =>
     expect(api.createCardExportTemplate).toHaveBeenCalledWith(
@@ -235,6 +264,7 @@ test("keeps a code reserved after archiving in the current session", async () =>
   await screen.findByText("Шаблон выгрузки архивирован");
   await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
   await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
   await waitFor(() =>
     expect(api.createCardExportTemplate).toHaveBeenCalledWith(
@@ -255,6 +285,7 @@ test("refreshes occupied codes after a create conflict and retries only after ex
   const user = await openExports();
   await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
   await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Список шаблонов обновлён. Повторите сохранение.",
@@ -272,7 +303,7 @@ test("refreshes occupied codes after a create conflict and retries only after ex
   expect(await screen.findByRole("status")).toHaveTextContent("Шаблон выгрузки сохранён");
 });
 
-test("personnel download requires organization and inclusive valid period and clicks a blob download", async () => {
+test("personnel download uses saved organizations and an inclusive valid period", async () => {
   const personnel = {
     ...savedExport,
     export_kind: "personnel_changes",
@@ -281,6 +312,7 @@ test("personnel download requires organization and inclusive valid period and cl
       structural_unit_field_id: "mapped-1",
       appointment_date_field_id: "mapped-2",
       appointment_basis_field_id: "mapped-3",
+      organization_ids: ["organization-1"],
     },
   };
   api.listCardExportTemplates.mockResolvedValue({ items: [personnel] });
@@ -298,9 +330,8 @@ test("personnel download requires organization and inclusive valid period and cl
   });
   const user = await openExports();
   await user.selectOptions(screen.getByLabelText("Сохранённый шаблон выгрузки"), "export-1");
-  expect(screen.getByLabelText("Организация для выгрузки")).toHaveValue("");
+  expect(screen.queryByLabelText("Организация для выгрузки")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Скачать XLSX" })).toBeDisabled();
-  await user.selectOptions(screen.getByLabelText("Организация для выгрузки"), "organization-1");
   await user.type(screen.getByLabelText("Начало периода"), "2026-09-10");
   await user.type(screen.getByLabelText("Конец периода"), "2026-09-09");
   expect(screen.getByRole("button", { name: "Скачать XLSX" })).toBeDisabled();
@@ -309,7 +340,6 @@ test("personnel download requires organization and inclusive valid period and cl
   await user.click(screen.getByRole("button", { name: "Скачать XLSX" }));
   await waitFor(() => expect(click).toHaveBeenCalledOnce());
   expect(api.downloadCardExportTemplate).toHaveBeenCalledWith("token", "export-1", {
-    organization_id: "organization-1",
     period_from: "2026-09-09",
     period_to: "2026-09-09",
   });
@@ -363,6 +393,7 @@ test("preserves personnel mappings on backend validation error and prevents dupl
   ]) {
     await user.selectOptions(screen.getByLabelText(label), id);
   }
+  await user.click(screen.getByRole("button", { name: "Все организации" }));
   await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Дата назначения должна соответствовать полю типа «Дата».",
@@ -380,7 +411,7 @@ test("shows safe load error and retries the template list without probing global
   expect(await screen.findByText("Шаблоны выгрузки пока не созданы")).toBeInTheDocument();
 });
 
-test("retains selected template and download scope on period rejection and retries archive failure", async () => {
+test("retains saved organization scope on download rejection and retries archive failure", async () => {
   api.listCardExportTemplates.mockResolvedValue({ items: [savedExport] });
   api.downloadCardExportTemplate.mockRejectedValueOnce(
     new api.ApiError("Укажите корректный период выгрузки: начало и окончание включительно."),
@@ -388,13 +419,14 @@ test("retains selected template and download scope on period rejection and retri
   api.archiveCardExportTemplate.mockRejectedValueOnce(new api.ApiError("Internal service error."));
   const user = await openExports();
   await user.selectOptions(screen.getByLabelText("Сохранённый шаблон выгрузки"), "export-1");
-  await user.selectOptions(screen.getByLabelText("Организация для выгрузки"), "organization-1");
   expect(screen.queryByLabelText("Начало периода")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Скачать XLSX" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Укажите корректный период выгрузки: начало и окончание включительно.",
   );
-  expect(screen.getByLabelText("Организация для выгрузки")).toHaveValue("organization-1");
+  expect(screen.getByRole("button", { name: "Организации выгрузки" })).toHaveTextContent(
+    "Администрация (admin)",
+  );
   await user.click(screen.getByRole("button", { name: "Архивировать шаблон" }));
   await user.click(screen.getByRole("button", { name: "Подтвердить архивирование" }));
   expect(await screen.findByRole("alert")).not.toHaveTextContent("Internal service error");

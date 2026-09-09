@@ -562,12 +562,19 @@ export type PersonnelExportMapping = {
   appointment_date_field_id: string;
   appointment_basis_field_id: string;
 };
+export type CardListExportConfiguration = {
+  field_ids: string[];
+  organization_ids?: string[];
+};
+export type PersonnelExportConfiguration = PersonnelExportMapping & {
+  organization_ids?: string[];
+};
 export type CardExportTemplatePayload = {
   code: string;
   name: string;
   export_kind: CardExportKind;
   card_template_id: string;
-  configuration_json: { field_ids: string[] } | PersonnelExportMapping;
+  configuration_json: CardListExportConfiguration | PersonnelExportConfiguration;
 };
 export type CardExportTemplateRead = CardExportTemplatePayload & {
   id: string;
@@ -577,7 +584,6 @@ export type CardExportTemplateRead = CardExportTemplatePayload & {
   archived_at: string | null;
 };
 export type CardExportDownloadPayload = {
-  organization_id: string;
   period_from?: string;
   period_to?: string;
 };
