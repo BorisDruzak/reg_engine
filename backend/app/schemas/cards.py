@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -69,6 +70,7 @@ class CardSummaryRead(BaseModel):
     display_value: str
     creator_display_name: str | None = None
     lifecycle_status: str
+    activated_at: datetime | None = None
     public_view_enabled: bool
     public_edit_enabled: bool
     list_fields: list[CardListFieldValueRead] = Field(default_factory=list)
@@ -78,7 +80,17 @@ class CardListRead(BaseModel):
     items: list[CardSummaryRead]
 
 
-class CardUpdate(BaseModel):
+class CardChangeRequest(BaseModel):
+    basis_text: str | None = None
+    occurred_on: date | None = None
+
+
+class CardDismissalRequest(BaseModel):
+    basis_text: str
+    occurred_on: date
+
+
+class CardUpdate(CardChangeRequest):
     org_unit_id: UUID | None = None
     lifecycle_status: str | None = None
     public_view_enabled: bool | None = None
@@ -134,7 +146,7 @@ class CardDraftPublicLinkRead(BaseModel):
     public_link_id: UUID
 
 
-class FieldValueUpdate(BaseModel):
+class FieldValueUpdate(CardChangeRequest):
     value: Any
     block_instance_id: UUID | None = None
 
@@ -145,7 +157,7 @@ class FieldValueBulkItemUpdate(BaseModel):
     block_instance_id: UUID | None = None
 
 
-class FieldValuesBulkUpdate(BaseModel):
+class FieldValuesBulkUpdate(CardChangeRequest):
     values: list[FieldValueBulkItemUpdate]
 
 
@@ -210,9 +222,9 @@ class CardRead(BaseModel):
     fields: dict[str, CardFieldRead]
 
 
-class CardTransferRequest(BaseModel):
+class CardTransferRequest(CardChangeRequest):
     target_organization_id: UUID
 
 
-class CardOrganizationUpdate(BaseModel):
+class CardOrganizationUpdate(CardChangeRequest):
     organization_id: UUID

@@ -54,6 +54,7 @@ class Card(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("org_units.id")
     )
     lifecycle_status: Mapped[str] = mapped_column(String, nullable=False, server_default="draft")
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     public_view_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )

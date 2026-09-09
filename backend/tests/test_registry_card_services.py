@@ -31,8 +31,11 @@ from app.models import (
     Card,
     CardBlockInstance,
     CardChangeNotification,
+    CardEvent,
+    CardEventChange,
     CardPublicFieldSetting,
     CardPublicLink,
+    CardRelation,
     CardTemplate,
     FieldValue,
     FieldValueItem,
@@ -65,6 +68,516 @@ from app.services.registry_schema import RegistrySchemaError, RegistrySchemaServ
 class _FlushOnlySession:
     def flush(self) -> None:
         pass
+
+
+@pytest.fixture()
+def card_event_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
+    """Real local transactions; schema/permissions are isolated from PostgreSQL setup."""
+    from sqlalchemy.dialects.postgresql import INET, JSONB
+    from sqlalchemy.ext.compiler import compiles, deregister
+    from sqlalchemy.pool import StaticPool
+
+    from app.models.base import Base
+
+    compiles(JSONB, "sqlite")(lambda *_args, **_kwargs: "JSON")
+    compiles(INET, "sqlite")(lambda *_args, **_kwargs: "TEXT")
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    with engine.connect() as connection:
+        connection.connection.driver_connection.create_function(
+            "gen_random_uuid", 0, lambda: uuid4().hex
+        )
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            model.__table__
+            for model in (
+                Card,
+                CardBlockInstance,
+                FieldValue,
+                FieldValueItem,
+                CardEvent,
+                CardEventChange,
+                AuditEvent,
+                Organization,
+                CardRelation,
+            )
+        ],
+    )
+    with Session(engine, expire_on_commit=False) as session:
+        actor_id, registry_id, block_id = uuid4(), uuid4(), uuid4()
+        card = Card(
+            id=uuid4(),
+            registry_id=registry_id,
+            organization_id=uuid4(),
+            card_template_id=uuid4(),
+            lifecycle_status="active",
+            public_view_enabled=True,
+            public_edit_enabled=True,
+        )
+        instance = CardBlockInstance(id=uuid4(), card_id=card.id, block_id=block_id, ordinal=0)
+        fields = [
+            SimpleNamespace(
+                id=uuid4(),
+                block_id=block_id,
+                code=f"field_{index}",
+                label=f"Поле {index}",
+                field_type="text",
+                required_mode="optional",
+                validation_json=None,
+                sensitivity_level="normal",
+            )
+            for index in range(2)
+        ]
+        values = [
+            FieldValue(
+                id=uuid4(),
+                card_id=card.id,
+                block_instance_id=instance.id,
+                field_id=field.id,
+                value_text="До",
+            )
+            for field in fields
+        ]
+        session.add_all([card, instance, *values])
+        session.commit()
+        block = SimpleNamespace(
+            id=block_id,
+            registry_id=registry_id,
+            is_repeatable=True,
+            is_system=False,
+            is_locked=False,
+            min_instances=0,
+        )
+        monkeypatch.setattr(
+            CardService,
+            "_get_active_field",
+            lambda _self, key: next(field for field in fields if field.id == key),
+        )
+        monkeypatch.setattr(CardService, "_get_active_block", lambda *_args: block)
+        monkeypatch.setattr(CardService, "_require_card_permission", lambda *_args, **_kw: None)
+        monkeypatch.setattr(CardService, "_missing_required_field_labels", lambda *_a, **_k: [])
+        monkeypatch.setattr(CardService, "_validate_org_unit_for_organization", lambda *_a: None)
+        monkeypatch.setattr(
+            CardChangeNotificationService, "record_card_history_events", lambda *_args: None
+        )
+        yield SimpleNamespace(
+            session=session,
+            service=CardService(session),
+            actor_id=actor_id,
+            card=card,
+            fields=fields,
+            values=values,
+            instance=instance,
+            block=block,
+        )
+    engine.dispose()
+    deregister(JSONB)
+    deregister(INET)
+
+
+def _event_change_context(basis: str = "Приказ № 1") -> Any:
+    context_type = getattr(cards_module, "CardChangeContext", None)
+    assert context_type is not None, "Active changes need a CardChangeContext contract"
+    return context_type(basis, date(2026, 9, 9))
+
+
+@pytest.mark.parametrize("basis", [None, "", " \t\n"])
+def test_active_bulk_basis_rejected_before_assignments(
+    card_event_context: Any, basis: str | None
+) -> None:
+    ctx = card_event_context
+    change_context = _event_change_context(basis) if basis is not None else None
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.set_field_values_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            values=[BulkFieldValueInput(ctx.fields[0].id, "После")],
+            change_context=change_context,
+        )
+    assert ctx.values[0].value_text == "До"
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_active_bulk_card_event_has_real_diffs_and_ignores_noop(card_event_context: Any) -> None:
+    ctx = card_event_context
+    values = [BulkFieldValueInput(field.id, "После") for field in ctx.fields]
+    for _ in range(2):
+        ctx.service.set_field_values_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            values=values,
+            change_context=_event_change_context("  Приказ № 1  "),
+        )
+    event = ctx.session.scalars(select(CardEvent)).one()
+    assert (event.event_type, event.basis_text, event.occurred_on, event.created_by) == (
+        "change",
+        "Приказ № 1",
+        date(2026, 9, 9),
+        ctx.actor_id,
+    )
+    changes = ctx.session.scalars(select(CardEventChange)).all()
+    assert {change.field_id for change in changes} == {field.id for field in ctx.fields}
+    assert all(change.old_value_json["value"] == "До" for change in changes)
+    assert all(change.new_value_json["value"] == "После" for change in changes)
+    assert all(
+        change.old_value_json["block_instance_id"] == str(ctx.instance.id) for change in changes
+    )
+
+
+def test_active_card_event_bulk_failure_rolls_back_values_and_events(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    with pytest.raises(InvalidFieldValueError):
+        ctx.service.set_field_values_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            values=[
+                BulkFieldValueInput(ctx.fields[0].id, "После"),
+                BulkFieldValueInput(ctx.fields[1].id, 123),
+            ],
+            change_context=_event_change_context(),
+        )
+    assert [value.value_text for value in ctx.values] == ["До", "До"]
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+    assert ctx.session.scalars(select(AuditEvent)).all() == []
+
+
+def test_draft_card_event_first_activation_is_basis_free(card_event_context: Any) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = "draft"
+    ctx.session.commit()
+    ctx.service.set_field_values_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        values=[BulkFieldValueInput(field.id, "После") for field in ctx.fields],
+    )
+    assert ctx.card.lifecycle_status == "active"
+    assert ctx.card.activated_at is not None
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_demoted_card_event_still_requires_basis_after_first_activation(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = "draft"
+    ctx.card.activated_at = datetime(2026, 9, 1, tzinfo=UTC)
+    ctx.session.commit()
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.set_field_values_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            values=[BulkFieldValueInput(ctx.fields[0].id, "После")],
+        )
+    assert ctx.values[0].value_text == "До"
+    ctx.service.set_field_values_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        values=[BulkFieldValueInput(ctx.fields[0].id, "После")],
+        change_context=_event_change_context(),
+    )
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 1
+    assert ctx.card.activated_at.date() == date(2026, 9, 1)
+
+
+def test_initial_first_save_is_basis_free_even_for_complete_template(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = card_event_context
+    monkeypatch.setattr(
+        RegistrySchemaService,
+        "resolve_default_registry_for_organization",
+        lambda *_args: SimpleNamespace(id=ctx.card.registry_id),
+    )
+    monkeypatch.setattr(
+        ctx.service,
+        "_get_active_card_template_for_registry",
+        lambda *_args, **_kw: SimpleNamespace(id=ctx.card.card_template_id),
+    )
+    monkeypatch.setattr(ctx.service, "_template_field_ids", lambda *_args: {ctx.fields[0].id})
+    monkeypatch.setattr(ctx.service, "create_card_for_actor", lambda **_kw: ctx.card)
+    ctx.service.create_card_with_first_value_for_actor(
+        actor_user_id=ctx.actor_id,
+        organization_id=ctx.card.organization_id,
+        card_template_id=ctx.card.card_template_id,
+        field_id=ctx.fields[0].id,
+        value="Первое",
+        public_view_enabled=True,
+        public_edit_enabled=True,
+    )
+    assert ctx.card.lifecycle_status == "active"
+    assert ctx.values[0].value_text == "Первое"
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_active_single_card_event_uses_basis_and_redacts_sensitive_differences(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    ctx.fields[0].sensitivity_level = "restricted"
+    ctx.service.set_field_value_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        field_id=ctx.fields[0].id,
+        value="Секрет",
+        change_context=_event_change_context(),
+    )
+    change = ctx.session.scalars(select(CardEventChange)).one()
+    assert change.old_value_json["value"] == {"redacted": True}
+    assert change.new_value_json["value"] == {"redacted": True}
+
+
+def test_active_metadata_and_repeatable_blocks_require_basis_and_record_card_events(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    operations = [
+        lambda change: ctx.service.update_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            org_unit_id=uuid4(),
+            update_org_unit=True,
+            change_context=change,
+        ),
+        lambda change: ctx.service.create_block_instance_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            block_id=ctx.block.id,
+            change_context=change,
+        ),
+        lambda change: ctx.service.archive_block_instance_for_actor(
+            actor_user_id=ctx.actor_id,
+            block_instance_id=ctx.instance.id,
+            change_context=change,
+        ),
+    ]
+    for operation in operations:
+        with pytest.raises(CardServiceError, match="Основание изменения"):
+            operation(None)
+        operation(_event_change_context())
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 3
+
+
+def test_dismissal_sets_terminal_status_records_event_and_blocks_edits(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    ctx.service.dismiss_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        occurred_on=date(2026, 9, 9),
+        basis_text="  Приказ  ",
+    )
+    assert ctx.card.lifecycle_status == "dismissed"
+    assert not ctx.card.public_edit_enabled
+    assert ctx.service.synchronize_card_lifecycle(ctx.card) is False
+    event = ctx.session.scalars(select(CardEvent)).one()
+    assert (event.event_type, event.basis_text) == ("dismissal", "Приказ")
+    with pytest.raises(CardServiceError):
+        ctx.service.set_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+            change_context=_event_change_context(),
+        )
+    with pytest.raises(CardServiceError):
+        ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date(2026, 9, 9),
+            basis_text="Приказ",
+        )
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 1
+
+
+@pytest.mark.parametrize("basis,status", [(" ", "active"), ("Приказ", "draft")])
+def test_dismissal_rejects_blank_basis_and_nonactive_card(
+    card_event_context: Any, basis: str, status: str
+) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = status
+    ctx.session.commit()
+    with pytest.raises(CardServiceError):
+        ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date(2026, 9, 9),
+            basis_text=basis,
+        )
+    assert ctx.card.lifecycle_status == status
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_card_event_failure_rolls_back_business_write_and_audit(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.card_events import CardEventService
+
+    ctx = card_event_context
+    original = CardEventService.record_change
+
+    def fail_after_event(self: Any, **kwargs: Any) -> Any:
+        original(self, **kwargs)
+        raise RuntimeError("event storage failed")
+
+    monkeypatch.setattr(CardEventService, "record_change", fail_after_event)
+    for operation in [
+        lambda: ctx.service.set_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+            change_context=_event_change_context(),
+        ),
+        lambda: ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date(2026, 9, 9),
+            basis_text="Приказ",
+        ),
+    ]:
+        with pytest.raises(RuntimeError, match="event storage failed"):
+            operation()
+        assert ctx.card.lifecycle_status == "active"
+        assert ctx.card.public_edit_enabled is True
+        assert ctx.values[0].value_text == "До"
+        assert ctx.session.scalars(select(CardEvent)).all() == []
+        assert ctx.session.scalars(select(AuditEvent)).all() == []
+
+
+def test_card_event_permissions_are_checked_before_basis_or_mutation(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = card_event_context
+
+    def deny(*_args: Any, **_kwargs: Any) -> None:
+        raise PermissionDeniedError("denied")
+
+    monkeypatch.setattr(ctx.service, "_require_card_permission", deny)
+    with pytest.raises(PermissionDeniedError):
+        ctx.service.set_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+            change_context=None,
+        )
+    with pytest.raises(PermissionDeniedError):
+        ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date(2026, 9, 9),
+            basis_text="Приказ",
+        )
+    assert ctx.values[0].value_text == "До"
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_public_card_event_requires_basis_and_keeps_public_audit_actor(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    link_id = uuid4()
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.set_field_value_from_public_link(
+            actor_public_link_id=link_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+        )
+    ctx.service.set_field_value_from_public_link(
+        actor_public_link_id=link_id,
+        card_id=ctx.card.id,
+        field_id=ctx.fields[0].id,
+        value="После",
+        change_context=_event_change_context(),
+    )
+    event = ctx.session.scalars(select(CardEvent)).one()
+    assert event.created_by is None
+    audit = ctx.session.scalars(select(AuditEvent).where(AuditEvent.object_id == event.id)).one()
+    assert audit.actor_public_link_id == link_id
+
+
+def test_public_access_settings_do_not_require_basis_or_create_card_event(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    ctx.service.update_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        public_edit_enabled=False,
+    )
+    assert not ctx.card.public_edit_enabled
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_organization_move_and_transfer_require_basis_and_create_card_events(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ctx = card_event_context
+    organization = Organization(id=uuid4(), code="target", name="Организация")
+    ctx.session.add(organization)
+    ctx.session.commit()
+    monkeypatch.setattr(cards_module.PermissionService, "is_superuser", lambda *_args: True)
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.move_card_organization_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            target_organization_id=organization.id,
+        )
+    ctx.service.move_card_organization_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        target_organization_id=organization.id,
+        change_context=_event_change_context(),
+    )
+    assert ctx.card.organization_id == organization.id
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.transfer_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            target_organization_id=uuid4(),
+        )
+    # Isolate template/attachment copying; exercise real transfer lifecycle/relation/event writes.
+    new_card = Card(
+        id=uuid4(),
+        registry_id=ctx.card.registry_id,
+        organization_id=organization.id,
+        card_template_id=ctx.card.card_template_id,
+        lifecycle_status="active",
+    )
+    ctx.session.add(new_card)
+    ctx.session.flush()
+    monkeypatch.setattr(ctx.service, "create_card", lambda **_kw: new_card)
+    monkeypatch.setattr(
+        ctx.service, "_copy_card_values", lambda **_kw: cards_module._CopyCardValuesResult()
+    )
+    ctx.service.transfer_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        target_organization_id=organization.id,
+        change_context=_event_change_context(),
+    )
+    assert ctx.card.lifecycle_status == "superseded"
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 2
+    assert ctx.session.scalars(select(CardRelation)).one().target_card_id == new_card.id
+
+
+def test_archive_active_card_requires_basis_and_records_card_event(card_event_context: Any) -> None:
+    ctx = card_event_context
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.archive_card_for_actor(actor_user_id=ctx.actor_id, card_id=ctx.card.id)
+    ctx.service.archive_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        change_context=_event_change_context(),
+    )
+    assert ctx.card.lifecycle_status == "archived"
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 1
 
 
 def test_safe_field_value_audit_snapshot_redacts_non_normal_sensitivity() -> None:
@@ -1298,7 +1811,7 @@ def test_first_card_value_discards_card_when_public_access_update_fails_without_
     registry_id = uuid4()
     template_id = uuid4()
     field_id = uuid4()
-    card = SimpleNamespace(id=uuid4())
+    card = SimpleNamespace(id=uuid4(), lifecycle_status="draft", activated_at=None)
 
     monkeypatch.setattr(
         RegistrySchemaService,

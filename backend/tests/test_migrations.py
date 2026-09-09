@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 from io import StringIO
@@ -123,6 +124,54 @@ EXPECTED_TABLES = {
 
 def test_base_metadata_contains_core_schema_v1_tables() -> None:
     assert set(Base.metadata.tables) == EXPECTED_TABLES
+
+
+def test_card_event_first_activation_backfill_preserves_known_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration = importlib.import_module("migrations.versions.0035_card_first_activation")
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text("ATTACH DATABASE ':memory:' AS public"))
+        connection.execute(
+            text("CREATE TABLE public.cards (id INTEGER PRIMARY KEY, lifecycle_status TEXT)")
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE public.audit_events "
+                "(card_id INTEGER, created_at DATETIME, new_data_json JSON)"
+            )
+        )
+        connection.execute(
+            text("CREATE TABLE public.card_events (card_id INTEGER, created_at DATETIME)")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO public.cards VALUES "
+                "(1, 'active'), (2, 'draft'), (3, 'draft'), (4, 'dismissed')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO public.audit_events VALUES (2, '2026-09-01 12:00:00', :data)"),
+            {"data": '{"lifecycle_status":"active"}'},
+        )
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+        rows = connection.execute(
+            text("SELECT id, activated_at FROM public.cards ORDER BY id")
+        ).all()
+        assert rows[0].activated_at is not None
+        assert rows[1].activated_at == "2026-09-01 12:00:00"
+        assert rows[2].activated_at is None
+        assert rows[3].activated_at is not None
+        migration.downgrade()
+        assert "activated_at" not in {
+            column["name"] for column in inspect(connection).get_columns("cards", schema="public")
+        }
+    engine.dispose()
 
 
 def test_alembic_can_render_core_schema_upgrade_sql() -> None:

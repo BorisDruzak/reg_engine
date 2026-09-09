@@ -36,6 +36,120 @@ from app.models import (
 )
 from app.services.cards import CardService, CardServiceError
 from app.services.registry_schema import RegistrySchemaError, RegistrySchemaService
+from tests.test_registry_card_services import card_event_context as card_event_context
+
+
+@pytest.fixture()
+def card_event_api(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[tuple[TestClient, Any]]:
+    from app.api.dependencies import get_actor_user_id
+
+    ctx = card_event_context
+    app = create_app()
+    app.dependency_overrides[get_db_session] = lambda: ctx.session
+    app.dependency_overrides[get_actor_user_id] = lambda: ctx.actor_id
+    monkeypatch.setattr(CardService, "_card_template_name", lambda *_args: "Шаблон")
+    monkeypatch.setattr(CardService, "card_display_value", lambda *_args: "Карточка")
+    monkeypatch.setattr(CardService, "creator_display_name_for_card", lambda *_args: None)
+    monkeypatch.setattr(CardService, "list_display_fields_for_card", lambda *_args: [])
+    with TestClient(app) as client:
+        yield client, ctx
+
+
+def test_card_event_api_accepts_basis_on_bulk_and_single_saves(
+    card_event_api: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.models import CardEvent
+
+    client, ctx = card_event_api
+    # Endpoint references are imported by name; preserve real DTO serialization.
+    import app.api.v1.endpoints.cards as endpoints
+    from app.schemas.cards import FieldValueRead
+
+    monkeypatch.setattr(endpoints, "coerce_api_field_value", lambda _s, _f, value: value)
+    monkeypatch.setattr(
+        endpoints,
+        "field_value_to_read",
+        lambda _s, value: FieldValueRead(
+            id=value.id,
+            card_id=value.card_id,
+            block_instance_id=value.block_instance_id,
+            field_id=value.field_id,
+            value=value.value_text,
+        ),
+    )
+    for suffix, payload in [
+        ("values", {"values": [{"field_id": str(ctx.fields[0].id), "value": "После"}]}),
+        (f"fields/{ctx.fields[1].id}", {"value": "После"}),
+    ]:
+        missing = client.patch(f"/api/v1/cards/{ctx.card.id}/{suffix}", json=payload)
+        assert missing.status_code == 400
+        assert "Основание изменения" in missing.json()["detail"]
+        response = client.patch(
+            f"/api/v1/cards/{ctx.card.id}/{suffix}",
+            json={
+                **payload,
+                "basis_text": "  Приказ API  ",
+                "occurred_on": "2026-09-08",
+            },
+        )
+        assert response.status_code == 200, response.text
+    events = ctx.session.scalars(select(CardEvent)).all()
+    assert len(events) == 2
+    assert all(
+        event.basis_text == "Приказ API" and event.occurred_on == date(2026, 9, 8)
+        for event in events
+    )
+
+
+def test_card_event_api_metadata_and_block_context(card_event_api: Any) -> None:
+    from app.models import CardEvent
+
+    client, ctx = card_event_api
+    basis = {"basis_text": "Приказ", "occurred_on": "2026-09-09"}
+    response = client.patch(
+        f"/api/v1/cards/{ctx.card.id}",
+        json={
+            "org_unit_id": str(uuid4()),
+            **basis,
+        },
+    )
+    assert response.status_code == 200, response.text
+    added = client.post(f"/api/v1/cards/{ctx.card.id}/blocks/{ctx.block.id}/instances", json=basis)
+    assert added.status_code == 201, added.text
+    archived = client.request(
+        "DELETE", f"/api/v1/card-block-instances/{ctx.instance.id}", json=basis
+    )
+    assert archived.status_code == 200, archived.text
+    assert len(ctx.session.scalars(select(CardEvent)).all()) == 3
+
+
+def test_dismissal_api_validates_basis_date_and_returns_terminal_card(card_event_api: Any) -> None:
+    client, ctx = card_event_api
+    path = f"/api/v1/cards/{ctx.card.id}/dismissal"
+    for payload in [{"basis_text": "Приказ"}, {"basis_text": "Приказ", "occurred_on": "bad-date"}]:
+        invalid = client.post(path, json=payload)
+        assert invalid.status_code == 422
+    blank = client.post(path, json={"basis_text": " \t ", "occurred_on": "2026-09-09"})
+    assert blank.status_code == 400
+    assert "Основание изменения" in blank.json()["detail"]
+    response = client.post(path, json={"basis_text": "Приказ", "occurred_on": "2026-09-09"})
+    assert response.status_code == 200, response.text
+    assert response.json()["lifecycle_status"] == "dismissed"
+    assert ctx.card.lifecycle_status == "dismissed"
+    denied = client.patch(f"/api/v1/cards/{ctx.card.id}", json={"public_edit_enabled": True})
+    assert denied.status_code == 400
+    assert "только для чтения" in denied.json()["detail"]
+
+
+def test_archive_card_event_api_accepts_optional_change_context(card_event_api: Any) -> None:
+    client, ctx = card_event_api
+    path = f"/api/v1/cards/{ctx.card.id}"
+    assert client.delete(path).status_code == 400
+    response = client.request("DELETE", path, json={"basis_text": "Основание архивирования"})
+    assert response.status_code == 200, response.text
+    assert response.json()["lifecycle_status"] == "archived"
 
 
 def _require_test_database_url() -> str:
@@ -362,6 +476,7 @@ def test_draft_endpoint_accepts_no_template_and_returns_display_value_without_da
         organization_id=uuid4(),
         org_unit_id=None,
         lifecycle_status="draft",
+        activated_at=None,
         public_view_enabled=True,
         public_edit_enabled=False,
         created_by=None,
@@ -416,6 +531,7 @@ def test_ordinary_create_keeps_template_choice_while_draft_delegates_selection(
         organization_id=organization_id,
         org_unit_id=None,
         lifecycle_status="draft",
+        activated_at=None,
         public_view_enabled=True,
         public_edit_enabled=False,
         created_by=None,

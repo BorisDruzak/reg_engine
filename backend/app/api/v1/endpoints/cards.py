@@ -1,11 +1,12 @@
 import json
-from typing import Annotated
+from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_actor_user_id, get_db_session, raise_service_http_error
+from app.api.dependencies import get_actor_user_id, get_db_session
+from app.api.dependencies import raise_service_http_error as _raise_service_http_error
 from app.api.v1.endpoints._field_values import coerce_api_field_value, field_value_to_read
 from app.models import Card
 from app.schemas.card_change_notifications import (
@@ -16,11 +17,13 @@ from app.schemas.cards import (
     CardBlockInstanceRead,
     CardBlockInstanceSummaryRead,
     CardBlockRead,
+    CardChangeRequest,
     CardCreate,
     CardCreationPreviewBlockRead,
     CardCreationPreviewFieldRead,
     CardCreationPreviewOptionRead,
     CardCreationPreviewRead,
+    CardDismissalRequest,
     CardDraftCreateRequest,
     CardDraftPublicLinkRead,
     CardDraftPublicLinkRequest,
@@ -48,6 +51,9 @@ from app.services.card_change_notifications import CardChangeNotificationService
 from app.services.card_public_access import CardPublicAccessService
 from app.services.cards import (
     BulkFieldValueInput,
+    CardChangeBasisError,
+    CardChangeContext,
+    CardDismissalError,
     CardFieldFilterInput,
     CardService,
     CardServiceError,
@@ -58,6 +64,18 @@ from app.services.cards import CardListFieldRead as ServiceCardListFieldRead
 from app.services.cards import CardRead as ServiceCardRead
 
 router = APIRouter(tags=["cards"])
+
+
+def raise_service_http_error(exc: Exception) -> NoReturn:
+    if isinstance(exc, (CardChangeBasisError, CardDismissalError)):
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _raise_service_http_error(exc)
+
+
+def _change_context(payload: CardChangeRequest | None) -> CardChangeContext | None:
+    if payload is None or payload.basis_text is None:
+        return None
+    return CardChangeContext(payload.basis_text, payload.occurred_on)
 
 
 @router.get(
@@ -495,6 +513,7 @@ def set_card_field_value(
             field_id=field_id,
             value=value,
             block_instance_id=payload.block_instance_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -521,6 +540,7 @@ def set_card_field_values(
             actor_user_id=actor_user_id,
             card_id=card_id,
             values=values,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -546,6 +566,7 @@ def update_card(
             lifecycle_status=payload.lifecycle_status,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -565,6 +586,7 @@ def move_card_organization(
             actor_user_id=actor_user_id,
             card_id=card_id,
             target_organization_id=payload.organization_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -603,17 +625,39 @@ def update_card_public_access(
         raise_service_http_error(exc)
 
 
+@router.post("/cards/{card_id}/dismissal", response_model=CardSummaryRead)
+def dismiss_card(
+    card_id: UUID,
+    payload: CardDismissalRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+) -> CardSummaryRead:
+    try:
+        card_service = CardService(session)
+        card = card_service.dismiss_card_for_actor(
+            actor_user_id=actor_user_id,
+            card_id=card_id,
+            occurred_on=payload.occurred_on,
+            basis_text=payload.basis_text,
+        )
+    except Exception as exc:
+        raise_service_http_error(exc)
+    return _card_to_summary(card, card_service)
+
+
 @router.delete("/cards/{card_id}", response_model=CardSummaryRead)
 def archive_card(
     card_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    payload: Annotated[CardChangeRequest | None, Body()] = None,
 ) -> CardSummaryRead:
     try:
         card_service = CardService(session)
         card = card_service.archive_card_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -630,12 +674,14 @@ def create_card_block_instance(
     block_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    payload: Annotated[CardChangeRequest | None, Body()] = None,
 ) -> CardBlockInstanceSummaryRead:
     try:
         block_instance = CardService(session).create_block_instance_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
             block_id=block_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -654,11 +700,13 @@ def archive_card_block_instance(
     block_instance_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
     actor_user_id: Annotated[UUID, Depends(get_actor_user_id)],
+    payload: Annotated[CardChangeRequest | None, Body()] = None,
 ) -> CardBlockInstanceSummaryRead:
     try:
         block_instance = CardService(session).archive_block_instance_for_actor(
             actor_user_id=actor_user_id,
             block_instance_id=block_instance_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -687,6 +735,7 @@ def transfer_card(
             actor_user_id=actor_user_id,
             card_id=card_id,
             target_organization_id=payload.target_organization_id,
+            change_context=_change_context(payload),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -762,6 +811,7 @@ def _card_to_summary(card: Card, card_service: CardService) -> CardSummaryRead:
         display_value=card_service.card_display_value(card),
         creator_display_name=card_service.creator_display_name_for_card(card),
         lifecycle_status=card.lifecycle_status,
+        activated_at=card.activated_at,
         public_view_enabled=card.public_view_enabled,
         public_edit_enabled=card.public_edit_enabled,
         list_fields=[

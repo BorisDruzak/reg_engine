@@ -1,8 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Concatenate, cast
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -35,6 +37,8 @@ from app.models import (
     User,
 )
 from app.services.audit import AuditService, safe_field_value_audit_snapshot
+from app.services.card_events import CardChangeContext as CardChangeContext
+from app.services.card_events import CardEventFieldChange, CardEventService
 from app.services.organizations import OrganizationService
 from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.references import ReferenceListError, ReferenceListService
@@ -51,6 +55,80 @@ class CardServiceError(ValueError):
 
 class InvalidFieldValueError(ValueError):
     """Raised when a dynamic field value does not match its field configuration."""
+
+
+class CardChangeBasisError(CardServiceError):
+    """A business mutation has no usable basis."""
+
+
+class CardDismissalError(CardServiceError):
+    """The card cannot enter or leave the terminal dismissed state."""
+
+
+@dataclass
+class _PendingFieldChange:
+    field_id: UUID
+    before: object
+    after: object
+    old_snapshot: dict[str, Any]
+    new_snapshot: dict[str, Any]
+
+
+def _active_card_change[**P, R](
+    operation: Callable[Concatenate["CardService", P], R],
+) -> Callable[Concatenate["CardService", P], R]:
+    """Serialize business mutations and aggregate nested writes into one event."""
+
+    @wraps(operation)
+    def wrapped(self: "CardService", /, *args: P.args, **kwargs: P.kwargs) -> R:
+        card_id = cast(UUID | None, kwargs.get("card_id"))
+        if card_id is None:
+            instance = self._get_active_block_instance(cast(UUID, kwargs["block_instance_id"]))
+            card_id = instance.card_id
+        if self._event_card_id == card_id:
+            return operation(self, *args, **kwargs)
+        with self.session.begin_nested():
+            # Lock and refresh before checking lifecycle/basis or reading old values.
+            self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+            card = self._get_editable_card(card_id)
+            actor_id = cast(UUID | None, kwargs.get("actor_user_id"))
+            if actor_id is not None:
+                self._require_card_permission(
+                    actor_id, card.organization_id, registry_id=card.registry_id
+                )
+            business_data = operation.__name__ != "update_card_for_actor" or bool(
+                kwargs.get("update_org_unit")
+            )
+            active = (
+                card.activated_at is not None or card.lifecycle_status == "active"
+            ) and business_data
+            context = cast(CardChangeContext | None, kwargs.get("change_context"))
+            if active:
+                context = self._require_change_context(context)
+            before = self._card_business_state(card) if active else None
+            previous_card_id, previous_changes = self._event_card_id, self._event_changes
+            self._event_card_id, self._event_changes = card.id, {}
+            try:
+                result = operation(self, *args, **kwargs)
+                changes = [
+                    CardEventFieldChange(item.field_id, item.old_snapshot, item.new_snapshot)
+                    for item in self._event_changes.values()
+                    if item.before != item.after
+                ]
+                if active and (changes or before != self._card_business_state(card)):
+                    assert context is not None
+                    CardEventService(self.session).record_change(
+                        card_id=card.id,
+                        context=context,
+                        actor_user_id=actor_id,
+                        changes=changes,
+                        actor_public_link_id=cast(UUID | None, kwargs.get("actor_public_link_id")),
+                    )
+                return result
+            finally:
+                self._event_card_id, self._event_changes = previous_card_id, previous_changes
+
+    return wrapped
 
 
 @dataclass(frozen=True)
@@ -200,6 +278,61 @@ class CardFieldFilterInput:
 class CardService:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self._event_card_id: UUID | None = None
+        self._event_changes: dict[UUID, _PendingFieldChange] = {}
+
+    @staticmethod
+    def _require_change_context(context: CardChangeContext | None) -> CardChangeContext:
+        if (
+            context is None
+            or not isinstance(context.basis_text, str)
+            or not context.basis_text.strip()
+        ):
+            raise CardChangeBasisError("Основание изменения обязательно.")
+        if context.occurred_on is not None and (
+            not isinstance(context.occurred_on, date) or isinstance(context.occurred_on, datetime)
+        ):
+            raise CardChangeBasisError("Дата изменения должна быть календарной датой.")
+        return CardChangeContext(context.basis_text.strip(), context.occurred_on)
+
+    def _card_business_state(self, card: Card) -> object:
+        instances = self.session.execute(
+            select(CardBlockInstance.id, CardBlockInstance.archived_at)
+            .where(CardBlockInstance.card_id == card.id)
+            .order_by(CardBlockInstance.id)
+        ).all()
+        return (card.organization_id, card.org_unit_id, card.lifecycle_status, tuple(instances))
+
+    def _field_storage_snapshot(self, value: FieldValue) -> object:
+        return deepcopy(
+            (
+                tuple(
+                    getattr(value, column.key)
+                    for column in FieldValue.__table__.columns
+                    if column.key.startswith("value_")
+                ),
+                self._multi_select_item_ids([value]).get(value.id, []),
+            )
+        )
+
+    def _collect_field_change(
+        self,
+        field_model: FormField,
+        value: FieldValue,
+        before: object,
+        old_snapshot: dict[str, Any],
+    ) -> None:
+        new_snapshot = self._field_value_audit_snapshot(field_model, value)
+        old_snapshot = {**old_snapshot, "block_instance_id": str(value.block_instance_id)}
+        new_snapshot = {**new_snapshot, "block_instance_id": str(value.block_instance_id)}
+        pending = self._event_changes.get(value.id)
+        self._event_changes[value.id] = _PendingFieldChange(
+            field_model.id,
+            pending.before if pending else before,
+            self._field_storage_snapshot(value),
+            pending.old_snapshot if pending else old_snapshot,
+            new_snapshot,
+        )
 
     def create_card_for_actor(
         self,
@@ -329,6 +462,8 @@ class CardService:
         *,
         actor_user_id: UUID,
     ) -> None:
+        # Used only within initial card creation, before its first completed save.
+        card.activated_at = None
         if card.lifecycle_status == "draft":
             return
         old_status = card.lifecycle_status
@@ -472,6 +607,7 @@ class CardService:
                 public_view_enabled=public_view_enabled,
                 public_edit_enabled=public_edit_enabled,
             )
+            self._preserve_draft_lifecycle(card, actor_user_id=actor_user_id)
             self.set_field_value_for_actor(
                 actor_user_id=actor_user_id,
                 card_id=card.id,
@@ -977,6 +1113,7 @@ class CardService:
                 ) from exc
         raise CardServiceError("Datetime field filters require ISO datetime values.")
 
+    @_active_card_change
     def set_field_value_for_actor(
         self,
         *,
@@ -988,6 +1125,7 @@ class CardService:
         synchronize_lifecycle: bool = True,
         notification_batch: list[AuditEvent] | None = None,
         work_experience_as_of_date: date | None = None,
+        change_context: CardChangeContext | None = None,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -1022,9 +1160,11 @@ class CardService:
             field_id=field_model.id,
             actor_user_id=actor_user_id,
         )
+        before = self._field_storage_snapshot(field_value)
         old_data = self._field_value_audit_snapshot(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=actor_user_id)
         self.session.flush()
+        self._collect_field_change(field_model, field_value, before, old_data)
         AuditService(self.session).record_user_event(
             actor_user_id=actor_user_id,
             action="update",
@@ -1040,12 +1180,14 @@ class CardService:
             self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return field_value
 
+    @_active_card_change
     def set_field_values_for_actor(
         self,
         *,
         actor_user_id: UUID,
         card_id: UUID,
         values: Sequence[BulkFieldValueInput],
+        change_context: CardChangeContext | None = None,
     ) -> list[FieldValue]:
         notification_batch: list[AuditEvent] = []
         with self.session.begin_nested():
@@ -1116,6 +1258,7 @@ class CardService:
             actor_user_id=actor_user_id,
         )
 
+    @_active_card_change
     def set_field_value_from_public_link(
         self,
         *,
@@ -1126,6 +1269,7 @@ class CardService:
         field_id: UUID,
         value: object,
         block_instance_id: UUID | None = None,
+        change_context: CardChangeContext | None = None,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -1154,9 +1298,11 @@ class CardService:
             field_id=field_model.id,
             actor_user_id=None,
         )
+        before = self._field_storage_snapshot(field_value)
         old_data = self._field_value_audit_snapshot(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=None)
         self.session.flush()
+        self._collect_field_change(field_model, field_value, before, old_data)
         AuditService(self.session).record_public_link_event(
             actor_public_link_id=actor_public_link_id,
             actor_display_name=actor_display_name,
@@ -1177,6 +1323,7 @@ class CardService:
         )
         return field_value
 
+    @_active_card_change
     def update_card_for_actor(
         self,
         *,
@@ -1187,6 +1334,7 @@ class CardService:
         lifecycle_status: str | None = None,
         public_view_enabled: bool | None = None,
         public_edit_enabled: bool | None = None,
+        change_context: CardChangeContext | None = None,
     ) -> Card:
         card = self._get_editable_card(card_id)
         self._require_card_permission(
@@ -1416,7 +1564,53 @@ class CardService:
         )
         return self._organization_options(organizations)
 
-    def archive_card_for_actor(self, *, actor_user_id: UUID, card_id: UUID) -> Card:
+    def dismiss_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        occurred_on: date,
+        basis_text: str,
+    ) -> Card:
+        with self.session.begin_nested():
+            self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+            card = self._get_editable_card(card_id)
+            self._require_card_permission(
+                actor_user_id, card.organization_id, registry_id=card.registry_id
+            )
+            if card.lifecycle_status != "active":
+                raise CardDismissalError("Увольнение доступно только для действующей карточки.")
+            context = self._require_change_context(CardChangeContext(basis_text, occurred_on))
+            if occurred_on is None:
+                raise CardDismissalError("Дата увольнения обязательна.")
+            card.lifecycle_status = "dismissed"
+            card.public_edit_enabled = False
+            card.updated_by = actor_user_id
+            CardEventService(self.session).record_change(
+                card_id=card.id,
+                context=context,
+                actor_user_id=actor_user_id,
+                event_type="dismissal",
+            )
+            self._record_lifecycle_transition(
+                card,
+                old_status="active",
+                actor_user_id=actor_user_id,
+                actor_public_link_id=None,
+                actor_display_name=None,
+                attributed_user_id=None,
+            )
+            self.session.flush()
+            return card
+
+    @_active_card_change
+    def archive_card_for_actor(
+        self,
+        *,
+        actor_user_id: UUID,
+        card_id: UUID,
+        change_context: CardChangeContext | None = None,
+    ) -> Card:
         card = self._get_editable_card(card_id)
         self._require_card_permission(
             actor_user_id,
@@ -1437,12 +1631,14 @@ class CardService:
         )
         return card
 
+    @_active_card_change
     def transfer_card_for_actor(
         self,
         *,
         actor_user_id: UUID,
         card_id: UUID,
         target_organization_id: UUID,
+        change_context: CardChangeContext | None = None,
     ) -> Card:
         old_card = self._get_editable_card(card_id)
         if not PermissionService(self.session).is_superuser(actor_user_id):
@@ -1509,12 +1705,14 @@ class CardService:
         )
         return new_card
 
+    @_active_card_change
     def move_card_organization_for_actor(
         self,
         *,
         actor_user_id: UUID,
         card_id: UUID,
         target_organization_id: UUID,
+        change_context: CardChangeContext | None = None,
     ) -> Card:
         card = self._get_editable_card(card_id)
         target_organization = self.session.get(Organization, target_organization_id)
@@ -1562,12 +1760,14 @@ class CardService:
         )
         return card
 
+    @_active_card_change
     def create_block_instance_for_actor(
         self,
         *,
         actor_user_id: UUID,
         card_id: UUID,
         block_id: UUID,
+        change_context: CardChangeContext | None = None,
     ) -> CardBlockInstance:
         card = self._get_editable_card(card_id)
         block = self._get_active_block(block_id)
@@ -1602,11 +1802,13 @@ class CardService:
         self.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
         return block_instance
 
+    @_active_card_change
     def archive_block_instance_for_actor(
         self,
         *,
         actor_user_id: UUID,
         block_instance_id: UUID,
+        change_context: CardChangeContext | None = None,
     ) -> CardBlockInstance:
         block_instance = self._get_active_block_instance(block_instance_id)
         card = self._get_editable_card(block_instance.card_id)
@@ -1658,6 +1860,8 @@ class CardService:
 
     def _get_editable_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)
+        if card is not None and card.lifecycle_status == "dismissed":
+            raise CardDismissalError("Уволенная карточка доступна только для чтения.")
         if (
             card is None
             or card.archived_at is not None
@@ -2104,13 +2308,16 @@ class CardService:
         attributed_user_id: UUID | None = None,
         audit_transition: bool = True,
     ) -> bool:
-        if card.lifecycle_status in {"archived", "superseded"}:
+        if card.lifecycle_status in {"archived", "superseded", "dismissed"}:
             return False
         missing_labels = self._missing_required_field_labels(
             card,
             include_publish_required=True,
         )
         next_status = "draft" if missing_labels else "active"
+        if next_status == "active" and getattr(card, "activated_at", None) is None:
+            card.activated_at = datetime.now(UTC)
+            self.session.flush()
         if next_status == card.lifecycle_status:
             return False
         old_status = card.lifecycle_status
