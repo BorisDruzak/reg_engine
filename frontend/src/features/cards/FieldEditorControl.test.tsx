@@ -350,7 +350,10 @@ describe("FieldEditorControl hints", () => {
     await user.click(screen.getByRole("combobox", { name: "Статус" }));
     expect(screen.getByRole("listbox", { name: "Статус" })).toBeVisible();
 
-    await user.pointer({ target: screen.getByRole("button", { name: "Другая область карточки" }), keys: "[MouseLeft]" });
+    await user.pointer({
+      target: screen.getByRole("button", { name: "Другая область карточки" }),
+      keys: "[MouseLeft]",
+    });
 
     expect(screen.queryByRole("listbox", { name: "Статус" })).not.toBeInTheDocument();
   });
