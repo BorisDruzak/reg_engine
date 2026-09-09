@@ -433,6 +433,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     public_edit_enabled: boolean;
   } | null = null;
   let repeatableInstances: { block_instance_id: string; ordinal: number; value: string }[] = [];
+  const repeatableWrites: Array<{ method: string; body: unknown }> = [];
   let auditItems = [...apiPayloads.audit.items];
   const publicLinkItems = [...apiPayloads.publicLinks.items];
   let attachmentItems = [...apiPayloads.attachments.items];
@@ -678,11 +679,12 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     }
     if (
       url.pathname ===
-      "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd/blocks/8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d/instances"
+      "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/blocks/8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d/instances"
     ) {
+      repeatableWrites.push({ method: request.method(), body: request.postDataJSON() });
       const createdInstance = {
         id: "edededed-eded-4ede-8ede-edededededed",
-        card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+        card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
         ordinal: repeatableInstances.length,
       };
@@ -703,6 +705,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       return;
     }
     if (url.pathname === "/api/v1/card-block-instances/edededed-eded-4ede-8ede-edededededed") {
+      repeatableWrites.push({ method: request.method(), body: request.postDataJSON() });
       repeatableInstances = repeatableInstances.filter(
         (instance) => instance.block_instance_id !== "edededed-eded-4ede-8ede-edededededed",
       );
@@ -712,7 +715,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
         contentType: "application/json",
         body: JSON.stringify({
           id: "edededed-eded-4ede-8ede-edededededed",
-          card_id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
           ordinal: 0,
         }),
@@ -952,19 +955,31 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     const payload = responsePayload(url.pathname, url.search, {
       approvedValue: cardApprovedValue,
       statusValue: cardStatusValue,
+      repeatableInstances,
     });
     if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") {
       const body = request.postDataJSON() as {
         basis_text?: string;
         values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
       };
-      expect(body.basis_text).toBe("Приказ об изменении 42");
+      const changesRepeatableInstance = body.values.some((item) => Boolean(item.block_instance_id));
+      expect(body.basis_text).toBe(
+        changesRepeatableInstance ? "Приказ об уточнении сведений 44" : "Приказ об изменении 42",
+      );
+      if (changesRepeatableInstance) repeatableWrites.push({ method: request.method(), body });
       for (const item of body.values) {
         if (item.field_id === "99999999-9999-4999-8999-999999999999") {
           cardStatusValue = String(item.value ?? "");
         }
         if (item.field_id === "99999999-9999-4999-8999-999999999998") {
           cardApprovedValue = Boolean(item.value);
+        }
+        if (item.field_id === "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d") {
+          repeatableInstances = repeatableInstances.map((instance) =>
+            instance.block_instance_id === item.block_instance_id
+              ? { ...instance, value: String(item.value ?? "") }
+              : instance,
+          );
         }
       }
       await route.fulfill({
@@ -1070,6 +1085,70 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.getByLabel("Основание изменения").fill("Приказ об изменении 42");
   await page.getByRole("button", { name: "Сохранить блок" }).click();
   await expect(page.getByLabel("Основание изменения")).toHaveCount(0);
+
+  await page.locator("#card-base-block").getByText("Публичный доступ", { exact: true }).click();
+  await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
+  const createInstanceDialog = page.getByRole("dialog", {
+    name: "Добавить экземпляр блока",
+    exact: true,
+  });
+  await expect(
+    createInstanceDialog.getByRole("button", { name: "Сохранить", exact: true }),
+  ).toBeDisabled();
+  expect(repeatableWrites).toEqual([]);
+  await createInstanceDialog
+    .getByLabel("Основание изменения")
+    .fill("Приказ о добавлении сведений 43");
+  await createInstanceDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(createInstanceDialog).toHaveCount(0);
+  await page
+    .locator(
+      '[data-filled-card-instance="edededed-eded-4ede-8ede-edededededed"] [data-card-field-id="9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d"]',
+    )
+    .click();
+  await page.getByLabel("Комментарий", { exact: true }).fill("Сведения по приказу");
+  await expect(page.getByRole("button", { name: "Сохранить блок", exact: true })).toBeDisabled();
+  await page.getByLabel("Основание изменения").fill("Приказ об уточнении сведений 44");
+  await page.getByRole("button", { name: "Сохранить блок", exact: true }).click();
+  await expect(page.getByLabel("Основание изменения")).toHaveCount(0);
+  await expect(page.getByText("Сведения по приказу", { exact: true })).toBeVisible();
+  const archiveInstanceButton = page.getByRole("button", {
+    name: "Архивировать экземпляр блока Детали карточки экземпляр 1",
+  });
+  await archiveInstanceButton.click();
+  const archiveInstanceDialog = page.getByRole("dialog", {
+    name: "Архивировать экземпляр блока",
+    exact: true,
+  });
+  await expect(
+    archiveInstanceDialog.getByRole("button", { name: "Сохранить", exact: true }),
+  ).toBeDisabled();
+  await archiveInstanceDialog
+    .getByLabel("Основание изменения")
+    .fill("Приказ об исключении сведений 45");
+  await archiveInstanceDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(archiveInstanceDialog).toHaveCount(0);
+  await expect(archiveInstanceButton).toHaveCount(0);
+  await expect(
+    page.locator('[data-filled-card-instance="edededed-eded-4ede-8ede-edededededed"]'),
+  ).toHaveCount(0);
+  expect(repeatableWrites).toEqual([
+    { method: "POST", body: { basis_text: "Приказ о добавлении сведений 43" } },
+    {
+      method: "PATCH",
+      body: {
+        basis_text: "Приказ об уточнении сведений 44",
+        values: [
+          {
+            field_id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+            block_instance_id: "edededed-eded-4ede-8ede-edededededed",
+            value: "Сведения по приказу",
+          },
+        ],
+      },
+    },
+    { method: "DELETE", body: { basis_text: "Приказ об исключении сведений 45" } },
+  ]);
 
   await page.getByRole("tab", { name: "Список карточек" }).click();
   await page.getByRole("tab", { name: "Создать карточку", exact: true }).click();
@@ -2294,11 +2373,19 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     .click();
   await page.getByRole("button", { name: "Создать поле в блоке Основные сведения" }).click();
   await page.getByLabel("Название поля", { exact: true }).fill("Статус проверки");
-  await page.getByRole("combobox", { name: /^Тип поля/ }).selectOption("text");
+  await page.getByRole("combobox", { name: /^Тип поля/ }).selectOption("select");
+  await page
+    .getByRole("combobox", { name: /^Справочник/ })
+    .selectOption("61616161-6161-4616-8616-616161616161");
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByLabel("Название поля", { exact: true })).toHaveCount(0);
   expect(fields).toEqual([
-    expect.objectContaining({ label: "Статус проверки", field_type: "text" }),
+    expect.objectContaining({
+      label: "Статус проверки",
+      field_type: "select",
+      options_source_type: "reference_list",
+      options_source_id: "61616161-6161-4616-8616-616161616161",
+    }),
   ]);
 
   await page.getByRole("button", { name: "Аудит", exact: true }).click();
@@ -2451,7 +2538,11 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
 function responsePayload(
   pathname: string,
   _search: string,
-  cardValues: { approvedValue: boolean; statusValue: string },
+  cardValues: {
+    approvedValue: boolean;
+    statusValue: string;
+    repeatableInstances: Array<{ block_instance_id: string; ordinal: number; value: string }>;
+  },
 ) {
   if (pathname === "/api/v1/auth/login") {
     return apiPayloads.login;
@@ -2501,6 +2592,22 @@ function responsePayload(
     return {
       ...apiPayloads.cardRead,
       blocks: {
+        details: {
+          block_id: "8d8d8d8d-8d8d-48d8-88d8-8d8d8d8d8d8d",
+          code: "details",
+          instances: cardValues.repeatableInstances.map((instance) => ({
+            block_instance_id: instance.block_instance_id,
+            ordinal: instance.ordinal,
+            fields: {
+              comment: {
+                field_id: "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
+                code: "comment",
+                field_type: "text",
+                value: instance.value,
+              },
+            },
+          })),
+        },
         main: {
           ...apiPayloads.cardRead.blocks.main,
           instances: [
