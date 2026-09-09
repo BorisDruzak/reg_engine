@@ -311,6 +311,9 @@ class PublicLinkService:
         self._require_not_expired(public_link)
         if not public_link.can_edit or public_link.status not in EDITABLE_PUBLIC_LINK_STATUSES:
             raise PermissionDeniedError("Public link is not editable.")
+        card = self._get_card_for_write(public_link.card_id)
+        if not public_link.can_view or not self._card_allows_public_edit(card.id):
+            raise PermissionDeniedError("Public editing is disabled for this card.")
         CardService(self.session)._lock_editable_card(public_link.card_id, actor_user_id=None)
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
             raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")

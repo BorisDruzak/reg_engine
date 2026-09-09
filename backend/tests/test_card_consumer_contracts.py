@@ -322,6 +322,7 @@ def test_terminal_consumers_authorize_before_lifecycle(consumer, authorized, mon
         registry_id=uuid4(),
         lifecycle_status="dismissed",
         archived_at=None,
+        public_view_enabled=True,
         public_edit_enabled=True,
     )
     link = SimpleNamespace(
@@ -331,6 +332,7 @@ def test_terminal_consumers_authorize_before_lifecycle(consumer, authorized, mon
         max_attachment_uploads=None,
         status="active",
         can_edit=True,
+        can_view=True,
     )
     session = MagicMock()
     session.get.return_value = card
@@ -428,6 +430,32 @@ def test_disabled_public_submit_does_not_disclose_card_lifecycle(monkeypatch):
         baseline_snapshot_json={},
     )
     service.session.get.return_value = SimpleNamespace(lifecycle_status="dismissed")
+    monkeypatch.setattr(service, "_public_link_for_token", lambda *a, **kw: link)
+    monkeypatch.setattr(service, "_require_not_expired", lambda *a: None)
+    with pytest.raises(PermissionDeniedError):
+        service.submit_for_review(raw_token="revoked", actor_name="Иванов Иван Иванович")
+
+
+@pytest.mark.parametrize("revoked", ["public_view_enabled", "public_edit_enabled", "can_view"])
+def test_revoked_card_public_submit_does_not_disclose_lifecycle(monkeypatch, revoked):
+    service = PublicLinkService(MagicMock())
+    card = SimpleNamespace(
+        id=uuid4(),
+        lifecycle_status="dismissed",
+        archived_at=None,
+        public_view_enabled=True,
+        public_edit_enabled=True,
+    )
+    link = SimpleNamespace(
+        card_id=card.id,
+        status="active",
+        can_edit=True,
+        can_view=True,
+        review_enabled=True,
+        baseline_snapshot_json={},
+    )
+    setattr(link if revoked == "can_view" else card, revoked, False)
+    service.session.get.return_value = card
     monkeypatch.setattr(service, "_public_link_for_token", lambda *a, **kw: link)
     monkeypatch.setattr(service, "_require_not_expired", lambda *a: None)
     with pytest.raises(PermissionDeniedError):
