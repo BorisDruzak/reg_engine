@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-09-09 22:08:00 +05:00
+- Generated: 2026-09-09 23:24:33 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -172,6 +172,7 @@
 - `backend/migrations/versions/0034_card_events_exports_display_fio.py`
 - `backend/migrations/versions/0035_card_first_activation.py`
 - `backend/migrations/versions/0036_card_display_placeholders.py`
+- `backend/migrations/versions/0037_remove_display_configuration.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -499,6 +500,7 @@
 - `frontend/src/features/registry/print/A4LayoutToolbar.tsx`
 - `frontend/src/features/registry/print/A4ResizeHandles.tsx`
 - `frontend/src/features/registry/print/A4SelectionOverlay.tsx`
+- `frontend/src/features/registry/print/A4TemplatePalette.test.tsx`
 - `frontend/src/features/registry/print/A4TemplatePalette.tsx`
 - `frontend/src/features/registry/print/A4TemplatePropertiesPanel.tsx`
 - `frontend/src/features/registry/print/A4TemplateRenderer.tsx`
