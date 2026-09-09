@@ -494,7 +494,7 @@ const apiPayloads = {
   },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    display_name: "Публичная карточка",
+    display_value: "Публичная карточка",
     expires_at: "2026-06-29T12:00:00Z",
     can_edit: true,
     form_layout: {

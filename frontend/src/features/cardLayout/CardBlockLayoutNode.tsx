@@ -235,7 +235,6 @@ export function CardBlockLayoutNode({
                 ) : null}
               </div>
             ) : null}
-            {block && !designMode ? renderBlockActions?.({ block, section, mode }) : null}
           </header>
           <div
             className="card-layout-field-grid card-layout-responsive-field-grid"
@@ -285,6 +284,7 @@ export function CardBlockLayoutNode({
               );
             })}
           </div>
+          {block && !designMode ? renderBlockActions?.({ block, section, mode }) : null}
           {block && designMode && !geometryActive && onCreateField ? (
             <footer className="card-layout-block-footer">
               <button

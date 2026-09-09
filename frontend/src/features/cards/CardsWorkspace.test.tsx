@@ -93,7 +93,7 @@ beforeEach(() => {
               created_cards: [
                 {
                   card_id: "created-card-1",
-                  display_name: "Созданная карточка",
+                  display_value: "Созданная карточка",
                   organization_id: organization.id,
                   organization_name: organization.name,
                   child_public_link_id: "child-link-1",
@@ -112,6 +112,160 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test.each(["active", "dismissed"])(
+    "requires a basis when a superuser archives a previously activated %s card",
+    async (lifecycle) => {
+      const writes: unknown[] = [];
+      const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        if (init?.method === "DELETE") {
+          writes.push(JSON.parse(String(init.body)));
+          return Response.json({ ...organizationUnitCardSummary, lifecycle_status: "archived" });
+        }
+        return originalFetch(input, init);
+      });
+      renderWorkspace({
+        cards: [{ ...organizationUnitCardSummary, lifecycle_status: lifecycle }],
+        card: organizationUnitCard,
+        isSuperuser: true,
+      });
+      fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /Архивировать карточку/ }));
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: "Сохранить" })).toBeDisabled();
+      fireEvent.change(within(dialog).getByLabelText("Основание изменения"), {
+        target: { value: "Приказ об архивировании" },
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+      await waitFor(() => expect(writes).toEqual([{ basis_text: "Приказ об архивировании" }]));
+    },
+  );
+  test("requires a basis for a demoted card's ordinary field save", async () => {
+    renderWorkspace({
+      cards: [
+        {
+          ...organizationUnitCardSummary,
+          lifecycle_status: "draft",
+          activated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+      card: organizationUnitCard,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+    expect(await screen.findByLabelText("Основание изменения")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+  });
+
+  test.each(["add", "archive"])(
+    "requires one basis for repeatable instance %s and forwards it",
+    async (action) => {
+      const presentation = organizationUnitPresentation();
+      presentation.layout.structure.blocks[0].is_repeatable = true;
+      const repeatCard = {
+        ...organizationUnitCard,
+        blocks: {
+          main: {
+            ...organizationUnitCard.blocks["block-org-unit"],
+            instances: [
+              {
+                ...organizationUnitCard.blocks["block-org-unit"].instances[0],
+                block_instance_id: "instance-1",
+                ordinal: 1,
+              },
+            ],
+          },
+        },
+      };
+      const writes: unknown[] = [];
+      const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        if (String(input).includes("/presentation")) return Response.json(presentation);
+        if (init?.method === "POST" || init?.method === "DELETE") {
+          writes.push(JSON.parse(String(init.body)));
+          return Response.json({
+            id: "instance-1",
+            card_id: repeatCard.id,
+            block_id: "block-org-unit",
+            ordinal: 1,
+          });
+        }
+        return originalFetch(input, init);
+      });
+      renderWorkspace({ cards: [organizationUnitCardSummary], card: repeatCard });
+      fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+      await screen.findByLabelText("Базовый блок");
+      fireEvent.click(screen.getByText("Публичный доступ", { selector: "summary" }));
+      const name =
+        action === "add"
+          ? /Добавить экземпляр блока Основные сведения/
+          : /Архивировать экземпляр блока Основные сведения/;
+      fireEvent.click(await screen.findByRole("button", { name }));
+      const dialog = await screen.findByRole("dialog");
+      expect(writes).toEqual([]);
+      expect(within(dialog).getByRole("button", { name: "Сохранить" })).toBeDisabled();
+      fireEvent.change(within(dialog).getByLabelText("Основание изменения"), {
+        target: { value: "  Приказ 44  " },
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+      await waitFor(() => expect(writes).toEqual([{ basis_text: "Приказ 44" }]));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    },
+  );
+
+  test("requires basis in the attachment-aware file reference save", async () => {
+    let resolveSave: (response: Response) => void = () => undefined;
+    const presentation = organizationUnitPresentation();
+    presentation.layout.structure.fields[0].field_type = "file_ref";
+    const writes: unknown[] = [];
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input).includes("/presentation")) return Response.json(presentation);
+      if (init?.method === "PATCH") {
+        writes.push(JSON.parse(String(init.body)));
+        return new Promise<Response>((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      return originalFetch(input, init);
+    });
+    const fileCard = {
+      ...organizationUnitCard,
+      blocks: {
+        main: {
+          ...organizationUnitCard.blocks["block-org-unit"],
+          instances: [
+            {
+              ...organizationUnitCard.blocks["block-org-unit"].instances[0],
+              fields: {
+                file: {
+                  field_id: "field-org-unit",
+                  code: "org_unit",
+                  field_type: "file_ref",
+                  value: null,
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    renderWorkspace({ cards: [organizationUnitCardSummary], card: fileCard });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    const fieldNode = await screen.findByTestId("filled-field-item-org-unit");
+    const save = within(fieldNode).getByRole("button", { name: /Сохранить/ });
+    expect(save).toBeDisabled();
+    fireEvent.change(within(fieldNode).getByLabelText("Основание изменения"), {
+      target: { value: "Приказ 45" },
+    });
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(writes).toEqual([{ value: null, block_instance_id: null, basis_text: "Приказ 45" }]),
+    );
+    expect(within(fieldNode).getByRole("combobox")).toBeDisabled();
+    resolveSave(Response.json({ value: null }));
+    await waitFor(() => expect(within(fieldNode).getByRole("combobox")).toBeEnabled());
+  });
   test("returns to the list when dismissal removes the active tab instead of editing the next card", async () => {
     const nextSummary = {
       ...organizationUnitCardSummary,

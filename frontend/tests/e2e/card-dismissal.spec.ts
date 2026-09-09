@@ -116,6 +116,7 @@ test("creates without title and dismisses a card through the compact dialog", as
     is_superuser: false,
   };
   const dismissalPayloads: unknown[] = [];
+  const editPayloads: unknown[] = [];
   const draftPayloads: unknown[] = [];
   const statuses: (string | null)[] = [];
   await page.route("**/api/v1/**", async (route) => {
@@ -156,7 +157,10 @@ test("creates without title and dismisses a card through the compact dialog", as
         fields: [],
       };
     else if (path.endsWith("/change-notification-subscription")) data = { enabled: false };
-    else if (path.endsWith("/dismissal")) {
+    else if (path.endsWith("/values") && request.method() === "PATCH") {
+      editPayloads.push(request.postDataJSON());
+      data = { items: [] };
+    } else if (path.endsWith("/dismissal")) {
       dismissalPayloads.push(request.postDataJSON());
       cards = cards.map((card) =>
         card.id === "card-1" ? { ...card, lifecycle_status: "dismissed" } : card,
@@ -241,6 +245,26 @@ test("creates without title and dismisses a card through the compact dialog", as
   await page.getByLabel("Статус карточек").selectOption("active");
   await page.getByRole("button", { name: /Иванов Иван Иванович/ }).dblclick();
   await expect(page.getByRole("button", { name: /Архивировать карточку/ })).toHaveCount(0);
+  await page.getByTestId("filled-field-item-fio").click();
+  await page.getByLabel("ФИО", { exact: true }).fill("Иванов Пётр Иванович");
+  await expect(page.getByRole("button", { name: "Сохранить блок", exact: true })).toBeDisabled();
+  await page.getByLabel("Основание изменения").fill("  Приказ об изменении  ");
+  await page.getByLabel("Дата события (необязательно)").fill("2026-09-08");
+  expect(editPayloads).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("basis-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel("Основание изменения").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("basis-mobile.png") });
+  await page.getByRole("button", { name: "Сохранить блок", exact: true }).click();
+  await expect(page.getByLabel("Основание изменения")).toHaveCount(0);
+  expect(editPayloads).toEqual([
+    {
+      values: [{ field_id: field.id, value: "Иванов Пётр Иванович", block_instance_id: null }],
+      basis_text: "Приказ об изменении",
+      occurred_on: "2026-09-08",
+    },
+  ]);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("button", { name: "Уволить", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Увольнение" });
   await expect(dialog.getByRole("button", { name: "Уволить", exact: true })).toBeDisabled();

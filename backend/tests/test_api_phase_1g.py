@@ -1,7 +1,7 @@
 import json
 import os
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime
 from ipaddress import ip_address
 from pathlib import Path
 from types import SimpleNamespace
@@ -148,6 +148,26 @@ def test_archive_card_event_api_accepts_optional_change_context(card_event_api: 
     path = f"/api/v1/cards/{ctx.card.id}"
     assert client.delete(path).status_code == 400
     response = client.request("DELETE", path, json={"basis_text": "Основание архивирования"})
+    assert response.status_code == 200, response.text
+    assert response.json()["lifecycle_status"] == "archived"
+
+
+def test_dismissed_archive_api_enforces_system_admin_and_basis(card_event_api: Any) -> None:
+    client, ctx = card_event_api
+    ctx.card.lifecycle_status = "dismissed"
+    ctx.card.activated_at = datetime(2026, 9, 1)
+    actor = ctx.session.get(User, ctx.actor_id)
+    actor.is_superuser = False
+    ctx.session.commit()
+    path = f"/api/v1/cards/{ctx.card.id}"
+    assert client.request("DELETE", path, json={"basis_text": "Приказ"}).status_code == 403
+    assert ctx.card.lifecycle_status == "dismissed"
+    actor.is_superuser = True
+    ctx.session.commit()
+    assert client.delete(path).status_code == 400
+    response = client.request(
+        "DELETE", path, json={"basis_text": "Приказ", "occurred_on": "2026-09-09"}
+    )
     assert response.status_code == 200, response.text
     assert response.json()["lifecycle_status"] == "archived"
 

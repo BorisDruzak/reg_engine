@@ -28,6 +28,7 @@ import { CardDraftActionRail } from "@/features/cards/CardDraftActionRail";
 import { CardPresentationShell } from "@/features/cards/CardPresentationShell";
 import type { CardBlockNavigationItem } from "@/features/cards/CardBlockNavigator";
 import { FieldEditorControl } from "@/features/cards/FieldEditorControl";
+import { ChangeBasisFields } from "@/features/cards/ChangeBasisFields";
 import { buildBlockCompletions, type CompletionResult } from "@/features/cards/cardCompletion";
 import {
   type FieldEditorState,
@@ -148,7 +149,7 @@ export function PublicLinkEditPage() {
               <div>
                 <p className="section-kicker">{uiText.publicCardEdit}</p>
                 <h2>Публичное заполнение карточки</h2>
-                <h3>{previewQuery.data.display_name}</h3>
+                <h3>{previewQuery.data.display_value}</h3>
               </div>
               <div className="public-title-actions">
                 <span>
@@ -233,15 +234,15 @@ function PublicEditableCard({
   const [confirmedFieldValues, setConfirmedFieldValues] = useState(() =>
     publicConfirmedFieldValues(preview),
   );
-  const saveFieldValue: PublicFieldValueSaver = ({ fieldId, value, blockInstanceId }) =>
-    updatePublicLinkFieldValue(rawToken, actorName, fieldId, value, blockInstanceId);
+  const saveFieldValue: PublicFieldValueSaver = ({ fieldId, value, blockInstanceId, ...change }) =>
+    updatePublicLinkFieldValue(rawToken, actorName, fieldId, value, blockInstanceId, change);
   const baseBlock = (
     <CardBaseBlockSurface
       id="public-card-base-block"
       mode="public"
       organization={{ label: "Организация", value: preview.organization_name }}
       template={{ label: "Шаблон", value: preview.card_template_name }}
-      displayName={{ label: "Карточка", value: preview.display_name }}
+      displayName={{ label: "Карточка", value: preview.display_value }}
       publicAccessContent={
         <p className="public-muted">Параметры публичного доступа определяет администратор.</p>
       }
@@ -334,9 +335,12 @@ function publicStatusReceipt(status: PublicLinkSafeStatusRead["status"]) {
   };
 }
 
-type PublicCardPreview = Pick<PublicLinkPreviewRead, "form_layout" | "blocks">;
+type PublicCardPreview = Pick<PublicLinkPreviewRead, "form_layout" | "blocks"> &
+  Partial<Pick<PublicLinkPreviewRead, "activated_at" | "lifecycle_status">>;
 
 export type PublicFieldValueSaver = (input: {
+  basis_text?: string;
+  occurred_on?: string;
   fieldId: string;
   value: unknown;
   blockInstanceId: string | null;
@@ -430,6 +434,7 @@ export function PublicCardLayout({
             saveFieldValue={saveFieldValue}
             requireActorName={requireActorName}
             surface={surface}
+            requiresBasis={Boolean(preview.activated_at || preview.lifecycle_status === "active")}
           />
         ))}
       </div>
@@ -483,6 +488,7 @@ function publicCardBlockAnchorId(surface: PublicCardSurface, blockId: string) {
 }
 
 function PublicCardLayoutSurface({
+  requiresBasis,
   surface,
   onLifecycleDenial,
   onFieldSaveStateChange,
@@ -491,6 +497,7 @@ function PublicCardLayoutSurface({
   completions,
   requireActorName,
 }: {
+  requiresBasis: boolean;
   surface: PublicCardSurface;
   onLifecycleDenial: (error: unknown) => Promise<boolean>;
   onFieldSaveStateChange: (fieldKey: string, saveState: PublicFieldSaveState) => void;
@@ -557,6 +564,7 @@ function PublicCardLayoutSurface({
           }
           return (
             <PublicFieldEditor
+              requiresBasis={requiresBasis}
               key={`${context.blockInstanceId ?? context.instanceOrdinal}:${context.field.field_id}`}
               fieldKey={publicFieldKey(context)}
               blockInstanceId={context.blockInstanceId}
@@ -738,6 +746,7 @@ function publicPreviewFieldsById(blocks: PublicLinkPreviewBlockRead[]) {
 }
 
 function PublicFieldEditor({
+  requiresBasis,
   fieldKey,
   blockInstanceId,
   field,
@@ -747,6 +756,7 @@ function PublicFieldEditor({
   saveFieldValue,
   requireActorName,
 }: {
+  requiresBasis: boolean;
   fieldKey: string;
   blockInstanceId: string | null;
   field: PublicLinkPreviewFieldRead;
@@ -757,10 +767,20 @@ function PublicFieldEditor({
   requireActorName: () => boolean;
 }) {
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field));
+  const confirmedValueRef = useRef(rawValue);
+  const [controlRevision, setControlRevision] = useState(0);
+  const [basisText, setBasisText] = useState("");
+  const [occurredOn, setOccurredOn] = useState("");
+  const [dirty, setDirty] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const latestVersionRef = useRef(0);
-  const queuedSaveRef = useRef<{ value: unknown; version: number } | null>(null);
+  const queuedSaveRef = useRef<{
+    value: unknown;
+    version: number;
+    basis_text?: string;
+    occurred_on?: string;
+  } | null>(null);
   const savingRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -783,6 +803,8 @@ function PublicFieldEditor({
           fieldId: field.field_id,
           value: pendingSave.value,
           blockInstanceId,
+          ...(pendingSave.basis_text ? { basis_text: pendingSave.basis_text } : {}),
+          ...(pendingSave.occurred_on ? { occurred_on: pendingSave.occurred_on } : {}),
         });
         if (
           mountedRef.current &&
@@ -791,6 +813,13 @@ function PublicFieldEditor({
         ) {
           setLocalError(null);
           setSaveState("saved");
+          setDirty(false);
+          confirmedValueRef.current = initialEditorValue({
+            field_type: field.field_type,
+            value: savedFieldValue.value,
+          });
+          setBasisText("");
+          setOccurredOn("");
           onSaveStateChange(fieldKey, "saved");
           onSaveConfirmed(fieldKey, savedFieldValue.value);
         }
@@ -812,13 +841,20 @@ function PublicFieldEditor({
   }
 
   function flushPendingSave() {
+    if (requiresBasis) return;
     void drainSaveQueue();
   }
 
   function updateRawValue(nextValue: FieldEditorState) {
     if (!requireActorName()) return;
+    if (requiresBasis && savingRef.current) return;
     setRawValue(nextValue);
+    setDirty(true);
     setLocalError(null);
+    if (requiresBasis) {
+      setSaveState("idle");
+      return;
+    }
     const version = latestVersionRef.current + 1;
     latestVersionRef.current = version;
     try {
@@ -836,6 +872,29 @@ function PublicFieldEditor({
       setLocalError(errorText(error));
       setSaveState("error");
       onSaveStateChange(fieldKey, "error");
+    }
+  }
+
+  function saveExplicitChange() {
+    if (!requireActorName() || !basisText.trim() || savingRef.current || !dirty) return;
+    try {
+      const value = coerceEditorValue(field.field_type, rawValue);
+      if (field.required_mode === "required" && (value === null || value === "")) {
+        setLocalError(uiText.requiredFields);
+        return;
+      }
+      queuedSaveRef.current = {
+        value,
+        version: ++latestVersionRef.current,
+        basis_text: basisText.trim(),
+        ...(occurredOn ? { occurred_on: occurredOn } : {}),
+      };
+      setSaveState("saving");
+      onSaveStateChange(fieldKey, "saving");
+      void drainSaveQueue();
+    } catch (error) {
+      setLocalError(errorText(error));
+      setSaveState("error");
     }
   }
 
@@ -859,7 +918,9 @@ function PublicFieldEditor({
       }}
     >
       <FieldEditorControl
+        key={controlRevision}
         fieldType={field.field_type}
+        disabled={requiresBasis && saveState === "saving"}
         label={field.label}
         hint={field.description}
         validation={field.validation_json}
@@ -867,6 +928,43 @@ function PublicFieldEditor({
         value={rawValue}
         onChange={updateRawValue}
       />
+      {requiresBasis && dirty ? (
+        <div className="stack">
+          <ChangeBasisFields
+            basisText={basisText}
+            occurredOn={occurredOn}
+            disabled={saveState === "saving"}
+            onBasisTextChange={setBasisText}
+            onOccurredOnChange={setOccurredOn}
+          />
+          <div className="row-actions">
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!basisText.trim() || saveState === "saving"}
+              onClick={saveExplicitChange}
+            >
+              Сохранить изменение
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={saveState === "saving"}
+              onClick={() => {
+                setRawValue(confirmedValueRef.current);
+                setControlRevision((current) => current + 1);
+                setBasisText("");
+                setOccurredOn("");
+                setDirty(false);
+                setLocalError(null);
+                setSaveState("idle");
+              }}
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : null}
       {saveState === "saving" && <p className="public-muted">Сохранение…</p>}
       {localError && <p className="inline-alert">{localError}</p>}
       {saveState === "saved" && <p className="inline-success">Все изменения сохранены</p>}

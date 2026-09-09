@@ -1611,7 +1611,6 @@ class CardService:
             self.session.flush()
             return card
 
-    @_active_card_change
     def archive_card_for_actor(
         self,
         *,
@@ -1619,25 +1618,45 @@ class CardService:
         card_id: UUID,
         change_context: CardChangeContext | None = None,
     ) -> Card:
-        card = self._get_editable_card(card_id)
-        self._require_card_permission(
-            actor_user_id,
-            card.organization_id,
-            registry_id=card.registry_id,
-        )
-        card.archived_at = datetime.now(UTC)
-        card.archived_by = actor_user_id
-        card.lifecycle_status = "archived"
-        self.session.flush()
-        AuditService(self.session).record_user_event(
-            actor_user_id=actor_user_id,
-            action="archive",
-            object_type="card",
-            object_id=card.id,
-            card_id=card.id,
-            retention_class="card_history",
-        )
-        return card
+        if not PermissionService(self.session).is_superuser(actor_user_id):
+            raise PermissionDeniedError("Only a system administrator can archive cards.")
+        # Administrative archival may include dismissed cards. Ordinary business
+        # writes continue through the stricter _get_editable_card boundary.
+        with self.session.begin_nested():
+            card = self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+            if (
+                card is None
+                or card.archived_at is not None
+                or card.lifecycle_status in {"archived", "superseded"}
+            ):
+                raise CardServiceError("Card was not found.")
+            self._require_card_permission(
+                actor_user_id, card.organization_id, registry_id=card.registry_id
+            )
+            active = card.activated_at is not None or card.lifecycle_status in {
+                "active",
+                "dismissed",
+            }
+            if active:
+                change_context = self._require_change_context(change_context)
+            card.archived_at = datetime.now(UTC)
+            card.archived_by = actor_user_id
+            card.lifecycle_status = "archived"
+            self.session.flush()
+            AuditService(self.session).record_user_event(
+                actor_user_id=actor_user_id,
+                action="archive",
+                object_type="card",
+                object_id=card.id,
+                card_id=card.id,
+                retention_class="card_history",
+            )
+            if active:
+                assert change_context is not None
+                CardEventService(self.session).record_change(
+                    card_id=card.id, context=change_context, actor_user_id=actor_user_id
+                )
+            return card
 
     @_active_card_change
     def transfer_card_for_actor(

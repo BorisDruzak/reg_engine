@@ -161,11 +161,20 @@ def card_event_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamesp
                 AuditEvent,
                 Organization,
                 CardRelation,
+                User,
             )
         ],
     )
     with Session(engine, expire_on_commit=False) as session:
         actor_id, registry_id, block_id = uuid4(), uuid4(), uuid4()
+        session.add(
+            User(
+                id=actor_id,
+                email="event-admin@example.test",
+                display_name="Администратор",
+                is_superuser=True,
+            )
+        )
         card = Card(
             id=uuid4(),
             registry_id=registry_id,
@@ -240,6 +249,78 @@ def _event_change_context(basis: str = "Приказ № 1") -> Any:
     context_type = getattr(cards_module, "CardChangeContext", None)
     assert context_type is not None, "Active changes need a CardChangeContext contract"
     return context_type(basis, date(2026, 9, 9))
+
+
+@pytest.mark.parametrize("lifecycle", ["draft", "active", "dismissed"])
+def test_only_system_admin_can_archive_cards(card_event_context: Any, lifecycle: str) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = lifecycle
+    ctx.session.get(User, ctx.actor_id).is_superuser = False
+    ctx.session.commit()
+    with pytest.raises(PermissionDeniedError):
+        ctx.service.archive_card_for_actor(
+            actor_user_id=ctx.actor_id, card_id=ctx.card.id, change_context=_event_change_context()
+        )
+    assert ctx.card.lifecycle_status == lifecycle
+    assert ctx.card.archived_at is None
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+
+
+def test_admin_archives_dismissed_card_with_basis_but_cannot_edit_it(
+    card_event_context: Any,
+) -> None:
+    ctx = card_event_context
+    ctx.card.lifecycle_status = "dismissed"
+    ctx.card.activated_at = datetime(2026, 9, 1, tzinfo=UTC)
+    ctx.session.commit()
+    with pytest.raises(CardServiceError, match="Основание изменения"):
+        ctx.service.archive_card_for_actor(actor_user_id=ctx.actor_id, card_id=ctx.card.id)
+    with pytest.raises(CardServiceError, match="только для чтения"):
+        ctx.service.set_field_value_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            field_id=ctx.fields[0].id,
+            value="После",
+            change_context=_event_change_context(),
+        )
+    ctx.service.archive_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        change_context=_event_change_context("Приказ об архивировании"),
+    )
+    assert ctx.card.lifecycle_status == "archived"
+    assert ctx.card.archived_by == ctx.actor_id
+    assert ctx.card.archived_at is not None
+    event = ctx.session.scalars(select(CardEvent)).one()
+    assert (event.basis_text, event.created_by) == ("Приказ об архивировании", ctx.actor_id)
+    audit = ctx.session.scalars(select(AuditEvent).where(AuditEvent.action == "archive")).one()
+    assert audit.card_id == ctx.card.id
+
+
+def test_admin_archive_event_failure_rolls_back_dismissed_card(
+    card_event_context: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.card_events import CardEventService
+
+    ctx = card_event_context
+    ctx.card.lifecycle_status = "dismissed"
+    ctx.card.activated_at = datetime(2026, 9, 1, tzinfo=UTC)
+    ctx.session.commit()
+    original = CardEventService.record_change
+
+    def fail_after_write(self: Any, **kwargs: Any) -> Any:
+        original(self, **kwargs)
+        raise RuntimeError("event failure")
+
+    monkeypatch.setattr(CardEventService, "record_change", fail_after_write)
+    with pytest.raises(RuntimeError, match="event failure"):
+        ctx.service.archive_card_for_actor(
+            actor_user_id=ctx.actor_id, card_id=ctx.card.id, change_context=_event_change_context()
+        )
+    assert ctx.card.lifecycle_status == "dismissed"
+    assert ctx.card.archived_at is None
+    assert ctx.session.scalars(select(CardEvent)).all() == []
+    assert ctx.session.scalars(select(AuditEvent)).all() == []
 
 
 @pytest.mark.parametrize("basis", [None, "", " \t\n"])

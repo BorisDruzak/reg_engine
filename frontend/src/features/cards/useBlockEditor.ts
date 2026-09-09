@@ -17,6 +17,11 @@ export type BlockEditorTarget = {
 };
 
 export type BlockEditorState = {
+  requiresBasis: boolean;
+  basisText: string;
+  occurredOn: string;
+  setBasisText: (value: string) => void;
+  setOccurredOn: (value: string) => void;
   key: BlockEditorKey | null;
   target: BlockEditorTarget | null;
   values: Record<string, FieldEditorState>;
@@ -36,12 +41,15 @@ export type BlockEditorState = {
 };
 
 export type UseBlockEditorOptions = {
+  requiresBasis?: boolean;
   fields: FormFieldRead[];
   editableFieldIds: ReadonlySet<string>;
   saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
 };
 
 type BlockEditorSession = {
+  basisText: string;
+  occurredOn: string;
   id: number;
   key: BlockEditorKey;
   target: BlockEditorTarget;
@@ -59,6 +67,7 @@ const emptyValues: Record<string, FieldEditorState> = {};
 const emptyErrors: Record<string, string> = {};
 
 export function useBlockEditor({
+  requiresBasis = false,
   fields,
   editableFieldIds,
   saveValues,
@@ -76,19 +85,21 @@ export function useBlockEditor({
     ) => {
       const nextSession = createSession(
         { blockId, blockInstanceId },
-        { [fieldId]: initial[fieldId] },
+        requiresBasis ? initial : { [fieldId]: initial[fieldId] },
         fieldsById,
         editableFieldIds,
         ++sessionIdRef.current,
       );
       setSession((current) => {
+        if (requiresBasis && current?.key === nextSession.key) return current;
+        if (requiresBasis && (current?.dirty || current?.pending)) return current;
         if (!current || !current.dirty) return nextSession;
         const currentFieldId = Object.keys(current.values)[0] ?? null;
         if (current.key === nextSession.key && currentFieldId === fieldId) return current;
         return { ...current, pendingOpen: nextSession, autoSaveDelayMs: 0 };
       });
     },
-    [editableFieldIds, fieldsById],
+    [editableFieldIds, fieldsById, requiresBasis],
   );
 
   const updateAndSave = useCallback(
@@ -104,33 +115,46 @@ export function useBlockEditor({
           values,
           errors,
           dirty: isDirty(current.initialValues, values),
-          autoSaveDelayMs: delayMs,
+          autoSaveDelayMs: requiresBasis ? null : delayMs,
         };
       });
     },
-    [],
+    [requiresBasis],
   );
 
   const flushPendingSave = useCallback(() => {
+    if (requiresBasis) return;
     setSession((current) => {
       if (!current || current.pending || !current.dirty) return current;
       return { ...current, autoSaveDelayMs: 0 };
     });
+  }, [requiresBasis]);
+
+  const setBasisText = useCallback((value: string) => {
+    setSession((current) =>
+      current && !current.pending ? { ...current, basisText: value } : current,
+    );
+  }, []);
+  const setOccurredOn = useCallback((value: string) => {
+    setSession((current) =>
+      current && !current.pending ? { ...current, occurredOn: value } : current,
+    );
   }, []);
 
   const save = useCallback(async () => {
     if (!session || session.pending) return false;
+    if (requiresBasis && !session.basisText.trim()) return false;
 
     const validationErrors: Record<string, string> = {};
     const changedValues: FieldValueBulkItemUpdatePayload[] = [];
     for (const [fieldId, editorValue] of Object.entries(session.values)) {
       const field = fieldsById.get(fieldId);
       if (!field || !isOrdinaryEditableField(field, editableFieldIds)) continue;
+      if (sameEditorValue(editorValue, session.initialValues[fieldId])) continue;
       if (field.required_mode === "required" && isEmptyEditorValue(editorValue)) {
         validationErrors[fieldId] = uiText.requiredFields;
         continue;
       }
-      if (sameEditorValue(editorValue, session.initialValues[fieldId])) continue;
       try {
         changedValues.push({
           field_id: fieldId,
@@ -145,7 +169,7 @@ export function useBlockEditor({
     if (Object.keys(validationErrors).length > 0) {
       setSession((current) =>
         current?.id === session.id
-          ? { ...current, pending: false, errors: validationErrors }
+          ? { ...current, pending: false, autoSaveDelayMs: null, errors: validationErrors }
           : current,
       );
       return false;
@@ -162,7 +186,15 @@ export function useBlockEditor({
       current?.id === session.id ? { ...current, pending: true, errors: {} } : current,
     );
     try {
-      await saveValues({ values: changedValues });
+      await saveValues({
+        values: changedValues,
+        ...(requiresBasis
+          ? {
+              basis_text: session.basisText.trim(),
+              ...(session.occurredOn ? { occurred_on: session.occurredOn } : {}),
+            }
+          : {}),
+      });
       setSession((current) =>
         current?.id === session.id
           ? (current.pendingOpen ??
@@ -194,7 +226,7 @@ export function useBlockEditor({
       );
       return false;
     }
-  }, [editableFieldIds, fieldsById, saveValues, session]);
+  }, [editableFieldIds, fieldsById, requiresBasis, saveValues, session]);
 
   useEffect(() => {
     if (!session?.dirty || session.pending || session.autoSaveDelayMs === null) return;
@@ -208,13 +240,19 @@ export function useBlockEditor({
   const commitAndClose = useCallback(() => {
     setSession((current) => {
       if (!current) return current;
+      if (requiresBasis && !current.basisText.trim()) return current;
       if (current.pending) return { ...current, closeAfterSave: true };
       if (!current.dirty) return null;
       return { ...current, closeAfterSave: true, pendingOpen: null, autoSaveDelayMs: 0 };
     });
-  }, []);
+  }, [requiresBasis]);
 
   return {
+    requiresBasis,
+    basisText: session?.basisText ?? "",
+    occurredOn: session?.occurredOn ?? "",
+    setBasisText,
+    setOccurredOn,
     key: session?.key ?? null,
     target: session?.target ?? null,
     values: session?.values ?? emptyValues,
@@ -254,6 +292,8 @@ function createSession(
   }
   return {
     id,
+    basisText: "",
+    occurredOn: "",
     key: blockEditorKey(target.blockId, target.blockInstanceId),
     target,
     initialValues,

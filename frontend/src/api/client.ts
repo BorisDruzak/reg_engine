@@ -47,6 +47,7 @@ import type {
   CardPublicAccessRead,
   CardRead,
   CardSummaryRead,
+  CardChangePayload,
   CardTransferPayload,
   CardUpdatePayload,
   CurrentUser,
@@ -593,10 +594,11 @@ export async function updateCardPublicAccess(
   });
 }
 
-export async function archiveCard(token: string, cardId: string) {
+export async function archiveCard(token: string, cardId: string, change?: CardChangePayload) {
   return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}`, {
     method: "DELETE",
     token,
+    body: change,
   });
 }
 
@@ -608,17 +610,26 @@ export async function dismissCard(token: string, cardId: string, payload: CardDi
   });
 }
 
-export async function createCardBlockInstance(token: string, cardId: string, blockId: string) {
+export async function createCardBlockInstance(
+  token: string,
+  cardId: string,
+  blockId: string,
+  change?: CardChangePayload,
+) {
   return apiRequest<CardBlockInstanceSummaryRead>(
     `/api/v1/cards/${cardId}/blocks/${blockId}/instances`,
-    { method: "POST", token },
+    { method: "POST", token, body: change },
   );
 }
 
-export async function archiveCardBlockInstance(token: string, blockInstanceId: string) {
+export async function archiveCardBlockInstance(
+  token: string,
+  blockInstanceId: string,
+  change?: CardChangePayload,
+) {
   return apiRequest<CardBlockInstanceSummaryRead>(
     `/api/v1/card-block-instances/${blockInstanceId}`,
-    { method: "DELETE", token },
+    { method: "DELETE", token, body: change },
   );
 }
 
@@ -695,11 +706,12 @@ export async function updateCardFieldValue(
   fieldId: string,
   value: unknown,
   blockInstanceId: string | null,
+  change: CardChangePayload = {},
 ) {
   return apiRequest<FieldValueRead>(`/api/v1/cards/${cardId}/fields/${fieldId}`, {
     method: "PATCH",
     token,
-    body: { value, block_instance_id: blockInstanceId },
+    body: { value, block_instance_id: blockInstanceId, ...change },
   });
 }
 
@@ -996,6 +1008,7 @@ export async function updatePublicLinkFieldValue(
   fieldId: string,
   value: unknown,
   blockInstanceId: string | null,
+  change: { basis_text?: string; occurred_on?: string } = {},
 ) {
   return apiRequest<FieldValueRead>("/api/v1/public-links/edit", {
     method: "POST",
@@ -1005,6 +1018,7 @@ export async function updatePublicLinkFieldValue(
       field_id: fieldId,
       value,
       block_instance_id: blockInstanceId,
+      ...change,
     },
   });
 }

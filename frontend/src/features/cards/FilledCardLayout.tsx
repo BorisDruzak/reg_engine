@@ -12,6 +12,7 @@ import { booleanLabel, formatUiDateTime, instanceLabel } from "@/app/uiText";
 import { CardLayoutRenderer } from "@/features/cardLayout/CardLayoutRenderer";
 
 import { BlockFieldControl } from "./BlockFieldControl";
+import { ChangeBasisFields } from "./ChangeBasisFields";
 import { CardPresentationShell } from "./CardPresentationShell";
 import type { CardBlockNavigationItem } from "./CardBlockNavigator";
 import { buildBlockCompletions } from "./cardCompletion";
@@ -160,9 +161,10 @@ export function FilledCardLayout({
     [blockEditor?.values],
   );
   const commitAndClose = blockEditor?.commitAndClose;
+  const requiresBasis = blockEditor?.requiresBasis ?? false;
 
   useEffect(() => {
-    if (!activeFieldId || !commitAndClose) return;
+    if (!activeFieldId || !commitAndClose || requiresBasis) return;
 
     const closeFieldOnOutsidePointer = (event: PointerEvent) => {
       if (!(event.target instanceof Element)) return;
@@ -173,7 +175,7 @@ export function FilledCardLayout({
 
     document.addEventListener("pointerdown", closeFieldOnOutsidePointer, true);
     return () => document.removeEventListener("pointerdown", closeFieldOnOutsidePointer, true);
-  }, [activeFieldId, commitAndClose]);
+  }, [activeFieldId, commitAndClose, requiresBasis]);
 
   return (
     <>
@@ -280,9 +282,16 @@ export function FilledCardLayout({
                     const blockValues =
                       valuesByInstance.get(instanceKey(blockInstanceId)) ?? new Map();
                     onEditBlock?.(field.block_id, blockInstanceId);
-                    blockEditor?.openField(field.block_id, blockInstanceId, field.id, {
-                      [field.id]: blockValues.get(field.id),
-                    });
+                    blockEditor?.openField(
+                      field.block_id,
+                      blockInstanceId,
+                      field.id,
+                      Object.fromEntries(
+                        fields
+                          .filter((candidate) => candidate.block_id === field.block_id)
+                          .map((candidate) => [candidate.id, blockValues.get(candidate.id)]),
+                      ),
+                    );
                   }}
                   renderFieldValue={({ field, mode }) => {
                     const blockInstanceId = surface.blockInstanceIds.get(field.block_id) ?? null;
@@ -299,6 +308,16 @@ export function FilledCardLayout({
                       ) : (
                         readValue
                       );
+                    if (field.field_type === "file_ref" && editableFieldIds.has(field.id)) {
+                      return (
+                        renderFileRefControl?.({
+                          field,
+                          blockInstanceId,
+                          value,
+                          readValue: displayReadValue,
+                        }) ?? displayReadValue
+                      );
+                    }
                     if (
                       mode !== "block-edit" ||
                       !blockEditor ||
@@ -342,7 +361,41 @@ export function FilledCardLayout({
                       />
                     );
                   }}
-                  renderBlockActions={() => null}
+                  renderBlockActions={({ block }) =>
+                    blockEditor?.requiresBasis && editorTarget?.blockId === block?.id ? (
+                      <div className="stack" onPointerDown={(event) => event.stopPropagation()}>
+                        <ChangeBasisFields
+                          basisText={blockEditor.basisText}
+                          occurredOn={blockEditor.occurredOn}
+                          disabled={blockEditor.pending}
+                          onBasisTextChange={blockEditor.setBasisText}
+                          onOccurredOnChange={blockEditor.setOccurredOn}
+                        />
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="primary-button"
+                            disabled={
+                              !blockEditor.dirty ||
+                              !blockEditor.basisText.trim() ||
+                              blockEditor.pending
+                            }
+                            onClick={blockEditor.commitAndClose}
+                          >
+                            Сохранить блок
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={blockEditor.pending}
+                            onClick={blockEditor.cancel}
+                          >
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
+                    ) : null
+                  }
                 />
               </section>
             );

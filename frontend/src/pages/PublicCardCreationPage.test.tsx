@@ -165,7 +165,7 @@ async function handleFetch(input: RequestInfo | URL, init?: RequestInit) {
     return jsonResponse(
       {
         card_id: "card-1",
-        display_name: "Шаблон для создания",
+        display_value: "Шаблон для создания",
         child_raw_token: "child-token",
       },
       201,

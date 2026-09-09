@@ -411,6 +411,7 @@ export type CardSummaryRead = {
   display_value: string;
   creator_display_name?: string | null;
   lifecycle_status: string;
+  activated_at?: string | null;
   public_view_enabled: boolean;
   public_edit_enabled: boolean;
   list_fields: CardListFieldValueRead[];
@@ -686,7 +687,12 @@ export type FieldValueBulkItemUpdatePayload = {
   block_instance_id?: string | null;
 };
 
-export type FieldValuesBulkUpdatePayload = {
+export type CardChangePayload = {
+  basis_text?: string;
+  occurred_on?: string;
+};
+
+export type FieldValuesBulkUpdatePayload = CardChangePayload & {
   values: FieldValueBulkItemUpdatePayload[];
 };
 
@@ -833,10 +839,11 @@ export type PublicLinkPreviewBlockRead = {
 
 export type PublicLinkPreviewRead = {
   card_id: string;
-  display_name: string;
+  display_value: string;
   organization_name: string;
   card_template_name: string;
   lifecycle_status: string;
+  activated_at?: string | null;
   expires_at: string | null;
   can_edit: boolean;
   form_layout: CardTemplateFormLayoutRead;
@@ -850,7 +857,7 @@ export type CardCreationLinkOrganizationRead = {
 
 export type CardCreationLinkCreatedCardRead = {
   card_id: string;
-  display_name: string;
+  display_value: string;
   organization_id: string;
   organization_name: string;
   child_public_link_id: string;
@@ -893,7 +900,7 @@ export type CardCreationLinkPublicPreviewRead = {
 
 export type CardCreationLinkFirstSaveRead = {
   card_id: string;
-  display_name: string;
+  display_value: string;
   child_raw_token: string;
 };
 

@@ -222,7 +222,7 @@ export function CardCreationLinksPanel({
                       onOpenCard(card.card_id);
                     }}
                   >
-                    <strong>{card.display_name}</strong>
+                    <strong>{card.display_value}</strong>
                     <span>{card.organization_name}</span>
                     <span>{card.cardTemplateName}</span>
                   </li>

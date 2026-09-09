@@ -112,7 +112,7 @@ const creationLink = {
   created_cards: [
     {
       card_id: "card-1",
-      display_name: "Карточка садика",
+      display_value: "Карточка садика",
       organization_id: organization.id,
       organization_name: organization.name,
       child_public_link_id: "child-link-1",
@@ -130,7 +130,7 @@ const secondCreationLink = {
   created_cards: [
     {
       card_id: "card-2",
-      display_name: "Карточка школы",
+      display_value: "Карточка школы",
       organization_id: organization.id,
       organization_name: organization.name,
       child_public_link_id: "child-link-2",

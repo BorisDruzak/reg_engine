@@ -23,7 +23,7 @@ def test_audit_resolves_fio_without_card_display_name(
 
     ctx = event_context
     for model in (User, FormBlock, FormField):
-        model.__table__.create(ctx.session.get_bind())
+        model.__table__.create(ctx.session.get_bind(), checkfirst=True)
     monkeypatch.setattr(PermissionService, "is_superuser", lambda *args: True)
     template = SimpleNamespace(
         id=ctx.card.card_template_id,

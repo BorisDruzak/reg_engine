@@ -40,6 +40,7 @@ import type {
   CardPublicAccessRead,
   CardRead,
   CardSummaryRead,
+  CardChangePayload,
   CardTemplateRead,
   FieldValuesBulkUpdatePayload,
   FormBlockRead,
@@ -81,6 +82,8 @@ import {
   initialEditorValue,
 } from "./fieldEditorUtils";
 import { useBlockEditor } from "./useBlockEditor";
+import { ChangeBasisFields } from "./ChangeBasisFields";
+import { CardChangeDialog } from "./CardChangeDialog";
 
 type CardUtilityTab = "create-card" | "creation-links";
 type CardShellTab = "list" | CardUtilityTab | `card:${string}`;
@@ -144,6 +147,13 @@ export function CardsWorkspace({
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
+  const requiresBasis = Boolean(
+    selectedCard?.activated_at || selectedCard?.lifecycle_status === "active",
+  );
+  const [instanceChange, setInstanceChange] = useState<{
+    action: "add" | "archive";
+    id: string;
+  } | null>(null);
   const canEditCard = Boolean(card?.can_manage && selectedCard?.lifecycle_status !== "dismissed");
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [requestedShellTab, setActiveShellTab] = useState<CardShellTab>(
@@ -238,6 +248,7 @@ export function CardsWorkspace({
     [card, queryClient, token],
   );
   const blockEditor = useBlockEditor({
+    requiresBasis,
     fields: presentationFields,
     editableFieldIds,
     saveValues: saveBlockValues,
@@ -380,7 +391,8 @@ export function CardsWorkspace({
     [schema?.templates],
   );
   const archiveCardMutation = useMutation({
-    mutationFn: (target: CardSummaryRead) => archiveCard(token, target.id),
+    mutationFn: ({ target, change }: { target: CardSummaryRead; change?: CardChangePayload }) =>
+      archiveCard(token, target.id, change),
     onSuccess: async (archived) => {
       await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
       if (activeCardIdRef.current !== archived.id) {
@@ -420,14 +432,15 @@ export function CardsWorkspace({
     },
   });
   const createBlockInstanceMutation = useMutation({
-    mutationFn: async (blockId: string) => {
+    mutationFn: async ({ blockId, change }: { blockId: string; change?: CardChangePayload }) => {
       if (!card) {
         throw new Error(uiText.notFound);
       }
-      const instance = await createCardBlockInstance(token, card.id, blockId);
+      const instance = await createCardBlockInstance(token, card.id, blockId, change);
       return { instance, registryId: card.registry_id };
     },
     onSuccess: async ({ instance, registryId }) => {
+      setInstanceChange(null);
       await invalidateCardQueries(queryClient, token, registryId, instance.card_id);
       if (activeCardIdRef.current === instance.card_id) {
         setSuccessMessage(uiText.blockInstanceCreated);
@@ -435,8 +448,15 @@ export function CardsWorkspace({
     },
   });
   const archiveBlockInstanceMutation = useMutation({
-    mutationFn: (blockInstanceId: string) => archiveCardBlockInstance(token, blockInstanceId),
+    mutationFn: ({
+      blockInstanceId,
+      change,
+    }: {
+      blockInstanceId: string;
+      change?: CardChangePayload;
+    }) => archiveCardBlockInstance(token, blockInstanceId, change),
     onSuccess: async (instance) => {
+      setInstanceChange(null);
       const registryId = cards.find((item) => item.id === instance.card_id)?.registry_id;
       if (registryId) {
         await invalidateCardQueries(queryClient, token, registryId, instance.card_id);
@@ -625,10 +645,16 @@ export function CardsWorkspace({
           ) : null
         }
         onPublicAccessChange={(payload) => updatePublicAccessMutation.mutate(payload)}
-        onAddBlockInstance={(blockId) => createBlockInstanceMutation.mutate(blockId)}
-        onArchiveBlockInstance={(blockInstanceId) =>
-          archiveBlockInstanceMutation.mutate(blockInstanceId)
-        }
+        onAddBlockInstance={(blockId) => {
+          createBlockInstanceMutation.reset();
+          if (requiresBasis) setInstanceChange({ action: "add", id: blockId });
+          else createBlockInstanceMutation.mutate({ blockId });
+        }}
+        onArchiveBlockInstance={(blockInstanceId) => {
+          archiveBlockInstanceMutation.reset();
+          if (requiresBasis) setInstanceChange({ action: "archive", id: blockInstanceId });
+          else archiveBlockInstanceMutation.mutate({ blockInstanceId });
+        }}
       />
     ) : null;
 
@@ -790,6 +816,7 @@ export function CardsWorkspace({
                           );
                           return fileRefField ? (
                             <CardFieldEditor
+                              requiresBasis={requiresBasis}
                               key={fileRefField.key}
                               cardId={card.id}
                               field={fileRefField}
@@ -814,6 +841,28 @@ export function CardsWorkspace({
         </div>
       )}
       <MutationFeedback successMessage={activeShellTab !== "list" ? successMessage : null} />
+      {instanceChange ? (
+        <CardChangeDialog
+          title={
+            instanceChange.action === "add" ? uiText.addBlockInstance : uiText.archiveBlockInstance
+          }
+          isPending={
+            createBlockInstanceMutation.isPending || archiveBlockInstanceMutation.isPending
+          }
+          error={
+            instanceChange.action === "add"
+              ? createBlockInstanceMutation.error
+              : archiveBlockInstanceMutation.error
+          }
+          onCancel={() => setInstanceChange(null)}
+          onSubmit={(change) => {
+            if (instanceChange.action === "add")
+              createBlockInstanceMutation.mutate({ blockId: instanceChange.id, change });
+            else
+              archiveBlockInstanceMutation.mutate({ blockInstanceId: instanceChange.id, change });
+          }}
+        />
+      ) : null}
       {dismissalTarget ? (
         <CardDismissalDialog
           cardLabel={dismissalTarget.display_value}
@@ -825,17 +874,29 @@ export function CardsWorkspace({
           onSubmit={(payload) => dismissalMutation.mutate({ target: dismissalTarget, payload })}
         />
       ) : null}
-      {archiveTarget && card?.can_manage && isSuperuser && (
-        <AdminMutationDialog title={uiText.archiveCard}>
-          <ArchiveConfirmation
-            entityLabel={uiText.archiveCard}
-            itemLabel={archiveTarget.display_value}
+      {archiveTarget &&
+        card?.can_manage &&
+        isSuperuser &&
+        (archiveTarget.activated_at ||
+        ["active", "dismissed"].includes(archiveTarget.lifecycle_status) ? (
+          <CardChangeDialog
+            title={`${uiText.archiveCard}: ${archiveTarget.display_value}`}
             isPending={archiveCardMutation.isPending}
+            error={archiveCardMutation.error}
             onCancel={() => setArchiveTarget(null)}
-            onConfirm={() => archiveCardMutation.mutate(archiveTarget)}
+            onSubmit={(change) => archiveCardMutation.mutate({ target: archiveTarget, change })}
           />
-        </AdminMutationDialog>
-      )}
+        ) : (
+          <AdminMutationDialog title={uiText.archiveCard}>
+            <ArchiveConfirmation
+              entityLabel={uiText.archiveCard}
+              itemLabel={archiveTarget.display_value}
+              isPending={archiveCardMutation.isPending}
+              onCancel={() => setArchiveTarget(null)}
+              onConfirm={() => archiveCardMutation.mutate({ target: archiveTarget })}
+            />
+          </AdminMutationDialog>
+        ))}
       {pendingCardTabClose && (
         <AdminMutationDialog
           title={uiText.unsavedCardChangesTitle}
@@ -1331,10 +1392,12 @@ type EditableCardField = {
 };
 
 function CardFieldEditor({
+  requiresBasis,
   cardId,
   field,
   token,
 }: {
+  requiresBasis: boolean;
   cardId: string;
   field: EditableCardField;
   token: string;
@@ -1343,6 +1406,8 @@ function CardFieldEditor({
   const [rawValue, setRawValue] = useState<FieldEditorState>(() => initialEditorValue(field.field));
   const [localError, setLocalError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [basisText, setBasisText] = useState("");
+  const [occurredOn, setOccurredOn] = useState("");
   const isReferenceField =
     field.schema?.options_source_type === "reference_list" &&
     ["select", "multi_select"].includes(field.field.field_type);
@@ -1362,9 +1427,20 @@ function CardFieldEditor({
   );
   const mutation = useMutation({
     mutationFn: (value: unknown) =>
-      updateCardFieldValue(token, cardId, field.field.field_id, value, field.blockInstanceId),
+      updateCardFieldValue(
+        token,
+        cardId,
+        field.field.field_id,
+        value,
+        field.blockInstanceId,
+        requiresBasis
+          ? { basis_text: basisText.trim(), ...(occurredOn ? { occurred_on: occurredOn } : {}) }
+          : {},
+      ),
     onSuccess: async () => {
       setSaved(true);
+      setBasisText("");
+      setOccurredOn("");
       await queryClient.invalidateQueries({ queryKey: ["card", token, cardId] });
       await queryClient.invalidateQueries({ queryKey: ["audit-events", token] });
     },
@@ -1378,6 +1454,7 @@ function CardFieldEditor({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (mutation.isPending || (requiresBasis && !basisText.trim())) return;
     try {
       mutation.mutate(coerceEditorValue(field.field.field_type, rawValue));
     } catch (error) {
@@ -1400,6 +1477,7 @@ function CardFieldEditor({
         <span>{field.label}</span>
         <FieldEditorControl
           fieldType={field.field.field_type}
+          disabled={mutation.isPending}
           label={field.label}
           hint={field.schema?.description}
           options={referenceItemsQuery.data?.items ?? []}
@@ -1408,7 +1486,20 @@ function CardFieldEditor({
           onChange={updateRawValue}
         />
       </label>
-      <button type="submit" className="primary-button" disabled={mutation.isPending}>
+      {requiresBasis ? (
+        <ChangeBasisFields
+          basisText={basisText}
+          occurredOn={occurredOn}
+          disabled={mutation.isPending}
+          onBasisTextChange={setBasisText}
+          onOccurredOnChange={setOccurredOn}
+        />
+      ) : null}
+      <button
+        type="submit"
+        className="primary-button"
+        disabled={mutation.isPending || (requiresBasis && !basisText.trim())}
+      >
         {saveLabel(field.label)}
       </button>
       {(localError || mutation.error) && (

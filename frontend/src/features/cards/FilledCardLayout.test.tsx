@@ -1,4 +1,12 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
@@ -123,6 +131,128 @@ function defaultProps(overrides: Partial<FilledCardLayoutProps> = {}): FilledCar
 }
 
 describe("FilledCardLayout", () => {
+  test("saves a changed field with basis when a different required field was already empty", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const editor = renderHook(() =>
+      useBlockEditor({
+        fields: [fields[0], { ...fields[1], required_mode: "required" }],
+        editableFieldIds: new Set(["first-name", "last-name"]),
+        requiresBasis: true,
+        saveValues,
+      }),
+    );
+    act(() =>
+      editor.result.current.openField(block.id, null, "first-name", {
+        "first-name": "Иван",
+        "last-name": "",
+      }),
+    );
+    act(() => {
+      editor.result.current.updateAndSave("first-name", "Пётр", null);
+      editor.result.current.setBasisText("Приказ");
+    });
+    act(() => editor.result.current.commitAndClose());
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledExactlyOnceWith({
+        values: [{ field_id: "first-name", value: "Пётр", block_instance_id: null }],
+        basis_text: "Приказ",
+      }),
+    );
+  });
+  test("does not retry an invalid active save after the schema requirement changes", async () => {
+    vi.useFakeTimers();
+    try {
+      const saveValues = vi.fn().mockResolvedValue(undefined);
+      const editableFieldIds = new Set(["first-name"]);
+      const requiredField = { ...fields[0], required_mode: "required" };
+      const editor = renderHook(
+        ({ fields }) =>
+          useBlockEditor({ fields, editableFieldIds, requiresBasis: true, saveValues }),
+        { initialProps: { fields: [requiredField] } },
+      );
+      act(() =>
+        editor.result.current.openField(block.id, null, "first-name", { "first-name": "Иван" }),
+      );
+      act(() => {
+        editor.result.current.updateAndSave("first-name", "", null);
+        editor.result.current.setBasisText("Приказ");
+      });
+      act(() => editor.result.current.commitAndClose());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(editor.result.current.errors["first-name"]).toBeTruthy();
+      editor.rerender({ fields: [{ ...requiredField, required_mode: "not_required" }] });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(saveValues).not.toHaveBeenCalled();
+      act(() => editor.result.current.commitAndClose());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(saveValues).toHaveBeenCalledExactlyOnceWith({
+        values: [{ field_id: "first-name", value: "", block_instance_id: null }],
+        basis_text: "Приказ",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  test("requires a basis and saves changed active block fields together only on explicit save", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    render(<EditableFilledCard saveValues={saveValues} requiresBasis />);
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
+    fireEvent.blur(screen.getByLabelText("Имя"));
+    expect(
+      screen
+        .getByLabelText("Имя")
+        .compareDocumentPosition(screen.getByLabelText("Основание изменения")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Фамилия"), { target: { value: "Петров" } });
+    fireEvent.change(screen.getByLabelText("Основание изменения"), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+    await user.click(document.body);
+    expect(saveValues).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Основание изменения"), {
+      target: { value: "  Приказ 42  " },
+    });
+    fireEvent.change(screen.getByLabelText("Дата события (необязательно)"), {
+      target: { value: "2026-09-08" },
+    });
+    await user.click(screen.getByRole("button", { name: "Сохранить блок" }));
+    await waitFor(() =>
+      expect(saveValues).toHaveBeenCalledExactlyOnceWith({
+        values: [
+          { field_id: "first-name", value: "Пётр", block_instance_id: null },
+          { field_id: "last-name", value: "Петров", block_instance_id: null },
+        ],
+        basis_text: "Приказ 42",
+        occurred_on: "2026-09-08",
+      }),
+    );
+    expect(screen.queryByLabelText("Основание изменения")).not.toBeInTheDocument();
+  });
+
+  test("retains active block values and basis on failure and cancels without another request", async () => {
+    const user = userEvent.setup();
+    const saveValues = vi.fn().mockRejectedValue(new Error("Network error"));
+    render(<EditableFilledCard saveValues={saveValues} requiresBasis />);
+    await user.click(screen.getByTestId("filled-field-layout-first-name"));
+    fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Пётр" } });
+    fireEvent.change(screen.getByLabelText("Основание изменения"), { target: { value: "Приказ" } });
+    await user.click(screen.getByRole("button", { name: "Сохранить блок" }));
+    await waitFor(() => expect(saveValues).toHaveBeenCalledTimes(1));
+    expect(screen.getByLabelText("Имя")).toHaveValue("Пётр");
+    expect(screen.getByLabelText("Основание изменения")).toHaveValue("Приказ");
+    await user.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByLabelText("Основание изменения")).not.toBeInTheDocument();
+    expect(saveValues).toHaveBeenCalledTimes(1);
+  });
   test("renders a stored work experience display in the saved read-only card", () => {
     const experienceField = field({
       id: "experience",
@@ -561,13 +691,16 @@ describe("FilledCardLayout", () => {
 
 function EditableFilledCard({
   saveValues,
+  requiresBasis = false,
 }: {
   saveValues: (payload: FieldValuesBulkUpdatePayload) => Promise<unknown>;
+  requiresBasis?: boolean;
 }) {
   const blockEditor = useBlockEditor({
     fields,
     editableFieldIds: new Set(["first-name", "last-name", "status", "birth-date"]),
     saveValues,
+    requiresBasis,
   });
   return (
     <FilledCardLayout

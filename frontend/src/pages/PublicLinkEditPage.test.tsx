@@ -56,6 +56,77 @@ afterEach(() => {
 });
 
 describe("PublicLinkEditPage", () => {
+  test("retains public basis and value after rejection, allows retry and freezes an in-flight save", async () => {
+    preview = { ...preview, activated_at: "2026-09-01T00:00:00Z" };
+    editResponseMode = "error";
+    renderPage();
+    await providePublicActorName();
+    const input = screen.getByRole("textbox", { name: "Публичный статус" });
+    fireEvent.change(input, { target: { value: "Подтверждено" } });
+    const editor = input.closest(".public-inline-field-control") as HTMLElement;
+    const basis = within(editor).getByLabelText("Основание изменения");
+    fireEvent.change(basis, { target: { value: "Приказ" } });
+    const save = within(editor).getByRole("button", { name: "Сохранить изменение" });
+    fireEvent.click(save);
+    await waitFor(() => expect(save).toBeEnabled());
+    expect(editCalls()).toHaveLength(1);
+    expect(input).toHaveValue("Подтверждено");
+    expect(basis).toHaveValue("Приказ");
+    editResponseMode = "deferred";
+    fireEvent.click(save);
+    await waitFor(() => expect(editCalls()).toHaveLength(2));
+    expect(input).toBeDisabled();
+    expect(basis).toBeDisabled();
+    expect(within(editor).getByRole("button", { name: "Отмена" })).toBeDisabled();
+    fireEvent.click(save);
+    expect(editCalls()).toHaveLength(2);
+    await act(async () => deferredEditResponses.shift()!(Response.json({ value: "Подтверждено" })));
+    await waitFor(() =>
+      expect(within(editor).queryByLabelText("Основание изменения")).not.toBeInTheDocument(),
+    );
+    fireEvent.change(input, { target: { value: "Отменено" } });
+    fireEvent.click(within(editor).getByRole("button", { name: "Отмена" }));
+    expect(screen.getByRole("textbox", { name: "Публичный статус" })).toHaveValue("Подтверждено");
+    expect(editCalls()).toHaveLength(2);
+  });
+  test.each(["active", "draft"])(
+    "requires basis for a previously activated %s card and forwards the explicit save",
+    async (lifecycleStatus) => {
+      preview = {
+        ...preview,
+        lifecycle_status: lifecycleStatus,
+        activated_at: "2026-09-01T00:00:00Z",
+        display_value: "Петров Пётр",
+      };
+      renderPage();
+      fireEvent.change(await screen.findByRole("textbox", { name: "ФИО" }), {
+        target: { value: "Иванов Иван" },
+      });
+      expect(screen.getByRole("heading", { name: "Петров Пётр" })).toBeInTheDocument();
+      const input = screen.getByRole("textbox", { name: "Публичный статус" });
+      fireEvent.change(input, { target: { value: "Подтверждено" } });
+      fireEvent.blur(input);
+      const editor = input.closest(".public-inline-field-control") as HTMLElement;
+      const save = within(editor).getByRole("button", { name: "Сохранить изменение" });
+      expect(save).toBeDisabled();
+      fireEvent.change(within(editor).getByLabelText("Основание изменения"), {
+        target: { value: "  Приказ 43  " },
+      });
+      fireEvent.change(within(editor).getByLabelText("Дата события (необязательно)"), {
+        target: { value: "2026-09-08" },
+      });
+      expect(editCalls()).toHaveLength(0);
+      fireEvent.click(save);
+      await waitFor(() => expect(editCalls()).toHaveLength(1));
+      expect(editCalls()[0]?.body).toMatchObject({
+        actor_name: "Иванов Иван",
+        field_id: "field-status",
+        value: "Подтверждено",
+        basis_text: "Приказ 43",
+        occurred_on: "2026-09-08",
+      });
+    },
+  );
   test("blocks public field activation until FIO is provided", async () => {
     renderPage();
 
@@ -651,7 +722,7 @@ describe("PublicLinkEditPage", () => {
       });
       const cachedPreview = {
         ...publicPreview(),
-        display_name: "PRIVATE CACHED CARD",
+        display_value: "PRIVATE CACHED CARD",
       };
       const queryClient = renderPage((client) => {
         client.setQueryData(["public-link-preview", rawToken], cachedPreview);
@@ -681,7 +752,7 @@ describe("PublicLinkEditPage", () => {
       client.setQueryData(["public-link-status", rawToken], safeStatus("active"));
       client.setQueryData(["public-link-preview", rawToken], {
         ...publicPreview(),
-        display_name: "PRIVATE STALE ACTIVE CARD",
+        display_value: "PRIVATE STALE ACTIVE CARD",
       });
       client.setQueryData(["public-link-attachments", rawToken], {
         ...attachments,
@@ -737,12 +808,12 @@ describe("PublicLinkEditPage", () => {
 
   test("never trusts cached active data after status revalidation fails", async () => {
     statusResponseMode = "error";
-    preview = { ...publicPreview(), display_name: "PRIVATE NETWORK PREVIEW" };
+    preview = { ...publicPreview(), display_value: "PRIVATE NETWORK PREVIEW" };
     const queryClient = renderPage((client) => {
       client.setQueryData(["public-link-status", rawToken], safeStatus("active"));
       client.setQueryData(["public-link-preview", rawToken], {
         ...publicPreview(),
-        display_name: "PRIVATE FAILED CACHE",
+        display_value: "PRIVATE FAILED CACHE",
       });
       client.setQueryData(["public-link-attachments", rawToken], {
         ...attachments,
@@ -911,7 +982,7 @@ function publicAttachment() {
 function publicPreview(): PublicLinkPreviewRead & { form_layout: PublicFormLayout } {
   return {
     card_id: "card-public",
-    display_name: "Публичная карточка",
+    display_value: "Публичная карточка",
     organization_name: "Администрация публичной карточки",
     card_template_name: "Шаблон публичной карточки",
     lifecycle_status: "draft",
