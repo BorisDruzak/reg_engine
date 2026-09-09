@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -103,7 +103,7 @@ class CardCreationPreviewBlockRead:
 class CardCreationPreviewRead:
     organization_id: UUID
     card_template_id: UUID
-    display_name: str
+    display_value: str
     blocks: list[CardCreationPreviewBlockRead] = field(default_factory=list)
 
 
@@ -143,7 +143,7 @@ class CardRead:
     card_id: UUID
     registry_id: UUID
     organization_id: UUID
-    display_name: str
+    display_value: str
     card_template_id: UUID
     card_template_name: str | None = None
     can_manage: bool = False
@@ -207,7 +207,6 @@ class CardService:
         actor_user_id: UUID,
         registry_id: UUID,
         organization_id: UUID,
-        display_name: str | None = None,
         card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
         public_view_enabled: bool = True,
@@ -217,7 +216,6 @@ class CardService:
         card = self.create_card(
             registry_id=registry_id,
             organization_id=organization_id,
-            display_name=display_name,
             card_template_id=card_template_id,
             org_unit_id=org_unit_id,
             public_view_enabled=public_view_enabled or public_edit_enabled,
@@ -245,7 +243,6 @@ class CardService:
         *,
         actor_user_id: UUID,
         organization_id: UUID,
-        display_name: str | None = None,
         card_template_id: UUID | None = None,
         public_view_enabled: bool = True,
         public_edit_enabled: bool = True,
@@ -257,7 +254,6 @@ class CardService:
             actor_user_id=actor_user_id,
             registry_id=registry.id,
             organization_id=organization_id,
-            display_name=display_name,
             card_template_id=card_template_id,
             public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
@@ -268,18 +264,19 @@ class CardService:
         *,
         actor_user_id: UUID,
         organization_id: UUID,
-        display_name: str | None,
-        card_template_id: UUID,
         public_access: "CardPublicAccessUpdate",
     ) -> Card:
         from app.services.card_public_access import CardPublicAccessService
 
         with self.session.begin_nested():
+            schema_service = RegistrySchemaService(self.session)
+            registry = schema_service.resolve_default_registry_for_organization(organization_id)
+            template = self._first_active_card_template_for_registry(registry.id)
+            self._require_single_fio_field(template)
             card = self.create_card_for_organization_for_actor(
                 actor_user_id=actor_user_id,
                 organization_id=organization_id,
-                display_name=display_name,
-                card_template_id=card_template_id,
+                card_template_id=template.id,
             )
             self._preserve_draft_lifecycle(card, actor_user_id=actor_user_id)
             CardPublicAccessService(self.session).update_for_actor(
@@ -294,19 +291,20 @@ class CardService:
         *,
         actor_user_id: UUID,
         organization_id: UUID,
-        display_name: str | None,
-        card_template_id: UUID,
         public_access: "CardPublicAccessUpdate",
     ) -> CardDraftPublicLink:
         from app.services.card_public_access import CardPublicAccessService
         from app.services.public_links import PublicLinkService
 
         with self.session.begin_nested():
+            schema_service = RegistrySchemaService(self.session)
+            registry = schema_service.resolve_default_registry_for_organization(organization_id)
+            template = self._first_active_card_template_for_registry(registry.id)
+            self._require_single_fio_field(template)
             card = self.create_card_for_organization_for_actor(
                 actor_user_id=actor_user_id,
                 organization_id=organization_id,
-                display_name=display_name,
-                card_template_id=card_template_id,
+                card_template_id=template.id,
             )
             self._preserve_draft_lifecycle(
                 card,
@@ -418,7 +416,7 @@ class CardService:
         return CardCreationPreviewRead(
             organization_id=organization_id,
             card_template_id=template.id,
-            display_name=self._card_display_name_from_input(display_name=None, template=template),
+            display_value="",
             blocks=blocks,
         )
 
@@ -427,7 +425,6 @@ class CardService:
         *,
         actor_user_id: UUID,
         organization_id: UUID,
-        display_name: str | None,
         card_template_id: UUID,
         public_view_enabled: bool,
         public_edit_enabled: bool,
@@ -471,7 +468,6 @@ class CardService:
                 actor_user_id=actor_user_id,
                 registry_id=registry.id,
                 organization_id=organization_id,
-                display_name=display_name,
                 card_template_id=template.id,
                 public_view_enabled=public_view_enabled,
                 public_edit_enabled=public_edit_enabled,
@@ -496,7 +492,6 @@ class CardService:
         *,
         registry_id: UUID,
         organization_id: UUID,
-        display_name: str | None = None,
         card_template_id: UUID | None = None,
         org_unit_id: UUID | None = None,
         public_view_enabled: bool = True,
@@ -511,16 +506,12 @@ class CardService:
             registry_id=registry_id,
             actor_user_id=created_by,
         )
-        resolved_display_name = self._card_display_name_from_input(
-            display_name=display_name,
-            template=template,
-        )
+        self._require_single_fio_field(template)
         card = Card(
             registry_id=registry_id,
             card_template_id=template.id,
             organization_id=organization_id,
             org_unit_id=org_unit_id,
-            display_name=resolved_display_name,
             lifecycle_status="draft",
             public_view_enabled=public_view_enabled or public_edit_enabled,
             public_edit_enabled=public_edit_enabled,
@@ -582,11 +573,7 @@ class CardService:
         for field_filter in field_filters or ():
             criteria.append(self._field_filter_criterion(field_filter, registry_id=registry_id))
 
-        return list(
-            self.session.scalars(
-                select(Card).where(*criteria).order_by(Card.display_name, Card.id)
-            ).all()
-        )
+        return list(self.session.scalars(select(Card).where(*criteria).order_by(Card.id)).all())
 
     def list_visible_cards_for_organization_for_actor(
         self,
@@ -719,7 +706,7 @@ class CardService:
         reference_labels = self._labels_by_id(ReferenceItem, reference_item_ids, "label")
         organization_labels = self._labels_by_id(Organization, organization_ids, "name")
         user_labels = self._labels_by_id(User, user_ids, "display_name")
-        card_labels = self._labels_by_id(Card, card_ids, "display_name")
+        card_labels = self._card_display_values_by_id(card_ids)
         registry_labels = self._labels_by_id(Registry, registry_ids, "name")
         org_unit_labels = self._org_unit_list_labels(card.organization_id, org_unit_ids)
 
@@ -838,7 +825,7 @@ class CardService:
             )
             .exists()
         )
-        return or_(Card.display_name.ilike(pattern), text_value_exists)
+        return text_value_exists
 
     def _field_filter_criterion(
         self,
@@ -1195,7 +1182,6 @@ class CardService:
         *,
         actor_user_id: UUID,
         card_id: UUID,
-        display_name: str | None = None,
         org_unit_id: UUID | None = None,
         update_org_unit: bool = False,
         lifecycle_status: str | None = None,
@@ -1209,7 +1195,6 @@ class CardService:
             registry_id=card.registry_id,
         )
         old_data = {
-            "display_name": card.display_name,
             "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
             "lifecycle_status": card.lifecycle_status,
             "public_view_enabled": card.public_view_enabled,
@@ -1217,8 +1202,6 @@ class CardService:
         }
         if lifecycle_status is not None and lifecycle_status not in {"draft", "active"}:
             raise CardServiceError(f"Unsupported card lifecycle status: {lifecycle_status}")
-        if display_name is not None:
-            card.display_name = display_name
         if update_org_unit:
             self._validate_org_unit_for_organization(org_unit_id, card.organization_id)
             card.org_unit_id = org_unit_id
@@ -1240,7 +1223,6 @@ class CardService:
             retention_class="card_history",
             old_data_json=old_data,
             new_data_json={
-                "display_name": card.display_name,
                 "org_unit_id": str(card.org_unit_id) if card.org_unit_id is not None else None,
                 "lifecycle_status": card.lifecycle_status,
                 "public_view_enabled": card.public_view_enabled,
@@ -1341,7 +1323,7 @@ class CardService:
             card_template_id=card.card_template_id,
             card_template_name=self._card_template_name(card),
             organization_id=card.organization_id,
-            display_name=card.display_name,
+            display_value=self.card_display_value(card),
             creator_display_name=self.creator_display_name_for_card(card),
             can_manage=permissions.has_permission(
                 actor_user_id,
@@ -1478,7 +1460,6 @@ class CardService:
         new_card = self.create_card(
             registry_id=old_card.registry_id,
             organization_id=target_organization_id,
-            display_name=old_card.display_name,
             card_template_id=old_card.card_template_id,
             org_unit_id=None,
             public_view_enabled=old_card.public_view_enabled,
@@ -1721,10 +1702,7 @@ class CardService:
         actor_user_id: UUID | None,
     ) -> CardTemplate:
         if template_id is None:
-            return RegistrySchemaService(self.session).ensure_base_card_template_for_registry(
-                registry_id=registry_id,
-                actor_user_id=actor_user_id,
-            )
+            return self._first_active_card_template_for_registry(registry_id)
         template = self.session.get(CardTemplate, template_id)
         if (
             template is None
@@ -1735,18 +1713,74 @@ class CardService:
             raise CardServiceError("Card template was not found.")
         return template
 
-    def _card_display_name_from_input(
-        self,
-        *,
-        display_name: str | None,
-        template: CardTemplate,
-    ) -> str:
-        cleaned_display_name = display_name.strip() if display_name is not None else ""
-        if cleaned_display_name:
-            return cleaned_display_name
-        if template.name.strip():
-            return template.name.strip()
-        raise CardServiceError("Card display name or card template is required.")
+    def _first_active_card_template_for_registry(self, registry_id: UUID) -> CardTemplate:
+        template = self.session.scalar(
+            select(CardTemplate)
+            .where(
+                CardTemplate.registry_id == registry_id,
+                CardTemplate.archived_at.is_(None),
+                CardTemplate.is_active.is_(True),
+            )
+            .order_by(CardTemplate.position, CardTemplate.id)
+            .limit(1)
+        )
+        if template is None:
+            raise CardServiceError("Card template was not found.")
+        return template
+
+    def _require_single_fio_field(self, template: CardTemplate) -> FormField:
+        field_ids = self._template_field_ids(template)
+        fio_fields = list(
+            self.session.scalars(
+                select(FormField)
+                .join(FormBlock, FormBlock.id == FormField.block_id)
+                .where(
+                    FormField.id.in_(field_ids),
+                    FormField.code == "fio",
+                    FormField.field_type == "text",
+                    FormField.archived_at.is_(None),
+                    FormField.is_active.is_(True),
+                    FormBlock.registry_id == template.registry_id,
+                    FormBlock.archived_at.is_(None),
+                    FormBlock.is_active.is_(True),
+                )
+                .order_by(FormField.id)
+            ).all()
+        )
+        if len(fio_fields) != 1:
+            raise CardServiceError(
+                "Шаблон карточки должен содержать ровно одно активное текстовое поле ФИО (fio)."
+            )
+        return fio_fields[0]
+
+    def card_display_value(self, card: Card) -> str:
+        fio_field = self._require_single_fio_field(
+            self._get_active_card_template_for_registry(
+                card.card_template_id,
+                registry_id=card.registry_id,
+                actor_user_id=None,
+            )
+        )
+        value = self.session.scalar(
+            select(FieldValue.value_text)
+            .join(CardBlockInstance, CardBlockInstance.id == FieldValue.block_instance_id)
+            .where(
+                FieldValue.card_id == card.id,
+                FieldValue.field_id == fio_field.id,
+                CardBlockInstance.archived_at.is_(None),
+            )
+            .order_by(CardBlockInstance.ordinal, FieldValue.id)
+            .limit(1)
+        )
+        return value or ""
+
+    def _card_display_values_by_id(self, card_ids: set[UUID]) -> dict[UUID, str]:
+        if not card_ids:
+            return {}
+        return {
+            card.id: self.card_display_value(card)
+            for card in self.session.scalars(select(Card).where(Card.id.in_(card_ids))).all()
+        }
 
     def _card_template_name(self, card: Card) -> str | None:
         template = self.session.get(CardTemplate, card.card_template_id)

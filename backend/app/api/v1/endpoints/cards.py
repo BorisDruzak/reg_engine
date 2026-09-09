@@ -81,7 +81,7 @@ def read_organization_card_creation_preview(
     return CardCreationPreviewRead(
         organization_id=preview.organization_id,
         card_template_id=preview.card_template_id,
-        display_name=preview.display_name,
+        display_value=preview.display_value,
         blocks=[
             CardCreationPreviewBlockRead(
                 block_id=block.block_id,
@@ -130,8 +130,6 @@ def create_organization_card_draft(
         card = card_service.create_card_draft_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
-            display_name=payload.display_name,
-            card_template_id=payload.card_template_id,
             public_access=payload.public_access,
         )
     except Exception as exc:
@@ -155,7 +153,6 @@ def first_save_organization_card(
         card = card_service.create_card_with_first_value_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
-            display_name=payload.display_name,
             card_template_id=payload.card_template_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
@@ -185,8 +182,6 @@ def create_organization_card_draft_with_public_link(
         created = card_service.create_card_draft_with_public_link_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
-            display_name=payload.display_name,
-            card_template_id=payload.card_template_id,
             public_access=payload.public_access,
         )
     except Exception as exc:
@@ -215,8 +210,6 @@ def create_card(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             organization_id=payload.organization_id,
-            display_name=payload.display_name,
-            card_template_id=payload.card_template_id,
             org_unit_id=payload.org_unit_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
@@ -242,8 +235,6 @@ def create_organization_card(
         card = card_service.create_card_for_organization_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
-            display_name=payload.display_name,
-            card_template_id=payload.card_template_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
         )
@@ -548,7 +539,6 @@ def update_card(
         card = card_service.update_card_for_actor(
             actor_user_id=actor_user_id,
             card_id=card_id,
-            display_name=payload.display_name,
             org_unit_id=payload.org_unit_id,
             update_org_unit="org_unit_id" in payload.model_fields_set,
             lifecycle_status=payload.lifecycle_status,
@@ -708,7 +698,7 @@ def _card_read_to_schema(card_read: ServiceCardRead) -> CardRead:
         card_template_id=card_read.card_template_id,
         card_template_name=card_read.card_template_name,
         organization_id=card_read.organization_id,
-        display_name=card_read.display_name,
+        display_value=card_read.display_value,
         creator_display_name=card_read.creator_display_name,
         can_manage=card_read.can_manage,
         blocks={
@@ -767,7 +757,7 @@ def _card_to_summary(card: Card, card_service: CardService) -> CardSummaryRead:
         card_template_name=card_service._card_template_name(card),
         organization_id=card.organization_id,
         org_unit_id=card.org_unit_id,
-        display_name=card.display_name,
+        display_value=card_service.card_display_value(card),
         creator_display_name=card_service.creator_display_name_for_card(card),
         lifecycle_status=card.lifecycle_status,
         public_view_enabled=card.public_view_enabled,

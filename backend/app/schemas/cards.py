@@ -6,16 +6,12 @@ from pydantic import BaseModel, Field
 
 class CardCreate(BaseModel):
     organization_id: UUID
-    display_name: str | None = None
-    card_template_id: UUID | None = None
     org_unit_id: UUID | None = None
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
 
 
 class OrganizationCardCreate(BaseModel):
-    display_name: str | None = None
-    card_template_id: UUID | None = None
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
 
@@ -48,7 +44,7 @@ class CardCreationPreviewBlockRead(BaseModel):
 class CardCreationPreviewRead(BaseModel):
     organization_id: UUID
     card_template_id: UUID
-    display_name: str
+    display_value: str
     blocks: list[CardCreationPreviewBlockRead] = Field(default_factory=list)
 
 
@@ -68,7 +64,7 @@ class CardSummaryRead(BaseModel):
     card_template_name: str | None = None
     organization_id: UUID
     org_unit_id: UUID | None
-    display_name: str
+    display_value: str
     creator_display_name: str | None = None
     lifecycle_status: str
     public_view_enabled: bool
@@ -81,7 +77,6 @@ class CardListRead(BaseModel):
 
 
 class CardUpdate(BaseModel):
-    display_name: str | None = None
     org_unit_id: UUID | None = None
     lifecycle_status: str | None = None
     public_view_enabled: bool | None = None
@@ -101,7 +96,6 @@ class CardPublicAccessUpdate(BaseModel):
 
 
 class CardFirstSaveRequest(BaseModel):
-    display_name: str | None = None
     card_template_id: UUID
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
@@ -112,14 +106,10 @@ class CardFirstSaveRequest(BaseModel):
 
 
 class CardDraftCreateRequest(BaseModel):
-    display_name: str | None = None
-    card_template_id: UUID
     public_access: CardPublicAccessUpdate = Field(default_factory=CardPublicAccessUpdate)
 
 
 class CardDraftPublicLinkRequest(BaseModel):
-    display_name: str | None = None
-    card_template_id: UUID
     public_access: CardPublicAccessUpdate = Field(default_factory=CardPublicAccessUpdate)
 
 
@@ -211,7 +201,7 @@ class CardRead(BaseModel):
     card_template_id: UUID
     card_template_name: str | None = None
     organization_id: UUID
-    display_name: str
+    display_value: str
     creator_display_name: str | None = None
     can_manage: bool
     blocks: dict[str, CardBlockRead]

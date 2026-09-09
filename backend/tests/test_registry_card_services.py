@@ -1347,7 +1347,6 @@ def test_first_card_value_discards_card_when_public_access_update_fails_without_
         service.create_card_with_first_value_for_actor(
             actor_user_id=actor_id,
             organization_id=organization_id,
-            display_name=None,
             card_template_id=template_id,
             public_view_enabled=True,
             public_edit_enabled=True,
@@ -2094,11 +2093,19 @@ def test_create_draft_card_and_public_link_preserves_draft_for_empty_template_wi
 
     card = SimpleNamespace(id=uuid4(), lifecycle_status="active", updated_by=None)
     service = CardService(cast(Session, _NestedSession()))
+    template = SimpleNamespace(id=uuid4())
     monkeypatch.setattr(
         service,
         "create_card_for_organization_for_actor",
         lambda **_payload: card,
     )
+    monkeypatch.setattr(
+        RegistrySchemaService,
+        "resolve_default_registry_for_organization",
+        lambda _self, _organization_id: SimpleNamespace(id=uuid4()),
+    )
+    monkeypatch.setattr(service, "_first_active_card_template_for_registry", lambda _id: template)
+    monkeypatch.setattr(service, "_require_single_fio_field", lambda _template: SimpleNamespace())
     monkeypatch.setattr(service, "_record_lifecycle_transition", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         CardPublicAccessService,
@@ -2114,8 +2121,6 @@ def test_create_draft_card_and_public_link_preserves_draft_for_empty_template_wi
     created = service.create_card_draft_with_public_link_for_actor(
         actor_user_id=uuid4(),
         organization_id=uuid4(),
-        display_name=None,
-        card_template_id=uuid4(),
         public_access=CardPublicAccessUpdate(),
     )
 
@@ -2329,6 +2334,91 @@ def test_explicit_draft_creation_saves_draft_without_public_link(
     }
 
 
+def test_first_active_template_is_used_when_creating_a_draft(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=registry.id,
+        code="draft-fio-block",
+        title="ФИО",
+    )
+    fio_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="fio",
+        label="ФИО",
+        field_type="text",
+    )
+    first_template = schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=registry.id,
+        code="first-draft-fio-template",
+        name="Первый шаблон",
+        position=1,
+        field_schema_json={"field_ids": [str(fio_field.id)]},
+    )
+    schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=registry.id,
+        code="second-draft-fio-template",
+        name="Второй шаблон",
+        position=2,
+        field_schema_json={"field_ids": [str(fio_field.id)]},
+    )
+
+    card = CardService(db_session).create_card_draft_for_actor(
+        actor_user_id=context["org_admin"].id,
+        organization_id=context["child"].id,
+        public_access=CardPublicAccessUpdate(),
+    )
+
+    assert card.card_template_id == first_template.id
+
+
+def test_draft_requires_exactly_one_active_text_fio_field(
+    db_session: Session,
+) -> None:
+    context = _phase_1d_context(db_session)
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        context["child"].id
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=registry.id,
+        code="draft-without-fio-block",
+        title="Без ФИО",
+    )
+    other_field = schema_service.create_field_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        block_id=block.id,
+        code="other_text",
+        label="Другое поле",
+        field_type="text",
+    )
+    schema_service.create_card_template_for_actor(
+        actor_user_id=context["registry_admin"].id,
+        registry_id=registry.id,
+        code="draft-without-fio-template",
+        name="Шаблон без ФИО",
+        position=1,
+        field_schema_json={"field_ids": [str(other_field.id)]},
+    )
+
+    with pytest.raises(CardServiceError, match="поле ФИО"):
+        CardService(db_session).create_card_draft_for_actor(
+            actor_user_id=context["org_admin"].id,
+            organization_id=context["child"].id,
+            public_access=CardPublicAccessUpdate(),
+        )
+
+
 def test_explicit_draft_creation_preserves_draft_without_database(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2348,11 +2438,19 @@ def test_explicit_draft_creation_preserves_draft_without_database(
 
     card = SimpleNamespace(id=uuid4(), lifecycle_status="active", updated_by=None)
     service = CardService(cast(Session, _NestedSession()))
+    template = SimpleNamespace(id=uuid4())
     monkeypatch.setattr(
         service,
         "create_card_for_organization_for_actor",
         lambda **_payload: card,
     )
+    monkeypatch.setattr(
+        RegistrySchemaService,
+        "resolve_default_registry_for_organization",
+        lambda _self, _organization_id: SimpleNamespace(id=uuid4()),
+    )
+    monkeypatch.setattr(service, "_first_active_card_template_for_registry", lambda _id: template)
+    monkeypatch.setattr(service, "_require_single_fio_field", lambda _template: SimpleNamespace())
     monkeypatch.setattr(service, "_record_lifecycle_transition", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         CardPublicAccessService,
@@ -2363,8 +2461,6 @@ def test_explicit_draft_creation_preserves_draft_without_database(
     created = service.create_card_draft_for_actor(
         actor_user_id=uuid4(),
         organization_id=uuid4(),
-        display_name=None,
-        card_template_id=uuid4(),
         public_access=CardPublicAccessUpdate(),
     )
 

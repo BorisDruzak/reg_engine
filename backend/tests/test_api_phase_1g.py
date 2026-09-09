@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from datetime import date
 from ipaddress import ip_address
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -347,6 +348,57 @@ def test_explicit_draft_endpoint_maps_domain_errors_to_russian_without_database(
     assert response.json()["detail"] == expected_detail
 
 
+def test_draft_endpoint_accepts_no_template_and_returns_display_value_without_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
+    app = create_app()
+    card = SimpleNamespace(
+        id=uuid4(),
+        registry_id=uuid4(),
+        card_template_id=uuid4(),
+        organization_id=uuid4(),
+        org_unit_id=None,
+        lifecycle_status="draft",
+        public_view_enabled=True,
+        public_edit_enabled=False,
+        created_by=None,
+        public_creator_name=None,
+    )
+
+    def override_session() -> Iterator[None]:
+        yield None
+
+    def create_draft(_self: CardService, **kwargs: Any) -> object:
+        assert set(kwargs) == {"actor_user_id", "organization_id", "public_access"}
+        return card
+
+    app.dependency_overrides[get_db_session] = override_session
+    monkeypatch.setattr(CardService, "create_card_draft_for_actor", create_draft)
+    monkeypatch.setattr(CardService, "card_display_value", lambda _self, _card: "")
+    monkeypatch.setattr(CardService, "_card_template_name", lambda _self, _card: "Шаблон")
+    monkeypatch.setattr(CardService, "list_display_fields_for_card", lambda _self, _card: [])
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/v1/organizations/{card.organization_id}/cards/draft",
+                json={"public_access": {}},
+                headers=_actor_headers(uuid4()),
+            )
+    finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
+
+    assert response.status_code == 201, response.text
+    assert response.json()["display_value"] == ""
+    assert "display_name" not in response.json()
+
+
 def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
     api_client: TestClient,
     db_session: Session,
@@ -592,6 +644,67 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
     )
 
     assert denied.status_code == 403, denied.text
+
+
+def test_draft_endpoint_selects_first_template_and_returns_empty_fio_display_value(
+    api_client: TestClient,
+    db_session: Session,
+) -> None:
+    system_admin = _create_user(
+        db_session,
+        "phase1g-fio-draft-system@example.test",
+        is_superuser=True,
+    )
+    organization = _post_json(
+        api_client,
+        "/api/v1/organizations",
+        {"code": "phase1g-fio-draft", "name": "Черновик ФИО"},
+        actor_id=system_admin.id,
+    )
+    registry = RegistrySchemaService(db_session).resolve_default_registry_for_organization(
+        UUID(organization["id"])
+    )
+    schema_service = RegistrySchemaService(db_session)
+    block = schema_service.create_block_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-fio-draft-block",
+        title="ФИО",
+    )
+    fio_field = schema_service.create_field_for_actor(
+        actor_user_id=system_admin.id,
+        block_id=block.id,
+        code="fio",
+        label="ФИО",
+        field_type="text",
+    )
+    first_template = schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-fio-draft-first-template",
+        name="Первый шаблон ФИО",
+        position=1,
+        field_schema_json={"field_ids": [str(fio_field.id)]},
+    )
+    schema_service.create_card_template_for_actor(
+        actor_user_id=system_admin.id,
+        registry_id=registry.id,
+        code="phase1g-fio-draft-second-template",
+        name="Второй шаблон ФИО",
+        position=2,
+        field_schema_json={"field_ids": [str(fio_field.id)]},
+    )
+
+    created = _post_json(
+        api_client,
+        f"/api/v1/organizations/{organization['id']}/cards/draft",
+        {"public_access": {}},
+        actor_id=system_admin.id,
+    )
+
+    assert created["card_template_id"] == str(first_template.id)
+    assert created["display_value"] == ""
+    assert "display_name" not in created
 
 
 def test_phase_1g_rest_workflow_completion(

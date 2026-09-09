@@ -483,7 +483,7 @@ class RegistrySchemaService:
                     CardTemplate.archived_at.is_(None),
                     CardTemplate.is_active.is_(True),
                 )
-                .order_by(CardTemplate.position, CardTemplate.name, CardTemplate.id)
+                .order_by(CardTemplate.position, CardTemplate.id)
             ).all()
         )
         return registry, blocks, fields, templates
