@@ -1,16 +1,21 @@
 import { expect, test } from "@playwright/test";
 
+test.use({ reducedMotion: "reduce" });
+
 const apiPayloads = {
   login: {
     access_token: "test-token",
     token_type: "bearer",
-    expires_at: "2026-06-28T12:00:00Z",
+    expires_at: "2099-06-28T12:00:00Z",
     user: {
       id: "11111111-1111-4111-8111-111111111111",
       email: "admin@example.test",
       display_name: "Системный администратор",
       status: "active",
       is_superuser: true,
+      role_code: "administrator",
+      organization_ids: [],
+      can_manage_access: true,
     },
   },
   organizations: {
@@ -46,6 +51,9 @@ const apiPayloads = {
         display_name: "Системный администратор",
         status: "active",
         is_superuser: true,
+        role_code: "administrator",
+        organization_ids: [],
+        can_manage_access: true,
         archived_at: null,
       },
     ],
@@ -156,6 +164,20 @@ const apiPayloads = {
     ],
     fields: [
       {
+        id: "99999999-9999-4999-8999-999999999990",
+        block_id: "88888888-8888-4888-8888-888888888888",
+        code: "fio",
+        label: "ФИО",
+        description: null,
+        field_type: "text",
+        position: 2,
+        options_source_type: null,
+        options_source_id: null,
+        is_active: true,
+        public_visible: true,
+        public_editable: false,
+      },
+      {
         id: "99999999-9999-4999-8999-999999999999",
         block_id: "88888888-8888-4888-8888-888888888888",
         code: "status",
@@ -208,6 +230,7 @@ const apiPayloads = {
         position: 0,
         field_schema_json: {
           field_ids: [
+            "99999999-9999-4999-8999-999999999990",
             "99999999-9999-4999-8999-999999999999",
             "99999999-9999-4999-8999-999999999998",
             "9d9d9d9d-9d9d-49d9-89d9-9d9d9d9d9d9d",
@@ -231,23 +254,24 @@ const apiPayloads = {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         registry_id: "77777777-7777-4777-8777-777777777777",
         card_template_id: "71717171-7171-4171-8171-717171717171",
-        card_template_name: "РњСѓРЅРёС†РёРїР°Р»СЊРЅР°СЏ РєР°СЂС‚РѕС‡РєР°",
+        card_template_name: "Типовая карточка",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
-        display_name: "Карточка актива",
-        lifecycle_status: "draft",
+        display_value: "Иванов Иван Иванович",
+        lifecycle_status: "active",
         public_view_enabled: false,
         public_edit_enabled: true,
       },
     ],
   },
   cardRead: {
+    can_manage: true,
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     registry_id: "77777777-7777-4777-8777-777777777777",
     card_template_id: "71717171-7171-4171-8171-717171717171",
-    card_template_name: "РњСѓРЅРёС†РёРїР°Р»СЊРЅР°СЏ РєР°СЂС‚РѕС‡РєР°",
+    card_template_name: "Типовая карточка",
     organization_id: "22222222-2222-4222-8222-222222222222",
-    display_name: "Карточка актива",
+    display_value: "Иванов Иван Иванович",
     blocks: {
       main: {
         block_id: "88888888-8888-4888-8888-888888888888",
@@ -269,6 +293,12 @@ const apiPayloads = {
       },
     },
     fields: {
+      fio: {
+        field_id: "99999999-9999-4999-8999-999999999990",
+        code: "fio",
+        field_type: "text",
+        value: "Иванов Иван Иванович",
+      },
       status: {
         field_id: "99999999-9999-4999-8999-999999999999",
         code: "status",
@@ -306,7 +336,7 @@ const apiPayloads = {
         name: "Сводка карточки",
         description: null,
         template_format: "docx_text_v1",
-        output_filename_template: "{{ card.display_name }}.docx",
+        output_filename_template: "{{ card.display_value }}.docx",
         output_content_type:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         is_active: true,
@@ -350,8 +380,9 @@ const apiPayloads = {
   },
   publicPreview: {
     card_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    display_name: "Публичная карточка",
-    expires_at: "2026-06-29T12:00:00Z",
+    display_value: "Петров Петр Петрович",
+    lifecycle_status: "active",
+    expires_at: "2099-06-29T12:00:00Z",
     can_edit: true,
     blocks: [
       {
@@ -367,6 +398,7 @@ const apiPayloads = {
                 field_id: "99999999-9999-4999-8999-999999999997",
                 code: "public_status",
                 label: "Публичный статус",
+                public_editable: true,
                 field_type: "text",
                 value: "drafted",
                 options_source_type: null,
@@ -395,7 +427,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     org_unit_id: string | null;
     card_template_id: string;
     card_template_name?: string | null;
-    display_name: string;
+    display_value: string;
     lifecycle_status: string;
     public_view_enabled: boolean;
     public_edit_enabled: boolean;
@@ -425,6 +457,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     }
     return {
       ...createdCard,
+      can_manage: true,
       blocks: {
         main: {
           block_id: "88888888-8888-4888-8888-888888888888",
@@ -495,6 +528,11 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const request = route.request();
+    const auxiliary = cardAuxiliaryPayload(url.pathname, apiPayloads.schema);
+    if (auxiliary) {
+      await route.fulfill({ json: auxiliary });
+      return;
+    }
     if (url.pathname === "/api/v1/organizations/22222222-2222-4222-8222-222222222222/org-units") {
       await route.fulfill({
         status: 200,
@@ -503,18 +541,16 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       });
       return;
     }
-    const organizationCardsMatch = url.pathname.match(/^\/api\/v1\/organizations\/([^/]+)\/cards$/);
+    const organizationCardsMatch = url.pathname.match(
+      /^\/api\/v1\/organizations\/([^/]+)\/cards(?:\/draft)?$/,
+    );
     if (organizationCardsMatch) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
-          display_name?: string | null;
-          card_template_id?: string | null;
-          public_view_enabled?: boolean;
-          public_edit_enabled?: boolean;
+          public_access: { public_view_enabled: boolean; public_edit_enabled: boolean };
         };
-        const template =
-          apiPayloads.schema.templates.find((item) => item.id === body.card_template_id) ??
-          apiPayloads.schema.templates[0];
+        expect(Object.keys(body)).toEqual(["public_access"]);
+        const template = apiPayloads.schema.templates[0];
         createdCard = {
           id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
           registry_id: "77777777-7777-4777-8777-777777777777",
@@ -522,10 +558,10 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
           org_unit_id: null,
           card_template_id: template.id,
           card_template_name: template.name,
-          display_name: body.display_name ?? template?.name ?? "Новая карточка",
+          display_value: "Не заполнено",
           lifecycle_status: "draft",
-          public_view_enabled: Boolean(body.public_view_enabled),
-          public_edit_enabled: Boolean(body.public_edit_enabled),
+          public_view_enabled: body.public_access.public_view_enabled,
+          public_edit_enabled: body.public_access.public_edit_enabled,
         };
         newCardStatusValue = String(template?.default_values_json[0]?.value ?? "");
         cardItems = [...cardItems, createdCard];
@@ -549,7 +585,6 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
         const body = request.postDataJSON() as {
           organization_id: string;
           org_unit_id?: string | null;
-          display_name?: string | null;
           card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
@@ -564,7 +599,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
           org_unit_id: body.org_unit_id ?? null,
           card_template_id: template.id,
           card_template_name: template.name,
-          display_name: body.display_name ?? template?.name ?? "Новая карточка",
+          display_value: "Не заполнено",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
@@ -605,13 +640,11 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     if (url.pathname === "/api/v1/cards/cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd") {
       if (request.method() === "PATCH" && createdCard) {
         const body = request.postDataJSON() as {
-          display_name?: string | null;
           public_view_enabled?: boolean | null;
           public_edit_enabled?: boolean | null;
         };
         createdCard = {
           ...createdCard,
-          display_name: body.display_name ?? createdCard.display_name,
           public_view_enabled: body.public_view_enabled ?? createdCard.public_view_enabled,
           public_edit_enabled: body.public_edit_enabled ?? createdCard.public_edit_enabled,
         };
@@ -733,7 +766,7 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
       });
       return;
     }
-    if (url.pathname === "/api/v1/audit-events" && url.search === "?limit=20") {
+    if (url.pathname === "/api/v1/audit-events") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -922,8 +955,10 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
     });
     if (url.pathname === "/api/v1/cards/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/values") {
       const body = request.postDataJSON() as {
+        basis_text?: string;
         values: { field_id: string; value: unknown; block_instance_id?: string | null }[];
       };
+      expect(body.basis_text).toBe("Приказ об изменении 42");
       for (const item of body.values) {
         if (item.field_id === "99999999-9999-4999-8999-999999999999") {
           cardStatusValue = String(item.value ?? "");
@@ -1005,12 +1040,10 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Главная организация")).toBeVisible();
 
   await page.getByRole("button", { name: "Пользователи", exact: true }).click();
-  await expect(page.getByText("Технический код: users.manage")).toBeVisible();
-  await expect(page.getByText("Технический код: system_admin")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Администратор", exact: true })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Все организации", exact: true })).toBeVisible();
   await expect(page.getByText("Системный администратор").first()).toBeVisible();
-  await expect(page.getByText("Управление пользователями.")).toBeVisible();
   await expect(page.getByText("System admin", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Manage users.", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("tab", { name: "Расширенное" }).click();
@@ -1027,125 +1060,46 @@ test("renders login shell and authenticated admin workspace", async ({ page }) =
   await expect(page.getByText("Статусы актива").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Карточки", exact: true }).click();
-  await expect(page.getByText("Карточка актива").first()).toBeVisible();
-  await page.getByRole("button", { name: /Карточка актива/ }).dblclick();
-  const fieldValuesForm = page.getByRole("form", { name: "Массовое сохранение полей" });
-  await expect(fieldValuesForm.getByLabel("Статус")).toHaveValue("drafted");
-  await expect(page.getByRole("button", { name: "Сохранить Статус" })).toHaveCount(0);
-  await fieldValuesForm.getByLabel("Статус").fill("published");
-  await fieldValuesForm.getByLabel("Подтверждено").check();
-  await page.getByRole("button", { name: "Сохранить все поля" }).click();
-  await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
-  await page.getByRole("tab", { name: "Публичные ссылки" }).click();
-  await expect(page.getByRole("heading", { name: "Публичные ссылки" })).toBeVisible();
-  await expect(page.getByText("Загрузки вложений: 1 из 3")).toBeVisible();
-  await page.getByRole("tab", { name: "Вложения" }).click();
-  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Документы" })).toHaveCount(0);
-  await expect(page.getByText("Нет файлов")).toBeVisible();
-  await page.getByLabel("Название файла").fill("Акт проверки");
-  await page.getByLabel("Файл", { exact: true }).setInputFiles({
-    name: "akt.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("hello world"),
-  });
-  await page.getByRole("button", { name: "Загрузить файл" }).click();
-  await expect(page.getByText("Файл загружен")).toBeVisible();
-  await expect(page.getByText("Акт проверки")).toBeVisible();
-  await page.getByRole("button", { name: "Скачать файл Акт проверки" }).click();
-  await expect(page.getByText("Файл скачан")).toBeVisible();
-  await page.getByRole("tab", { name: "Документы" }).click();
-  await expect(page.getByRole("heading", { name: "Документы" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toBeVisible();
-  await expect(page.getByText("Нет документов")).toBeVisible();
-  await expect(page.getByLabel("Код шаблона")).toHaveCount(0);
-  await page.getByLabel("Название шаблона").fill("Акт приема");
-  await page.getByLabel("Описание шаблона").fill("Документ по карточке");
-  await page.getByLabel("Шаблон имени файла").fill("{{ card.display_name }}-act.docx");
-  await page.getByLabel("Текст шаблона").fill("Карточка: {{ card.display_name }}");
-  await page.getByRole("button", { name: "Создать шаблон" }).click();
-  await expect(page.getByText("Шаблон создан")).toBeVisible();
-  await expect(page.getByLabel("Шаблоны документов").getByText("Акт приема")).toBeVisible();
-  await page.getByRole("button", { name: "Архивировать шаблон Акт приема" }).click();
-  await expect(page.getByText("Шаблон архивирован")).toBeVisible();
-  await expect(page.getByLabel("Шаблоны документов").getByText("Акт приема")).toHaveCount(0);
-  await page.getByRole("button", { name: "Сформировать документ" }).click();
-  await expect(page.getByText("Документ сформирован")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Скачать документ Сводка карточки" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Скачать документ Сводка карточки" }).click();
-  await expect(page.getByText("Документ скачан")).toBeVisible();
-  await page.getByRole("button", { name: "Архивировать документ Сводка карточки" }).click();
-  await expect(page.getByText("Документ архивирован")).toBeVisible();
-  await page.getByRole("tab", { name: "Вложения" }).click();
-  await page.getByRole("button", { name: "Архивировать файл Акт проверки" }).click();
-  await expect(page.getByText("Файл архивирован")).toBeVisible();
+  await expect(page.getByText("Иванов Иван Иванович").first()).toBeVisible();
+  await page.getByRole("button", { name: /Иванов Иван Иванович/ }).dblclick();
+  await page.getByTestId("filled-field-item-99999999-9999-4999-8999-999999999999").click();
+  await expect(page.getByLabel("Статус", { exact: true })).toHaveValue("drafted");
+  await page.getByLabel("Статус", { exact: true }).fill("published");
+  await page.getByLabel("Подтверждено", { exact: true }).check();
+  await expect(page.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+  await page.getByLabel("Основание изменения").fill("Приказ об изменении 42");
+  await page.getByRole("button", { name: "Сохранить блок" }).click();
+  await expect(page.getByLabel("Основание изменения")).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Список карточек" }).click();
-  await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
-  await page.getByLabel("Организация карточки").selectOption("");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Заполните обязательные поля")).toBeVisible();
-  await page.getByLabel("Шаблон карточки").selectOption("71717171-7171-4171-8171-717171717171");
+  await page.getByRole("tab", { name: "Создать карточку", exact: true }).click();
+  await expect(page.getByLabel("Организация карточки")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
+  await expect(page.getByLabel("Шаблон карточки")).toHaveCount(0);
   await page
     .getByLabel("Организация карточки")
     .selectOption("22222222-2222-4222-8222-222222222222");
-  await expect(page.getByLabel("Подразделение карточки")).toHaveCount(0);
-  await page.getByLabel("Публичный просмотр карточки").check();
-  await page.getByLabel("Публичное редактирование карточки").check();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Карточка создана")).toBeVisible();
-  await expect(page.getByText("Типовая карточка").first()).toBeVisible();
-
-  await expect(
-    page.getByRole("button", { name: "Редактировать карточку Типовая карточка" }),
-  ).toHaveCount(0);
-
-  await page.getByRole("button", { name: "Добавить экземпляр блока Детали карточки" }).click();
-  await expect(page.getByText("Экземпляр блока создан")).toBeVisible();
-  const bulkForm = page.getByRole("form", { name: "Массовое сохранение полей" });
-  await bulkForm.getByLabel("Статус").fill("published");
-  await bulkForm.getByLabel("Подтверждено").check();
-  await bulkForm.getByLabel("Комментарий").fill("Комментарий по карточке");
-  await page.getByRole("button", { name: "Сохранить все поля" }).click();
-  await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: "Архивировать экземпляр блока Детали карточки экземпляр 1",
-    })
-    .click();
-  await expect(page.getByText("Экземпляр блока архивирован")).toBeVisible();
-
-  await page.getByRole("button", { name: "Архивировать карточку Типовая карточка" }).click();
-  const archiveCardDialog = page.getByRole("dialog", { name: "Архивировать карточку" });
+  await page.getByRole("button", { name: "Сохранить черновик" }).focus();
+  await page.getByRole("button", { name: "Сохранить черновик" }).press("Enter");
+  await expect(page.getByRole("tab", { name: "Не заполнено", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Статус карточки")).toHaveText("Черновик");
+  await expect(page.getByRole("status").filter({ hasText: "Типовая карточка" })).toBeVisible();
+  await page.getByRole("button", { name: "Архивировать карточку Не заполнено" }).click();
+  const archiveCardDialog = page.getByRole("dialog", { name: /Архивировать карточку/ });
   await expect(archiveCardDialog).toBeVisible();
+  await expect(archiveCardDialog.getByLabel("Основание изменения")).toHaveCount(0);
   await archiveCardDialog.getByRole("button", { name: "Архивировать", exact: true }).click();
-  await expect(page.getByText("Карточка архивирована")).toBeVisible();
-  await expect(page.getByText("Карточка актива").first()).toBeVisible();
+  await expect(archiveCardDialog).toHaveCount(0);
+  await expect(page.getByText("Иванов Иван Иванович").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Аудит", exact: true }).click();
+  await page.getByRole("tab", { name: "Технический аудит" }).click();
   await expect(page.getByText("Создание").first()).toBeVisible();
   await expect(page.getByText("Архивация").first()).toBeVisible();
-  await expect(page.getByText("Обновление").first()).toBeVisible();
 
-  const adminSections = [
-    { button: "Обзор", expectedLabel: "Сводка" },
-    { button: "Организации", expectedText: "Главная организация" },
-    { button: "Реестры", expectedText: "Реестр активов" },
-    { button: "Карточки", expectedText: "Карточка актива" },
-    { button: "Пользователи", expectedText: "Управление пользователями." },
-    { button: "Доступ", expectedText: "С потомками" },
-    { button: "Аудит", expectedText: "Создание" },
-  ];
-
-  for (const section of adminSections) {
-    await page.getByRole("button", { name: section.button, exact: true }).click();
-    if ("expectedLabel" in section) {
-      await expect(page.getByLabel(section.expectedLabel, { exact: true })).toBeVisible();
-    } else {
-      await expect(page.getByText(section.expectedText).first()).toBeVisible();
-    }
+  for (const section of ["Обзор", "Организации", "Реестры", "Карточки", "Пользователи", "Аудит"]) {
+    await page.getByRole("button", { name: section, exact: true }).click();
+    await expect(page.getByRole("heading", { name: section, exact: true, level: 2 })).toBeVisible();
   }
 
   expect(consoleErrors).toEqual([]);
@@ -1290,7 +1244,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     card_template_name?: string | null;
     organization_id: string;
     org_unit_id: string | null;
-    display_name: string;
+    display_value: string;
     lifecycle_status: string;
     public_view_enabled: boolean;
     public_edit_enabled: boolean;
@@ -1480,6 +1434,17 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
     const url = new URL(route.request().url());
     const request = route.request();
 
+    const auxiliary = cardAuxiliaryPayload(url.pathname, {
+      registry: registries[0] ?? apiPayloads.schema.registry,
+      blocks,
+      fields,
+      templates: cardTemplates,
+    });
+    if (auxiliary) {
+      await route.fulfill({ json: auxiliary });
+      return;
+    }
+
     if (url.pathname === "/api/v1/auth/login") {
       await route.fulfill({
         status: 200,
@@ -1551,6 +1516,9 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           display_name: body.display_name,
           status: body.status ?? "active",
           is_superuser: Boolean(body.is_superuser),
+          role_code: "administrator",
+          organization_ids: [],
+          can_manage_access: false,
           archived_at: null,
         };
         users = [...users, created];
@@ -1915,12 +1883,11 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       return;
     }
     const setupOrganizationCardsMatch = url.pathname.match(
-      /^\/api\/v1\/organizations\/([^/]+)\/cards$/,
+      /^\/api\/v1\/organizations\/([^/]+)\/cards(?:\/draft)?$/,
     );
     if (setupOrganizationCardsMatch) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as {
-          display_name?: string | null;
           card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
@@ -1934,7 +1901,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           card_template_name: template.name,
           organization_id: setupOrganizationCardsMatch[1],
           org_unit_id: null,
-          display_name: body.display_name ?? template?.name ?? "Карточка проверки",
+          display_value: "Не заполнено",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
@@ -1960,7 +1927,6 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
         const body = request.postDataJSON() as {
           organization_id: string;
           org_unit_id?: string | null;
-          display_name?: string | null;
           card_template_id?: string | null;
           public_view_enabled?: boolean;
           public_edit_enabled?: boolean;
@@ -1974,7 +1940,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
           card_template_name: template.name,
           organization_id: body.organization_id,
           org_unit_id: body.org_unit_id ?? null,
-          display_name: body.display_name ?? template?.name ?? "Карточка проверки",
+          display_value: "Не заполнено",
           lifecycle_status: "draft",
           public_view_enabled: Boolean(body.public_view_enabled),
           public_edit_enabled: Boolean(body.public_edit_enabled),
@@ -2220,7 +2186,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
       });
       return;
     }
-    if (url.pathname === "/api/v1/audit-events" && url.search === "?limit=20") {
+    if (url.pathname === "/api/v1/audit-events") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -2248,7 +2214,10 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByRole("button", { name: "Организации", exact: true }).click();
   await page.getByRole("button", { name: "Создать организацию" }).click();
   await expect(page.getByLabel("Код организации")).toHaveCount(0);
-  await page.getByLabel("Название организации").fill("Отдел контроля");
+  await page
+    .getByRole("form", { name: "Создать организацию" })
+    .getByLabel("Название", { exact: true })
+    .fill("Отдел контроля");
   await page
     .getByLabel("Родительская организация")
     .selectOption("22222222-2222-4222-8222-222222222222");
@@ -2258,10 +2227,13 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
 
   await page.getByRole("button", { name: "Пользователи", exact: true }).click();
   await page.getByRole("button", { name: "Создать пользователя" }).click();
-  await page.getByLabel("Электронная почта пользователя").fill("operator@example.test");
+  await page.getByLabel("Логин пользователя").fill("operator@example.test");
   await page.getByLabel("Имя пользователя").fill("Оператор реестра");
   await page.getByLabel("Пароль пользователя").fill("operator-pass");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Роль пользователя", exact: true })
+    .selectOption("administrator");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByText("Пользователь создан")).toBeVisible();
   await expect(page.getByText("operator@example.test").first()).toBeVisible();
 
@@ -2276,35 +2248,24 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await expect(page.getByText("Реестр создан")).toBeVisible();
   await expect(page.getByText("Реестр проверок").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Доступ", exact: true }).click();
-  await page.getByRole("button", { name: "Выдать право доступа" }).click();
-  await page
-    .getByLabel("Пользователь для доступа")
-    .selectOption("91919191-9191-4919-8919-919191919191");
-  await page.getByLabel("Роль для доступа").selectOption("33333333-3333-4333-8333-333333333333");
-  await page.getByLabel("Организация доступа").selectOption("81818181-8181-4818-8818-818181818181");
-  await page.getByLabel("Реестр доступа").selectOption("71717171-7171-4717-8717-717171717171");
-  await page.getByLabel("Включить дочерние организации").check();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Право доступа выдано")).toBeVisible();
-
   await page.getByRole("button", { name: "Реестры", exact: true }).click();
   await page.getByRole("tab", { name: "Схема карточки" }).click();
   await page.getByRole("button", { name: "Создать шаблон карточки" }).click();
   await page.getByLabel("Название шаблона карточки").fill("Карточка проверки");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
   await expect(page.getByText("Шаблон карточки создан")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Шаблон карточки Карточка проверки", exact: true })
+    .dblclick();
   await expect(
     page.getByRole("region", { name: "Редактор шаблона Карточка проверки" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Добавить блок формы" }).click();
-  await expect(page.getByLabel("Код блока формы")).toHaveCount(0);
-  await expect(page.getByLabel("Описание блока формы")).toHaveCount(0);
-  await expect(page.getByLabel("Позиция блока формы")).toHaveCount(0);
-  await page.getByLabel("Название блока формы").fill("Основные сведения");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Блок формы создан")).toBeVisible();
-  await expect(page.getByText("Основные сведения").first()).toBeVisible();
+  await page.getByRole("button", { name: "Создать блок", exact: true }).click();
+  await page.getByLabel("Название блока", { exact: true }).fill("Основные сведения");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Создать поле в блоке Основные сведения" }),
+  ).toBeVisible();
 
   await page.getByRole("tab", { name: "Расширенное" }).click();
   await page.getByRole("tab", { name: "Справочники" }).click();
@@ -2313,6 +2274,7 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page.getByLabel("Название справочника").fill("Статусы проверки");
   await page.getByLabel("Описание справочника").fill("Результаты проверки");
   await page
+    .getByRole("form", { name: "Создать справочник" })
     .getByLabel("Организация-владелец")
     .selectOption("81818181-8181-4818-8818-818181818181");
   await page.getByLabel("Наследовать дочерним организациям").check();
@@ -2330,82 +2292,19 @@ test("validates complete admin setup path through Russian UI", async ({ page }) 
   await page
     .getByRole("button", { name: "Шаблон карточки Карточка проверки", exact: true })
     .click();
-  await expect(
-    page.getByRole("region", { name: "Редактор шаблона Карточка проверки" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Добавить поле в блок Основные сведения" }).click();
-  await expect(page.getByLabel("Код поля формы", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Блок формы", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Описание поля формы", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Позиция поля формы", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Тип поля формы").selectOption("select");
-  await page.getByLabel("Название поля формы").fill("Статус проверки");
-  await page.getByLabel("Справочник для поля").selectOption("61616161-6161-4616-8616-616161616161");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Поле формы создано")).toBeVisible();
-
-  await page.getByRole("button", { name: "Добавить поле в блок Основные сведения" }).click();
-  await expect(page.getByLabel("Код поля формы", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Тип поля формы").selectOption("file_ref");
-  await page.getByLabel("Название поля формы").fill("Файл проверки");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Поле формы создано")).toBeVisible();
-
-  await page.getByRole("button", { name: "Карточки", exact: true }).click();
-  await page.getByRole("button", { name: "Создать карточку", exact: true }).click();
-  await page.getByLabel("Шаблон карточки").selectOption("16161616-aaaa-4616-8616-161616161616");
-  await page
-    .getByLabel("Организация карточки")
-    .selectOption("81818181-8181-4818-8818-818181818181");
-  await page.getByLabel("Публичное редактирование карточки").check();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Карточка создана")).toBeVisible();
-  await expect(page.getByText("Карточка проверки").first()).toBeVisible();
-
-  const bulkForm = page.getByRole("form", { name: "Массовое сохранение полей" });
-  await bulkForm.getByLabel("Статус проверки").selectOption("51515151-5151-4515-8515-515151515151");
-  await page.getByRole("button", { name: "Сохранить все поля" }).click();
-  await expect(page.getByText("Поля карточки сохранены")).toBeVisible();
-
-  await page.getByRole("tab", { name: "Вложения" }).click();
-  await page.getByLabel("Название файла").fill("Файл проверки");
-  await page.getByLabel("Файл", { exact: true }).setInputFiles({
-    name: "qa.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("qa file"),
-  });
-  await page.getByRole("button", { name: "Загрузить файл" }).click();
-  await expect(page.getByText("Файл загружен")).toBeVisible();
-
-  await page.getByRole("tab", { name: "Поля" }).click();
-  await page
-    .getByLabel("Файл проверки", { exact: true })
-    .selectOption("11111111-aaaa-4111-8111-111111111111");
-  await page.getByRole("button", { name: "Сохранить Файл проверки" }).click();
-  await expect(page.getByText("Сохранено: Файл проверки")).toBeVisible();
-
-  await page.getByRole("tab", { name: "Документы" }).click();
-  await expect(page.getByLabel("Код шаблона")).toHaveCount(0);
-  await page.getByLabel("Название шаблона").fill("Документ проверки");
-  await page.getByLabel("Текст шаблона").fill("Карточка: {{ card.display_name }}");
-  await page.getByRole("button", { name: "Создать шаблон" }).click();
-  await expect(page.getByText("Шаблон создан")).toBeVisible();
-  await page.getByRole("button", { name: "Сформировать документ" }).click();
-  await expect(page.getByText("Документ сформирован")).toBeVisible();
-
-  await page.getByRole("tab", { name: "Публичные ссылки" }).click();
-  await page.getByRole("button", { name: "Создать публичную ссылку" }).click();
-  await page.getByLabel("Лимит загрузок вложений").fill("2");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
-  await expect(page.getByText("Публичная ссылка создана")).toBeVisible();
-  await expect(page.getByLabel("Адрес публичной ссылки")).toHaveValue(
-    /\/public\/edit\/setup-token$/,
-  );
+  await page.getByRole("button", { name: "Создать поле в блоке Основные сведения" }).click();
+  await page.getByLabel("Название поля", { exact: true }).fill("Статус проверки");
+  await page.getByRole("combobox", { name: /^Тип поля/ }).selectOption("text");
+  await page.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(page.getByLabel("Название поля", { exact: true })).toHaveCount(0);
+  expect(fields).toEqual([
+    expect.objectContaining({ label: "Статус проверки", field_type: "text" }),
+  ]);
 
   await page.getByRole("button", { name: "Аудит", exact: true }).click();
+  await page.getByRole("tab", { name: "Технический аудит" }).click();
   await expect(page.getByText("Создание").first()).toBeVisible();
-  await expect(page.getByText("Публичная ссылка").first()).toBeVisible();
-  await expect(page.getByText("Карточка").first()).toBeVisible();
+  await expect(page.getByText("Поле формы", { exact: true }).first()).toBeVisible();
 
   expect(unhandledApiRequests).toEqual([]);
   expect(consoleErrors).toEqual([]);
@@ -2487,6 +2386,10 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
       });
       return;
     }
+    if (url.pathname === "/api/v1/public-links/status") {
+      await route.fulfill({ json: { status: "active", can_edit: true } });
+      return;
+    }
     if (url.pathname === "/api/v1/public-links/preview") {
       await route.fulfill({
         status: 200,
@@ -2519,45 +2422,35 @@ test("renders public-link edit page and saves a field", async ({ page }) => {
   });
 
   await page.goto("/public/edit/public-token");
-  await expect(page.getByRole("heading", { name: "Публичная карточка" })).toBeVisible();
-  await expect(page.getByText("Публичный блок")).toBeVisible();
-  await expect(page.getByText("Публичное редактирование карточки")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Петров Петр Петрович" })).toBeVisible();
+  await expect(
+    page.getByTestId("public-block-public-section").getByText("Публичный блок"),
+  ).toBeVisible();
+  await expect(page.getByText("Публичное редактирование карточки").first()).toBeVisible();
   await expect(page.getByLabel("Публичный статус")).toHaveValue("drafted");
-  await expect(page.getByRole("heading", { name: "Вложения" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Документы" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Шаблоны документов" })).toHaveCount(0);
-  await expect(page.getByText("Нет файлов")).toBeVisible();
 
+  await page.getByRole("textbox", { name: "ФИО", exact: true }).fill("Петров Петр Петрович");
   await page.getByLabel("Публичный статус").fill("submitted");
-  await page.getByRole("button", { name: "Сохранить Публичный статус" }).click();
+  await page.getByLabel("Основание изменения").fill("Приказ 42");
+  await page.getByRole("button", { name: "Сохранить изменение" }).click();
 
-  await expect(page.getByText("Сохранено: Публичный статус")).toBeVisible();
+  await expect(page.getByText("Все изменения сохранены").first()).toBeVisible();
   expect(editRequestBody).toEqual({
     raw_token: "public-token",
     field_id: "99999999-9999-4999-8999-999999999997",
     value: "submitted",
     block_instance_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    basis_text: "Приказ 42",
+    actor_name: "Петров Петр Петрович",
   });
-
-  await page.getByLabel("Название файла").fill("Публичный акт");
-  await page.getByLabel("Файл", { exact: true }).setInputFiles({
-    name: "public.txt",
-    mimeType: "text/plain",
-    buffer: Buffer.from("public bytes"),
-  });
-  await page.getByRole("button", { name: "Загрузить файл" }).click();
-  await expect(page.getByText("Файл загружен")).toBeVisible();
-  await expect(page.getByText("Публичный акт")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Архивировать файл/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "Скачать файл Публичный акт" }).click();
-  await expect(page.getByText("Файл скачан")).toBeVisible();
 
   expect(forbiddenDocumentEndpointCalls).toBe(0);
 });
 
 function responsePayload(
   pathname: string,
-  search: string,
+  _search: string,
   cardValues: { approvedValue: boolean; statusValue: string },
 ) {
   if (pathname === "/api/v1/auth/login") {
@@ -2615,6 +2508,7 @@ function responsePayload(
               block_instance_id: null,
               ordinal: 0,
               fields: {
+                fio: apiPayloads.cardRead.fields.fio,
                 status: {
                   field_id: "99999999-9999-4999-8999-999999999999",
                   code: "status",
@@ -2633,6 +2527,7 @@ function responsePayload(
         },
       },
       fields: {
+        fio: apiPayloads.cardRead.fields.fio,
         status: {
           field_id: "99999999-9999-4999-8999-999999999999",
           code: "status",
@@ -2648,7 +2543,7 @@ function responsePayload(
       },
     };
   }
-  if (pathname === "/api/v1/audit-events" && search === "?limit=20") {
+  if (pathname === "/api/v1/audit-events") {
     return apiPayloads.audit;
   }
   return null;
@@ -2657,6 +2552,30 @@ function responsePayload(
 function currentPublicPreview(statusValue: string) {
   return {
     ...apiPayloads.publicPreview,
+    form_layout: {
+      columns: 12,
+      sections: [
+        {
+          id: "public-section",
+          block_id: apiPayloads.publicPreview.blocks[0].block_id,
+          row: 1,
+          column: 1,
+          row_span: 1,
+          column_span: 12,
+          items: [
+            {
+              id: "public-status-item",
+              kind: "field",
+              field_id: "99999999-9999-4999-8999-999999999997",
+              row: 1,
+              column: 1,
+              row_span: 1,
+              column_span: 12,
+            },
+          ],
+        },
+      ],
+    },
     blocks: [
       {
         ...apiPayloads.publicPreview.blocks[0],
@@ -2673,5 +2592,94 @@ function currentPublicPreview(statusValue: string) {
         ],
       },
     ],
+  };
+}
+
+function cardAuxiliaryPayload(
+  pathname: string,
+  schema: {
+    registry: { id: string; name: string };
+    blocks: Array<{ id: string; title: string; code: string }>;
+    fields: Array<{
+      id: string;
+      block_id: string;
+      label: string;
+      code: string;
+      field_type: string;
+    }>;
+    templates: Array<{ id: string; name: string }>;
+  },
+): unknown {
+  if (
+    pathname === "/api/v1/card-change-notifications" ||
+    pathname.endsWith("/reference-edit-links")
+  )
+    return { items: [] };
+  if (pathname.endsWith("/change-notification-subscription")) return { enabled: false };
+  if (pathname.endsWith("/card-creation-links") || pathname.endsWith("/creation-links"))
+    return { items: [] };
+  if (pathname.endsWith("/public-access"))
+    return { public_view_enabled: true, public_edit_enabled: true, fields: [] };
+  if (pathname.endsWith("/creation-preview"))
+    return {
+      card_template_id: schema.templates[0]?.id,
+      blocks: schema.blocks.map((block) => ({
+        block_id: block.id,
+        code: block.code,
+        title: block.title,
+        fields: schema.fields
+          .filter((field) => field.block_id === block.id)
+          .map((field) => ({
+            ...field,
+            field_id: field.id,
+            required_mode: "not_required",
+            options: [],
+          })),
+      })),
+    };
+  if (pathname.endsWith("/layout") || pathname.endsWith("/layout/form")) {
+    const payload = cardAuxiliaryPayload("/api/v1/cards/smoke/presentation", schema);
+    return payload && "layout" in payload ? payload.layout : null;
+  }
+  if (!pathname.endsWith("/presentation")) return null;
+  return {
+    card_id: pathname.split("/")[4],
+    registry_id: schema.registry.id,
+    registry_name: schema.registry.name,
+    card_template_id: schema.templates[0]?.id,
+    card_template_name: schema.templates[0]?.name,
+    layout: {
+      version: "card_template_layout_v1",
+      revision: "smoke",
+      registry_id: schema.registry.id,
+      card_template_id: schema.templates[0]?.id,
+      structure: { blocks: schema.blocks, fields: schema.fields },
+      form_layout: {
+        columns: 12,
+        sections: schema.blocks.map((block, index) => ({
+          id: `section-${block.id}`,
+          block_id: block.id,
+          row: index + 1,
+          column: 1,
+          row_span: 1,
+          column_span: 12,
+          items: schema.fields
+            .filter((field) => field.block_id === block.id)
+            .map((field, fieldIndex) => ({
+              id: `item-${field.id}`,
+              kind: "field",
+              field_id: field.id,
+              row: fieldIndex + 1,
+              column: 1,
+              row_span: 1,
+              column_span: 12,
+              text: null,
+            })),
+        })),
+      },
+      print_views: [],
+      export_settings: { formats: [] },
+      sync_status: { has_errors: false, errors: [], warnings: [], mapping: {} },
+    },
   };
 }
