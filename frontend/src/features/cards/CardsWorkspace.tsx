@@ -395,12 +395,12 @@ export function CardsWorkspace({
     mutationFn: ({ target, change }: { target: CardSummaryRead; change?: CardChangePayload }) =>
       archiveCard(token, target.id, change),
     onSuccess: async (archived) => {
+      setArchiveTarget(null);
       await invalidateCardQueries(queryClient, token, archived.registry_id, archived.id);
       if (activeCardIdRef.current !== archived.id) {
         return;
       }
       setSuccessMessage(uiText.cardArchived);
-      setArchiveTarget(null);
       const nextCardId = cards.find((item) => item.id !== archived.id)?.id ?? "";
       setOpenCardIds((current) => current.filter((cardId) => cardId !== archived.id));
       setActiveShellTab("list");

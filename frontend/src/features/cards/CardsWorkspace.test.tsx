@@ -248,6 +248,82 @@ describe("CardsWorkspace", () => {
       await waitFor(() => expect(writes).toEqual([{ basis_text: "Приказ об архивировании" }]));
     },
   );
+  test("closes the archive dialog when list refresh removes the selected card", async () => {
+    const nextSummary = {
+      ...organizationUnitCardSummary,
+      id: "card-next",
+      display_value: "Следующая карточка",
+    };
+    const nextCard = { ...organizationUnitCard, ...nextSummary };
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      init?.method === "DELETE"
+        ? Response.json({ ...organizationUnitCardSummary, lifecycle_status: "archived" })
+        : originalFetch(input, init),
+    );
+    const workspace = renderWorkspace({
+      cards: [organizationUnitCardSummary, nextSummary],
+      card: organizationUnitCard,
+      isSuperuser: true,
+    });
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const invalidate = vi.spyOn(workspace.queryClient, "invalidateQueries");
+    invalidate.mockImplementation(async (filters) => {
+      if (filters?.queryKey?.[0] === "cards") await refresh;
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Архивировать карточку/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Основание изменения"), {
+      target: { value: "Приказ об архивировании" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["cards", "test-token", "registry-1"],
+      }),
+    );
+
+    // The refreshed list updates HomePage props before the invalidation chain finishes.
+    workspace.rerenderCards([nextSummary], nextCard);
+    finishRefresh();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("tab", { name: "Карточка подразделения" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Базовый блок")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Следующая карточка/ })).toBeInTheDocument();
+  });
+  test("keeps the archive dialog and basis available after a rejected archive", async () => {
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      init?.method === "DELETE"
+        ? Response.json({ detail: "Ошибка архивирования" }, { status: 400 })
+        : originalFetch(input, init),
+    );
+    renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: organizationUnitCard,
+      isSuperuser: true,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Архивировать карточку/ }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("Основание изменения"), {
+      target: { value: "Приказ об архивировании" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+    expect(await within(dialog).findByText("Запрос не выполнен")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Основание изменения")).toHaveValue(
+      "Приказ об архивировании",
+    );
+    expect(within(dialog).getByRole("button", { name: "Сохранить" })).toBeEnabled();
+  });
   test("requires a basis for a demoted card's ordinary field save", async () => {
     renderWorkspace({
       cards: [
