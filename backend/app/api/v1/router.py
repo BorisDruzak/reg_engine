@@ -8,6 +8,7 @@ from app.api.v1.endpoints.card_change_notifications import (
     router as card_change_notifications_router,
 )
 from app.api.v1.endpoints.card_creation_links import router as card_creation_links_router
+from app.api.v1.endpoints.card_export_templates import router as card_export_templates_router
 from app.api.v1.endpoints.card_template_layouts import router as card_template_layouts_router
 from app.api.v1.endpoints.cards import router as cards_router
 from app.api.v1.endpoints.documents import router as documents_router
@@ -27,6 +28,7 @@ api_v1_router.include_router(attachments_router)
 api_v1_router.include_router(documents_router)
 api_v1_router.include_router(card_template_layouts_router)
 api_v1_router.include_router(import_export_router)
+api_v1_router.include_router(card_export_templates_router)
 api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(registries_router)
 api_v1_router.include_router(cards_router)
