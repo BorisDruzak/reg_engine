@@ -8,10 +8,10 @@ not a hardcoded employee registry.
 ## Current Stop Point
 
 - 2026-09-09 card identity, durable events, dismissal and persisted XLSX
-  templates are implemented locally through Task 8. Tasks 1–7 and their
-  reviewed corrections are included in the current tree; Task 8 remains
-  subject to independent integration review. No push, deployment, production
-  migration or live-data change is claimed for this checkpoint.
+  templates are implemented and deployed through Task 8. Tasks 1–8, their
+  independent review corrections, and the residual title-contract cleanup are
+  included in `main`. Production code is deployed at `1373dc17`; Alembic is
+  at `0038_normalize_fio_code`.
   The active implementation plan is
   `docs/superpowers/plans/2026-09-09-card-events-xlsx-implementation.md`.
 
@@ -77,19 +77,22 @@ not a hardcoded employee registry.
     configuration was changed. The same excludes are needed for future checks
     while those untracked directories exist.
 
-  Release boundaries and required next gate:
-  - Migrations `0034_card_events_exports_fio`, `0035_card_first_activation`
-    and `0036_card_display_placeholders` remain unapplied online. Run the full
-    PostgreSQL suite and upgrade/downgrade/upgrade on a disposable database
-    ending `_test` before production. The 283 skips are not migration/RBAC/
-    concurrent-locking proof; some older skipped fixtures still require the
-    title-contract integration pass. Offline SQL and adapted SQLite tests
-    cannot establish PostgreSQL behavior.
-  - Before production, synchronize the reviewed code to `origin/main`, create
-    a fresh external backup, check active templates for exactly one usable
-    `fio`, inspect title-removal/data preflight and migration status, then
-    apply the planned migrations intentionally and record post-checks.
-    Dropped historical titles are not recovered by downgrade; dismissed cards
+  Production release evidence:
+  - Disposable PostgreSQL tests passed for scalar audit snapshots, FIO-code
+    normalization, and registry display cleanup (**3 passed**). A clean
+    `0033 → 0038 → 0033 → 0038` cycle finished at head.
+  - A fresh external production backup was created and verified before the
+    final upgrade. Production preflight found one active field labelled `ФИО`
+    with a legacy generated code and no `fio` conflict; migration `0038`
+    normalized it to `fio`.
+  - The final upgrade applied `0034` through `0038`. Post-checks confirmed
+    Alembic head, one active `fio` field, 209 cards with nonempty FIO,
+    no remaining card-title/display-configuration columns, no card-title keys
+    in object audit snapshots, and all three event/export tables.
+  - Backend and frontend are deployed; `reg-engine.service`, API health, and
+    same-origin frontend smoke checks pass. The published bundle is
+    `index-Cq0-Yyo7.js` with `index-DNTBfoV1.css`.
+  - Dropped historical titles are not recovered by downgrade; dismissed cards
     downgrade to archived. Legacy drafts with purged activation history cannot
     have first activation inferred reliably.
   - Migration 0036 rewrites stored text/JSON card placeholders only. Binary
