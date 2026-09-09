@@ -1,3 +1,4 @@
+import json
 import os
 from io import StringIO
 from pathlib import Path
@@ -52,6 +53,18 @@ def _run_online_upgrade(database_url: str, revision: str) -> None:
     os.environ["TEST_DATABASE_URL"] = database_url
     try:
         command.upgrade(_alembic_config(StringIO()), revision)
+    finally:
+        if previous_url is None:
+            os.environ.pop("TEST_DATABASE_URL", None)
+        else:
+            os.environ["TEST_DATABASE_URL"] = previous_url
+
+
+def _run_online_downgrade(database_url: str, revision: str) -> None:
+    previous_url = os.environ.get("TEST_DATABASE_URL")
+    os.environ["TEST_DATABASE_URL"] = database_url
+    try:
+        command.downgrade(_alembic_config(StringIO()), revision)
     finally:
         if previous_url is None:
             os.environ.pop("TEST_DATABASE_URL", None)
@@ -193,6 +206,117 @@ def test_title_keys_are_removed_from_existing_audit_snapshots() -> None:
 
     assert "old_data_json - 'display_name'" in sql
     assert "new_data_json - 'display_name'" in sql
+
+
+def test_card_events_migration_downgrade_maps_dismissed_cards_to_archived() -> None:
+    sql = _render_downgrade_sql(
+        "0034_card_events_exports_fio",
+        "0033_card_creator_actor_name",
+    )
+
+    status_mapping_position = sql.index("UPDATE public.cards")
+    old_constraint_position = sql.index(
+        "lifecycle_status in ('draft', 'active', 'archived', 'superseded')"
+    )
+
+    assert status_mapping_position < old_constraint_position
+    assert "SET lifecycle_status = 'archived'" in sql
+    assert "WHERE lifecycle_status = 'dismissed'" in sql
+
+
+def test_card_events_migration_downgrade_archives_dismissed_cards() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0034_card_events_exports_fio")
+
+        with engine.begin() as connection:
+            organization_id = connection.execute(
+                text(
+                    "INSERT INTO public.organizations (code, name) "
+                    "VALUES ('downgrade-org', 'Downgrade organization') RETURNING id"
+                )
+            ).scalar_one()
+            registry_id = connection.execute(
+                text(
+                    "INSERT INTO public.registries (code, name) "
+                    "VALUES ('downgrade-registry', 'Downgrade registry') RETURNING id"
+                )
+            ).scalar_one()
+            template_id = connection.execute(
+                text(
+                    "INSERT INTO public.card_templates (registry_id, code, name) "
+                    "VALUES (:registry_id, 'downgrade-template', 'Downgrade template') "
+                    "RETURNING id"
+                ),
+                {"registry_id": registry_id},
+            ).scalar_one()
+            card_id = connection.execute(
+                text(
+                    "INSERT INTO public.cards "
+                    "(registry_id, card_template_id, organization_id, lifecycle_status) "
+                    "VALUES (:registry_id, :template_id, :organization_id, 'dismissed') "
+                    "RETURNING id"
+                ),
+                {
+                    "registry_id": registry_id,
+                    "template_id": template_id,
+                    "organization_id": organization_id,
+                },
+            ).scalar_one()
+
+        _run_online_downgrade(database_url, "0033_card_creator_actor_name")
+
+        with engine.connect() as connection:
+            lifecycle_status = connection.execute(
+                text("SELECT lifecycle_status FROM public.cards WHERE id = :card_id"),
+                {"card_id": card_id},
+            ).scalar_one()
+
+        assert lifecycle_status == "archived"
+    finally:
+        engine.dispose()
+
+
+def test_card_events_migration_removes_title_keys_from_audit_snapshots() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0033_card_creator_actor_name")
+
+        with engine.begin() as connection:
+            event_id = connection.execute(
+                text(
+                    "INSERT INTO public.audit_events "
+                    "(actor_type, action, object_type, source, old_data_json, new_data_json) "
+                    "VALUES ('system', 'test', 'card', 'system', "
+                    "CAST(:old_data AS jsonb), CAST(:new_data AS jsonb)) RETURNING id"
+                ),
+                {
+                    "old_data": json.dumps({"display_name": "Old title", "x": 1}),
+                    "new_data": json.dumps({"display_name": "New title", "y": 2}),
+                },
+            ).scalar_one()
+
+        _run_online_upgrade(database_url, "0034_card_events_exports_fio")
+
+        with engine.connect() as connection:
+            old_data, new_data = connection.execute(
+                text(
+                    "SELECT old_data_json, new_data_json FROM public.audit_events "
+                    "WHERE id = :event_id"
+                ),
+                {"event_id": event_id},
+            ).one()
+
+        assert old_data == {"x": 1}
+        assert new_data == {"y": 2}
+    finally:
+        engine.dispose()
 
 
 def test_card_public_access_migration_creates_field_scope_table() -> None:

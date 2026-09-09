@@ -176,6 +176,9 @@ def downgrade() -> None:
         schema="public",
     )
     op.execute("ALTER TABLE public.cards DROP CONSTRAINT IF EXISTS ck_cards_lifecycle_status")
+    op.execute(
+        "UPDATE public.cards SET lifecycle_status = 'archived' WHERE lifecycle_status = 'dismissed'"
+    )
     op.create_check_constraint(
         "lifecycle_status",
         "cards",
