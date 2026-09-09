@@ -7,6 +7,23 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-09-10 XLSX export hotfix is implemented at `d613a8bf`; deployment is
+  pending for this checkpoint.
+
+  - Ordinary and personnel-change XLSX rows sort alphabetically by the
+    schema-selected FIO field (empty FIO values follow named cards). Personnel
+    report date and basis values now use a comma separator.
+  - Saved personnel templates no longer appear modified merely because the API
+    returns JSON configuration keys in a different order. This restores the
+    `Скачать XLSX` action for unchanged templates, including template `123`.
+  - The personnel appointment-basis mapping accepts text fields; no date-type
+    requirement exists for it. Production template `123` currently points to
+    the dynamic `Дата рождения` field, so an operator must select the intended
+    text field and save the template once it exists in the card schema.
+  - Focused verification passed: 43 backend export-template tests, 22 frontend
+    import/export tests, backend Ruff, frontend TypeScript and Prettier. ESLint
+    has only the pre-existing `FilledCardLayout.tsx` hook-dependency warning.
+
 - 2026-09-10 saved organizations in persisted XLSX export templates are
   implemented and deployed at `4b8aded7`. The active implementation plan is
   `docs/superpowers/plans/2026-09-10-saved-xlsx-export-organizations.md`.
