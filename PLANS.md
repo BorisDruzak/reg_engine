@@ -7,8 +7,8 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-09-10 XLSX export hotfix is implemented at `d613a8bf`; deployment is
-  pending for this checkpoint.
+- 2026-09-10 XLSX export hotfix is implemented, pushed, and deployed at
+  `e92b1f3d`.
 
   - Ordinary and personnel-change XLSX rows sort alphabetically by the
     schema-selected FIO field (empty FIO values follow named cards). Personnel
@@ -23,6 +23,9 @@ not a hardcoded employee registry.
   - Focused verification passed: 43 backend export-template tests, 22 frontend
     import/export tests, backend Ruff, frontend TypeScript and Prettier. ESLint
     has only the pre-existing `FilledCardLayout.tsx` hook-dependency warning.
+  - Server checkout fast-forwarded to `e92b1f3d`; frontend asset
+    `index-CGw-iYNA.js` was published, `reg-engine.service` restarted, and
+    same-origin frontend/API smoke checks passed.
 
 - 2026-09-10 saved organizations in persisted XLSX export templates are
   implemented and deployed at `4b8aded7`. The active implementation plan is
