@@ -599,3 +599,151 @@ def test_export_template_resolves_reference_labels_without_raw_ids(export_contex
     ctx.app.dependency_overrides[get_actor_user_id] = lambda: ctx.viewer.id
     sheet = workbook(download(ctx, template)).active
     assert sheet["C2"].value == expected
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "select",
+        "multi_select",
+        "organization_ref",
+        "org_unit_ref",
+        "card_ref",
+        "registry_ref",
+        "user_ref",
+    ],
+)
+def test_personnel_snapshot_references_resolve_labels_and_hide_unavailable_ids(
+    export_context, kind
+):
+    ctx = export_context
+    field = FormField(block_id=ctx.block.id, code="historical", label="Ссылка", field_type=kind)
+    ctx.session.add(field)
+    ctx.session.flush()
+    missing = uuid4()
+    actor = ctx.viewer
+    if kind in {"select", "multi_select"}:
+        source = ReferenceList(
+            code="history", name="Исторический справочник", registry_id=ctx.registry.id
+        )
+        ctx.session.add(source)
+        ctx.session.flush()
+        item = ReferenceItem(list_id=source.id, code="available", label="Доступный вариант")
+        ctx.session.add(item)
+        ctx.session.flush()
+        field.options_source_type = "reference_list"
+        field.options_source_id = source.id
+        old_value = str(item.id)
+        expected = "Доступный вариант"
+    elif kind == "organization_ref":
+        old_value, missing, expected = str(ctx.org.id), ctx.child.id, "Организация А"
+    elif kind == "org_unit_ref":
+        unit = OrgUnit(
+            organization_id=ctx.org.id, code="visible", name="Доступный отдел", type="department"
+        )
+        hidden_unit = OrgUnit(
+            organization_id=ctx.child.id, code="hidden", name="Секретный отдел", type="department"
+        )
+        ctx.session.add_all([unit, hidden_unit])
+        ctx.session.flush()
+        old_value, missing, expected = str(unit.id), hidden_unit.id, "Доступный отдел"
+    elif kind == "card_ref":
+        hidden_card = add_card(
+            ctx, 27, "Секретная карточка", date(2026, 1, 1), organization=ctx.child
+        )
+        old_value, missing, expected = str(ctx.card.id), hidden_card.id, "Альфа"
+    elif kind == "registry_ref":
+        old_value, missing, expected = str(ctx.registry.id), ctx.other_registry.id, "Реестр"
+    else:
+        old_value, expected, actor = str(ctx.viewer.id), "Читатель", ctx.admin
+    old_snapshot = [old_value] if kind == "multi_select" else old_value
+    new_snapshot = [old_value, str(missing)] if kind == "multi_select" else str(missing)
+    event_row = CardEvent(
+        card_id=ctx.card.id, event_type="change", occurred_on=date(2026, 9, 1), basis_text="Приказ"
+    )
+    ctx.session.add(event_row)
+    ctx.session.flush()
+    ctx.session.add(
+        CardEventChange(
+            card_event_id=event_row.id,
+            field_id=field.id,
+            old_value_json={
+                "field": {"label": "Историческая подпись", "type": kind},
+                "value": old_snapshot,
+            },
+            new_value_json={
+                "field": {"label": "Историческая подпись", "type": kind},
+                "value": new_snapshot,
+            },
+        )
+    )
+    ctx.session.flush()
+    template = create_template(ctx, "personnel_changes")
+    ctx.app.dependency_overrides[get_actor_user_id] = lambda: actor.id
+    sheet = workbook(
+        download(ctx, template, period_from="2026-09-01", period_to="2026-09-01")
+    ).active
+    text = "\n".join(str(cell.value) for row in sheet for cell in row if cell.value is not None)
+    assert f"Историческая подпись: {expected} → " in text
+    assert "Недоступное значение" in text
+    assert old_value not in text and str(missing) not in text and "Секрет" not in text
+
+
+@pytest.mark.parametrize(
+    "kind,value,expected",
+    [
+        ("date", "2026-08-20", "20.08.2026"),
+        ("datetime", "2026-08-20T12:34:00", "20.08.2026 12:34"),
+        ("bool", True, "Да"),
+        ("number", "12.5", "12.5"),
+    ],
+)
+def test_personnel_snapshot_formats_typed_values(export_context, kind, value, expected):
+    ctx = export_context
+    add_event(ctx, ctx.card, 124, "change", date(2026, 9, 1), "Приказ")
+    change = ctx.session.scalar(select(CardEventChange))
+    change.old_value_json = {"field": {"label": "Значение", "type": kind}, "value": None}
+    change.new_value_json = {"field": {"label": "Значение", "type": kind}, "value": value}
+    ctx.session.flush()
+    sheet = workbook(
+        download(
+            ctx,
+            create_template(ctx, "personnel_changes"),
+            period_from="2026-09-01",
+            period_to="2026-09-01",
+        )
+    ).active
+    assert any(cell.value == f"Значение:  → {expected}" for row in sheet for cell in row)
+
+
+def test_personnel_long_single_line_basis_and_change_get_wrapped_row_height(export_context):
+    ctx = export_context
+    add_event(ctx, ctx.card, 130, "change", date(2026, 9, 1), "Основание решения " * 70)
+    change = ctx.session.scalar(select(CardEventChange))
+    change.new_value_json = {
+        "field": {"label": "Изменение", "type": "text"},
+        "value": "Подробное описание " * 70,
+    }
+    ctx.session.flush()
+    sheet = workbook(
+        download(
+            ctx,
+            create_template(ctx, "personnel_changes"),
+            period_from="2026-09-01",
+            period_to="2026-09-01",
+        )
+    ).active
+    row = next(
+        cell.row
+        for line in sheet
+        for cell in line
+        if isinstance(cell.value, str) and "Подробное описание" in cell.value
+    )
+    assert sheet.row_dimensions[row].height >= 350
+    assert all(dimension.height <= 409.5 for dimension in sheet.row_dimensions.values())
+    reconstructed = (
+        "".join(str(sheet.cell(index, 2).value or "") for index in range(row, sheet.max_row + 1))
+        .replace("\n", "")
+        .replace(" ", "")
+    )
+    assert "Подробноеописание" * 70 in reconstructed

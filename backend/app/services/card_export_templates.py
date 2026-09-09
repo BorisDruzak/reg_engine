@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from io import BytesIO
+from textwrap import wrap
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from app.models import (
     FormBlock,
     FormField,
     Organization,
+    OrgUnit,
     Registry,
 )
 from app.schemas.card_export_templates import (
@@ -31,6 +33,8 @@ from app.services.import_export import (
     _openpyxl,
 )
 from app.services.permissions import PermissionDeniedError, PermissionService
+from app.services.references import ReferenceListError
+from app.services.user_access import UserAccessError, UserAccessService
 
 
 class CardExportTemplateService:
@@ -316,6 +320,13 @@ class CardExportTemplateService:
         )
         book = _openpyxl().Workbook()
         sheet = book.active
+        widths = (
+            [10, *([32] * (len(fields) + 1))]
+            if template.export_kind == "card_list"
+            else [26, 17, 22, 46]
+        )
+        for index, width in enumerate(widths, 1):
+            sheet.column_dimensions[_openpyxl().utils.get_column_letter(index)].width = width
         if template.export_kind == "card_list":
             sheet.title = "Карточки"
             self._append(sheet, ["№ п/п", "Организация", *(f.label for f in fields)], header=True)
@@ -332,13 +343,6 @@ class CardExportTemplateService:
             self._personnel(
                 sheet, actor_user_id, organization.name, cards, fields, fio, period_from, period_to
             )
-        widths = (
-            [10, *([32] * (sheet.max_column - 1))]
-            if template.export_kind == "card_list"
-            else [26, 17, 22, 46]
-        )
-        for index, width in enumerate(widths, 1):
-            sheet.column_dimensions[_openpyxl().utils.get_column_letter(index)].width = width
         sheet.sheet_properties.pageSetUpPr.fitToPage = True
         sheet.page_setup.orientation = "landscape"
         sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
@@ -404,6 +408,32 @@ class CardExportTemplateService:
         self, sheet: Any, values: list[object], *, header: bool = False, merge_middle: bool = False
     ) -> None:
         styles = _openpyxl().styles
+        wrapped_values = []
+        for column, value in enumerate(values, 1):
+            width = sheet.column_dimensions[_openpyxl().utils.get_column_letter(column)].width
+            if merge_middle and column == 2:
+                width += sheet.column_dimensions["C"].width
+            wrapped_values.append(
+                [
+                    segment
+                    for line in self._text(value).splitlines()
+                    for segment in (wrap(line, max(1, int(width * 0.85))) or [""])
+                ]
+            )
+        max_lines = max((len(lines) for lines in wrapped_values), default=1)
+        if not header and max_lines > 26:
+            # Excel caps row height at 409.5pt. Continue tall cells on bounded rows.
+            for offset in range(0, max_lines, 26):
+                part: list[object] = [
+                    "\n".join(lines[offset : offset + 26])
+                    if isinstance(value, str | dict | list)
+                    else value
+                    if offset == 0
+                    else None
+                    for value, lines in zip(values, wrapped_values, strict=True)
+                ]
+                self._append(sheet, part, merge_middle=merge_middle)
+            return
         row = sheet.max_row + 1 if sheet.cell(1, 1).value is not None else 1
         border = styles.Border(
             **{
@@ -432,7 +462,6 @@ class CardExportTemplateService:
                 horizontal="center" if header or isinstance(value, int) else "left",
             )
             cell.font = styles.Font(name="Times New Roman", size=11, bold=header)
-        max_lines = max((len(self._text(value).splitlines()) for value in values), default=1)
         sheet.row_dimensions[row].height = max(30, max_lines * 15)
         if merge_middle:
             sheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=3)
@@ -544,6 +573,8 @@ class CardExportTemplateService:
                 )
 
     def _change_text(self, actor: UUID, event: CardEvent) -> str:
+        card = self.session.get(Card, event.card_id)
+        assert card is not None
         changes = self.session.scalars(
             select(CardEventChange)
             .where(CardEventChange.card_event_id == event.id)
@@ -563,6 +594,95 @@ class CardExportTemplateService:
             old, new = change.old_value_json or {}, change.new_value_json or {}
             label = new.get("field", {}).get("label") or old.get("field", {}).get("label") or "Поле"
             lines.append(
-                f"{label}: {self._text(old.get('value'))} → {self._text(new.get('value'))}"
+                f"{label}: {self._snapshot_text(actor, card, field, old)} → "
+                f"{self._snapshot_text(actor, card, field, new)}"
             )
         return "\n".join(lines) or "Изменены сведения карточки"
+
+    def _snapshot_text(
+        self, actor: UUID, card: Card, field: FormField, snapshot: dict[str, Any]
+    ) -> str:
+        value = snapshot.get("value")
+        if value is None or isinstance(value, dict) and value.get("redacted"):
+            return self._text(value)
+        kind = snapshot.get("field", {}).get("type", field.field_type)
+        if kind in {
+            "select",
+            "multi_select",
+            "organization_ref",
+            "org_unit_ref",
+            "card_ref",
+            "registry_ref",
+            "user_ref",
+        }:
+            raw_values = value if isinstance(value, list) else [value]
+            labels = []
+            for raw in raw_values:
+                try:
+                    reference_id = UUID(str(raw))
+                except (ValueError, TypeError, AttributeError):
+                    labels.append("Недоступное значение")
+                    continue
+                labels.append(
+                    self._historical_reference_label(actor, card, field, kind, reference_id)
+                )
+            return "; ".join(labels)
+        if kind in {"date", "datetime"} and isinstance(value, str):
+            try:
+                if kind == "date":
+                    return date.fromisoformat(value).strftime("%d.%m.%Y")
+                return datetime.fromisoformat(value).strftime("%d.%m.%Y %H:%M")
+            except ValueError:
+                return "Недоступное значение"
+        return self._text(value)
+
+    def _historical_reference_label(
+        self, actor: UUID, card: Card, field: FormField, kind: str, reference_id: UUID
+    ) -> str:
+        unavailable = "Недоступное значение"
+        permissions = PermissionService(self.session)
+        try:
+            if kind in {"select", "multi_select"}:
+                options = CardService(self.session).list_reference_items_for_card_field_for_actor(
+                    actor_user_id=actor, card_id=card.id, field_id=field.id
+                )
+                return next(
+                    (option.label for option in options if option.id == reference_id), unavailable
+                )
+            if kind == "organization_ref":
+                if permissions.can_see_organization(
+                    actor, reference_id, registry_id=card.registry_id
+                ):
+                    organization = self.session.get(Organization, reference_id)
+                    return organization.name if organization else unavailable
+            elif kind == "org_unit_ref":
+                unit = self.session.get(OrgUnit, reference_id)
+                if unit and permissions.can_see_organization(
+                    actor, unit.organization_id, registry_id=card.registry_id
+                ):
+                    return unit.name
+            elif kind == "card_ref":
+                target = self.session.get(Card, reference_id)
+                if target and permissions.can_see_organization(
+                    actor, target.organization_id, registry_id=target.registry_id
+                ):
+                    return CardService(self.session).card_display_value(target) or "Не заполнено"
+            elif kind == "registry_ref":
+                self._authorize(actor, reference_id, manage=False)
+                registry = self.session.get(Registry, reference_id)
+                return registry.name if registry else unavailable
+            elif kind == "user_ref":
+                return (
+                    UserAccessService(self.session)
+                    .read_user_for_actor(actor_user_id=actor, user_id=reference_id)
+                    .display_name
+                )
+        except (
+            PermissionDeniedError,
+            CardServiceError,
+            ReferenceListError,
+            ImportExportServiceError,
+            UserAccessError,
+        ):
+            return unavailable
+        return unavailable
