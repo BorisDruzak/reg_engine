@@ -1969,13 +1969,12 @@ class CardService:
         return fio_fields[0]
 
     def card_display_value(self, card: Card) -> str:
-        fio_field = self._require_single_fio_field(
-            self._get_active_card_template_for_registry(
-                card.card_template_id,
-                registry_id=card.registry_id,
-                actor_user_id=None,
-            )
-        )
+        # Existing cards retain their template when it is retired. Display reads
+        # must not apply the active-template eligibility rule used for creation.
+        template = self.session.get(CardTemplate, card.card_template_id)
+        if template is None or template.registry_id != card.registry_id:
+            raise CardServiceError("Card template was not found.")
+        fio_field = self._require_single_fio_field(template)
         value = self.session.scalar(
             select(FieldValue.value_text)
             .join(CardBlockInstance, CardBlockInstance.id == FieldValue.block_instance_id)
