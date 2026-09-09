@@ -146,9 +146,25 @@ export function CardsWorkspace({
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
   const canEditCard = Boolean(card?.can_manage && selectedCard?.lifecycle_status !== "dismissed");
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
-  const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
+  const [requestedShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
   );
+  const activeShellTab: CardShellTab =
+    requestedShellTab.startsWith("card:") &&
+    !cards.some((item) => item.id === requestedShellTab.slice("card:".length))
+      ? "list"
+      : requestedShellTab;
+  const [previousCards, setPreviousCards] = useState(cards);
+  if (previousCards !== cards) {
+    setPreviousCards(cards);
+    // Close a removed selection, but preserve saved tabs during initial list loading.
+    if (
+      activeShellTab !== requestedShellTab &&
+      previousCards.some((item) => requestedShellTab === `card:${item.id}`)
+    ) {
+      setActiveShellTab("list");
+    }
+  }
   const activeShellCardId = activeShellTab.startsWith("card:")
     ? activeShellTab.slice("card:".length)
     : null;
@@ -691,7 +707,7 @@ export function CardsWorkspace({
         )
       ) : (
         <div className="stack">
-          {card && (
+          {card && card.id === activeShellCardId && (
             <>
               {cardPresentationQuery.isLoading && <p>{uiText.loadingCard}</p>}
               <DataAlert error={cardPresentationQuery.error} />

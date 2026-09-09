@@ -112,6 +112,93 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test("returns to the list when dismissal removes the active tab instead of editing the next card", async () => {
+    const nextSummary = {
+      ...organizationUnitCardSummary,
+      id: "card-next",
+      display_value: "Следующая карточка",
+    };
+    const nextCard = {
+      ...organizationUnitCard,
+      id: nextSummary.id,
+      display_value: nextSummary.display_value,
+    };
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input).endsWith("/dismissal")
+        ? Response.json({ ...organizationUnitCardSummary, lifecycle_status: "dismissed" })
+        : originalFetch(input, init),
+    );
+    const workspace = renderWorkspace({
+      cards: [organizationUnitCardSummary, nextSummary],
+      card: organizationUnitCard,
+      cardLifecycleStatus: "active",
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Уволить" }));
+    const dialog = screen.getByRole("dialog", { name: "Увольнение" });
+    fireEvent.change(within(dialog).getByLabelText("Дата увольнения"), {
+      target: { value: "2026-09-09" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Основание"), {
+      target: { value: "Приказ № 7" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Уволить" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // HomePage's refreshed active-only list falls back to B after A is dismissed.
+    workspace.rerenderCards([nextSummary], nextCard);
+    expect(screen.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("tab", { name: "Карточка подразделения" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Базовый блок")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Следующая карточка/ })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("reg_engine.card_tabs.v1")!).activeTab).toBe("list");
+
+    workspace.rerenderCards(
+      [{ ...organizationUnitCardSummary, lifecycle_status: "dismissed" }],
+      organizationUnitCard,
+    );
+    expect(screen.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByLabelText("Базовый блок")).not.toBeInTheDocument();
+  });
+
+  test("never displays another card while the selected tab detail is loading", async () => {
+    const nextSummary = {
+      ...organizationUnitCardSummary,
+      id: "card-next",
+      display_value: "Следующая карточка",
+    };
+    const nextCard = {
+      ...organizationUnitCard,
+      id: nextSummary.id,
+      display_value: nextSummary.display_value,
+    };
+    const workspace = renderWorkspace({
+      cards: [organizationUnitCardSummary, nextSummary],
+      card: organizationUnitCard,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    await screen.findByTestId("filled-field-item-org-unit");
+    workspace.rerenderCards([organizationUnitCardSummary, nextSummary], nextCard);
+    await waitFor(() =>
+      expect(
+        workspace.queryClient.getQueryState(["card-presentation", "test-token", nextCard.id])
+          ?.status,
+      ).toBe("success"),
+    );
+    expect(screen.getByRole("tab", { name: "Карточка подразделения" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByLabelText("Базовый блок")).not.toBeInTheDocument();
+  });
+
   test("forwards the dismissed filter and keeps the list controlled by server data", () => {
     const onCardLifecycleStatusChange = vi.fn();
     renderWorkspace({ cards: [organizationUnitCardSummary], onCardLifecycleStatusChange });
@@ -896,6 +983,7 @@ describe("CardsWorkspace", () => {
 });
 
 function renderWorkspace({
+  cardLifecycleStatus = "",
   isSuperuser = false,
   onCardLifecycleStatusChange = vi.fn(),
   onOpenCreatedCard = vi.fn().mockResolvedValue(undefined),
@@ -905,6 +993,7 @@ function renderWorkspace({
   selectedCardId = "",
   schema: workspaceSchema = schema,
 }: {
+  cardLifecycleStatus?: string;
   isSuperuser?: boolean;
   onCardLifecycleStatusChange?: (value: string) => void;
   onOpenCreatedCard?: (cardId: string) => Promise<void>;
@@ -917,14 +1006,14 @@ function renderWorkspace({
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const rendered = render(
+  const content = (nextCards = cards, nextCard = card) => (
     <QueryClientProvider client={queryClient}>
       <CardsWorkspace
         isSuperuser={isSuperuser}
-        cardLifecycleStatus=""
+        cardLifecycleStatus={cardLifecycleStatus}
         onCardLifecycleStatusChange={onCardLifecycleStatusChange}
-        cards={cards}
-        card={card}
+        cards={nextCards}
+        card={nextCard}
         schema={workspaceSchema}
         token="test-token"
         organizations={[organization]}
@@ -944,9 +1033,15 @@ function renderWorkspace({
         onIncludeArchivedCardsChange={vi.fn()}
         onOpenCreatedCard={onOpenCreatedCard}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { ...rendered, queryClient };
+  const rendered = render(content());
+  return {
+    ...rendered,
+    queryClient,
+    rerenderCards: (nextCards: CardSummaryRead[], nextCard: CardRead | null) =>
+      rendered.rerender(content(nextCards, nextCard)),
+  };
 }
 
 const organizationUnitCard: CardRead = {

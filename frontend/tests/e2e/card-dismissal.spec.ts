@@ -73,6 +73,7 @@ test("creates without title and dismisses a card through the compact dialog", as
       list_fields: [],
     },
   ];
+  cards.push({ ...cards[0], id: "card-2", display_value: "Петров Пётр Петрович" });
   const layout = {
     version: "card_template_layout_v1",
     revision: "qa",
@@ -237,6 +238,7 @@ test("creates without title and dismisses a card through the compact dialog", as
     { public_access: { public_view_enabled: true, public_edit_enabled: true, fields: [] } },
   ]);
   await page.getByRole("tab", { name: "Список карточек" }).click();
+  await page.getByLabel("Статус карточек").selectOption("active");
   await page.getByRole("button", { name: /Иванов Иван Иванович/ }).dblclick();
   await expect(page.getByRole("button", { name: /Архивировать карточку/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Уволить", exact: true }).click();
@@ -253,8 +255,13 @@ test("creates without title and dismisses a card through the compact dialog", as
   await dialog.getByRole("button", { name: "Уволить", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(dismissalPayloads).toEqual([{ occurred_on: "2026-09-09", basis_text: "Приказ № 7" }]);
-  await expect(page.getByRole("status", { name: "Статус карточки" })).toHaveText("Уволен");
-  await page.getByRole("tab", { name: "Список карточек" }).click();
+  await expect(page.getByRole("tab", { name: "Список карточек" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("tab", { name: "Иванов Иван Иванович", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Петров Пётр Петрович/ })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Статус карточки" })).toHaveCount(0);
   await page.getByLabel("Статус карточек").selectOption("dismissed");
   expect((await page.getByLabel("Статус карточек").boundingBox())!.height).toBeGreaterThanOrEqual(
     36,
@@ -270,5 +277,7 @@ test("creates without title and dismisses a card through the compact dialog", as
   expect(statuses).toContain("dismissed");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: testInfo.outputPath("dismissed-list.png") });
+  await row.dblclick();
+  await expect(page.getByRole("status", { name: "Статус карточки" })).toHaveText("Уволен");
   expect(errors).toEqual([]);
 });
