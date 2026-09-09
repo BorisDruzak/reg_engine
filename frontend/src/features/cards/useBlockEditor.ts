@@ -37,6 +37,7 @@ export type BlockEditorState = {
   updateAndSave: (fieldId: string, value: FieldEditorState, delayMs: number | null) => void;
   flushPendingSave: () => void;
   commitAndClose: () => void;
+  save: () => Promise<boolean>;
   cancel: () => void;
 };
 
@@ -263,6 +264,7 @@ export function useBlockEditor({
     updateAndSave,
     flushPendingSave,
     commitAndClose,
+    save,
     cancel,
   };
 }

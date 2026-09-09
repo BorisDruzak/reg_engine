@@ -250,6 +250,10 @@ test("creates without title and dismisses a card through the compact dialog", as
   await expect(page.getByRole("button", { name: "Сохранить блок", exact: true })).toBeDisabled();
   await page.getByLabel("Основание изменения").fill("  Приказ об изменении  ");
   await page.getByLabel("Дата события (необязательно)").fill("2026-09-08");
+  await page.getByRole("tab", { name: "Список карточек", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Продолжить редактирование" }).click();
+  await expect(page.getByLabel("ФИО", { exact: true })).toHaveValue("Иванов Пётр Иванович");
+  await expect(page.getByLabel("Основание изменения")).toHaveValue("  Приказ об изменении  ");
   expect(editPayloads).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("basis-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -265,6 +269,19 @@ test("creates without title and dismisses a card through the compact dialog", as
     },
   ]);
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByTestId("filled-field-item-fio").click();
+  await page.getByLabel("ФИО", { exact: true }).fill("Несохранённое значение");
+  await page.getByRole("tab", { name: "Список карточек", exact: true }).click();
+  await expect(
+    page.getByRole("dialog").getByRole("button", { name: "Сохранить и перейти" }),
+  ).toBeDisabled();
+  await page.getByRole("dialog").getByRole("button", { name: "Не сохранять" }).click();
+  await expect(page.getByRole("tab", { name: "Список карточек", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(editPayloads).toHaveLength(1);
+  await page.getByRole("tab", { name: "Иванов Иван Иванович", exact: true }).click();
   await page.getByRole("button", { name: "Уволить", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Увольнение" });
   await expect(dialog.getByRole("button", { name: "Уволить", exact: true })).toBeDisabled();

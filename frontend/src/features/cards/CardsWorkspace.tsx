@@ -185,6 +185,7 @@ export function CardsWorkspace({
   const [archiveTarget, setArchiveTarget] = useState<CardSummaryRead | null>(null);
   const [dismissalTarget, setDismissalTarget] = useState<CardSummaryRead | null>(null);
   const [pendingCardTabClose, setPendingCardTabClose] = useState<string | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
@@ -538,7 +539,19 @@ export function CardsWorkspace({
     resetSelectedCardMutationState();
   }
 
+  function requestCardNavigation(navigate: () => void) {
+    if (blockEditor.requiresBasis && (blockEditor.dirty || blockEditor.pending)) {
+      setPendingNavigation(() => navigate);
+      return;
+    }
+    navigate();
+  }
+
   function openCardEditor(cardId: string) {
+    requestCardNavigation(() => selectCardEditor(cardId));
+  }
+
+  function selectCardEditor(cardId: string) {
     setOpenCardIds((current) => (current.includes(cardId) ? current : [...current, cardId]));
     setActiveShellTab(`card:${cardId}`);
     activeCardIdRef.current = cardId;
@@ -554,6 +567,11 @@ export function CardsWorkspace({
   }
 
   function handleShellTabChange(tabId: CardShellTab) {
+    if (tabId === activeShellTab) return;
+    requestCardNavigation(() => selectShellTab(tabId));
+  }
+
+  function selectShellTab(tabId: CardShellTab) {
     if (fixedCardUtilityTabs.includes(tabId as CardUtilityTab)) {
       openUtilityTab(tabId as CardUtilityTab);
       return;
@@ -697,7 +715,7 @@ export function CardsWorkspace({
               className: item.lifecycle_status === "dismissed" ? "is-dismissed" : undefined,
             }))}
             selectedId={selectedCardId}
-            onSelect={onSelectCard}
+            onSelect={(cardId) => requestCardNavigation(() => onSelectCard(cardId))}
             onOpen={openCardEditor}
           />
           <MutationFeedback error={archiveCardMutation.error} successMessage={successMessage} />
@@ -897,6 +915,60 @@ export function CardsWorkspace({
             />
           </AdminMutationDialog>
         ))}
+      {pendingNavigation && (
+        <AdminMutationDialog
+          title={uiText.unsavedCardChangesTitle}
+          onCancel={blockEditor.pending ? undefined : () => setPendingNavigation(null)}
+        >
+          <div className="archive-confirmation">
+            <p>
+              Сохранить изменения перед переходом? При выходе без сохранения значения и основание
+              будут потеряны.
+            </p>
+            {Object.values(blockEditor.errors).map((error, index) => (
+              <p className="inline-alert" key={index}>
+                {error}
+              </p>
+            ))}
+            <div className="admin-mutation-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={blockEditor.pending}
+                onClick={() => setPendingNavigation(null)}
+              >
+                Продолжить редактирование
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={blockEditor.pending}
+                onClick={() => {
+                  blockEditor.cancel();
+                  setPendingNavigation(null);
+                  pendingNavigation();
+                }}
+              >
+                Не сохранять
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={blockEditor.pending || !blockEditor.basisText.trim()}
+                onClick={async () => {
+                  if (await blockEditor.save()) {
+                    blockEditor.cancel();
+                    setPendingNavigation(null);
+                    pendingNavigation();
+                  }
+                }}
+              >
+                Сохранить и перейти
+              </button>
+            </div>
+          </div>
+        </AdminMutationDialog>
+      )}
       {pendingCardTabClose && (
         <AdminMutationDialog
           title={uiText.unsavedCardChangesTitle}

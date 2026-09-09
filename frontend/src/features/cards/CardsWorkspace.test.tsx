@@ -112,6 +112,114 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test("keeps draft tab navigation basis-free and preserves the active close confirmation", async () => {
+    const rendered = renderWorkspace({
+      cards: [{ ...organizationUnitCardSummary, lifecycle_status: "draft" }],
+      card: organizationUnitCard,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+    fireEvent.click(await screen.findByRole("option", { name: "Управление образования" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Список карточек" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    rendered.unmount();
+    localStorage.clear();
+    renderWorkspace({ cards: [organizationUnitCardSummary], card: organizationUnitCard });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+    fireEvent.click(await screen.findByRole("option", { name: "Управление образования" }));
+    fireEvent.change(screen.getByLabelText("Основание изменения"), { target: { value: "Приказ" } });
+    fireEvent.click(screen.getByRole("button", { name: /Закрыть вкладку Карточка подразделения/ }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Продолжить редактирование" }),
+    );
+    expect(screen.getByLabelText("Основание изменения")).toHaveValue("Приказ");
+  });
+  test.each(["Список карточек", "Создать карточку", "Ссылки на заполнение"])(
+    "guards active staged edits when navigating to %s and discards only after confirmation",
+    async (destination) => {
+      renderWorkspace({ cards: [organizationUnitCardSummary], card: organizationUnitCard });
+      fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+      fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+      const input = await screen.findByRole("combobox", { name: "Подразделение организации" });
+      fireEvent.click(await screen.findByRole("option", { name: "Управление образования" }));
+      fireEvent.change(screen.getByLabelText("Основание изменения"), {
+        target: { value: "Приказ" },
+      });
+      fireEvent.click(screen.getByRole("tab", { name: destination }));
+      const dialog = screen.getByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Продолжить редактирование" }));
+      expect(input).toHaveTextContent("Управление образования");
+      expect(screen.getByLabelText("Основание изменения")).toHaveValue("Приказ");
+      fireEvent.click(screen.getByRole("tab", { name: destination }));
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Не сохранять" }),
+      );
+      expect(screen.getByRole("tab", { name: destination })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.queryByLabelText("Основание изменения")).not.toBeInTheDocument();
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "PATCH"),
+      ).toHaveLength(0);
+    },
+  );
+
+  test("retains failed changes before card-tab navigation, then saves before selecting the destination", async () => {
+    const other = {
+      ...organizationUnitCardSummary,
+      id: "other-card",
+      display_value: "Другая карточка",
+    };
+    const onSelectCard = vi.fn();
+    renderWorkspace({
+      cards: [organizationUnitCardSummary, other],
+      card: organizationUnitCard,
+      onSelectCard,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Другая карточка/ }));
+    fireEvent.click(screen.getByRole("tab", { name: "Список карточек" }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByTestId("filled-field-item-org-unit"));
+    fireEvent.click(await screen.findByRole("option", { name: "Управление образования" }));
+    fireEvent.change(screen.getByLabelText("Основание изменения"), {
+      target: { value: "  Приказ  " },
+    });
+    onSelectCard.mockClear();
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    let rejected = true;
+    const writes: unknown[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (init?.method === "PATCH") {
+        writes.push(JSON.parse(String(init.body)));
+        return rejected
+          ? Response.json({ detail: "Ошибка сохранения" }, { status: 400 })
+          : Response.json({ items: [] });
+      }
+      return originalFetch(input, init);
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Другая карточка" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить и перейти" }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Сохранить и перейти" })).toBeEnabled(),
+    );
+    expect(onSelectCard).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Основание изменения")).toHaveValue("  Приказ  ");
+    rejected = false;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить и перейти" }));
+    await waitFor(() => expect(onSelectCard).toHaveBeenCalledExactlyOnceWith(other.id));
+    expect(writes).toEqual(
+      Array(2).fill({
+        values: [
+          { field_id: "field-org-unit", value: "management-local", block_instance_id: null },
+        ],
+        basis_text: "Приказ",
+      }),
+    );
+  });
   test.each(["active", "dismissed"])(
     "requires a basis when a superuser archives a previously activated %s card",
     async (lifecycle) => {
