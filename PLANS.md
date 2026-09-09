@@ -7,6 +7,44 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-09-10 saved organizations in persisted XLSX export templates are
+  implemented and deployed at `4b8aded7`. The active implementation plan is
+  `docs/superpowers/plans/2026-09-10-saved-xlsx-export-organizations.md`.
+
+  Delivered contract:
+  - An export template stores one or more unique accessible organization ids in
+    its JSON configuration. The UI provides a multiple-choice
+    `Организации выгрузки` control and `Все организации`; download no longer
+    accepts a one-time organization choice.
+  - Ordinary `Список карточек` export produces a single `Карточки` sheet for
+    all saved organizations, without an organization column. `Стаж` remains
+    one readable Russian column with days, months, and years.
+  - `Кадровые изменения` produces one sanitized, unique worksheet per saved
+    organization. Its download accepts only inclusive start/end dates.
+  - A legacy template without `organization_ids` remains editable, but cannot
+    be downloaded until an operator selects organizations and saves it once.
+
+  Fresh verification and deployment evidence:
+  - `backend/.venv/Scripts/python.exe -m pytest backend/tests/test_card_export_templates.py -q`:
+    **42 passed**, with the existing Starlette/httpx deprecation warning.
+  - `npm --prefix frontend test -- --run src/api/client.test.ts src/features/registry/ImportExportPanel.test.tsx`:
+    **26 passed**. The full `scripts/test.ps1` did not return a final summary
+    on this host and left child Vitest processes; they were stopped. It is not
+    claimed as a full-suite pass.
+  - `scripts/lint.ps1`, `scripts/format.ps1 -Check`, and
+    `scripts/typecheck.ps1` passed. ESLint retains the pre-existing
+    `FilledCardLayout.tsx` exhaustive-deps warning. `frontend build` passed
+    with the existing large-chunk advisory.
+  - `scripts/deploy.ps1` updated `/opt/reg_engine` to `4b8aded7` and passed
+    server/database/storage checks. `scripts/deploy-frontend.ps1` published
+    `index-DKXshtD6.js`, restarted `reg-engine.service`, and passed API and
+    same-origin frontend smoke checks.
+  - Production browser inspection confirmed `Организации выгрузки` and
+    `Все организации`, showed all ten accessible organizations after the
+    temporary selection, and confirmed the old per-download organization
+    selector is absent. No production template was saved or downloaded during
+    this visual check, so existing user configuration was not altered.
+
 - 2026-09-09 card identity, durable events, dismissal and persisted XLSX
   templates are implemented and deployed through Task 8. Tasks 1–8, their
   independent review corrections, and the residual title-contract cleanup are
