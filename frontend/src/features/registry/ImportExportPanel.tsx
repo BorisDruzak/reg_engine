@@ -17,6 +17,7 @@ import { uiText } from "@/app/uiText";
 import { Panel } from "@/components/common/DataSurfaces";
 import { errorText } from "@/components/common/dataUtils";
 import { SearchableChoicePicker } from "@/features/cards/SearchableChoicePicker";
+import { ExportTemplatesPanel } from "./ExportTemplatesPanel";
 
 export function ImportExportPanel({
   selectedRegistryId,
@@ -35,7 +36,9 @@ export function ImportExportPanel({
   const [organizationIds, setOrganizationIds] = useState<string[]>([]);
   const [fixedOrganizationId, setFixedOrganizationId] = useState("");
   const [fieldIds, setFieldIds] = useState<string[]>([]);
-  const [activeOperation, setActiveOperation] = useState<"export" | "import">("export");
+  const [activeOperation, setActiveOperation] = useState<"export" | "import" | "templates">(
+    "export",
+  );
   const [importMode, setImportMode] = useState<"strict" | "enrich_global_references">("strict");
   const [workExperienceAsOfDate, setWorkExperienceAsOfDate] = useState(() =>
     localIsoDate(new Date()),
@@ -219,80 +222,94 @@ export function ImportExportPanel({
         <p className="muted-text">{uiText.tabularXlsxDescription}</p>
         {optionsQuery.isLoading && <p className="muted-text">{uiText.loadingCard}</p>}
         {optionsError && <p className="inline-alert attachment-status">{optionsError}</p>}
-        {!optionsQuery.isLoading && !optionsError && optionsQuery.data && (
-          <>
-            {optionsQuery.data.templates.length === 0 ||
-            optionsQuery.data.organizations.length === 0 ? (
-              <p className="empty-state">{uiText.tabularXlsxNoOptions}</p>
-            ) : (
-              <section className="xlsx-exchange-settings" aria-labelledby="tabular-xlsx-settings">
-                <h4 id="tabular-xlsx-settings">{uiText.tabularXlsxSettingsTitle}</h4>
-                <div className="template-form">
-                  <label className="field-editor-control">
-                    <span>{uiText.cardTemplate}</span>
-                    <select
-                      value={effectiveTemplateId}
-                      onChange={(event) => {
-                        setTemplateId(event.currentTarget.value);
-                        initializedTemplateKey.current = null;
-                        setFieldIds([]);
-                        resetConfigurationFeedback();
-                      }}
-                    >
-                      <option value="">{uiText.tabularXlsxSelectTemplate}</option>
-                      {optionsQuery.data.templates.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="field-editor-control">
-                    <span>{uiText.tabularXlsxOrganizations}</span>
-                    <SearchableChoicePicker
-                      label={uiText.tabularXlsxOrganizations}
-                      hint={uiText.tabularXlsxSelectOrganization}
-                      mode="multiple"
-                      options={optionsQuery.data.organizations.map((organization) => ({
-                        id: organization.id,
-                        label: organization.label,
-                      }))}
-                      value={selectedOrganizationIds}
-                      onChange={(value) => {
-                        setOrganizationIds(Array.isArray(value) ? value : []);
-                        resetConfigurationFeedback();
-                      }}
-                    />
-                  </div>
-                  {selectedTemplate && (
-                    <div className="field-editor-control template-body-control">
+        {activeOperation !== "templates" &&
+          !optionsQuery.isLoading &&
+          !optionsError &&
+          optionsQuery.data && (
+            <>
+              {optionsQuery.data.templates.length === 0 ||
+              optionsQuery.data.organizations.length === 0 ? (
+                <p className="empty-state">{uiText.tabularXlsxNoOptions}</p>
+              ) : (
+                <section className="xlsx-exchange-settings" aria-labelledby="tabular-xlsx-settings">
+                  <h4 id="tabular-xlsx-settings">{uiText.tabularXlsxSettingsTitle}</h4>
+                  <div className="template-form">
+                    <label className="field-editor-control">
+                      <span>{uiText.cardTemplate}</span>
+                      <select
+                        value={effectiveTemplateId}
+                        onChange={(event) => {
+                          setTemplateId(event.currentTarget.value);
+                          initializedTemplateKey.current = null;
+                          setFieldIds([]);
+                          resetConfigurationFeedback();
+                        }}
+                      >
+                        <option value="">{uiText.tabularXlsxSelectTemplate}</option>
+                        {optionsQuery.data.templates.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="field-editor-control">
+                      <span>{uiText.tabularXlsxOrganizations}</span>
                       <SearchableChoicePicker
-                        label={uiText.tabularXlsxFields}
-                        hint={uiText.tabularXlsxSelectField}
+                        label={uiText.tabularXlsxOrganizations}
+                        hint={uiText.tabularXlsxSelectOrganization}
                         mode="multiple"
-                        options={supportedFields.map((field) => ({
-                          id: field.id,
-                          label: `${field.block_title}: ${field.label}`,
+                        options={optionsQuery.data.organizations.map((organization) => ({
+                          id: organization.id,
+                          label: organization.label,
                         }))}
-                        value={selectedFieldIds}
+                        value={selectedOrganizationIds}
                         onChange={(value) => {
-                          setFieldIds(Array.isArray(value) ? value : []);
+                          setOrganizationIds(Array.isArray(value) ? value : []);
                           resetConfigurationFeedback();
                         }}
                       />
-                      {unsupportedFields.map((field) => (
-                        <p key={field.id} className="muted-text">
-                          {field.block_title}: {field.label} — {field.unsupported_reason}
-                        </p>
-                      ))}
                     </div>
-                  )}
-                </div>
-              </section>
-            )}
-          </>
-        )}
+                    {selectedTemplate && (
+                      <div className="field-editor-control template-body-control">
+                        <SearchableChoicePicker
+                          label={uiText.tabularXlsxFields}
+                          hint={uiText.tabularXlsxSelectField}
+                          mode="multiple"
+                          options={supportedFields.map((field) => ({
+                            id: field.id,
+                            label: `${field.block_title}: ${field.label}`,
+                          }))}
+                          value={selectedFieldIds}
+                          onChange={(value) => {
+                            setFieldIds(Array.isArray(value) ? value : []);
+                            resetConfigurationFeedback();
+                          }}
+                        />
+                        {unsupportedFields.map((field) => (
+                          <p key={field.id} className="muted-text">
+                            {field.block_title}: {field.label} — {field.unsupported_reason}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
         <div className="xlsx-operation-tabs" role="tablist" aria-label={uiText.importExport}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeOperation === "templates"}
+            className={
+              activeOperation === "templates" ? "workspace-tab is-active" : "workspace-tab"
+            }
+            onClick={() => setActiveOperation("templates")}
+          >
+            Шаблоны выгрузки
+          </button>
           <button
             type="button"
             role="tab"
@@ -313,7 +330,16 @@ export function ImportExportPanel({
           </button>
         </div>
         <div className="xlsx-operation-grid">
-          {activeOperation === "export" ? (
+          {activeOperation === "templates" ? (
+            optionsQuery.data ? (
+              <ExportTemplatesPanel
+                key={`${token}:${selectedRegistryId}`}
+                token={token}
+                registryId={selectedRegistryId}
+                options={optionsQuery.data}
+              />
+            ) : null
+          ) : activeOperation === "export" ? (
             <section className="xlsx-operation" aria-labelledby="tabular-xlsx-export">
               <h4 id="tabular-xlsx-export">{uiText.tabularXlsxExportTitle}</h4>
               <p className="muted-text">{uiText.tabularXlsxExportDescription}</p>

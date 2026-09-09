@@ -194,6 +194,7 @@ class TabularCardExchangeService:
                 {
                     "id": str(template.id),
                     "name": template.name,
+                    "fio_field_id": self._export_fio_field_id(template, fields, blocks_by_id),
                     "fields": [
                         self._field_option(
                             field=field,
@@ -207,6 +208,26 @@ class TabularCardExchangeService:
                 for template in templates
             ],
         }
+
+    def _export_fio_field_id(
+        self,
+        template: CardTemplate,
+        fields: list[FormField],
+        blocks: dict[UUID, FormBlock],
+    ) -> str | None:
+        template_ids = self._template_field_ids(template)
+        matches = [
+            field
+            for field in fields
+            if field.id in template_ids
+            and field.code == "fio"
+            and field.field_type == "text"
+            and field.is_active
+            and field.is_exportable
+            and blocks[field.block_id].is_active
+            and not blocks[field.block_id].is_repeatable
+        ]
+        return str(matches[0].id) if len(matches) == 1 else None
 
     def export_xlsx_for_actor(
         self,

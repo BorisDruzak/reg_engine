@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-07-17 15:46:02 +05:00
+- Generated: 2026-09-09 22:08:00 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -24,7 +24,6 @@
 - `.env.example`
 - `.github/workflows/ci.yml`
 - `.gitignore`
-- `.playwright-cli/page-2026-07-16T20-11-16-831Z.yml`
 - `.pre-commit-config.yaml`
 - `.superpowers/sdd/2026-07-14-embedded-actions-report.md`
 - `.superpowers/sdd/2026-07-14-inline-card-template-name-edit-report.md`
@@ -46,6 +45,7 @@
 - `backend/app/api/v1/endpoints/auth.py`
 - `backend/app/api/v1/endpoints/card_change_notifications.py`
 - `backend/app/api/v1/endpoints/card_creation_links.py`
+- `backend/app/api/v1/endpoints/card_export_templates.py`
 - `backend/app/api/v1/endpoints/card_template_layouts.py`
 - `backend/app/api/v1/endpoints/cards.py`
 - `backend/app/api/v1/endpoints/documents.py`
@@ -82,7 +82,9 @@
 - `backend/app/models/card.py`
 - `backend/app/models/card_change_notification.py`
 - `backend/app/models/card_creation_link.py`
+- `backend/app/models/card_event.py`
 - `backend/app/models/document.py`
+- `backend/app/models/export_template.py`
 - `backend/app/models/identity.py`
 - `backend/app/models/organization.py`
 - `backend/app/models/public_link.py`
@@ -98,6 +100,7 @@
 - `backend/app/schemas/auth.py`
 - `backend/app/schemas/card_change_notifications.py`
 - `backend/app/schemas/card_creation_links.py`
+- `backend/app/schemas/card_export_templates.py`
 - `backend/app/schemas/card_template_layouts.py`
 - `backend/app/schemas/cards.py`
 - `backend/app/schemas/documents.py`
@@ -114,6 +117,8 @@
 - `backend/app/services/bootstrap.py`
 - `backend/app/services/card_change_notifications.py`
 - `backend/app/services/card_creation_links.py`
+- `backend/app/services/card_events.py`
+- `backend/app/services/card_export_templates.py`
 - `backend/app/services/card_print.py`
 - `backend/app/services/card_public_access.py`
 - `backend/app/services/card_template_layout.py`
@@ -164,6 +169,9 @@
 - `backend/migrations/versions/0031_card_audit_history.py`
 - `backend/migrations/versions/0032_card_change_notifications.py`
 - `backend/migrations/versions/0033_card_creator_public_actor_name.py`
+- `backend/migrations/versions/0034_card_events_exports_display_fio.py`
+- `backend/migrations/versions/0035_card_first_activation.py`
+- `backend/migrations/versions/0036_card_display_placeholders.py`
 - `backend/pyproject.toml`
 - `backend/tests/__init__.py`
 - `backend/tests/conftest.py`
@@ -185,7 +193,9 @@
 - `backend/tests/test_bootstrap_seed.py`
 - `backend/tests/test_bootstrap_seed_unicode_regression.py`
 - `backend/tests/test_card_change_notification_services.py`
+- `backend/tests/test_card_consumer_contracts.py`
 - `backend/tests/test_card_creation_links.py`
+- `backend/tests/test_card_export_templates.py`
 - `backend/tests/test_card_print_layout_services.py`
 - `backend/tests/test_card_public_access.py`
 - `backend/tests/test_card_template_layout_services.py`
@@ -298,8 +308,11 @@
 - `docs/superpowers/plans/2026-07-16-notification-quiet-refresh.md`
 - `docs/superpowers/plans/2026-07-16-text-field-validation.md`
 - `docs/superpowers/plans/2026-07-17-card-creator-public-identity.md`
+- `docs/superpowers/plans/2026-07-17-creation-only-xlsx-import.md`
 - `docs/superpowers/plans/2026-07-17-multiple-text-validation-conditions.md`
 - `docs/superpowers/plans/2026-07-17-notification-popover-and-picker-layering.md`
+- `docs/superpowers/plans/2026-07-27-user-profile-and-template-visibility-bugfixes.md`
+- `docs/superpowers/plans/2026-09-09-card-events-xlsx-implementation.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -352,8 +365,10 @@
 - `docs/superpowers/specs/2026-07-16-notification-quiet-refresh-design.md`
 - `docs/superpowers/specs/2026-07-16-text-field-validation-design.md`
 - `docs/superpowers/specs/2026-07-17-card-creator-public-identity-design.md`
+- `docs/superpowers/specs/2026-07-17-creation-only-xlsx-import-design.md`
 - `docs/superpowers/specs/2026-07-17-multiple-text-validation-conditions-design.md`
 - `docs/superpowers/specs/2026-07-17-notification-popover-and-picker-layering-design.md`
+- `docs/superpowers/specs/2026-09-09-card-events-xlsx-design.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -419,6 +434,7 @@
 - `frontend/src/features/cards/CardBaseBlockSurface.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.test.tsx`
 - `frontend/src/features/cards/CardBlockNavigator.tsx`
+- `frontend/src/features/cards/CardChangeDialog.tsx`
 - `frontend/src/features/cards/CardChangeNotificationToggle.test.tsx`
 - `frontend/src/features/cards/CardChangeNotificationToggle.tsx`
 - `frontend/src/features/cards/cardCompletion.test.ts`
@@ -434,6 +450,7 @@
 - `frontend/src/features/cards/CardsWorkspace.test.tsx`
 - `frontend/src/features/cards/CardsWorkspace.tsx`
 - `frontend/src/features/cards/CardTagSearchBar.tsx`
+- `frontend/src/features/cards/ChangeBasisFields.tsx`
 - `frontend/src/features/cards/FieldEditorControl.test.tsx`
 - `frontend/src/features/cards/FieldEditorControl.tsx`
 - `frontend/src/features/cards/fieldEditorUtils.test.ts`
@@ -469,6 +486,7 @@
 - `frontend/src/features/registry/.gitkeep`
 - `frontend/src/features/registry/CardPrintTemplateEditor.test.tsx`
 - `frontend/src/features/registry/CardPrintTemplateEditor.tsx`
+- `frontend/src/features/registry/ExportTemplatesPanel.tsx`
 - `frontend/src/features/registry/ImportExportPanel.test.tsx`
 - `frontend/src/features/registry/ImportExportPanel.tsx`
 - `frontend/src/features/registry/print/a4DragPayload.ts`
@@ -507,6 +525,9 @@
 - `frontend/src/styles/globals.css`
 - `frontend/src/test/setup.ts`
 - `frontend/src/vite-env.d.ts`
+- `frontend/tests/e2e/card-dismissal.spec.ts`
+- `frontend/tests/e2e/export-templates.spec.ts`
+- `frontend/tests/e2e/public-change-basis.spec.ts`
 - `frontend/tests/e2e/smoke.spec.ts`
 - `frontend/tsconfig.app.json`
 - `frontend/tsconfig.json`

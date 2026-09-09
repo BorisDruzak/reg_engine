@@ -6,11 +6,69 @@ import {
   listOrganizationCards,
   downloadTabularXlsxImportTemplate,
   previewTabularXlsxImport,
+  listCardExportTemplates,
+  createCardExportTemplate,
+  updateCardExportTemplate,
+  archiveCardExportTemplate,
+  downloadCardExportTemplate,
 } from "./client";
 import type { TabularCardWorkbookPayload } from "./types";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test("uses authenticated persisted export CRUD routes and downloads server-named XLSX bytes", async () => {
+  const requests: { path: string; method: string; body: unknown; auth: string | null }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init: RequestInit) => {
+      requests.push({
+        path,
+        method: init.method ?? "GET",
+        body: init.body ? JSON.parse(String(init.body)) : null,
+        auth: new Headers(init.headers).get("Authorization"),
+      });
+      return path.endsWith("/download")
+        ? new Response("xlsx bytes", { headers: { "X-Document-Filename": "registry-export.xlsx" } })
+        : Response.json(
+            path.endsWith("card-export-templates") && !init.method
+              ? { items: [] }
+              : { id: "export-1" },
+          );
+    }),
+  );
+  const payload = {
+    code: "spisok",
+    name: "Список",
+    export_kind: "card_list" as const,
+    card_template_id: "template-1",
+    configuration_json: { field_ids: ["fio", "second", "first"] },
+  };
+  await listCardExportTemplates("token", "registry-1");
+  await createCardExportTemplate("token", "registry-1", payload);
+  await updateCardExportTemplate("token", "export-1", payload);
+  await archiveCardExportTemplate("token", "export-1");
+  const result = await downloadCardExportTemplate("token", "export-1", {
+    organization_id: "org-1",
+  });
+  expect(requests.map(({ path, method }) => [path, method])).toEqual([
+    ["/api/v1/registries/registry-1/card-export-templates", "GET"],
+    ["/api/v1/registries/registry-1/card-export-templates", "POST"],
+    ["/api/v1/card-export-templates/export-1", "PATCH"],
+    ["/api/v1/card-export-templates/export-1", "DELETE"],
+    ["/api/v1/card-export-templates/export-1/download", "POST"],
+  ]);
+  expect(requests.every((request) => request.auth === "Bearer token")).toBe(true);
+  expect(requests[1].body).toEqual(payload);
+  expect(requests[4].body).toEqual({ organization_id: "org-1" });
+  expect(result.filename).toBe("registry-export.xlsx");
+  const contents = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsText(result.blob);
+  });
+  expect(contents).toBe("xlsx bytes");
 });
 
 test("sends dismissed list filtering to the backend with existing organization scope", async () => {

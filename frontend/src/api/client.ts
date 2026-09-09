@@ -22,6 +22,9 @@ import type {
   CardDraftCreatePayload,
   CardDraftPublicLinkRead,
   CardDismissalPayload,
+  CardExportTemplatePayload,
+  CardExportTemplateRead,
+  CardExportDownloadPayload,
   CardFirstSavePayload,
   CardPrintTemplateCreatePayload,
   CardPrintTemplateBlankDownloadPayload,
@@ -645,6 +648,60 @@ export async function getTabularXlsxCardExchangeOptions(token: string, registryI
   return apiRequest<TabularCardExchangeOptionsRead>(
     `/api/v1/registries/${registryId}/tabular-xlsx-card-exchange/options`,
     { token },
+  );
+}
+
+export async function listCardExportTemplates(token: string, registryId: string) {
+  return apiRequest<{ items: CardExportTemplateRead[] }>(
+    `/api/v1/registries/${registryId}/card-export-templates`,
+    { token },
+  );
+}
+
+export async function createCardExportTemplate(
+  token: string,
+  registryId: string,
+  payload: CardExportTemplatePayload,
+) {
+  return apiRequest<CardExportTemplateRead>(
+    `/api/v1/registries/${registryId}/card-export-templates`,
+    {
+      method: "POST",
+      token,
+      body: payload,
+    },
+  );
+}
+
+export async function updateCardExportTemplate(
+  token: string,
+  templateId: string,
+  payload: CardExportTemplatePayload,
+) {
+  return apiRequest<CardExportTemplateRead>(`/api/v1/card-export-templates/${templateId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function archiveCardExportTemplate(token: string, templateId: string) {
+  return apiRequest<CardExportTemplateRead>(`/api/v1/card-export-templates/${templateId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function downloadCardExportTemplate(
+  token: string,
+  templateId: string,
+  payload: CardExportDownloadPayload,
+) {
+  return downloadJsonFile(
+    `/api/v1/card-export-templates/${templateId}/download`,
+    token,
+    "X-Document-Filename",
+    payload,
   );
 }
 

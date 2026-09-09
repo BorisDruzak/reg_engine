@@ -7,6 +7,90 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-09-09 card identity, durable events, dismissal and persisted XLSX
+  templates are implemented locally through Task 8. Tasks 1–7 and their
+  reviewed corrections are included in the current tree; Task 8 remains
+  subject to independent integration review. No push, deployment, production
+  migration or live-data change is claimed for this checkpoint.
+  The active implementation plan is
+  `docs/superpowers/plans/2026-09-09-card-events-xlsx-implementation.md`.
+
+  Delivered contract:
+  - Cards use derived `display_value` from the template's single active text
+    `fio` field; stored card titles and registry title-label configuration
+    are removed. Organization starts unselected; draft creation selects the
+    first active template by `(position, id)` on the backend. User and public
+    actor display names retain their separate meaning.
+  - `activated_at` remembers first activation. Later business changes require
+    trimmed `basis_text` and accept optional `occurred_on`, even after a card
+    becomes a draft again. Single/bulk/repeatable/public/MCP paths share the
+    transaction boundary, write safe change snapshots and audit, and avoid
+    events for no-op value saves. Authenticated ordinary blocks save explicitly;
+    cancellation and staged tab/list navigation preserve deliberate choices.
+  - Dismissal records date/basis and a durable event, disables business writes,
+    and retains the card for reading. Lists expose the backend status filter
+    and red dismissed state. Only a real system administrator can archive a
+    card, including a dismissed card; archival remains audited and transactional.
+  - Registry-scoped export-template CRUD and download use REST only. The
+    `Шаблоны выгрузки` tab saves/reloads ordered card-list fields or the four
+    personnel mappings. Safe options include nullable `fio_field_id`; FIO is
+    fixed first among card fields and cannot be removed in this UI. Personnel
+    FIO is implicit. Each download requires an explicitly selected accessible
+    organization; personnel dates are required and inclusive. Unsupported
+    fields cannot be selected. Existing creation-only XLSX import remains.
+  - XLSX personnel output contains `Вновь приняты`, `Уволены`, `Иные изменения`.
+    Reference snapshots resolve to safe readable labels; inaccessible values
+    use a placeholder. Long content wraps and continues below Excel's row-height
+    limit. Task 5 visually checked the real generated short and long reports
+    through LibreOffice/Poppler; long reports can span pages without repeated
+    section headings. Binary attachment export is still excluded.
+
+  Fresh Task 8 verification:
+  - `backend/.venv/Scripts/python.exe -m pytest -o addopts='' backend/tests -q`:
+    **598 passed, 283 skipped**, one existing Starlette/httpx warning.
+  - `pnpm -C frontend test:run`: **462 passed, 32 skipped**, 44 files.
+  - `scripts/lint.ps1` and `scripts/typecheck.ps1` through PowerShell passed;
+    ESLint retains the existing `FilledCardLayout.tsx` exhaustive-deps warning.
+    `pnpm -C frontend build` passed with the existing large-chunk advisory.
+  - `scripts/format.ps1 -Check` passed backend formatting but failed on the
+    pre-existing `frontend/src/features/cards/FieldEditorControl.test.tsx`
+    Prettier drift. Task 8 does not modify that unrelated file. Scoped changed
+    frontend files pass Prettier.
+  - Chromium ran `export-templates.spec.ts`, `card-dismissal.spec.ts` and
+    `public-change-basis.spec.ts` with `--workers=1`: **3 passed**. Synthetic
+    REST fixtures verified template persistence across reload, field ordering,
+    basis/dismissal flows, organization/date payloads and actual browser
+    downloads with filename/response bytes. Desktop 1280x720 and mobile
+    390x844 export screenshots were inspected; no horizontal overflow or page
+    errors. This is UI proof, not production API/database integration proof.
+  - `scripts/project-map.ps1 -Check` initially failed on Git-quoted non-ASCII
+    paths in pre-existing untracked user output. With process-local
+    `core.quotepath=false` and an external excludes file containing only
+    `.playwright-cli/` and `output/`, the script reported the map stale, then
+    regenerated it and passed `-Check`. No user output or persistent Git
+    configuration was changed. The same excludes are needed for future checks
+    while those untracked directories exist.
+
+  Release boundaries and required next gate:
+  - Migrations `0034_card_events_exports_fio`, `0035_card_first_activation`
+    and `0036_card_display_placeholders` remain unapplied online. Run the full
+    PostgreSQL suite and upgrade/downgrade/upgrade on a disposable database
+    ending `_test` before production. The 283 skips are not migration/RBAC/
+    concurrent-locking proof; some older skipped fixtures still require the
+    title-contract integration pass. Offline SQL and adapted SQLite tests
+    cannot establish PostgreSQL behavior.
+  - Before production, synchronize the reviewed code to `origin/main`, create
+    a fresh external backup, check active templates for exactly one usable
+    `fio`, inspect title-removal/data preflight and migration status, then
+    apply the planned migrations intentionally and record post-checks.
+    Dropped historical titles are not recovered by downgrade; dismissed cards
+    downgrade to archived. Legacy drafts with purged activation history cannot
+    have first activation inferred reliably.
+  - Migration 0036 rewrites stored text/JSON card placeholders only. Binary
+    DOCX templates require replacement versions for obsolete placeholders;
+    generated documents are unchanged. GitNexus still reports `reg_engine`
+    unavailable; no manual index synchronization was attempted.
+
 - 2026-07-17 XLSX creation-only import is pushed and deployed at `7e60c642`.
   A headed browser validation downloaded the real enrichment template, filled
   one row, previewed it as valid, created one test card (`Проверка импорта

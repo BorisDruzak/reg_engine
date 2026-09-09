@@ -558,7 +558,35 @@ export type TabularCardExchangeFieldRead = {
 export type TabularCardExchangeTemplateRead = {
   id: string;
   name: string;
+  fio_field_id?: string | null;
   fields: TabularCardExchangeFieldRead[];
+};
+
+export type CardExportKind = "card_list" | "personnel_changes";
+export type PersonnelExportMapping = {
+  position_field_id: string;
+  structural_unit_field_id: string;
+  appointment_date_field_id: string;
+  appointment_basis_field_id: string;
+};
+export type CardExportTemplatePayload = {
+  code: string;
+  name: string;
+  export_kind: CardExportKind;
+  card_template_id: string;
+  configuration_json: { field_ids: string[] } | PersonnelExportMapping;
+};
+export type CardExportTemplateRead = CardExportTemplatePayload & {
+  id: string;
+  registry_id: string;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+};
+export type CardExportDownloadPayload = {
+  organization_id: string;
+  period_from?: string;
+  period_to?: string;
 };
 
 export type TabularCardExchangeOrganizationRead = {

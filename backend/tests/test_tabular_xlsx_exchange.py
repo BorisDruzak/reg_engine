@@ -282,16 +282,23 @@ def test_tabular_xlsx_request_defaults_to_strict_and_accepts_enrichment_metadata
     assert enrich.work_experience_as_of_date == date(2026, 7, 17)
 
 
+@pytest.mark.parametrize("fio_code,expected_fio", [("fio", True), ("other", False)])
 def test_tabular_xlsx_options_omit_non_exportable_fields(
     monkeypatch: pytest.MonkeyPatch,
+    fio_code: str,
+    expected_fio: bool,
 ) -> None:
     actor_user_id = uuid4()
     registry_id = uuid4()
-    block = SimpleNamespace(id=uuid4(), title="Основные сведения", is_repeatable=False)
+    block = SimpleNamespace(
+        id=uuid4(), title="Основные сведения", is_repeatable=False, is_active=True
+    )
     exportable_field = SimpleNamespace(
         id=uuid4(),
         block_id=block.id,
         label="Публичное поле",
+        code=fio_code,
+        is_active=True,
         field_type="text",
         is_exportable=True,
     )
@@ -299,6 +306,8 @@ def test_tabular_xlsx_options_omit_non_exportable_fields(
         id=uuid4(),
         block_id=block.id,
         label="Скрытое поле",
+        code="hidden",
+        is_active=True,
         field_type="text",
         is_exportable=False,
     )
@@ -332,6 +341,9 @@ def test_tabular_xlsx_options_omit_non_exportable_fields(
         registry_id=registry_id,
     )
 
+    assert result["templates"][0]["fio_field_id"] == (
+        str(exportable_field.id) if expected_fio else None
+    )
     assert result["templates"][0]["fields"] == [
         {
             "id": str(exportable_field.id),

@@ -27,6 +27,7 @@ class TabularCardExchangeFieldRead(BaseModel):
 class TabularCardExchangeTemplateRead(BaseModel):
     id: str
     name: str
+    fio_field_id: str | None = None
     fields: list[TabularCardExchangeFieldRead]
 
 

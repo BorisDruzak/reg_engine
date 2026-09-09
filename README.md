@@ -62,6 +62,50 @@ Target system:
   PDF report outputs are available for existing report types. Additional report
   polish and broader MCP write tools are later phases.
 
+## Card Identity, Events and Saved XLSX Exports
+
+The 2026-09-09 implementation checkpoint is local only; see `PLANS.md` for
+verification and the outstanding PostgreSQL migration/release gate.
+
+- A card's `display_value` comes from the single active text field with code
+  `fio` in its card template. Empty values display `Не заполнено`. Stored
+  card titles and registry `card_title_label` no longer exist; user/actor
+  display names are separate. New-card UI starts with no organization and the
+  backend selects the first active template by `(position, id)`.
+- After first activation, business changes require `basis_text` and accept
+  optional `occurred_on`. Durable `activated_at` preserves this rule when a
+  card becomes incomplete again. Ordinary authenticated blocks use one
+  explicit bulk save; public field saves also request basis/date. Cancel and
+  staged navigation do not silently save. Values, safe change events and audit
+  share the transaction boundary; no-op values do not add business events.
+- `POST /api/v1/cards/{card_id}/dismissal` requires date and basis, retains the
+  card as read-only and records dismissal. `lifecycle_status=dismissed` filters
+  the existing organization/registry card lists without changing scope rules.
+  Only system administrators can archive cards, including dismissed cards.
+- `GET/POST /api/v1/registries/{registry_id}/card-export-templates` list/create
+  templates. `GET/PATCH/DELETE /api/v1/card-export-templates/{template_id}`
+  read/update/soft-archive them. Create/update configuration uses
+  `card_template_id`, `export_kind` and `configuration_json`: ordered
+  `field_ids` for `card_list`, or `position_field_id`,
+  `structural_unit_field_id`, `appointment_date_field_id` and
+  `appointment_basis_field_id` for `personnel_changes`.
+- `POST /api/v1/card-export-templates/{template_id}/download` returns XLSX
+  bytes and `X-Document-Filename`. It requires `organization_id`; personnel
+  additionally requires `period_from` and `period_to`, both inclusive.
+  The existing options API exposes optional `fio_field_id` for each template.
+  The UI's `Шаблоны выгрузки` tab fixes FIO first among selected card fields,
+  preserves manual field order, and leaves organization unselected. Personnel
+  FIO is implicit, and the report contains `Вновь приняты`, `Уволены` and
+  `Иные изменения`. API permissions remain authoritative for every operation.
+
+Migrations 0034–0036 remove title storage, add card events/export templates and
+first activation, and rewrite stored text/JSON document placeholders from
+`card.display_name` to `card.display_value`. Binary DOCX templates need a
+replacement version if they use the old token. Production migration requires
+the disposable `_test` gate, fresh backup and preflight described in `PLANS.md`.
+The local browser session remains suitable only for the documented MVP/internal
+environments, not production hosting.
+
 ## Contextual Card Layout Contract
 
 - Every newly saved form layout uses exactly 12 columns and four logical rows.
