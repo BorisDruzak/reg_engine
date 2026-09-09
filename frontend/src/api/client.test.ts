@@ -71,6 +71,15 @@ test("uses authenticated persisted export CRUD routes and downloads server-named
   expect(contents).toBe("xlsx bytes");
 });
 
+test("can list archived export codes for collision-free template creation", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  await listCardExportTemplates("token", "registry-1", true);
+  expect(String(fetchMock.mock.calls[0][0])).toBe(
+    "/api/v1/registries/registry-1/card-export-templates?include_archive=true",
+  );
+});
+
 test("sends dismissed list filtering to the backend with existing organization scope", async () => {
   const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [] }));
   vi.stubGlobal("fetch", fetchMock);

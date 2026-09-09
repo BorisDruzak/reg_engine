@@ -22,4 +22,14 @@ describe("generateTechnicalCode", () => {
       ]),
     ).toBe("glavnaya_organizatsiya_3");
   });
+
+  test("reserves space for a unique suffix after transliteration and length truncation", () => {
+    const name = "щ".repeat(40);
+    const first = "shch".repeat(25);
+    const second = `${first.slice(0, 98)}_2`;
+    expect(generateTechnicalCode(name, "export", [], 100)).toBe(first);
+    expect(generateTechnicalCode(name, "export", [first, second], 100)).toBe(
+      `${first.slice(0, 98)}_3`,
+    );
+  });
 });

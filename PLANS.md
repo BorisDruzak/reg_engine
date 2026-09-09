@@ -38,6 +38,10 @@ not a hardcoded employee registry.
     FIO is implicit. Each download requires an explicitly selected accessible
     organization; personnel dates are required and inclusive. Unsupported
     fields cannot be selected. Existing creation-only XLSX import remains.
+    Task 8 review correction keeps archived template codes reserved, bounds
+    generated codes to 100 characters without truncating uniqueness suffixes,
+    and refreshes the template list after a create conflict so the user can
+    explicitly retry without losing input. Backend uniqueness remains final.
   - XLSX personnel output contains `Вновь приняты`, `Уволены`, `Иные изменения`.
     Reference snapshots resolve to safe readable labels; inaccessible values
     use a placeholder. Long content wraps and continues below Excel's row-height
@@ -48,7 +52,9 @@ not a hardcoded employee registry.
   Fresh Task 8 verification:
   - `backend/.venv/Scripts/python.exe -m pytest -o addopts='' backend/tests -q`:
     **598 passed, 283 skipped**, one existing Starlette/httpx warning.
-  - `pnpm -C frontend test:run`: **462 passed, 32 skipped**, 44 files.
+  - `pnpm -C frontend test:run`: **468 passed, 32 skipped**, 44 files after
+    the Task 8 code-collision review correction. Its focused initial run had
+    27 passing tests; two supplementary UI cases are included in the full run.
   - `scripts/lint.ps1` and `scripts/typecheck.ps1` through PowerShell passed;
     ESLint retains the existing `FilledCardLayout.tsx` exhaustive-deps warning.
     `pnpm -C frontend build` passed with the existing large-chunk advisory.

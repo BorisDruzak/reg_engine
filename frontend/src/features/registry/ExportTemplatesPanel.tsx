@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
+  ApiError,
   archiveCardExportTemplate,
   createCardExportTemplate,
   downloadCardExportTemplate,
@@ -41,13 +42,14 @@ export function ExportTemplatesPanel({
   options: TabularCardExchangeOptionsRead;
 }) {
   const client = useQueryClient();
-  const queryKey = ["card-export-templates", token, registryId];
+  const queryKey = ["card-export-templates", token, registryId, "with-archive"];
   const templatesQuery = useQuery({
     queryKey,
-    queryFn: () => listCardExportTemplates(token, registryId),
+    queryFn: () => listCardExportTemplates(token, registryId, true),
     enabled: Boolean(token && registryId),
   });
-  const templates = templatesQuery.data?.items.filter((item) => !item.archived_at) ?? [];
+  const allTemplates = templatesQuery.data?.items ?? [];
+  const templates = allTemplates.filter((item) => !item.archived_at);
   const [selected, setSelected] = useState<CardExportTemplateRead | null>(null);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CardExportKind>("card_list");
@@ -119,9 +121,7 @@ export function ExportTemplatesPanel({
   }
   function cacheTemplate(template: CardExportTemplateRead) {
     client.setQueryData<{ items: CardExportTemplateRead[] }>(queryKey, (old) => ({
-      items: [...(old?.items ?? []).filter((item) => item.id !== template.id), template].filter(
-        (item) => !item.archived_at,
-      ),
+      items: [...(old?.items ?? []).filter((item) => item.id !== template.id), template],
     }));
     void client.invalidateQueries({ queryKey: ["audit-events", token] });
   }
@@ -133,8 +133,9 @@ export function ExportTemplatesPanel({
           generateTechnicalCode(
             name,
             "export",
-            templates.map((item) => item.code),
-          ).slice(0, 100),
+            allTemplates.map((item) => item.code),
+            100,
+          ),
         name: name.trim(),
         export_kind: kind,
         card_template_id: cardTemplateId,
@@ -149,8 +150,17 @@ export function ExportTemplatesPanel({
       chooseTemplate(template);
       setMessage("Шаблон выгрузки сохранён");
     },
-    onError: (failure) => {
+    onError: async (failure) => {
       setMessage(null);
+      if (!selected && failure instanceof ApiError && failure.status === 409) {
+        const refreshed = await templatesQuery.refetch();
+        setError(
+          refreshed.isError
+            ? "Не удалось создать шаблон из-за конфликта. Обновите список шаблонов и повторите сохранение."
+            : "Не удалось создать шаблон из-за конфликта. Список шаблонов обновлён. Повторите сохранение.",
+        );
+        return;
+      }
       setError(errorText(failure));
     },
   });

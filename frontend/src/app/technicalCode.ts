@@ -38,6 +38,7 @@ export function generateTechnicalCode(
   source: string,
   prefix: string,
   existingCodes: Iterable<string> = [],
+  maxLength = Infinity,
 ) {
   const fallback = normalizeTechnicalCode(prefix) || "item";
   const normalizedSource = normalizeTechnicalCode(source) || fallback;
@@ -45,10 +46,11 @@ export function generateTechnicalCode(
   const usedCodes = new Set(
     Array.from(existingCodes, (code) => code.trim().toLowerCase()).filter(Boolean),
   );
-  let candidate = base;
+  let candidate = base.slice(0, maxLength);
   let suffix = 2;
   while (usedCodes.has(candidate.toLowerCase())) {
-    candidate = `${base}_${suffix}`;
+    const ending = `_${suffix}`;
+    candidate = `${base.slice(0, maxLength - ending.length)}${ending}`;
     suffix += 1;
   }
   return candidate;

@@ -651,9 +651,13 @@ export async function getTabularXlsxCardExchangeOptions(token: string, registryI
   );
 }
 
-export async function listCardExportTemplates(token: string, registryId: string) {
+export async function listCardExportTemplates(
+  token: string,
+  registryId: string,
+  includeArchive = false,
+) {
   return apiRequest<{ items: CardExportTemplateRead[] }>(
-    `/api/v1/registries/${registryId}/card-export-templates`,
+    `/api/v1/registries/${registryId}/card-export-templates${includeArchive ? "?include_archive=true" : ""}`,
     { token },
   );
 }

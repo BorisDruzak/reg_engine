@@ -8,7 +8,14 @@ import { uiText } from "@/app/uiText";
 import { ImportExportPanel } from "./ImportExportPanel";
 
 const api = vi.hoisted(() => ({
-  ApiError: class ApiError extends Error {},
+  ApiError: class ApiError extends Error {
+    constructor(
+      message: string,
+      public status?: number,
+    ) {
+      super(message);
+    }
+  },
   commitTabularXlsxImport: vi.fn(),
   downloadTabularXlsxCards: vi.fn(),
   downloadTabularXlsxImportTemplate: vi.fn(),
@@ -75,6 +82,7 @@ function renderPanel() {
 }
 
 beforeEach(() => {
+  vi.resetAllMocks();
   api.listCardExportTemplates.mockResolvedValue({ items: [] });
   api.getTabularXlsxCardExchangeOptions.mockResolvedValue(options);
   api.previewTabularXlsxImport.mockResolvedValue({
@@ -96,7 +104,6 @@ beforeEach(() => {
     registry_id: "registry-1",
     summary: { created_cards: 1, field_values_written: 1 },
   });
-  vi.clearAllMocks();
 });
 
 const exportOptions = {
@@ -173,6 +180,97 @@ test("saves ordered card-list fields with non-removable FIO and no title", async
       configuration_json: { field_ids: ["fio", "mapped-1", "mapped-0"] },
     }),
   );
+});
+
+test("reserves codes of archived templates when creating the same name again", async () => {
+  api.listCardExportTemplates.mockResolvedValue({
+    items: [{ ...savedExport, code: "spisok_otdela", archived_at: "2026-09-09T00:00:00Z" }],
+  });
+  api.createCardExportTemplate.mockResolvedValue({ ...savedExport, code: "spisok_otdela_2" });
+  const user = await openExports();
+  expect(screen.queryByRole("option", { name: "Список отдела" })).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  await waitFor(() =>
+    expect(api.createCardExportTemplate).toHaveBeenCalledWith(
+      "token",
+      "registry-1",
+      expect.objectContaining({ code: "spisok_otdela_2" }),
+    ),
+  );
+  expect(api.listCardExportTemplates).toHaveBeenCalledWith("token", "registry-1", true);
+});
+
+test("uses bounded unique export codes for long transliterated names", async () => {
+  const occupied = "shch".repeat(25);
+  api.listCardExportTemplates.mockResolvedValue({ items: [{ ...savedExport, code: occupied }] });
+  api.createCardExportTemplate.mockResolvedValue(savedExport);
+  const user = await openExports();
+  await user.type(screen.getByLabelText("Название шаблона выгрузки"), "щ".repeat(40));
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  await waitFor(() =>
+    expect(api.createCardExportTemplate).toHaveBeenCalledWith(
+      "token",
+      "registry-1",
+      expect.objectContaining({ code: `${occupied.slice(0, 98)}_2` }),
+    ),
+  );
+});
+
+test("keeps a code reserved after archiving in the current session", async () => {
+  api.listCardExportTemplates.mockResolvedValue({
+    items: [{ ...savedExport, code: "spisok_otdela" }],
+  });
+  api.archiveCardExportTemplate.mockResolvedValue({
+    ...savedExport,
+    code: "spisok_otdela",
+    archived_at: "2026-09-09T00:00:00Z",
+  });
+  api.createCardExportTemplate.mockResolvedValue(savedExport);
+  const user = await openExports();
+  await user.selectOptions(screen.getByLabelText("Сохранённый шаблон выгрузки"), "export-1");
+  await user.click(screen.getByRole("button", { name: "Архивировать шаблон" }));
+  await user.click(screen.getByRole("button", { name: "Подтвердить архивирование" }));
+  await screen.findByText("Шаблон выгрузки архивирован");
+  await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  await waitFor(() =>
+    expect(api.createCardExportTemplate).toHaveBeenCalledWith(
+      "token",
+      "registry-1",
+      expect.objectContaining({ code: "spisok_otdela_2" }),
+    ),
+  );
+});
+
+test("refreshes occupied codes after a create conflict and retries only after explicit save", async () => {
+  api.listCardExportTemplates
+    .mockResolvedValueOnce({ items: [] })
+    .mockResolvedValue({ items: [{ ...savedExport, code: "spisok_otdela" }] });
+  api.createCardExportTemplate
+    .mockRejectedValueOnce(new api.ApiError("Integrity constraint violation.", 409))
+    .mockResolvedValueOnce({ ...savedExport, code: "spisok_otdela_2" });
+  const user = await openExports();
+  await user.type(screen.getByLabelText("Название шаблона выгрузки"), "Список отдела");
+  await user.selectOptions(screen.getByLabelText("Шаблон карточки для выгрузки"), "template-1");
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Список шаблонов обновлён. Повторите сохранение.",
+  );
+  expect(screen.getByLabelText("Название шаблона выгрузки")).toHaveValue("Список отдела");
+  expect(api.createCardExportTemplate).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("button", { name: "Сохранить шаблон выгрузки" }));
+  await waitFor(() =>
+    expect(api.createCardExportTemplate).toHaveBeenLastCalledWith(
+      "token",
+      "registry-1",
+      expect.objectContaining({ code: "spisok_otdela_2" }),
+    ),
+  );
+  expect(await screen.findByRole("status")).toHaveTextContent("Шаблон выгрузки сохранён");
 });
 
 test("personnel download requires organization and inclusive valid period and clicks a blob download", async () => {
