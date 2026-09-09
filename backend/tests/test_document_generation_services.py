@@ -129,7 +129,7 @@ def _card_read_with_file_ref(value: FileRefValueRead | None) -> CardRead:
         card_template_id=uuid4(),
         card_template_name="Базовый шаблон",
         organization_id=uuid4(),
-        display_name="File ref render card",
+        display_value="File ref render card",
         fields={
             "main.support_file": CardFieldRead(
                 field_id=uuid4(),
@@ -242,7 +242,7 @@ def _card_read_for_print_layout(field_id: UUID) -> CardRead:
         registry_id=uuid4(),
         card_template_id=uuid4(),
         organization_id=uuid4(),
-        display_name="Печатная карточка",
+        display_value="Печатная карточка",
         fields={
             "main.text": CardFieldRead(
                 field_id=field_id,
@@ -501,7 +501,7 @@ def test_document_renderers_use_work_experience_display_from_card_read() -> None
         registry_id=uuid4(),
         card_template_id=uuid4(),
         organization_id=uuid4(),
-        display_name="Печатная карточка",
+        display_value="Печатная карточка",
         fields={
             "main.work_experience": CardFieldRead(
                 field_id=field_id,
@@ -757,7 +757,7 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
                 "y_mm": 58.0,
                 "width_mm": 90.0,
                 "height_mm": 8.0,
-                "metadata_key": "card.display_name",
+                "metadata_key": "card.display_value",
                 "style": {"font_size": 10, "bold": True},
             },
             {
@@ -1007,7 +1007,7 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     overlays_by_id = {overlay["id"]: overlay for overlay in converted_overlays}
     assert overlays_by_id["legacy-heading"]["text"] == "Печатная форма карточки"
     assert overlays_by_id["legacy-static-note"]["text"] == "Служебная пометка"
-    assert overlays_by_id["legacy-metadata"]["metadata_key"] == "card.display_name"
+    assert overlays_by_id["legacy-metadata"]["metadata_key"] == "card.display_value"
     assert overlays_by_id["legacy-page-number"]["kind"] == "page_number"
     assert overlays_by_id["legacy-print-date"]["kind"] == "print_date"
     assert overlays_by_id["brand-image"]["alt"] == "Эмблема карточки"
@@ -1039,7 +1039,7 @@ def test_convert_production_legacy_print_view_promotes_print_only_items_to_overl
     expected_rendered_text = [
         "Печатная форма карточки",
         "Служебная пометка",
-        card.display_name,
+        card.display_value,
         "Страница 1",
         date.today().isoformat(),
         "Эмблема карточки",
@@ -1256,7 +1256,7 @@ def test_card_print_generation_rejects_document_template_for_another_card_templa
         registry_id=registry_id,
         card_template_id=document_card_template_id,
         template_format="card_print_layout_v1",
-        output_filename_template="{{ card.display_name }}.docx",
+        output_filename_template="{{ card.display_value }}.docx",
         output_content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         name="Печатная форма",
     )
@@ -1267,6 +1267,9 @@ def test_card_print_generation_rejects_document_template_for_another_card_templa
     )
 
     class FakeSession:
+        def get(self, *args, **kwargs):
+            return card
+
         def add(self, _value: object) -> None:
             return None
 
@@ -1286,6 +1289,9 @@ def test_card_print_generation_rejects_document_template_for_another_card_templa
     class FakeCardService:
         def __init__(self, _session: object) -> None:
             pass
+
+        def _get_editable_card(self, *args):
+            return card
 
         def read_card_for_actor(self, **_kwargs: object) -> CardRead:
             return card
@@ -1493,7 +1499,7 @@ def test_document_template_creation_requires_schema_permission_and_writes_audit(
             registry_id=context["registry"].id,
             code="summary",
             name="Сводка",
-            template_body="Карточка: {{ card.display_name }}",
+            template_body="Карточка: {{ card.display_value }}",
         )
 
     template = document_service.create_template_for_actor(
@@ -1501,7 +1507,7 @@ def test_document_template_creation_requires_schema_permission_and_writes_audit(
         registry_id=context["registry"].id,
         code="summary",
         name="Сводка",
-        template_body="Карточка: {{ card.display_name }}",
+        template_body="Карточка: {{ card.display_value }}",
     )
 
     audit_event = db_session.scalar(
@@ -1526,11 +1532,11 @@ def test_generated_document_renders_schema_driven_card_data_to_storage(
         code="card-summary",
         name="Сводка карточки",
         template_body=(
-            "Карточка: {{ card.display_name }}\n"
+            "Карточка: {{ card.display_value }}\n"
             "Поле: {{ fields.main.full_name }}\n"
             "ID: {{ card.id }}"
         ),
-        output_filename_template="{{ card.display_name }}.docx",
+        output_filename_template="{{ card.display_value }}.docx",
     )
 
     generated = document_service.generate_document_for_actor(
@@ -1580,7 +1586,7 @@ def test_generated_document_download_writes_audit(
         registry_id=context["registry"].id,
         code="download-audit",
         name="Download audit",
-        template_body="РљР°СЂС‚РѕС‡РєР°: {{ card.display_name }}",
+        template_body="РљР°СЂС‚РѕС‡РєР°: {{ card.display_value }}",
     )
     generated = document_service.generate_document_for_actor(
         actor_user_id=context["card_admin"].id,
@@ -1711,11 +1717,11 @@ def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
         code="card-summary-pdf",
         name="PDF summary",
         template_body=(
-            "Карточка: {{ card.display_name }}\n"
+            "Карточка: {{ card.display_value }}\n"
             "Поле: {{ fields.main.full_name }}\n"
             "ID: {{ card.id }}"
         ),
-        output_filename_template="{{ card.display_name }}.docx",
+        output_filename_template="{{ card.display_value }}.docx",
     )
 
     generated = document_service.generate_pdf_for_actor(
@@ -1771,7 +1777,7 @@ def test_generated_pdf_rejects_binary_template_until_converter_boundary(
         name="Binary PDF",
         original_filename="binary-template.docx",
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        content=_binary_docx_bytes("Binary {{ card.display_name }}"),
+        content=_binary_docx_bytes("Binary {{ card.display_value }}"),
     )
 
     with pytest.raises(DocumentServiceError, match="PDF conversion supports docx_text_v1"):
@@ -1813,7 +1819,7 @@ def test_generated_document_render_requires_cards_manage_in_scope(
         registry_id=context["registry"].id,
         code="scope",
         name="Scope",
-        template_body="Карточка: {{ card.display_name }}",
+        template_body="Карточка: {{ card.display_value }}",
     )
 
     with pytest.raises(PermissionDeniedError):
@@ -1834,7 +1840,7 @@ def test_generated_document_does_not_render_superseded_card(
         registry_id=context["registry"].id,
         code="superseded",
         name="Superseded",
-        template_body="Карточка: {{ card.display_name }}",
+        template_body="Карточка: {{ card.display_value }}",
     )
     CardService(db_session).transfer_card_for_actor(
         actor_user_id=context["system_admin"].id,
@@ -1860,7 +1866,7 @@ def test_archived_template_cannot_render_and_writes_audit(
         registry_id=context["registry"].id,
         code="archive-template",
         name="Archive template",
-        template_body="Карточка: {{ card.display_name }}",
+        template_body="Карточка: {{ card.display_value }}",
     )
 
     archived = document_service.archive_template_for_actor(
@@ -1898,7 +1904,7 @@ def test_generated_document_archive_preserves_stored_file_and_writes_audit(
         registry_id=context["registry"].id,
         code="archive-generated",
         name="Archive generated",
-        template_body="Карточка: {{ card.display_name }}",
+        template_body="Карточка: {{ card.display_value }}",
     )
     generated = document_service.generate_document_for_actor(
         actor_user_id=context["card_admin"].id,

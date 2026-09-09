@@ -373,7 +373,7 @@ def test_card_detail_report_uses_work_experience_display_from_card_read() -> Non
         registry_id=uuid4(),
         card_template_id=uuid4(),
         organization_id=uuid4(),
-        display_name="Карточка отчёта",
+        display_value="Карточка отчёта",
         fields={
             "main.work_experience": CardFieldRead(
                 field_id=field_id,
@@ -409,7 +409,7 @@ def test_xlsx_report_output_renderer_creates_workbook_bytes() -> None:
                     "registry_id": "registry-1",
                     "organization_id": "organization-1",
                     "org_unit_id": None,
-                    "display_name": "Visible report card",
+                    "display_value": "Visible report card",
                     "lifecycle_status": "draft",
                     "created_at": "2026-06-30T00:00:00+00:00",
                 }
@@ -436,7 +436,7 @@ def test_xlsx_report_output_renderer_creates_workbook_bytes() -> None:
         "registry_id",
         "organization_id",
         "org_unit_id",
-        "display_name",
+        "display_value",
         "lifecycle_status",
         "created_at",
     )
@@ -460,7 +460,7 @@ def test_pdf_report_output_renderer_creates_pdf_bytes() -> None:
                     "registry_id": "registry-1",
                     "organization_id": "organization-1",
                     "org_unit_id": None,
-                    "display_name": "Visible report card",
+                    "display_value": "Visible report card",
                     "lifecycle_status": "draft",
                     "created_at": "2026-06-30T00:00:00+00:00",
                 }
@@ -727,7 +727,7 @@ def test_csv_registry_report_runs_are_scoped_stored_and_downloadable(
     rows = list(csv.DictReader(StringIO(csv_text)))
     assert len(rows) == 1
     assert rows[0]["id"] == str(context["child_card"].id)
-    assert rows[0]["display_name"] == "Visible report card"
+    assert rows[0]["display_value"] == "Visible report card"
     assert rows[0]["lifecycle_status"] == "active"
     assert "Hidden sibling report card" not in csv_text
 
@@ -966,7 +966,7 @@ def test_xlsx_registry_report_runs_are_scoped_stored_and_downloadable(
         "registry_id",
         "organization_id",
         "org_unit_id",
-        "display_name",
+        "display_value",
         "lifecycle_status",
         "created_at",
     )

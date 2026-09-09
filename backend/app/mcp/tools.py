@@ -420,12 +420,11 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
             "properties": {
                 "registry_id": {"type": "string"},
                 "organization_id": {"type": "string"},
-                "display_name": {"type": "string"},
                 "org_unit_id": {"type": "string"},
                 "public_view_enabled": {"type": "boolean"},
                 "public_edit_enabled": {"type": "boolean"},
             },
-            "required": ["registry_id", "organization_id", "display_name"],
+            "required": ["registry_id", "organization_id"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": False},
@@ -438,7 +437,6 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
             "type": "object",
             "properties": {
                 "card_id": {"type": "string"},
-                "display_name": {"type": "string"},
                 "public_view_enabled": {"type": "boolean"},
                 "public_edit_enabled": {"type": "boolean"},
             },
@@ -741,6 +739,29 @@ MCP_TOOL_DEFINITIONS: list[McpToolDefinition] = [
 ]
 
 
+for _tool in MCP_TOOL_DEFINITIONS:
+    if _tool["name"] in {
+        "reg_engine_update_card",
+        "reg_engine_archive_card",
+        "reg_engine_set_card_field_value",
+        "reg_engine_set_card_values",
+        "reg_engine_create_card_block_instance",
+        "reg_engine_archive_card_block_instance",
+        "reg_engine_transfer_card",
+    }:
+        _tool["inputSchema"]["properties"].update(
+            {
+                "basis_text": {
+                    "type": "string",
+                    "description": "Основание изменения после первой активации карточки.",
+                },
+                "occurred_on": {"type": "string", "format": "date"},
+            }
+        )
+    if _tool["name"] == "reg_engine_update_card":
+        _tool["inputSchema"]["properties"]["org_unit_id"] = {"type": ["string", "null"]}
+
+
 def call_tool(
     name: str,
     arguments: dict[str, Any] | None,
@@ -957,11 +978,12 @@ def _call_tool_or_raise(
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/fields/{field_id}")
+    if name in {"reg_engine_create_card", "reg_engine_update_card"} and "display_name" in arguments:
+        raise ValueError("Card title is not supported; use schema field values.")
     if name == "reg_engine_create_card":
         registry_id = _required_str_arg(arguments, "registry_id")
         card_payload: dict[str, Any] = {
             "organization_id": _required_str_arg(arguments, "organization_id"),
-            "display_name": _required_str_arg(arguments, "display_name"),
         }
         _add_optional_str(card_payload, arguments, "org_unit_id")
         _add_optional_bool(card_payload, arguments, "public_view_enabled")
@@ -970,22 +992,27 @@ def _call_tool_or_raise(
     if name == "reg_engine_update_card":
         card_id = _required_str_arg(arguments, "card_id")
         card_update_payload: dict[str, Any] = {}
-        _add_optional_str(card_update_payload, arguments, "display_name")
+        if "org_unit_id" in arguments:
+            card_update_payload["org_unit_id"] = _optional_str_arg(arguments, "org_unit_id")
         _add_optional_bool(card_update_payload, arguments, "public_view_enabled")
         _add_optional_bool(card_update_payload, arguments, "public_edit_enabled")
         if not card_update_payload:
             raise ValueError("At least one card update field is required.")
+        card_update_payload.update(_change_context_payload(arguments))
         return client.patch_json(f"/api/v1/cards/{card_id}", card_update_payload)
     if name == "reg_engine_archive_card":
         card_id = _required_str_arg(arguments, "card_id")
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
-        return client.delete_json(f"/api/v1/cards/{card_id}")
+        return client.delete_json(
+            f"/api/v1/cards/{card_id}", payload=_change_context_payload(arguments) or None
+        )
     if name == "reg_engine_set_card_field_value":
         card_id = _required_str_arg(arguments, "card_id")
         field_id = _required_str_arg(arguments, "field_id")
         field_value_payload: dict[str, Any] = {"value": _required_json_arg(arguments, "value")}
         _add_optional_str(field_value_payload, arguments, "block_instance_id")
+        field_value_payload.update(_change_context_payload(arguments))
         return client.patch_json(
             f"/api/v1/cards/{card_id}/fields/{field_id}",
             field_value_payload,
@@ -994,17 +1021,23 @@ def _call_tool_or_raise(
         card_id = _required_str_arg(arguments, "card_id")
         return client.patch_json(
             f"/api/v1/cards/{card_id}/values",
-            {"values": _required_bulk_values_arg(arguments)},
+            {"values": _required_bulk_values_arg(arguments), **_change_context_payload(arguments)},
         )
     if name == "reg_engine_create_card_block_instance":
         card_id = _required_str_arg(arguments, "card_id")
         block_id = _required_str_arg(arguments, "block_id")
-        return client.post_json(f"/api/v1/cards/{card_id}/blocks/{block_id}/instances", {})
+        return client.post_json(
+            f"/api/v1/cards/{card_id}/blocks/{block_id}/instances",
+            _change_context_payload(arguments),
+        )
     if name == "reg_engine_archive_card_block_instance":
         block_instance_id = _required_str_arg(arguments, "block_instance_id")
         if _bool_arg(arguments, "confirm_archive", False) is not True:
             raise ValueError("Tool argument 'confirm_archive' must be true.")
-        return client.delete_json(f"/api/v1/card-block-instances/{block_instance_id}")
+        return client.delete_json(
+            f"/api/v1/card-block-instances/{block_instance_id}",
+            payload=_change_context_payload(arguments) or None,
+        )
     if name == "reg_engine_transfer_card":
         card_id = _required_str_arg(arguments, "card_id")
         target_organization_id = _required_str_arg(arguments, "target_organization_id")
@@ -1012,7 +1045,10 @@ def _call_tool_or_raise(
             raise ValueError("Tool argument 'confirm_transfer' must be true.")
         return client.post_json(
             f"/api/v1/cards/{card_id}/transfer",
-            {"target_organization_id": target_organization_id},
+            {
+                "target_organization_id": target_organization_id,
+                **_change_context_payload(arguments),
+            },
         )
     if name == "reg_engine_create_report_template":
         registry_id = _required_str_arg(arguments, "registry_id")
@@ -1118,6 +1154,13 @@ def _call_tool_or_raise(
             raise ValueError("Tool argument 'confirm_archive' must be true.")
         return client.delete_json(f"/api/v1/generated-documents/{generated_document_id}")
     raise ValueError(f"Unknown MCP tool: {name}")
+
+
+def _change_context_payload(arguments: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    _add_optional_str(payload, arguments, "basis_text")
+    _add_optional_str(payload, arguments, "occurred_on")
+    return payload
 
 
 def _required_str_arg(arguments: dict[str, Any], key: str) -> str:

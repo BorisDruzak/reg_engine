@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -130,10 +130,11 @@ class PublicLinkPreviewBlockRead(BaseModel):
 
 class PublicLinkPreviewRead(BaseModel):
     card_id: UUID
-    display_name: str
+    display_value: str
     organization_name: str
     card_template_name: str
     lifecycle_status: str
+    activated_at: datetime | None = None
     expires_at: datetime | None
     can_edit: bool
     form_layout: CardTemplateFormLayoutRead
@@ -148,6 +149,8 @@ class PublicLinkEditRequest(BaseModel):
     field_id: UUID
     value: Any
     block_instance_id: UUID | None = None
+    basis_text: str | None = None
+    occurred_on: date | None = None
 
     @field_validator("actor_name")
     @classmethod

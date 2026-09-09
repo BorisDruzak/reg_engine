@@ -2,10 +2,12 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CardCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     organization_id: UUID
     card_template_id: UUID | None = None
     org_unit_id: UUID | None = None
@@ -14,6 +16,8 @@ class CardCreate(BaseModel):
 
 
 class OrganizationCardCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     card_template_id: UUID | None = None
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
@@ -81,6 +85,8 @@ class CardListRead(BaseModel):
 
 
 class CardChangeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     basis_text: str | None = None
     occurred_on: date | None = None
 

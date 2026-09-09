@@ -80,7 +80,7 @@ class CardTemplatePrintViewRead(BaseModel):
     page: CardTemplatePrintPageRead
     items: list[CardTemplatePrintViewItemRead] = Field(default_factory=list)
     layout_json: dict[str, Any] = Field(default_factory=dict)
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
 
 
 class CardTemplateLayoutSyncStatusRead(BaseModel):
@@ -92,7 +92,7 @@ class CardTemplateLayoutSyncStatusRead(BaseModel):
 
 class CardTemplateExportSettingsRead(BaseModel):
     default_print_view_id: str | None = None
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
     formats: list[Literal["docx", "pdf"]] = Field(default_factory=_default_export_formats)
 
 
@@ -126,7 +126,7 @@ class CardTemplatePrintViewUpdate(BaseModel):
     name: str | None = None
     is_default: bool = True
     layout_json: dict[str, Any]
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
 
 
 class CardTemplateLayoutProjectionResult(BaseModel):

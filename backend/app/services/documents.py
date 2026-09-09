@@ -108,7 +108,7 @@ class DocumentService:
         template_body: str,
         description: str | None = None,
         template_format: str = "docx_text_v1",
-        output_filename_template: str = "{{ card.display_name }}.docx",
+        output_filename_template: str = "{{ card.display_value }}.docx",
         output_content_type: str = _DOCX_CONTENT_TYPE,
     ) -> DocumentTemplate:
         self._require_schema_permission(actor_user_id, registry_id)
@@ -165,7 +165,7 @@ class DocumentService:
         content_type: str,
         content: bytes,
         description: str | None = None,
-        output_filename_template: str = "{{ card.display_name }}.docx",
+        output_filename_template: str = "{{ card.display_value }}.docx",
     ) -> tuple[DocumentTemplate, DocumentTemplateVersion]:
         self._require_schema_permission(actor_user_id, registry_id)
         clean_filename = normalize_attachment_filename(original_filename)
@@ -301,7 +301,7 @@ class DocumentService:
         layout_json: dict[str, object],
         card_template_id: UUID | None = None,
         description: str | None = None,
-        output_filename_template: str = "{{ card.display_name }}.docx",
+        output_filename_template: str = "{{ card.display_value }}.docx",
     ) -> DocumentTemplate:
         self._require_schema_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
@@ -535,6 +535,7 @@ class DocumentService:
         title: str | None = None,
     ) -> GeneratedDocument:
         template = self._get_active_template(template_id)
+        self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
         try:
             card_read = CardService(self.session).read_card_for_actor(
                 actor_user_id=actor_user_id,
@@ -549,6 +550,7 @@ class DocumentService:
             card_read.organization_id,
             registry_id=card_read.registry_id,
         )
+        CardService(self.session)._get_editable_card(card_id)
         self._validate_card_print_template_for_card(template, card_read)
 
         template_version = self._latest_template_version(template.id)
@@ -667,7 +669,7 @@ class DocumentService:
         output_format: str,
         name: str,
         card_template_id: UUID | None = None,
-        output_filename_template: str = "{{ card.display_name }}.docx",
+        output_filename_template: str = "{{ card.display_value }}.docx",
     ) -> RenderedDocumentDownload:
         self._require_schema_permission(actor_user_id, registry_id)
         self._get_active_registry(registry_id)
@@ -680,7 +682,7 @@ class DocumentService:
             card=self._blank_card_print_context_card_from_values(
                 registry_id=registry_id,
                 card_template_id=card_template_id,
-                display_name=self._clean_required_text(name, "name"),
+                display_value=self._clean_required_text(name, "name"),
             )
         )
         clean_output_template = self._clean_required_text(
@@ -749,7 +751,7 @@ class DocumentService:
             card_read = self._blank_card_print_context_card_from_values(
                 registry_id=registry_id,
                 card_template_id=card_template_id,
-                display_name="Печатная форма",
+                display_value="Печатная форма",
             )
         context = _RenderContext(card=card_read)
         return {
@@ -757,7 +759,7 @@ class DocumentService:
             "warnings": result.warnings,
             "view": {
                 "card_id": str(card_read.card_id),
-                "display_name": card_read.display_name,
+                "display_value": card_read.display_value,
                 "items": [
                     {
                         "id": str(item.get("id") or ""),
@@ -778,6 +780,7 @@ class DocumentService:
         title: str | None = None,
     ) -> GeneratedDocument:
         template = self._get_active_template(template_id)
+        self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
         try:
             card_read = CardService(self.session).read_card_for_actor(
                 actor_user_id=actor_user_id,
@@ -792,6 +795,7 @@ class DocumentService:
             card_read.organization_id,
             registry_id=card_read.registry_id,
         )
+        CardService(self.session)._get_editable_card(card_id)
         self._validate_card_print_template_for_card(template, card_read)
 
         template_version = self._latest_template_version(template.id)
@@ -966,15 +970,19 @@ class DocumentService:
         archive_reason: str | None = None,
     ) -> GeneratedDocument:
         generated = self._get_generated_document(generated_document_id)
-        if generated.archived_at is not None:
-            return generated
-
-        card = self._get_readable_card(generated.card_id, include_archive=False)
+        card = self.session.get(
+            Card, generated.card_id, with_for_update=True, populate_existing=True
+        )
+        if card is None:
+            raise DocumentServiceError("Card was not found.")
         self._require_card_manage_permission(
             actor_user_id,
             card.organization_id,
             registry_id=card.registry_id,
         )
+        CardService(self.session)._get_editable_card(card.id)
+        if generated.archived_at is not None:
+            return generated
         generated.archived_at = datetime.now(UTC)
         generated.archived_by = actor_user_id
         generated.archive_reason = archive_reason
@@ -1210,7 +1218,7 @@ class DocumentService:
         return self._blank_card_print_context_card_from_values(
             registry_id=template.registry_id,
             card_template_id=template.card_template_id,
-            display_name=template.name,
+            display_value=template.name,
         )
 
     def _blank_card_print_context_card_from_values(
@@ -1218,13 +1226,13 @@ class DocumentService:
         *,
         registry_id: UUID,
         card_template_id: UUID | None,
-        display_name: str,
+        display_value: str,
     ) -> CardRead:
         return CardRead(
             card_id=UUID(int=0),
             registry_id=registry_id,
             organization_id=UUID(int=0),
-            display_name=display_name,
+            display_value=display_value,
             card_template_id=card_template_id or UUID(int=0),
             card_template_name=None,
             blocks={},
@@ -1234,8 +1242,8 @@ class DocumentService:
     def _resolve_placeholder(self, placeholder: str, context: _RenderContext) -> object | None:
         if placeholder == "card.id":
             return context.card.card_id
-        if placeholder == "card.display_name":
-            return context.card.display_name
+        if placeholder == "card.display_value":
+            return context.card.display_value
         if placeholder == "card.registry_id":
             return context.card.registry_id
         if placeholder == "card.organization_id":
@@ -1560,7 +1568,7 @@ class DocumentService:
         column_width = usable_width / 12
         font_name = self._pdf_font_name()
         pdf_canvas = canvas.Canvas(buffer, pagesize=A4)
-        pdf_canvas.setTitle(context.card.display_name)
+        pdf_canvas.setTitle(context.card.display_value)
 
         items = self._card_print_items(render_layout)
         max_page = max(
@@ -1858,8 +1866,8 @@ class DocumentService:
             return self._card_print_field_text(item, context)
         if kind == "metadata":
             key = str(item.get("metadata_key") or "")
-            if key == "card.display_name":
-                return context.card.display_name
+            if key == "card.display_value":
+                return context.card.display_value
             if key == "card.id":
                 return str(context.card.card_id)
             if key == "card.registry_id":

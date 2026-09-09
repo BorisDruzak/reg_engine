@@ -24,7 +24,7 @@ class CardChangeNotificationChangeRead(BaseModel):
 class CardChangeNotificationRead(BaseModel):
     id: UUID
     card_id: UUID
-    card_display_name: str
+    card_display_value: str
     actor_display_name: str
     changes: list[CardChangeNotificationChangeRead]
     read_at: datetime | None

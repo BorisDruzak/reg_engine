@@ -19,7 +19,7 @@ class AuditEventRead(BaseModel):
     object_type: str
     object_id: UUID | None
     card_id: UUID | None = None
-    card_display_name: str | None = None
+    card_display_value: str | None = None
     card_lifecycle_status: str | None = None
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
@@ -45,7 +45,7 @@ class AuditEventRead(BaseModel):
         *,
         actor_display_name: str | None,
         attributed_user_display_name: str | None,
-        card_display_name: str | None,
+        card_display_value: str | None,
         card_lifecycle_status: str | None,
         object_id: UUID | None,
         old_data_json: dict[str, Any] | None,
@@ -56,7 +56,7 @@ class AuditEventRead(BaseModel):
         updates: dict[str, Any] = {
             "actor_display_name": actor_display_name,
             "attributed_user_display_name": attributed_user_display_name,
-            "card_display_name": card_display_name,
+            "card_display_value": card_display_value,
             "card_lifecycle_status": card_lifecycle_status,
             "object_id": object_id,
             "old_data_json": old_data_json,

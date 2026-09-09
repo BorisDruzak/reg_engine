@@ -13,7 +13,7 @@ from app.schemas.cards import (
     CardPublicFieldSettingUpdate,
 )
 from app.services.audit import AuditService
-from app.services.cards import CardServiceError
+from app.services.cards import CardService, CardServiceError
 from app.services.permissions import PermissionDeniedError, PermissionService
 
 
@@ -96,8 +96,11 @@ class CardPublicAccessService:
         card_id: UUID,
         payload: CardPublicAccessUpdate,
     ) -> CardPublicAccessRead:
-        card = self._get_active_card(card_id)
+        card = self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+        if card is None:
+            raise CardPublicAccessError("Card was not found.")
         self._require_manage_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         active_fields = self._active_template_fields(card)
         fields_by_id = {field_model.id: field_model for _, field_model in active_fields}
         self._validate_field_updates(payload.fields, fields_by_id)

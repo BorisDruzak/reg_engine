@@ -23,7 +23,7 @@ class CardCreationLinkOrganizationRead(BaseModel):
 
 class CardCreationLinkCreatedCardRead(BaseModel):
     card_id: UUID
-    display_name: str
+    display_value: str
     organization_id: UUID
     organization_name: str
     child_public_link_id: UUID
@@ -97,5 +97,5 @@ class CardCreationLinkDraftCreateRequest(BaseModel):
 
 class CardCreationLinkFirstSaveRead(BaseModel):
     card_id: UUID
-    display_name: str
+    display_value: str
     child_raw_token: str

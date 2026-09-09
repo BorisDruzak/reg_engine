@@ -85,7 +85,7 @@ def test_public_preview_endpoint_projections_include_text_validation(
     public_payload = public_link_endpoints._public_link_preview_to_read(
         PublicLinkPreview(
             card_id=uuid4(),
-            display_name="Card",
+            display_value="Card",
             organization_name="Organization",
             card_template_name="Template",
             lifecycle_status="draft",

@@ -42,7 +42,7 @@ from app.services.permissions import PermissionDeniedError, PermissionService
 from app.services.registry_schema import RegistrySchemaError
 
 CARD_TEMPLATE_LAYOUT_VERSION = "card_template_layout_v1"
-DEFAULT_OUTPUT_FILENAME = "{{ card.display_name }}.docx"
+DEFAULT_OUTPUT_FILENAME = "{{ card.display_value }}.docx"
 QUARTER_COLUMN_SPANS = {3, 6, 9, 12}
 
 

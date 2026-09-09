@@ -45,6 +45,7 @@ from app.schemas.public_links import (
 )
 from app.services.attachments import AttachmentService
 from app.services.card_change_notifications import CardChangeNotificationService
+from app.services.card_events import CardChangeContext
 from app.services.public_links import (
     PublicLinkPreview,
     PublicLinkReviewDiff,
@@ -292,6 +293,7 @@ def edit_card_field_with_public_link(
             field_id=payload.field_id,
             value=value,
             block_instance_id=payload.block_instance_id,
+            change_context=CardChangeContext(payload.basis_text or "", payload.occurred_on),
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -506,10 +508,11 @@ def _can_public_link_upload_attachment(public_link: CardPublicLink) -> bool:
 def _public_link_preview_to_read(preview: PublicLinkPreview) -> PublicLinkPreviewRead:
     return PublicLinkPreviewRead(
         card_id=preview.card_id,
-        display_name=preview.display_name,
+        display_value=preview.display_value,
         organization_name=preview.organization_name,
         card_template_name=preview.card_template_name,
         lifecycle_status=preview.lifecycle_status,
+        activated_at=preview.activated_at,
         expires_at=preview.expires_at,
         can_edit=preview.can_edit,
         form_layout=CardTemplateFormLayoutRead.model_validate(preview.form_layout),

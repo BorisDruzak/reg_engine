@@ -14,6 +14,7 @@ from app.schemas.card_change_notifications import (
     CardChangeNotificationRead,
 )
 from app.services.card_change_notifications import CardChangeNotificationService
+from app.services.cards import CardService
 from app.services.permissions import PermissionDeniedError
 
 router = APIRouter(tags=["card-change-notifications"])
@@ -39,7 +40,7 @@ def list_card_change_notifications(
         return CardChangeNotificationListRead(
             unread_count=unread_count,
             items=[
-                _notification_to_read(item, card=cards_by_id[item.card_id])
+                _notification_to_read(item, card=cards_by_id[item.card_id], session=session)
                 for item in notifications
                 if item.card_id in cards_by_id
             ],
@@ -69,7 +70,7 @@ def mark_card_change_notification_read(
         ).get(notification.card_id)
         if card is None:
             raise PermissionDeniedError("Notification is not available to this actor.")
-        return _notification_to_read(notification, card=card)
+        return _notification_to_read(notification, card=card, session=session)
     except Exception as exc:
         raise_service_http_error(exc)
 
@@ -95,11 +96,12 @@ def _notification_to_read(
     notification: CardChangeNotification,
     *,
     card: Card,
+    session: Session,
 ) -> CardChangeNotificationRead:
     return CardChangeNotificationRead(
         id=notification.id,
         card_id=notification.card_id,
-        card_display_name=card.display_name,
+        card_display_value=CardService(session).card_display_value(card),
         actor_display_name=notification.actor_display_name,
         changes=[_notification_change_to_read(change) for change in notification.changes_json],
         read_at=notification.read_at,

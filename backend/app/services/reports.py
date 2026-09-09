@@ -547,7 +547,7 @@ class ReportService:
             "registry_id",
             "organization_id",
             "org_unit_id",
-            "display_name",
+            "display_value",
             "lifecycle_status",
             "created_at",
         ]
@@ -564,7 +564,7 @@ class ReportService:
             "registry_id",
             "organization_id",
             "org_unit_id",
-            "display_name",
+            "display_value",
             "lifecycle_status",
             "created_at",
         ]
@@ -578,7 +578,7 @@ class ReportService:
     def _render_registry_cards_pdf_lines(self, rendered: _RenderedReport) -> list[str]:
         fieldnames = [
             "id",
-            "display_name",
+            "display_value",
             "lifecycle_status",
             "organization_id",
             "org_unit_id",
@@ -692,7 +692,7 @@ class ReportService:
         lines.extend(
             [
                 f"card_id: {_csv_cell(card.get('id'))}",
-                f"display_name: {_csv_cell(card.get('display_name'))}",
+                f"display_value: {_csv_cell(card.get('display_value'))}",
                 "",
             ]
         )
@@ -896,7 +896,7 @@ class ReportService:
             "registry_id": card.registry_id,
             "organization_id": card.organization_id,
             "org_unit_id": card.org_unit_id,
-            "display_name": card.display_name,
+            "display_value": CardService(self.session).card_display_value(card),
             "lifecycle_status": card.lifecycle_status,
             "created_at": card.created_at,
         }
@@ -906,7 +906,7 @@ class ReportService:
             "id": card_read.card_id,
             "registry_id": card_read.registry_id,
             "organization_id": card_read.organization_id,
-            "display_name": card_read.display_name,
+            "display_value": card_read.display_value,
             "blocks": {
                 block_code: {
                     "block_id": block.block_id,

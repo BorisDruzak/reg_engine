@@ -59,7 +59,6 @@ class TabularCardImportPreviewRowRead(BaseModel):
     row_number: int
     status: Literal["valid", "invalid"]
     organization_label: str | None
-    display_name: str | None
     errors: list[str]
 
 

@@ -456,7 +456,7 @@ class CardService:
         self,
         card: Card,
         *,
-        actor_user_id: UUID,
+        actor_user_id: UUID | None,
     ) -> None:
         # Used only within initial card creation, before its first completed save.
         card.activated_at = None

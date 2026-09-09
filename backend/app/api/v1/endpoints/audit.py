@@ -40,7 +40,7 @@ def list_audit_events(
                 item.event,
                 actor_display_name=item.actor_display_name,
                 attributed_user_display_name=item.attributed_user_display_name,
-                card_display_name=item.card_display_name,
+                card_display_value=item.card_display_value,
                 card_lifecycle_status=item.card_lifecycle_status,
                 object_id=item.object_id,
                 old_data_json=item.old_data_json,

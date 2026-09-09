@@ -75,7 +75,7 @@ class CardCreationLinkOrganizationValue:
 @dataclass(frozen=True)
 class CardCreationLinkCardValue:
     card_id: UUID
-    display_name: str
+    display_value: str
     organization_id: UUID
     organization_name: str
     child_public_link_id: UUID
@@ -429,6 +429,7 @@ class CardCreationLinkService:
                 created_by=None,
                 public_creator_name=actor_display_name,
             )
+            card_service._preserve_draft_lifecycle(card, actor_user_id=creation_link.created_by)
             child_raw_token = secrets.token_urlsafe(32)
             child_public_link = CardPublicLink(
                 card_id=card.id,
@@ -537,7 +538,7 @@ class CardCreationLinkService:
         organization = self._active_organization(card.organization_id)
         return CardCreationLinkCardValue(
             card_id=card.id,
-            display_name=card.display_name,
+            display_value=CardService(self.session).card_display_value(card),
             organization_id=organization.id,
             organization_name=organization.name,
             child_public_link_id=relation.child_public_link_id,

@@ -20,7 +20,6 @@ from app.models import (
     ReferenceList,
     Registry,
 )
-from app.models.registry_schema import DEFAULT_CARD_TITLE_LABEL
 from app.services.audit import AuditService
 from app.services.permissions import PermissionDeniedError, PermissionService
 
@@ -90,17 +89,14 @@ class RegistrySchemaService:
         code: str,
         name: str,
         description: str | None = None,
-        card_title_label: str = DEFAULT_CARD_TITLE_LABEL,
     ) -> Registry:
         if not PermissionService(self.session).is_superuser(actor_user_id):
             raise PermissionDeniedError("Only a system admin can create registries.")
 
-        cleaned_card_title_label = self._clean_card_title_label(card_title_label)
         registry = Registry(
             code=code,
             name=name,
             description=description,
-            card_title_label=cleaned_card_title_label,
             created_by=actor_user_id,
         )
         self.session.add(registry)
@@ -113,7 +109,6 @@ class RegistrySchemaService:
             new_data_json={
                 "code": code,
                 "name": name,
-                "card_title_label": cleaned_card_title_label,
             },
         )
         self.ensure_base_card_template_for_registry(
@@ -380,7 +375,6 @@ class RegistrySchemaService:
         registry_id: UUID,
         name: str | None = None,
         description: str | None = None,
-        card_title_label: str | None = None,
         lifecycle_status: str | None = None,
     ) -> Registry:
         registry = self._get_active_registry(registry_id)
@@ -393,15 +387,12 @@ class RegistrySchemaService:
         old_data = {
             "name": registry.name,
             "description": registry.description,
-            "card_title_label": registry.card_title_label,
             "lifecycle_status": registry.lifecycle_status,
         }
         if name is not None:
             registry.name = name
         if description is not None:
             registry.description = description
-        if card_title_label is not None:
-            registry.card_title_label = self._clean_card_title_label(card_title_label)
         if lifecycle_status is not None:
             registry.lifecycle_status = lifecycle_status
         self.session.flush()
@@ -414,7 +405,6 @@ class RegistrySchemaService:
             new_data_json={
                 "name": registry.name,
                 "description": registry.description,
-                "card_title_label": registry.card_title_label,
                 "lifecycle_status": registry.lifecycle_status,
             },
         )
@@ -1699,10 +1689,3 @@ class RegistrySchemaService:
         if not self.session.scalar(select(Registry.id).where(Registry.code == base_code)):
             return base_code
         return f"{base_code}_{str(root_organization_id).split('-', maxsplit=1)[0]}"
-
-    @staticmethod
-    def _clean_card_title_label(card_title_label: str) -> str:
-        cleaned = card_title_label.strip()
-        if not cleaned:
-            raise RegistrySchemaError("Card title label must not be empty.")
-        return cleaned

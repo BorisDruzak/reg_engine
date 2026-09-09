@@ -23,7 +23,6 @@ from app.models import (
     ReferenceItem,
     Registry,
 )
-from app.models.registry_schema import DEFAULT_CARD_TITLE_LABEL
 from app.services.audit import AuditService
 from app.services.cards import (
     CardRead,
@@ -61,20 +60,13 @@ WORK_EXPERIENCE_PARTIAL_ERROR = (
 )
 
 
-def tabular_xlsx_title_header(card_title_label: object | None) -> str:
-    if isinstance(card_title_label, str) and card_title_label.strip():
-        return card_title_label.strip()
-    return DEFAULT_CARD_TITLE_LABEL
-
-
 def tabular_xlsx_fixed_headers(
     include_organization_column: bool,
-    title_header: str = DEFAULT_CARD_TITLE_LABEL,
 ) -> tuple[str, ...]:
     return (
-        (TABULAR_XLSX_ORDINAL_HEADER, title_header, TABULAR_XLSX_ORGANIZATION_HEADER)
+        (TABULAR_XLSX_ORDINAL_HEADER, TABULAR_XLSX_ORGANIZATION_HEADER)
         if include_organization_column
-        else (TABULAR_XLSX_ORDINAL_HEADER, title_header)
+        else (TABULAR_XLSX_ORDINAL_HEADER,)
     )
 
 
@@ -117,7 +109,6 @@ class TabularWorkbookConfiguration:
     unit_organization_ids: dict[UUID, UUID]
     import_mode: Literal["strict", "enrich_global_references"] = "strict"
     work_experience_as_of_date: date | None = None
-    title_header: str = DEFAULT_CARD_TITLE_LABEL
 
 
 @dataclass(frozen=True)
@@ -436,7 +427,6 @@ class TabularCardExchangeService:
             unit_organization_ids=unit_organization_ids,
             import_mode=import_mode,
             work_experience_as_of_date=work_experience_as_of_date,
-            title_header=tabular_xlsx_title_header(registry.card_title_label),
         )
 
     @staticmethod
@@ -468,7 +458,6 @@ class TabularCardExchangeService:
         headers = [
             *tabular_xlsx_fixed_headers(
                 configuration.include_organization_column,
-                configuration.title_header,
             ),
             *(column.header for column in columns),
         ]
@@ -486,7 +475,7 @@ class TabularCardExchangeService:
                     card_id=card.id,
                 )
                 values_by_field = self._card_values_by_field(card_read)
-                row: list[object] = [ordinal, getattr(card, "display_name", None)]
+                row: list[object] = [ordinal]
                 if configuration.include_organization_column:
                     row.append(
                         self._organization_label(
@@ -533,7 +522,7 @@ class TabularCardExchangeService:
             else None
         )
         for ordinal in range(1, TABULAR_XLSX_TEMPLATE_ROW_COUNT + 1):
-            row: list[object] = [ordinal, None]
+            row: list[object] = [ordinal]
             if configuration.include_organization_column:
                 row.append(organization_label)
             row.extend(None for _ in self._workbook_columns(configuration.fields))
@@ -578,12 +567,10 @@ class TabularCardExchangeService:
         fixed_column_count = len(
             tabular_xlsx_fixed_headers(
                 configuration.include_organization_column,
-                configuration.title_header,
             )
         )
-        sheet.column_dimensions["B"].width = max(22, min(36, len(configuration.title_header) + 6))
         if configuration.include_organization_column:
-            sheet.column_dimensions["C"].width = 34
+            sheet.column_dimensions["B"].width = 34
         for row in sheet.iter_rows(
             min_row=2,
             max_row=last_row,
@@ -636,8 +623,6 @@ class TabularCardExchangeService:
                 if configuration.work_experience_as_of_date is not None
                 else None
             ),
-            "title_header": configuration.title_header,
-            "title_required": True,
             "registry_id": str(configuration.registry_id),
             "card_template_id": str(configuration.template.id),
             "field_columns": [
@@ -716,7 +701,7 @@ class TabularCardExchangeService:
             allow_blank=False,
         )
         sheet.add_data_validation(validation)
-        validation.add(f"C2:C{last_row}")
+        validation.add(f"B2:B{last_row}")
 
     def _add_field_validation(
         self,
@@ -1104,7 +1089,6 @@ class TabularCardExchangeService:
                 "row_number": row["row_number"],
                 "status": "invalid" if row["errors"] else "valid",
                 "organization_label": row["organization_label"],
-                "display_name": row["display_name"],
                 "errors": row["errors"],
                 "organization_id": row["organization_id"],
                 "values": row["values"],
@@ -1192,8 +1176,8 @@ class TabularCardExchangeService:
                         registry_id=registry_id,
                         organization_id=organization_id,
                         card_template_id=configuration.template.id,
-                        display_name=row["display_name"],
                     )
+                    card_service._preserve_draft_lifecycle(card, actor_user_id=actor_user_id)
                     fields_by_id = {item.field.id: item for item in configuration.fields}
                     for field_id, value in row["values"].items():
                         if fields_by_id[field_id].field.field_type == "work_experience":
@@ -1202,6 +1186,7 @@ class TabularCardExchangeService:
                                 card_id=card.id,
                                 field_id=field_id,
                                 value=value,
+                                synchronize_lifecycle=False,
                                 work_experience_as_of_date=configuration.work_experience_as_of_date,
                             )
                         else:
@@ -1210,13 +1195,11 @@ class TabularCardExchangeService:
                                 card_id=card.id,
                                 field_id=field_id,
                                 value=value,
+                                synchronize_lifecycle=False,
                             )
                         field_values_written += 1
-                    if self._row_has_empty_required_field(row, configuration):
-                        card_service._preserve_draft_lifecycle(
-                            card,
-                            actor_user_id=actor_user_id,
-                        )
+                    if not self._row_has_empty_required_field(row, configuration):
+                        card_service.synchronize_card_lifecycle(card, actor_user_id=actor_user_id)
                 AuditService(self.session).record_user_event(
                     actor_user_id=actor_user_id,
                     action="import_commit",
@@ -1308,14 +1291,12 @@ class TabularCardExchangeService:
             fixed_column_count = len(
                 tabular_xlsx_fixed_headers(
                     configuration.include_organization_column,
-                    configuration.title_header,
                 )
             )
             columns = self._workbook_columns(configuration.fields)
             expected_headers = [
                 *tabular_xlsx_fixed_headers(
                     configuration.include_organization_column,
-                    configuration.title_header,
                 ),
                 *(column.header for column in columns),
             ]
@@ -1339,17 +1320,12 @@ class TabularCardExchangeService:
                     for value in values[: len(expected_headers)]
                 ]
                 row_values.extend([None] * (len(expected_headers) - len(row_values)))
-                display_name = self._normalized_label(row_values[1])
                 field_values = row_values[fixed_column_count:]
-                if display_name is None and all(
-                    self._is_blank_cell(value) for value in field_values
-                ):
+                if all(self._is_blank_cell(value) for value in field_values):
                     continue
                 errors: list[str] = []
-                if display_name is None:
-                    errors.append(f"{configuration.title_header}: заполните название карточки.")
                 if configuration.include_organization_column:
-                    organization_label = self._normalized_label(row_values[2])
+                    organization_label = self._normalized_label(row_values[1])
                     organization_id = configuration.organization_labels.get(
                         organization_label or ""
                     )
@@ -1418,7 +1394,6 @@ class TabularCardExchangeService:
                         "row_number": row_number,
                         "organization_label": organization_label,
                         "organization_id": organization_id,
-                        "display_name": display_name,
                         "values": parsed_values,
                         "errors": errors,
                     }
@@ -1644,13 +1619,10 @@ class TabularCardExchangeService:
             work_experience_as_of_date = date.fromisoformat(raw_work_experience_as_of_date)
         except ValueError as exc:
             raise ImportExportServiceError("Служебная разметка XLSX повреждена.") from exc
-        title_header = metadata.get("title_header")
-        if (
-            not isinstance(title_header, str)
-            or not title_header.strip()
-            or metadata.get("title_required") is not True
-        ):
-            raise ImportExportServiceError("Служебная разметка XLSX повреждена.")
+        if "title_header" in metadata or "title_required" in metadata:
+            raise ImportExportServiceError(
+                "Формат XLSX с названием карточки устарел. Загрузите новый шаблон."
+            )
         raw_columns = metadata.get("field_columns")
         raw_organizations = metadata.get("organizations")
         include_organization_column = metadata.get("include_organization_column", True)
@@ -1688,10 +1660,6 @@ class TabularCardExchangeService:
             work_experience_as_of_date=work_experience_as_of_date,
             require_fixed_organization=True,
         )
-        if configuration.title_header != title_header:
-            raise ImportExportServiceError(
-                "Заголовок названия карточки XLSX был изменён или устарел."
-            )
         expected_columns = [
             {
                 "field_id": str(column.workbook_field.field.id),

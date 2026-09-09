@@ -125,8 +125,14 @@ class RegEngineApiClient:
     def patch_json(self, path: str, payload: Mapping[str, Any]) -> Any:
         return self._request_json(method="PATCH", path=path, payload=payload)
 
-    def delete_json(self, path: str, query: Mapping[str, object | None] | None = None) -> Any:
-        return self._request_json(method="DELETE", path=path, query=query)
+    def delete_json(
+        self,
+        path: str,
+        query: Mapping[str, object | None] | None = None,
+        *,
+        payload: Mapping[str, Any] | None = None,
+    ) -> Any:
+        return self._request_json(method="DELETE", path=path, query=query, payload=payload)
 
     def _request_json(
         self,

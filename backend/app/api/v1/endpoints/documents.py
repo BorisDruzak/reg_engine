@@ -115,7 +115,7 @@ async def create_binary_document_template(
     code: Annotated[str, Form()],
     name: Annotated[str, Form()],
     description: Annotated[str | None, Form()] = None,
-    output_filename_template: Annotated[str, Form()] = "{{ card.display_name }}.docx",
+    output_filename_template: Annotated[str, Form()] = "{{ card.display_value }}.docx",
 ) -> DocumentTemplateRead:
     service = _document_service(session)
     try:

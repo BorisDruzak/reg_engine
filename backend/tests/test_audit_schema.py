@@ -6,6 +6,33 @@ from uuid import uuid4
 from app.models import AuditEvent
 from app.schemas.audit import AuditEventRead
 from app.services.audit import AuditService
+from tests.test_registry_card_services import card_event_context as event_context  # noqa: F401
+
+
+def test_audit_resolves_fio_without_card_display_name(event_context, monkeypatch):  # noqa: F811
+    from app.models import User
+    from app.services.cards import CardService
+    from app.services.permissions import PermissionService
+
+    ctx = event_context
+    User.__table__.create(ctx.session.get_bind())
+    monkeypatch.setattr(PermissionService, "is_superuser", lambda *args: True)
+    monkeypatch.setattr(
+        CardService, "_get_active_card_template_for_registry", lambda *a, **kw: None
+    )
+    monkeypatch.setattr(CardService, "_require_single_fio_field", lambda *a: ctx.fields[0])
+    ctx.values[0].value_text = "Иванов Иван Иванович"
+    audit = AuditService(ctx.session)
+    audit.record_user_event(
+        actor_user_id=ctx.actor_id,
+        action="update",
+        object_type="card",
+        object_id=ctx.card.id,
+        card_id=ctx.card.id,
+    )
+    item = audit.list_events_for_actor(actor_user_id=ctx.actor_id)[0]
+    assert item.card_display_value == "Иванов Иван Иванович"
+    assert not hasattr(item, "card_display_name")
 
 
 def test_audit_event_read_serializes_database_ip_address_objects() -> None:

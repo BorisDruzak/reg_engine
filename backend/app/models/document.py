@@ -51,7 +51,7 @@ class DocumentTemplate(UUIDPrimaryKeyMixin, TimestampMixin, ArchiveMixin, Base):
     )
     template_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_filename_template: Mapped[str] = mapped_column(
-        String, nullable=False, server_default="{{ card.display_name }}.docx"
+        String, nullable=False, server_default="{{ card.display_value }}.docx"
     )
     output_content_type: Mapped[str] = mapped_column(
         String,

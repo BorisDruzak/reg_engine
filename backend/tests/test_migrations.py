@@ -1,6 +1,7 @@
 import importlib
 import json
 import os
+import re
 from io import StringIO
 from pathlib import Path
 
@@ -11,6 +12,90 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine, make_url
 
 from app.models import Base
+
+
+def test_document_display_placeholder_migration_rewrites_only_card_tokens(monkeypatch):
+    migration = importlib.import_module("migrations.versions.0036_card_display_placeholders")
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS public")
+        connection.connection.driver_connection.create_function(
+            "regexp_replace",
+            4,
+            lambda value, pattern, replacement, flags: (
+                re.sub(pattern.replace(r"\m", r"\b").replace(r"\M", r"\b"), replacement, value)
+                if value is not None
+                else None
+            ),
+        )
+        connection.exec_driver_sql(
+            "CREATE TABLE public.document_templates "
+            "(template_body TEXT, output_filename_template TEXT)"
+        )
+        connection.exec_driver_sql(
+            "CREATE TABLE public.document_template_versions (template_body TEXT, layout_json TEXT)"
+        )
+        connection.exec_driver_sql("CREATE TABLE public.card_templates (field_schema_json TEXT)")
+        body = "{{ card.display_name }} / {{ user.display_name }} / {{ card.display_name_extra }}"
+        layout = json.dumps(
+            {"items": [{"key": "card.display_name"}, {"text": "{{ user.display_name }}"}]}
+        )
+        connection.execute(
+            text(
+                "INSERT INTO public.document_templates "
+                "VALUES (:body, '{{ card.display_name }}.docx')"
+            ),
+            {"body": body},
+        )
+        connection.execute(
+            text("INSERT INTO public.document_template_versions VALUES (:body, :layout)"),
+            {"body": body, "layout": layout},
+        )
+        connection.execute(
+            text("INSERT INTO public.card_templates VALUES (:layout)"), {"layout": layout}
+        )
+        defaults = []
+
+        class Operations:
+            def execute(self, statement):
+                connection.execute(text(str(statement).replace(" AS JSONB)", " AS TEXT)")))
+
+            def alter_column(self, table, column, **kwargs):
+                defaults.append((table, column, kwargs["server_default"]))
+
+        monkeypatch.setattr(migration, "op", Operations())
+        migration.upgrade()
+        expected_body = (
+            "{{ card.display_value }} / {{ user.display_name }} / {{ card.display_name_extra }}"
+        )
+        assert (
+            connection.scalar(text("SELECT template_body FROM public.document_templates"))
+            == expected_body
+        )
+        assert (
+            connection.scalar(text("SELECT template_body FROM public.document_template_versions"))
+            == expected_body
+        )
+        for table, column in [
+            ("document_template_versions", "layout_json"),
+            ("card_templates", "field_schema_json"),
+        ]:
+            value = json.loads(connection.scalar(text(f"SELECT {column} FROM public.{table}")))
+            assert value["items"] == [
+                {"key": "card.display_value"},
+                {"text": "{{ user.display_name }}"},
+            ]
+        assert defaults[-1] == (
+            "document_templates",
+            "output_filename_template",
+            "{{ card.display_value }}.docx",
+        )
+        migration.downgrade()
+        assert (
+            connection.scalar(text("SELECT template_body FROM public.document_templates")) == body
+        )
+        assert defaults[-1][2] == "{{ card.display_name }}.docx"
+    engine.dispose()
 
 
 def _alembic_config(stdout: StringIO) -> Config:

@@ -1629,6 +1629,8 @@ def test_public_link_lifecycle_openapi_contract_is_registered() -> None:
         "field_id",
         "value",
         "block_instance_id",
+        "basis_text",
+        "occurred_on",
     }
     assert public_edit_schema["additionalProperties"] is False
 

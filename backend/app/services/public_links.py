@@ -27,6 +27,7 @@ from app.models import (
     StoredFile,
 )
 from app.services.audit import AuditService
+from app.services.card_events import CardChangeContext
 from app.services.card_public_access import CardPublicAccessService
 from app.services.card_template_projection import resolve_card_template_form_layout
 from app.services.cards import CardService, CardServiceError
@@ -113,7 +114,7 @@ class PublicPreviewBlock:
 @dataclass(frozen=True)
 class PublicLinkPreview:
     card_id: UUID
-    display_name: str
+    display_value: str
     organization_name: str
     card_template_name: str
     lifecycle_status: str
@@ -121,6 +122,7 @@ class PublicLinkPreview:
     can_edit: bool
     form_layout: dict[str, Any]
     blocks: list[PublicPreviewBlock] = field(default_factory=list)
+    activated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -194,8 +196,9 @@ class PublicLinkService:
             raise PublicLinkError("Public link expiration must be between 1 and 30 days.")
         if max_attachment_uploads is not None and max_attachment_uploads < 0:
             raise PublicLinkError("Public attachment upload limit must not be negative.")
-        card = self._get_active_card(card_id)
+        card = self._get_card_for_write(card_id)
         self._require_card_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         raw_token = secrets.token_urlsafe(32)
         expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
         public_link = CardPublicLink(
@@ -250,8 +253,9 @@ class PublicLinkService:
         public_link_id: UUID,
     ) -> CardPublicLink:
         public_link = self._locked_public_link(public_link_id)
-        card = self._get_active_card(public_link.card_id)
+        card = self._get_card_for_write(public_link.card_id)
         self._require_card_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         self._require_not_expired(public_link)
         self._require_transition(public_link, "disabled")
         public_link.status = "disabled"
@@ -276,8 +280,9 @@ class PublicLinkService:
         public_link_id: UUID,
     ) -> CardPublicLink:
         public_link = self._locked_public_link(public_link_id)
-        card = self._get_active_card(public_link.card_id)
+        card = self._get_card_for_write(public_link.card_id)
         self._require_review_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         self._require_not_expired(public_link)
         if public_link.status != "active" or public_link.review_enabled:
             raise PublicLinkTransitionError("Review baseline cannot be captured in this state.")
@@ -304,6 +309,9 @@ class PublicLinkService:
         actor_display_name = normalize_public_actor_name(actor_name)
         public_link = self._public_link_for_token(raw_token, lock_for_update=True)
         self._require_not_expired(public_link)
+        if not public_link.can_edit or public_link.status not in EDITABLE_PUBLIC_LINK_STATUSES:
+            raise PermissionDeniedError("Public link is not editable.")
+        CardService(self.session)._lock_editable_card(public_link.card_id, actor_user_id=None)
         if not public_link.review_enabled or public_link.baseline_snapshot_json is None:
             raise PublicLinkTransitionError("Review cycle is not enabled for this public link.")
         self._require_transition(public_link, "submitted")
@@ -347,8 +355,9 @@ class PublicLinkService:
             raise PublicLinkError("Review comment must not exceed 2000 characters.")
 
         public_link = self._locked_public_link(public_link_id)
-        card = self._get_active_card(public_link.card_id)
+        card = self._get_card_for_write(public_link.card_id)
         self._require_review_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         self._require_not_expired(public_link)
         self._require_transition(public_link, "changes_requested")
 
@@ -383,8 +392,9 @@ class PublicLinkService:
         public_link_id: UUID,
     ) -> CardPublicLink:
         public_link = self._locked_public_link(public_link_id)
-        card = self._get_active_card(public_link.card_id)
+        card = self._get_card_for_write(public_link.card_id)
         self._require_review_permission(actor_user_id, card)
+        CardService(self.session)._get_editable_card(card.id)
         self._require_not_expired(public_link)
         self._require_transition(public_link, "approved")
 
@@ -631,10 +641,11 @@ class PublicLinkService:
 
         return PublicLinkPreview(
             card_id=card.id,
-            display_name=card.display_name,
+            display_value=CardService(self.session).card_display_value(card),
             organization_name=organization.name,
             card_template_name=card_template.name,
             lifecycle_status=card.lifecycle_status,
+            activated_at=card.activated_at,
             expires_at=public_link.expires_at,
             can_edit=(
                 public_link.status in EDITABLE_PUBLIC_LINK_STATUSES
@@ -653,6 +664,7 @@ class PublicLinkService:
         value: object,
         block_instance_id: UUID | None = None,
         actor_name: str,
+        change_context: CardChangeContext | None = None,
     ) -> FieldValue:
         actor_display_name = normalize_public_actor_name(actor_name)
         public_link = self._editable_public_link(raw_token, lock_for_update=True)
@@ -670,6 +682,7 @@ class PublicLinkService:
             field_id=field.id,
             value=value,
             block_instance_id=block_instance_id,
+            change_context=change_context,
         )
         public_link.used_count += 1
         self.session.flush()
@@ -975,6 +988,12 @@ class PublicLinkService:
             and card.public_view_enabled
             and card.public_edit_enabled
         )
+
+    def _get_card_for_write(self, card_id: UUID) -> Card:
+        card = self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+        if card is None:
+            raise PublicLinkError("Card was not found.")
+        return card
 
     def _get_active_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)

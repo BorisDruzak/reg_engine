@@ -218,12 +218,15 @@ class AttachmentService:
         title: str | None = None,
         description: str | None = None,
     ) -> CardAttachment:
-        card = self._get_editable_card(card_id)
+        card = self.session.get(Card, card_id, with_for_update=True, populate_existing=True)
+        if card is None:
+            raise AttachmentServiceError("Card was not found.")
         self._require_card_permission(
             actor_user_id,
             card.organization_id,
             registry_id=card.registry_id,
         )
+        self._require_writable_card(card)
         clean_original_filename = normalize_attachment_filename(original_filename)
         clean_content_type = self._clean_required_text(content_type, "content type")
         return self._create_attachment(
@@ -381,15 +384,19 @@ class AttachmentService:
         archive_reason: str | None = None,
     ) -> CardAttachment:
         attachment = self._get_attachment(attachment_id)
-        if attachment.archived_at is not None:
-            return attachment
-
-        card = self._get_editable_card(attachment.card_id)
+        card = self.session.get(
+            Card, attachment.card_id, with_for_update=True, populate_existing=True
+        )
+        if card is None:
+            raise AttachmentServiceError("Card was not found.")
         self._require_card_permission(
             actor_user_id,
             card.organization_id,
             registry_id=card.registry_id,
         )
+        self._require_writable_card(card)
+        if attachment.archived_at is not None:
+            return attachment
         attachment.archived_at = datetime.now(UTC)
         attachment.archived_by = actor_user_id
         attachment.archive_reason = archive_reason
@@ -428,6 +435,7 @@ class AttachmentService:
         self._require_public_attachment_upload_available(public_link)
         card = self._get_public_attachment_card(public_link, card_id=card_id)
         created_by_user_id = self._public_link_created_by(public_link)
+        self._require_writable_card(card)
         clean_original_filename = normalize_attachment_filename(original_filename)
         clean_content_type = self._clean_required_text(content_type, "content type")
         attachment = self._create_attachment(
@@ -602,6 +610,11 @@ class AttachmentService:
         if public_link.created_by is None:
             raise PermissionDeniedError("Public link creator is required for file uploads.")
         return public_link.created_by
+
+    def _require_writable_card(self, card: Card) -> None:
+        from app.services.cards import CardService
+
+        CardService(self.session)._lock_editable_card(card.id, actor_user_id=None)
 
     def _get_editable_card(self, card_id: UUID) -> Card:
         card = self.session.get(Card, card_id)

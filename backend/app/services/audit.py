@@ -31,7 +31,7 @@ class AuditEventListItem:
     object_id: UUID | None
     actor_display_name: str | None
     attributed_user_display_name: str | None
-    card_display_name: str | None
+    card_display_value: str | None
     card_lifecycle_status: str | None
     old_data_json: dict[str, Any] | None
     new_data_json: dict[str, Any] | None
@@ -397,7 +397,7 @@ class AuditService:
                 AuditEvent,
                 actor_user.display_name,
                 attributed_user.display_name,
-                Card.display_name,
+                Card,
                 Card.lifecycle_status,
             )
             .outerjoin(actor_user, AuditEvent.actor_user_id == actor_user.id)
@@ -426,7 +426,7 @@ class AuditService:
                     else actor_display_name
                 ),
                 attributed_user_display_name=attributed_user_display_name,
-                card_display_name=card_display_name,
+                card_display_value=(self._card_display_value(card) if card is not None else None),
                 card_lifecycle_status=card_lifecycle_status,
                 old_data_json=(
                     history_presentations[event.id].old_data_json
@@ -453,7 +453,7 @@ class AuditService:
                 event,
                 actor_display_name,
                 attributed_user_display_name,
-                card_display_name,
+                card,
                 card_lifecycle_status,
             ) in rows
         ]
@@ -522,9 +522,19 @@ class AuditService:
             ),
             "org_unit_ref": self._labels_by_id(OrgUnit, ids_by_type["org_unit_ref"], "name"),
             "user_ref": self._labels_by_id(User, ids_by_type["user_ref"], "display_name"),
-            "card_ref": self._labels_by_id(Card, ids_by_type["card_ref"], "display_name"),
+            "card_ref": {
+                card.id: self._card_display_value(card)
+                for card in self.session.scalars(
+                    select(Card).where(Card.id.in_(ids_by_type["card_ref"]))
+                ).all()
+            },
             "registry_ref": self._labels_by_id(Registry, ids_by_type["registry_ref"], "name"),
         }
+
+    def _card_display_value(self, card: Card) -> str:
+        from app.services.cards import CardService
+
+        return CardService(self.session).card_display_value(card)
 
     def _labels_by_id(
         self,

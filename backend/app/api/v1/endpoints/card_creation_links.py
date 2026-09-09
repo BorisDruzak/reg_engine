@@ -33,6 +33,7 @@ from app.services.card_creation_links import (
     CardCreationLinkService,
     CardCreationLinkValue,
 )
+from app.services.cards import CardService
 
 router = APIRouter(tags=["card-creation-links"])
 
@@ -160,7 +161,7 @@ def create_card_draft_from_creation_link(
         _raise_public_creation_link_http_error(exc)
     return CardCreationLinkFirstSaveRead(
         card_id=created.card.id,
-        display_name=created.card.display_name,
+        display_value=CardService(session).card_display_value(created.card),
         child_raw_token=created.child_raw_token,
     )
 
@@ -194,7 +195,7 @@ def first_save_card_from_creation_link(
         _raise_public_creation_link_http_error(exc)
     return CardCreationLinkFirstSaveRead(
         card_id=created.card.id,
-        display_name=created.card.display_name,
+        display_value=CardService(session).card_display_value(created.card),
         child_raw_token=created.child_raw_token,
     )
 
@@ -219,7 +220,7 @@ def _creation_link_to_read(value: CardCreationLinkValue) -> CardCreationLinkRead
 def _card_to_read(value: CardCreationLinkCardValue) -> CardCreationLinkCreatedCardRead:
     return CardCreationLinkCreatedCardRead(
         card_id=value.card_id,
-        display_name=value.display_name,
+        display_value=value.display_value,
         organization_id=value.organization_id,
         organization_name=value.organization_name,
         child_public_link_id=value.child_public_link_id,

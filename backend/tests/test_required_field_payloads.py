@@ -28,16 +28,11 @@ def test_form_field_payloads_expose_list_display_flag() -> None:
     assert update_payload.is_list_display is False
 
 
-def test_registry_payloads_expose_card_title_label() -> None:
-    create_payload = RegistryCreate(
-        code="assets",
-        name="Assets",
-        card_title_label="Asset name",
-    )
-    update_payload = RegistryUpdate(card_title_label="Case title")
-
-    assert create_payload.card_title_label == "Asset name"
-    assert update_payload.card_title_label == "Case title"
+def test_registry_payloads_have_no_card_title_label() -> None:
+    create_payload = RegistryCreate(code="records", name="Реестр")
+    update_payload = RegistryUpdate(name="Сведения")
+    assert "card_title_label" not in create_payload.model_dump()
+    assert "card_title_label" not in update_payload.model_dump()
 
 
 def test_card_update_accepts_lifecycle_status() -> None:

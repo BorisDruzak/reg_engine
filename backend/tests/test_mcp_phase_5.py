@@ -39,7 +39,7 @@ class RecordingTransport:
         headers: dict[str, str] | None = None,
         status_code: int = 200,
     ) -> None:
-        self.payload = payload or {"items": [{"id": "card-1", "display_name": "Карточка"}]}
+        self.payload = payload or {"items": [{"id": "card-1", "display_value": "Карточка"}]}
         self.body = body
         self.headers = headers or {"content-type": "application/json"}
         self.status_code = status_code
@@ -281,7 +281,7 @@ def test_mcp_tool_definitions_keep_read_tools_read_only_and_call_existing_api_pa
     )
 
     assert result["isError"] is False
-    assert result["structuredContent"] == {"items": [{"id": "card-1", "display_name": "Карточка"}]}
+    assert result["structuredContent"] == {"items": [{"id": "card-1", "display_value": "Карточка"}]}
     assert "Карточка" in result["content"][0]["text"]
     assert transport.requests[0]["method"] == "GET"
     assert (
@@ -817,7 +817,7 @@ def test_mcp_create_card_tool_posts_to_existing_api_boundary() -> None:
 
     tool = next(tool for tool in MCP_TOOL_DEFINITIONS if tool["name"] == "reg_engine_create_card")
     assert tool["annotations"]["readOnlyHint"] is False
-    assert tool["inputSchema"]["required"] == ["registry_id", "organization_id", "display_name"]
+    assert tool["inputSchema"]["required"] == ["registry_id", "organization_id"]
     assert tool["inputSchema"]["additionalProperties"] is False
 
     registry_id = str(uuid4())
@@ -830,7 +830,6 @@ def test_mcp_create_card_tool_posts_to_existing_api_boundary() -> None:
             "registry_id": registry_id,
             "organization_id": organization_id,
             "org_unit_id": org_unit_id,
-            "display_name": "Card 1",
             "lifecycle_status": "active",
             "public_view_enabled": True,
             "public_edit_enabled": False,
@@ -847,7 +846,6 @@ def test_mcp_create_card_tool_posts_to_existing_api_boundary() -> None:
         {
             "registry_id": registry_id,
             "organization_id": organization_id,
-            "display_name": "Card 1",
             "org_unit_id": org_unit_id,
             "public_view_enabled": True,
             "public_edit_enabled": False,
@@ -864,7 +862,6 @@ def test_mcp_create_card_tool_posts_to_existing_api_boundary() -> None:
     assert isinstance(body, bytes)
     assert json.loads(body.decode("utf-8")) == {
         "organization_id": organization_id,
-        "display_name": "Card 1",
         "org_unit_id": org_unit_id,
         "public_view_enabled": True,
         "public_edit_enabled": False,
@@ -887,7 +884,6 @@ def test_mcp_update_card_tool_patches_existing_api_boundary() -> None:
             "registry_id": str(uuid4()),
             "organization_id": str(uuid4()),
             "org_unit_id": None,
-            "display_name": "Updated card",
             "lifecycle_status": "active",
             "public_view_enabled": False,
             "public_edit_enabled": True,
@@ -907,7 +903,6 @@ def test_mcp_update_card_tool_patches_existing_api_boundary() -> None:
         "reg_engine_update_card",
         {
             "card_id": card_id,
-            "display_name": "Updated card",
             "public_view_enabled": False,
             "public_edit_enabled": True,
         },
@@ -922,7 +917,6 @@ def test_mcp_update_card_tool_patches_existing_api_boundary() -> None:
     body = transport.requests[0]["body"]
     assert isinstance(body, bytes)
     assert json.loads(body.decode("utf-8")) == {
-        "display_name": "Updated card",
         "public_view_enabled": False,
         "public_edit_enabled": True,
     }
@@ -944,7 +938,7 @@ def test_mcp_archive_card_tool_requires_confirmation_before_delete() -> None:
             "registry_id": str(uuid4()),
             "organization_id": str(uuid4()),
             "org_unit_id": None,
-            "display_name": "Archived card",
+            "display_value": "Archived card",
             "lifecycle_status": "archived",
             "public_view_enabled": False,
             "public_edit_enabled": False,
@@ -1247,7 +1241,7 @@ def test_mcp_transfer_card_tool_requires_confirmation_before_post() -> None:
             "registry_id": registry_id,
             "organization_id": target_organization_id,
             "org_unit_id": None,
-            "display_name": "Transferred card",
+            "display_value": "Transferred card",
             "lifecycle_status": "active",
             "public_view_enabled": False,
             "public_edit_enabled": False,
@@ -2130,7 +2124,7 @@ def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> N
 
     registry_id = str(uuid4())
     template_id = str(uuid4())
-    template_body = "Карточка: {{ card.display_name }}"
+    template_body = "Карточка: {{ card.display_value }}"
     transport = RecordingTransport(
         {
             "id": template_id,
@@ -2139,7 +2133,7 @@ def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> N
             "name": "Summary",
             "description": "Document summary",
             "template_format": "docx_text_v1",
-            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_filename_template": "{{ card.display_value }}.docx",
             "output_content_type": (
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             ),
@@ -2164,7 +2158,7 @@ def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> N
             "name": "Summary",
             "description": "Document summary",
             "template_body": template_body,
-            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_filename_template": "{{ card.display_value }}.docx",
         },
         client=client,
     )
@@ -2184,7 +2178,7 @@ def test_mcp_create_document_template_tool_posts_to_existing_api_boundary() -> N
         "name": "Summary",
         "description": "Document summary",
         "template_body": template_body,
-        "output_filename_template": "{{ card.display_name }}.docx",
+        "output_filename_template": "{{ card.display_value }}.docx",
     }
 
 
@@ -2210,7 +2204,7 @@ def test_mcp_archive_document_template_tool_requires_confirmation_before_delete(
             "name": "Summary",
             "description": None,
             "template_format": "docx_text_v1",
-            "output_filename_template": "{{ card.display_name }}.docx",
+            "output_filename_template": "{{ card.display_value }}.docx",
             "output_content_type": (
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             ),

@@ -17,7 +17,17 @@ from app.services import import_export
 from app.services.cards import InvalidFieldValueError
 
 
-def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None:
+class _ImportLifecycle:
+    """Lifecycle stub for parser tests; real import lifecycle is covered separately."""
+
+    def _preserve_draft_lifecycle(self, *args, **kwargs):
+        pass
+
+    def synchronize_card_lifecycle(self, *args, **kwargs):
+        pass
+
+
+def test_tabular_xlsx_v2_template_has_no_display_name_or_title_metadata() -> None:
     field = SimpleNamespace(id=uuid4(), label="Комментарий", field_type="text")
     configuration = import_export.TabularWorkbookConfiguration(
         registry_id=uuid4(),
@@ -37,7 +47,6 @@ def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None
         unit_organization_ids={},
         import_mode="enrich_global_references",
         work_experience_as_of_date=date(2026, 7, 17),
-        title_header="Наименование заявки",
     )
 
     content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
@@ -50,9 +59,8 @@ def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None
     sheet = workbook["Карточки"]
     metadata = json.loads(workbook["_registry_engine"]["B1"].value)
 
-    assert [cell.value for cell in sheet[1][:4]] == [
+    assert [cell.value for cell in sheet[1][:3]] == [
         "№ п/п",
-        "Наименование заявки",
         "Организация",
         "Комментарий",
     ]
@@ -60,8 +68,13 @@ def test_tabular_xlsx_v2_template_includes_title_and_creation_metadata() -> None
     assert metadata["format_version"] == "tabular_card_xlsx_v2"
     assert metadata["import_mode"] == "enrich_global_references"
     assert metadata["work_experience_as_of_date"] == "2026-07-17"
-    assert metadata["title_header"] == "Наименование заявки"
-    assert metadata["title_required"] is True
+    assert "title_header" not in metadata
+    assert "title_required" not in metadata
+    metadata["title_header"] = "Устаревшее название"
+    with pytest.raises(import_export.ImportExportServiceError, match="устарел"):
+        import_export.TabularCardExchangeService(MagicMock())._configuration_from_metadata(
+            actor_user_id=uuid4(), registry_id=configuration.registry_id, metadata=metadata
+        )
 
 
 def test_tabular_xlsx_metadata_deduplicates_work_experience_field_for_configuration(
@@ -116,8 +129,6 @@ def test_tabular_xlsx_metadata_deduplicates_work_experience_field_for_configurat
                 "importable": True,
                 "import_mode": "strict",
                 "work_experience_as_of_date": "2026-07-17",
-                "title_header": import_export.DEFAULT_CARD_TITLE_LABEL,
-                "title_required": True,
                 "registry_id": str(registry_id),
                 "card_template_id": str(template.id),
                 "field_columns": raw_columns,
@@ -245,8 +256,8 @@ def test_tabular_xlsx_uses_stable_dynamic_columns_when_headers_collide_with_fixe
         validation.sqref: validation for validation in sheet.data_validations.dataValidation
     }
 
-    assert validations["D2:D101"].formula1 == f"=field_{title_field.id.hex}_choices"
-    assert validations["E2:E101"].formula1 == f"=field_{organization_field.id.hex}_choices"
+    assert validations["C2:C101"].formula1 == f"=field_{title_field.id.hex}_choices"
+    assert validations["D2:D101"].formula1 == f"=field_{organization_field.id.hex}_choices"
 
 
 def test_tabular_xlsx_request_defaults_to_strict_and_accepts_enrichment_metadata() -> None:
@@ -403,8 +414,8 @@ def test_tabular_xlsx_omits_non_exportable_field_from_template_metadata_and_expo
     sheet = workbook["Карточки"]
     metadata = json.loads(workbook["_registry_engine"]["B1"].value)
 
-    assert [cell.value for cell in sheet[1]] == ["№ п/п", "Название карточки", "Публичное поле"]
-    assert [cell.value for cell in sheet[2]] == [1, "Карточка 1", "Видимое значение"]
+    assert [cell.value for cell in sheet[1]] == ["№ п/п", "Публичное поле"]
+    assert [cell.value for cell in sheet[2]] == [1, "Видимое значение"]
     assert metadata["field_columns"] == [
         {
             "field_id": str(exportable_field.id),
@@ -451,9 +462,9 @@ def test_tabular_xlsx_enrichment_plans_once_then_creates_one_global_reference_fo
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Status"])
-    sheet.append([1, "First", "  NEW\u00a0 STATUS "])
-    sheet.append([2, "Second", "new   status"])
+    sheet.append(["№ п/п", "Status"])
+    sheet.append([1, "  NEW\u00a0 STATUS "])
+    sheet.append([2, "new   status"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -481,7 +492,7 @@ def test_tabular_xlsx_enrichment_plans_once_then_creates_one_global_reference_fo
             created_items.append(item)
             return item
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -551,13 +562,13 @@ def test_tabular_xlsx_strict_unknown_reference_is_invalid_and_never_planned(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Status"])
-    sheet.append([1, "Strict", "unknown"])
+    sheet.append(["№ п/п", "Status"])
+    sheet.append([1, "unknown"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -603,13 +614,13 @@ def test_tabular_xlsx_enrichment_rejects_select_without_reference_list_configura
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Status"])
-    sheet.append([1, "No list", "unknown"])
+    sheet.append(["№ п/п", "Status"])
+    sheet.append([1, "unknown"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -669,8 +680,8 @@ def test_tabular_xlsx_enrichment_rejects_organization_aware_reference_resolution
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Status"])
-    sheet.append([1, "Organization aware", "unknown"])
+    sheet.append(["№ п/п", "Status"])
+    sheet.append([1, "unknown"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -687,7 +698,7 @@ def test_tabular_xlsx_enrichment_rejects_organization_aware_reference_resolution
                 reference_item_id=None,
             )
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -743,9 +754,9 @@ def test_tabular_xlsx_enrichment_rolls_back_created_references_and_cards_after_w
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Status"])
-    sheet.append([1, "First", "new status"])
-    sheet.append([2, "Second", "new status"])
+    sheet.append(["№ п/п", "Status"])
+    sheet.append([1, "new status"])
+    sheet.append([2, "new status"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -786,7 +797,7 @@ def test_tabular_xlsx_enrichment_rolls_back_created_references_and_cards_after_w
             persisted_references.append(item)
             return item
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -849,7 +860,7 @@ def test_tabular_xlsx_rejects_export_workbook_as_explicitly_non_importable() -> 
         )
 
 
-def test_tabular_xlsx_import_marks_blank_card_title_invalid_and_uses_title_on_commit(
+def test_tabular_xlsx_import_commits_schema_values_without_display_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     actor_user_id = uuid4()
@@ -874,24 +885,23 @@ def test_tabular_xlsx_import_marks_blank_card_title_invalid_and_uses_title_on_co
         unit_organization_ids={},
         import_mode="strict",
         work_experience_as_of_date=date(2026, 7, 17),
-        title_header="Название карточки",
     )
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Комментарий"])
-    sheet.append([1, "", "Нужны уточнения"])
-    sheet.append([2, "Карточка для импорта", "Готово"])
+    sheet.append(["№ п/п", "Комментарий"])
+    sheet.append([1, "Нужны уточнения"])
+    sheet.append([2, "Готово"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     output = BytesIO()
     workbook.save(output)
-    created_display_names: list[object] = []
+    created_cards: list[object] = []
 
     class ImportSession:
         def begin_nested(self) -> object:
             return nullcontext()
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -899,7 +909,7 @@ def test_tabular_xlsx_import_marks_blank_card_title_invalid_and_uses_title_on_co
             pass
 
         def create_card_for_actor(self, **kwargs: object) -> object:
-            created_display_names.append(kwargs["display_name"])
+            created_cards.append(kwargs)
             return SimpleNamespace(id=uuid4())
 
         def set_field_value_for_actor(self, **_kwargs: object) -> None:
@@ -923,34 +933,24 @@ def test_tabular_xlsx_import_marks_blank_card_title_invalid_and_uses_title_on_co
         xlsx_content=output.getvalue(),
     )
 
-    assert preview["rows"][0]["errors"] == ["Название карточки: заполните название карточки."]
-    assert preview["rows"][1]["display_name"] == "Карточка для импорта"
-    with pytest.raises(import_export.TabularCardImportValidationError):
-        service.commit_import_xlsx_for_actor(
-            actor_user_id=actor_user_id,
-            registry_id=registry_id,
-            xlsx_content=output.getvalue(),
-        )
-
-    sheet.delete_rows(2)
-    output = BytesIO()
-    workbook.save(output)
+    assert preview["summary"]["invalid_rows"] == 0
+    assert all("display_name" not in row for row in preview["rows"])
     service.commit_import_xlsx_for_actor(
         actor_user_id=actor_user_id,
         registry_id=registry_id,
         xlsx_content=output.getvalue(),
     )
 
-    assert created_display_names == ["Карточка для импорта"]
+    assert len(created_cards) == 2
+    assert all("display_name" not in card for card in created_cards)
 
 
 def test_tabular_xlsx_declares_user_facing_columns_and_supported_field_types() -> None:
     assert import_export.tabular_xlsx_fixed_headers(True) == (
         "№ п/п",
-        "Название карточки",
         "Организация",
     )
-    assert import_export.tabular_xlsx_fixed_headers(False) == ("№ п/п", "Название карточки")
+    assert import_export.tabular_xlsx_fixed_headers(False) == ("№ п/п",)
     assert getattr(import_export, "TABULAR_XLSX_SUPPORTED_FIELD_TYPES", None) == {
         "text",
         "number",
@@ -1070,16 +1070,14 @@ def test_tabular_xlsx_template_is_wide_formatted_and_contains_hidden_mapping() -
 
     workbook = load_workbook(filename=__import__("io").BytesIO(content), data_only=True)
     sheet = workbook["Карточки"]
-    assert [cell.value for cell in sheet[1][:4]] == [
+    assert [cell.value for cell in sheet[1][:3]] == [
         "№ п/п",
-        "Название карточки",
         "Организация",
         "Дата рождения",
     ]
     assert sheet["A2"].value == 1
-    assert sheet["B2"].value is None
-    assert sheet["C2"].value == "Администрация (admin)"
-    assert sheet["D2"].number_format == 'DD"."MM"."YYYY'
+    assert sheet["B2"].value == "Администрация (admin)"
+    assert sheet["C2"].number_format == 'DD"."MM"."YYYY'
     assert workbook["_registry_engine"].sheet_state == "hidden"
 
 
@@ -1115,10 +1113,9 @@ def test_tabular_xlsx_template_hides_organization_column_and_records_import_targ
     metadata = json.loads(workbook["_registry_engine"]["B1"].value)
     validations = {validation.sqref for validation in sheet.data_validations.dataValidation}
 
-    assert [cell.value for cell in sheet[1][:3]] == ["№ п/п", "Название карточки", "Дата рождения"]
+    assert [cell.value for cell in sheet[1][:3]] == ["№ п/п", "Дата рождения"]
     assert sheet["A2"].value == 1
-    assert sheet["B2"].value is None
-    assert "C2:C101" not in validations
+    assert "B2:B101" not in validations
     assert metadata["include_organization_column"] is False
     assert metadata["fixed_organization_id"] == str(organization.id)
 
@@ -1163,10 +1160,10 @@ def test_tabular_xlsx_template_does_not_expose_multi_select() -> None:
     validations = {
         validation.sqref: validation for validation in sheet.data_validations.dataValidation
     }
-    assert validations["C2:C101"].formula1 == "=organization_choices"
-    assert validations["D2:D101"].formula1 == f"=field_{select_field.id.hex}_choices"
-    assert "E2:E101" not in validations
-    assert sheet.max_column == 4
+    assert validations["B2:B101"].formula1 == "=organization_choices"
+    assert validations["C2:C101"].formula1 == f"=field_{select_field.id.hex}_choices"
+    assert "D2:D101" not in validations
+    assert sheet.max_column == 3
 
 
 def test_tabular_xlsx_marks_multi_select_as_unsupported() -> None:
@@ -1208,7 +1205,7 @@ def test_tabular_xlsx_enrich_template_leaves_select_column_without_validation() 
 
     sheet = load_workbook(filename=BytesIO(content), data_only=True)["Карточки"]
     validations = {validation.sqref for validation in sheet.data_validations.dataValidation}
-    assert "C2:C101" not in validations
+    assert "B2:B101" not in validations
 
 
 def test_tabular_xlsx_exports_readable_organization_and_unit_values(
@@ -1293,10 +1290,10 @@ def test_tabular_xlsx_exports_readable_organization_and_unit_values(
     )
 
     sheet = load_workbook(filename=BytesIO(content), data_only=True)["Карточки"]
-    assert sheet["D2"].value == "Администрация"
-    assert sheet["E2"].value == "Администрация → Управление → Отдел"
-    assert str(card_organization_id) not in {sheet["D2"].value, sheet["E2"].value}
-    assert str(department_id) not in {sheet["D2"].value, sheet["E2"].value}
+    assert sheet["C2"].value == "Администрация"
+    assert sheet["D2"].value == "Администрация → Управление → Отдел"
+    assert str(card_organization_id) not in {sheet["C2"].value, sheet["D2"].value}
+    assert str(department_id) not in {sheet["C2"].value, sheet["D2"].value}
 
 
 def test_tabular_xlsx_round_trips_work_experience_as_three_columns_with_batch_as_of_date(
@@ -1370,13 +1367,12 @@ def test_tabular_xlsx_round_trips_work_experience_as_three_columns_with_batch_as
     sheet = workbook["Карточки"]
     assert [cell.value for cell in sheet[1][:5]] == [
         "№ п/п",
-        "Название карточки",
         "Стаж: дни",
         "Стаж: месяцы",
         "Стаж: годы",
     ]
-    assert [sheet[cell].value for cell in ("C2", "D2", "E2")] == [16, 3, 9]
-    assert [sheet[cell].number_format for cell in ("C2", "D2", "E2")] == ["0", "0", "0"]
+    assert [sheet[cell].value for cell in ("B2", "C2", "D2")] == [16, 3, 9]
+    assert [sheet[cell].number_format for cell in ("B2", "C2", "D2")] == ["0", "0", "0"]
 
     class ImportSession:
         def begin_nested(self) -> object:
@@ -1384,7 +1380,7 @@ def test_tabular_xlsx_round_trips_work_experience_as_three_columns_with_batch_as
 
     set_value_calls: list[dict[str, object]] = []
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -1472,14 +1468,14 @@ def test_tabular_xlsx_preview_and_commit_report_text_validation_error(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "ФИО"])
-    sheet.append([1, "Проверка ФИО", "Иванов 7"])
+    sheet.append(["№ п/п", "ФИО"])
+    sheet.append([1, "Иванов 7"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
     validation_calls: list[dict[str, object]] = []
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -1532,6 +1528,11 @@ def test_tabular_xlsx_requires_all_or_none_work_experience_columns(
         template=SimpleNamespace(id=uuid4(), name="Сведения"),
         fields=(
             import_export.TabularWorkbookField(
+                field=SimpleNamespace(id=uuid4(), label="ФИО", field_type="text"),
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="ФИО",
+            ),
+            import_export.TabularWorkbookField(
                 field=field,
                 block=SimpleNamespace(id=uuid4(), title="Основные сведения"),
                 header="Стаж",
@@ -1547,10 +1548,10 @@ def test_tabular_xlsx_requires_all_or_none_work_experience_columns(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Стаж: дни", "Стаж: месяцы", "Стаж: годы"])
-    sheet.append([1, "Без стажа", None, None, None])
-    sheet.append([2, "Неполный стаж", 16, None, 9])
-    sheet.append([3, "Полный стаж", 16, 3, 9])
+    sheet.append(["№ п/п", "ФИО", "Стаж: дни", "Стаж: месяцы", "Стаж: годы"])
+    sheet.append([1, "Иванов Иван Иванович", None, None, None])
+    sheet.append([2, "Иванов Иван Иванович", 16, None, 9])
+    sheet.append([3, "Иванов Иван Иванович", 16, 3, 9])
     metadata_sheet = workbook.create_sheet("_registry_engine")
     metadata_sheet["B1"] = "{}"
     content = BytesIO()
@@ -1558,7 +1559,7 @@ def test_tabular_xlsx_requires_all_or_none_work_experience_columns(
 
     service = import_export.TabularCardExchangeService(MagicMock())
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -1579,13 +1580,13 @@ def test_tabular_xlsx_requires_all_or_none_work_experience_columns(
     )
 
     assert preview["rows"][0]["status"] == "valid"
-    assert preview["rows"][0]["values"] == {}
+    assert field.id not in preview["rows"][0]["values"]
     assert preview["rows"][1]["status"] == "invalid"
     assert preview["rows"][1]["errors"] == [
         "Стаж: заполните дни, месяцы и годы стажа либо оставьте все три значения пустыми."
     ]
     assert preview["rows"][2]["status"] == "valid"
-    assert preview["rows"][2]["values"] == {field.id: {"days": 16, "months": 3, "years": 9}}
+    assert preview["rows"][2]["values"][field.id] == {"days": 16, "months": 3, "years": 9}
 
 
 def test_tabular_xlsx_rejects_formulas_in_visible_data_cells(
@@ -1607,8 +1608,8 @@ def test_tabular_xlsx_rejects_formulas_in_visible_data_cells(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки"])
-    sheet.append([1, "=1+1"])
+    sheet.append(["№ п/п"])
+    sheet.append(["=1+1"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -1681,10 +1682,8 @@ def test_tabular_xlsx_export_escapes_formula_leading_text_and_marks_it_as_text(
     )
 
     sheet = load_workbook(filename=BytesIO(content), data_only=False)["Карточки"]
-    assert sheet["B2"].value == '\'=HYPERLINK("https://example.test")'
-    assert sheet["C2"].value == "'=2+2"
+    assert sheet["B2"].value == "'=2+2"
     assert sheet["B2"].number_format == "@"
-    assert sheet["C2"].number_format == "@"
 
 
 def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cells() -> None:
@@ -1712,7 +1711,6 @@ def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cell
         organization_labels={},
         reference_labels={field.id: reference_labels},
         unit_organization_ids={},
-        title_header="=Название карточки",
     )
 
     content = import_export.TabularCardExchangeService(MagicMock())._build_workbook(
@@ -1726,9 +1724,8 @@ def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cell
     metadata_sheet = workbook["_registry_engine"]
     metadata = json.loads(metadata_sheet["B1"].value)
 
-    assert sheet["B1"].value == "'=Название карточки"
-    assert sheet["D1"].value == "'+Значение справочника"
-    assert sheet["C2"].value == "'-Организация (@code)"
+    assert sheet["C1"].value == "'+Значение справочника"
+    assert sheet["B2"].value == "'-Организация (@code)"
     assert metadata_sheet["A3"].value == "'-Организация (@code)"
     assert [metadata_sheet.cell(row=row, column=3).value for row in range(3, 7)] == [
         "'=Формула",
@@ -1736,7 +1733,6 @@ def test_tabular_xlsx_escapes_formula_leading_headers_template_and_metadata_cell
         "'-Минус",
         "'@Адрес",
     ]
-    assert metadata["title_header"] == "=Название карточки"
     assert metadata["field_columns"][0]["header"] == "+Значение справочника"
     assert metadata["organizations"] == [
         {"id": str(organization_id), "label": "-Организация (@code)"}
@@ -1768,7 +1764,6 @@ def test_tabular_xlsx_imports_generated_formula_escaped_headers_and_choices(
         organization_labels={"-Организация (@code)": organization_id},
         reference_labels={field.id: {"@Значение": reference_item_id}},
         unit_organization_ids={},
-        title_header="=Название карточки",
     )
     service = import_export.TabularCardExchangeService(MagicMock())
     content = service._build_workbook(
@@ -1779,12 +1774,11 @@ def test_tabular_xlsx_imports_generated_formula_escaped_headers_and_choices(
     workbook = load_workbook(filename=BytesIO(content), data_only=False)
     sheet = workbook["Карточки"]
     metadata_sheet = workbook["_registry_engine"]
-    sheet["B2"] = "Карточка из шаблона"
-    sheet["D2"] = metadata_sheet["C3"].value
+    sheet["C2"] = metadata_sheet["C3"].value
     output = BytesIO()
     workbook.save(output)
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -1835,13 +1829,13 @@ def test_tabular_xlsx_imports_formula_escaped_text_without_apostrophe(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Comment"])
-    sheet.append([1, "Formula text", "'=2+2"])
+    sheet.append(["№ п/п", "Comment"])
+    sheet.append([1, "'=2+2"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -1878,6 +1872,11 @@ def test_tabular_xlsx_empty_required_cell_preserves_draft_despite_template_defau
         template=SimpleNamespace(id=uuid4(), name="Cards"),
         fields=(
             import_export.TabularWorkbookField(
+                field=SimpleNamespace(id=uuid4(), label="ФИО", field_type="text"),
+                block=SimpleNamespace(id=uuid4(), title="Основное"),
+                header="ФИО",
+            ),
+            import_export.TabularWorkbookField(
                 field=field,
                 block=SimpleNamespace(id=uuid4(), title="Main"),
                 header="Required status",
@@ -1893,8 +1892,8 @@ def test_tabular_xlsx_empty_required_cell_preserves_draft_despite_template_defau
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки", "Required status"])
-    sheet.append([1, "Card without imported value", None])
+    sheet.append(["№ п/п", "ФИО", "Required status"])
+    sheet.append([1, "Иванов Иван Иванович", None])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     content = BytesIO()
     workbook.save(content)
@@ -1904,11 +1903,14 @@ def test_tabular_xlsx_empty_required_cell_preserves_draft_despite_template_defau
         def begin_nested(self) -> object:
             return nullcontext()
 
-    class ImportCards:
+    class ImportCards(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
         def validate_field_value_for_actor(self, **_kwargs: object) -> None:
+            pass
+
+        def set_field_value_for_actor(self, **_kwargs: object) -> None:
             pass
 
         def create_card_for_actor(self, **_kwargs: object) -> object:
@@ -1979,7 +1981,7 @@ def test_tabular_xlsx_rejects_configured_workbook_limits_before_row_parsing(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Карточки"
-    sheet.append(["№ п/п", "Название карточки"])
+    sheet.append(["№ п/п"])
     workbook.create_sheet("_registry_engine")["B1"] = "{}"
     workbook_setup(workbook, sheet)
     content = BytesIO()
@@ -2053,7 +2055,7 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
         },
     )
 
-    class ImportCardService:
+    class ImportCardService(_ImportLifecycle):
         def __init__(self, _session: object) -> None:
             pass
 
@@ -2073,7 +2075,6 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             "№ п/п",
-            "Название карточки",
             "Организация",
             "Организация для согласования",
             "Подразделение для согласования",
@@ -2082,7 +2083,6 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             1,
-            "Карточка администрации",
             "Администрация (admin)",
             "Администрация",
             "Администрация → Управление → Отдел",
@@ -2091,7 +2091,6 @@ def test_tabular_xlsx_preview_resolves_organization_references_and_rejects_forei
     sheet.append(
         [
             2,
-            "Карточка с неверным подразделением",
             "Администрация (admin)",
             "Администрация",
             "Школа → Отдел",

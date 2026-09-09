@@ -11,7 +11,7 @@ class CardPrintTemplateCreate(BaseModel):
     layout_json: dict[str, Any]
     card_template_id: UUID | None = None
     description: str | None = None
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
 
 
 class CardPrintTemplateVersionCreate(BaseModel):
@@ -22,7 +22,7 @@ class CardPrintTemplateBlankDownload(BaseModel):
     name: str
     layout_json: dict[str, Any]
     card_template_id: UUID | None = None
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
 
 
 class CardPrintTemplatePreviewPayload(BaseModel):
@@ -44,7 +44,7 @@ class DocumentTemplateCreate(BaseModel):
     name: str
     template_body: str
     description: str | None = None
-    output_filename_template: str = "{{ card.display_name }}.docx"
+    output_filename_template: str = "{{ card.display_value }}.docx"
 
 
 class DocumentTemplateRead(BaseModel):

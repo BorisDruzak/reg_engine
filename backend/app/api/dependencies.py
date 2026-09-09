@@ -13,7 +13,12 @@ from app.core.database import get_session
 from app.models import User
 from app.services.attachments import AttachmentServiceError
 from app.services.auth import AuthError, AuthService
-from app.services.cards import CardServiceError, InvalidFieldValueError
+from app.services.cards import (
+    CardChangeBasisError,
+    CardDismissalError,
+    CardServiceError,
+    InvalidFieldValueError,
+)
 from app.services.documents import DocumentServiceError
 from app.services.import_export import ImportExportServiceError
 from app.services.organizations import OrganizationNotFoundError, OrganizationTopologyError
@@ -178,6 +183,8 @@ def raise_service_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(
             status_code=400, detail="Операция со ссылкой на справочники недоступна."
         ) from exc
+    if isinstance(exc, (CardChangeBasisError, CardDismissalError)):
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if isinstance(exc, CardServiceError):
         raise HTTPException(status_code=400, detail="Операция с карточкой недоступна.") from exc
     if isinstance(exc, RegistrySchemaError):
