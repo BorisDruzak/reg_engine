@@ -148,8 +148,12 @@ def upgrade() -> None:
     op.drop_column("registries", "card_title_label", schema="public")
     op.execute(
         "UPDATE public.audit_events "
-        "SET old_data_json = old_data_json - 'display_name', "
-        "new_data_json = new_data_json - 'display_name'"
+        "SET old_data_json = CASE "
+        "WHEN jsonb_typeof(old_data_json) = 'object' "
+        "THEN old_data_json - 'display_name' ELSE old_data_json END, "
+        "new_data_json = CASE "
+        "WHEN jsonb_typeof(new_data_json) = 'object' "
+        "THEN new_data_json - 'display_name' ELSE new_data_json END"
     )
 
 

@@ -338,8 +338,35 @@ def test_card_events_export_templates_and_dismissed_lifecycle_are_migrated() -> 
 def test_title_keys_are_removed_from_existing_audit_snapshots() -> None:
     sql = _render_upgrade_sql("head")
 
-    assert "old_data_json - 'display_name'" in sql
-    assert "new_data_json - 'display_name'" in sql
+    assert "jsonb_typeof(old_data_json) = 'object'" in sql
+    assert "jsonb_typeof(new_data_json) = 'object'" in sql
+
+
+def test_title_cleanup_preserves_scalar_audit_snapshots() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0033_card_creator_actor_name")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO public.audit_events "
+                    "(actor_type, action, object_type, old_data_json, new_data_json, source) "
+                    "VALUES ('system', 'migration_test', 'card', "
+                    "'\"legacy scalar\"'::jsonb, "
+                    '\'{"display_name": "Old title", "kept": true}\'::jsonb, \'system\')'
+                )
+            )
+        _run_online_upgrade(database_url, "0034_card_events_exports_fio")
+        with engine.connect() as connection:
+            old_data, new_data = connection.execute(
+                text("SELECT old_data_json, new_data_json FROM public.audit_events")
+            ).one()
+            assert old_data == "legacy scalar"
+            assert new_data == {"kept": True}
+    finally:
+        engine.dispose()
 
 
 def test_registry_display_configuration_is_removed_from_migration_head() -> None:
