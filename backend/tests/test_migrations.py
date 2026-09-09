@@ -349,6 +349,53 @@ def test_registry_display_configuration_is_removed_from_migration_head() -> None
     assert "DROP COLUMN display_name_template" in sql
 
 
+def test_fio_label_is_normalized_to_the_required_technical_code() -> None:
+    sql = _render_upgrade_sql("head")
+
+    assert "SET code = 'fio'" in sql
+    assert "f.label = 'ФИО'" in sql
+    assert "f.archived_at IS NULL" in sql
+
+
+def test_fio_code_normalization_migrates_existing_active_field() -> None:
+    database_url = _require_test_database_url()
+    engine = create_engine(database_url)
+    try:
+        _reset_public_schema(engine)
+        _run_online_upgrade(database_url, "0037_remove_display_config")
+        with engine.begin() as connection:
+            registry_id = connection.scalar(
+                text(
+                    "INSERT INTO public.registries (code, name) "
+                    "VALUES ('fio-normalization', 'Реестр') RETURNING id"
+                )
+            )
+            block_id = connection.scalar(
+                text(
+                    "INSERT INTO public.form_blocks (registry_id, code, label) "
+                    "VALUES (:registry_id, 'main', 'Основной блок') RETURNING id"
+                ),
+                {"registry_id": registry_id},
+            )
+            field_id = connection.scalar(
+                text(
+                    "INSERT INTO public.form_fields (block_id, code, label, field_type) "
+                    "VALUES (:block_id, 'novoe_pole_2', 'ФИО', 'text') RETURNING id"
+                ),
+                {"block_id": block_id},
+            )
+        _run_online_upgrade(database_url, "head")
+        with engine.connect() as connection:
+            assert (
+                connection.scalar(
+                    text("SELECT code FROM public.form_fields WHERE id = :id"), {"id": field_id}
+                )
+                == "fio"
+            )
+    finally:
+        engine.dispose()
+
+
 def test_registry_display_configuration_upgrade_downgrade_preserves_registry() -> None:
     database_url = _require_test_database_url()
     engine = create_engine(database_url)
