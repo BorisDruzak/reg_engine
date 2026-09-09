@@ -210,7 +210,7 @@ def test_tabular_xlsx_export_defaults_v2_as_of_date_when_omitted(
 def test_tabular_xlsx_uses_stable_dynamic_columns_when_headers_collide_with_fixed_headers() -> None:
     title_field = SimpleNamespace(
         id=uuid4(),
-        label="Название карточки",
+        label="№ п/п",
         field_type="select",
     )
     organization_field = SimpleNamespace(
@@ -225,7 +225,7 @@ def test_tabular_xlsx_uses_stable_dynamic_columns_when_headers_collide_with_fixe
             import_export.TabularWorkbookField(
                 field=title_field,
                 block=SimpleNamespace(id=uuid4(), title="Основное"),
-                header="Название карточки",
+                header="№ п/п",
             ),
             import_export.TabularWorkbookField(
                 field=organization_field,
@@ -389,7 +389,7 @@ def test_tabular_xlsx_omits_non_exportable_field_from_template_metadata_and_expo
         reference_labels={},
         unit_organization_ids={},
     )
-    card = SimpleNamespace(id=uuid4(), organization_id=organization_id, display_name="Карточка 1")
+    card = SimpleNamespace(id=uuid4(), organization_id=organization_id)
 
     class ExportCardService:
         def __init__(self, _session: object) -> None:
@@ -1337,7 +1337,6 @@ def test_tabular_xlsx_round_trips_work_experience_as_three_columns_with_batch_as
     card = SimpleNamespace(
         id=uuid4(),
         organization_id=organization_id,
-        display_name="Карточка для проверки стажа",
     )
 
     class ExportCardService:
@@ -1661,7 +1660,6 @@ def test_tabular_xlsx_export_escapes_formula_leading_text_and_marks_it_as_text(
     card = SimpleNamespace(
         id=uuid4(),
         organization_id=configuration.fixed_organization_id,
-        display_name='=HYPERLINK("https://example.test")',
     )
 
     class CardReader:

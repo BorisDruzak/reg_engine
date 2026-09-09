@@ -16,7 +16,16 @@ from sqlalchemy.orm import Session
 import app.services.import_export as import_export_module
 from app.core.config import get_settings
 from app.main import create_app
-from app.models import AccessGrant, Card, Permission, ReferenceItem, Role, User, role_permissions
+from app.models import (
+    AccessGrant,
+    Card,
+    FieldValue,
+    Permission,
+    ReferenceItem,
+    Role,
+    User,
+    role_permissions,
+)
 from app.services.cards import CardService
 from app.services.organizations import OrganizationService
 from app.services.references import ReferenceListService
@@ -160,12 +169,21 @@ def _context(session: Session) -> dict[str, object]:
         code="main",
         title="Основные сведения",
     )
+    fio = schema.create_field_for_actor(
+        actor_user_id=system.id,
+        block_id=block.id,
+        code="fio",
+        label="ФИО",
+        field_type="text",
+        required_mode="required",
+    )
     status = schema.create_field_for_actor(
         actor_user_id=system.id,
         block_id=block.id,
         code="status",
         label="Статус",
         field_type="text",
+        required_mode="required",
     )
     template = schema.ensure_base_card_template_for_registry(
         registry_id=registry.id,
@@ -176,6 +194,12 @@ def _context(session: Session) -> dict[str, object]:
         registry_id=registry.id,
         organization_id=child.id,
         card_template_id=template.id,
+    )
+    CardService(session).set_field_value_for_actor(
+        actor_user_id=scoped.id,
+        card_id=source_card.id,
+        field_id=fio.id,
+        value="Иванов Иван Иванович",
     )
     CardService(session).set_field_value_for_actor(
         actor_user_id=scoped.id,
@@ -192,6 +216,7 @@ def _context(session: Session) -> dict[str, object]:
         "sibling": sibling,
         "template": template,
         "status": status,
+        "fio": fio,
         "source_card": source_card,
     }
 
@@ -199,10 +224,19 @@ def _context(session: Session) -> dict[str, object]:
 def _selection(context: dict[str, object]) -> dict[str, object]:
     return {
         "card_template_id": str(context["template"].id),
-        "field_ids": [str(context["status"].id)],
+        "field_ids": [str(context["fio"].id), str(context["status"].id)],
         "organization_ids": [str(context["child"].id)],
         "include_organization_column": True,
     }
+
+
+def _fio_matches(context: dict[str, object], *values: str):
+    return Card.id.in_(
+        select(FieldValue.card_id).where(
+            FieldValue.field_id == context["fio"].id,
+            FieldValue.value_text.in_(values),
+        )
+    )
 
 
 def _url(context: dict[str, object], suffix: str) -> str:
@@ -271,7 +305,7 @@ def _reference_selection(
 ) -> dict[str, object]:
     return {
         "card_template_id": str(context["template"].id),
-        "field_ids": [str(reference_context["field"].id)],
+        "field_ids": [str(context["fio"].id), str(reference_context["field"].id)],
         "organization_ids": [str(context["child"].id)],
         "include_organization_column": False,
         "fixed_organization_id": str(context["child"].id),
@@ -318,13 +352,21 @@ def test_tabular_xlsx_options_are_scoped_to_card_management(
     )
     assert template["fields"] == [
         {
+            "id": str(context["fio"].id),
+            "label": "ФИО",
+            "block_title": "Основные сведения",
+            "field_type": "text",
+            "supported": True,
+            "unsupported_reason": None,
+        },
+        {
             "id": str(context["status"].id),
             "label": "Статус",
             "block_title": "Основные сведения",
             "field_type": "text",
             "supported": True,
             "unsupported_reason": None,
-        }
+        },
     ]
 
 
@@ -342,12 +384,12 @@ def test_tabular_xlsx_export_and_template_are_wide_and_readable(
     sheet = workbook["Карточки"]
     assert [cell.value for cell in sheet[1][:4]] == [
         "№ п/п",
-        "Название карточки",
         "Организация",
+        "ФИО",
         "Статус",
     ]
     assert sheet["A2"].value == 1
-    assert sheet["B2"].value == context["template"].name
+    assert sheet["C2"].value == "Иванов Иван Иванович"
     assert sheet["D2"].value == "Готово"
     assert workbook["_registry_engine"].sheet_state == "hidden"
 
@@ -360,8 +402,8 @@ def test_tabular_xlsx_export_and_template_are_wide_and_readable(
     template_workbook = load_workbook(io.BytesIO(template_response.content), data_only=True)
     template_sheet = template_workbook["Карточки"]
     assert template_sheet["A2"].value == 1
-    assert template_sheet["B2"].value is None
-    assert template_sheet["C2"].value == "Доступная организация (xlsx-child)"
+    assert template_sheet["C2"].value is None
+    assert template_sheet["B2"].value == "Доступная организация (xlsx-child)"
     assert template_sheet["D2"].value is None
 
 
@@ -377,7 +419,7 @@ def test_tabular_xlsx_import_previews_and_creates_cards_atomically(
         headers=headers,
     )
     workbook = load_workbook(io.BytesIO(template_response.content))
-    workbook["Карточки"]["B2"] = "Импортированная карточка"
+    workbook["Карточки"]["C2"] = "Импортированная карточка"
     workbook["Карточки"]["D2"] = "Импортировано"
     content = io.BytesIO()
     workbook.save(content)
@@ -416,12 +458,12 @@ def test_tabular_xlsx_import_previews_and_creates_cards_atomically(
     assert committed.status_code == 200, committed.text
     assert committed.json()["summary"] == {
         "created_cards": 1,
-        "field_values_written": 1,
+        "field_values_written": 2,
         "created_reference_items": 0,
     }
     created = db_session.scalar(
         select(Card)
-        .where(Card.display_name == "Импортированная карточка")
+        .where(_fio_matches(context, "Импортированная карточка"))
         .order_by(Card.created_at.desc())
     )
     assert created is not None
@@ -480,7 +522,7 @@ def test_tabular_xlsx_strict_mode_creates_cards_only_for_existing_global_referen
     assert committed.status_code == 200, committed.text
     assert committed.json()["summary"] == {
         "created_cards": 1,
-        "field_values_written": 1,
+        "field_values_written": 2,
         "created_reference_items": 0,
     }
     assert (
@@ -492,7 +534,7 @@ def test_tabular_xlsx_strict_mode_creates_cards_only_for_existing_global_referen
         == 1
     )
     assert (
-        db_session.scalar(select(Card).where(Card.display_name == "Строгая карточка")) is not None
+        db_session.scalar(select(Card).where(_fio_matches(context, "Строгая карточка"))) is not None
     )
 
 
@@ -538,7 +580,7 @@ def test_tabular_xlsx_strict_mode_rejects_unknown_reference_choice_without_mutat
         db_session.scalar(
             select(func.count())
             .select_from(Card)
-            .where(Card.display_name == "Строгая карточка с неизвестным значением")
+            .where(_fio_matches(context, "Строгая карточка с неизвестным значением"))
         )
         == 0
     )
@@ -608,7 +650,7 @@ def test_tabular_xlsx_enrichment_creates_exactly_previewed_global_references_and
     assert committed.status_code == 200, committed.text
     assert committed.json()["summary"] == {
         "created_cards": 2,
-        "field_values_written": 2,
+        "field_values_written": 4,
         "created_reference_items": 1,
     }
     assert (
@@ -627,8 +669,8 @@ def test_tabular_xlsx_enrichment_creates_exactly_previewed_global_references_and
             select(func.count())
             .select_from(Card)
             .where(
-                Card.display_name.in_(
-                    ["Карточка с новым статусом", "Вторая карточка с новым статусом"]
+                _fio_matches(
+                    context, "Карточка с новым статусом", "Вторая карточка с новым статусом"
                 )
             )
         )
@@ -708,7 +750,9 @@ def test_tabular_xlsx_invalid_enrichment_commit_leaves_no_cards_or_reference_ite
     assert committed.json()["detail"]["summary"]["invalid_rows"] == 1
     assert (
         db_session.scalar(
-            select(func.count()).select_from(Card).where(Card.display_name == "Атомарная карточка")
+            select(func.count())
+            .select_from(Card)
+            .where(_fio_matches(context, "Атомарная карточка"))
         )
         == 0
     )
@@ -788,7 +832,7 @@ def test_tabular_xlsx_enrichment_rolls_back_late_card_write_failure_via_api(
         db_session.scalar(
             select(func.count())
             .select_from(Card)
-            .where(Card.display_name == "Карточка позднего отката")
+            .where(_fio_matches(context, "Карточка позднего отката"))
         )
         == 0
     )

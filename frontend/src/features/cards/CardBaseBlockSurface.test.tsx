@@ -11,7 +11,7 @@ describe("CardBaseBlockSurface", () => {
         mode="public"
         organization={{ label: "Организация карточки", value: "Администрация" }}
         template={{ label: "Шаблон карточки", value: "Муниципальный служащий" }}
-        displayName={{ label: "Наименование карточки", value: "Карточка" }}
+        displayName={{ label: "ФИО", value: "Иванов Иван Иванович" }}
       />,
     );
 
@@ -19,9 +19,7 @@ describe("CardBaseBlockSurface", () => {
     expect(
       screen.queryByRole("combobox", { name: "Организация карточки" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("textbox", { name: "Наименование карточки" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "ФИО" })).not.toBeInTheDocument();
   });
 
   test("keeps public access collapsed until it is opened", () => {
@@ -31,7 +29,7 @@ describe("CardBaseBlockSurface", () => {
         mode="admin"
         organization={{ label: "Организация карточки", value: "Администрация" }}
         template={{ label: "Шаблон карточки", value: "Муниципальный служащий" }}
-        displayName={{ label: "Наименование карточки", value: "Карточка" }}
+        displayName={{ label: "ФИО", value: "Иванов Иван Иванович" }}
         publicAccessContent={<p>Настройки доступа</p>}
       />,
     );

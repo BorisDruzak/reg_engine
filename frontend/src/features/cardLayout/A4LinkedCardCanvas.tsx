@@ -44,7 +44,7 @@ const printOnlyActions: Array<{ kind: PrintOnlyItemKind; label: string }> = [
   { kind: "divider", label: "Добавить линию" },
   { kind: "print_date", label: "Добавить дату печати" },
   { kind: "page_number", label: "Добавить номер страницы" },
-  { kind: "metadata", label: "Добавить название карточки" },
+  { kind: "metadata", label: "Добавить ФИО" },
 ];
 
 export function A4LinkedCardCanvas({

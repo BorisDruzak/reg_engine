@@ -319,13 +319,11 @@ def test_ref_field_types_save_to_dedicated_columns(db_session: Session) -> None:
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Target Card",
     )
     card = card_service.create_card_for_actor(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Ref Card",
     )
 
     values = {
@@ -389,13 +387,11 @@ def test_optional_ref_field_types_can_be_cleared(db_session: Session) -> None:
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Target card",
     )
     card = card_service.create_card_for_actor(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Optional ref card",
     )
 
     saved = card_service.set_field_value_for_actor(
@@ -447,7 +443,6 @@ def test_repeatable_blocks_allow_multiple_instances_but_non_repeatable_stays_sin
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Repeatable Card",
     )
 
     instance_a = card_service.create_block_instance_for_actor(
@@ -528,7 +523,6 @@ def test_card_read_is_nested_by_block_instance_and_handles_duplicate_field_codes
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Nested Card",
     )
     card_service.set_field_value_for_actor(
         actor_user_id=context["org_admin"].id,
@@ -577,7 +571,6 @@ def test_superseded_cards_are_readable_only_in_archive_scope_and_not_editable(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Old Card",
         public_edit_enabled=True,
     )
 
@@ -661,7 +654,6 @@ def test_transfer_copies_dynamic_values_and_multi_select_items(db_session: Sessi
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Transfer Copy",
     )
     card_service.set_field_value_for_actor(
         actor_user_id=context["org_admin"].id,
@@ -741,7 +733,6 @@ def test_reference_list_inheritance_allows_use_but_blocks_locked_descendant_edit
         actor_user_id=context["child_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Inherited List Card",
     )
 
     value = card_service.set_field_value_for_actor(

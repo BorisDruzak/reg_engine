@@ -326,7 +326,6 @@ def _attachment_api_context(db_session: Session) -> dict[str, Any]:
         actor_user_id=card_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="API Attachment Card",
     )
     return {
         "system_admin": system_admin,

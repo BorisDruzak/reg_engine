@@ -147,7 +147,6 @@ def test_delete_expired_notifications_uses_strict_card_history_cutoff(
         actor_user_id=actor.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Notification retention card",
     )
     expired_notification = CardChangeNotification(
         user_id=actor.id,

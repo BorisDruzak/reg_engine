@@ -57,7 +57,6 @@ export const uiText = {
   cardMetadata: "Данные карточки",
   cardRegistry: "Реестр карточки",
   cardDisplayName: "Шаблон карточки",
-  cardName: "Наименование карточки",
   cardTemplate: "Шаблон карточки",
   cardTemplates: "Шаблоны карточек",
   cardTemplateName: "Название шаблона карточки",

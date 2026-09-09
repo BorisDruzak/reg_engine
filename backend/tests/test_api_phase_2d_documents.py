@@ -297,15 +297,15 @@ def _document_api_context(db_session: Session) -> dict[str, Any]:
     field = schema_service.create_field_for_actor(
         actor_user_id=schema_admin.id,
         block_id=block.id,
-        code="title",
-        label="Название",
+        code="fio",
+        label="ФИО",
         field_type="text",
+        required_mode="required",
     )
     card = CardService(db_session).create_card_for_actor(
         actor_user_id=card_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="Документируемая карточка",
     )
     CardService(db_session).set_field_value_for_actor(
         actor_user_id=card_admin.id,
@@ -372,7 +372,7 @@ def test_generated_document_api_supports_phase_2d_workflow(
         json={
             "code": "summary",
             "name": "Сводка",
-            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.title }}",
+            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.fio }}",
         },
     )
     assert template_response.status_code == 201, template_response.text
@@ -692,7 +692,7 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         files={
             "file": (
                 "summary-v1.docx",
-                _binary_docx_bytes("V1 {{ card.display_value }} {{ fields.main.title }}"),
+                _binary_docx_bytes("V1 {{ card.display_value }} {{ fields.main.fio }}"),
                 DOCX_CONTENT_TYPE,
             )
         },
@@ -721,7 +721,7 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         files={
             "file": (
                 "summary-v2.docx",
-                _binary_docx_bytes("V2 {{ card.display_value }} {{ fields.main.title }}"),
+                _binary_docx_bytes("V2 {{ card.display_value }} {{ fields.main.fio }}"),
                 DOCX_CONTENT_TYPE,
             )
         },
@@ -750,7 +750,7 @@ def test_binary_docx_template_upload_versions_and_generates_latest_version(
         rendered_xml = docx.read("word/document.xml").decode("utf-8")
     assert "V2" in rendered_xml
     assert "{{ card.display_value }}" not in rendered_xml
-    assert "{{ fields.main.title }}" not in rendered_xml
+    assert "{{ fields.main.fio }}" not in rendered_xml
     assert "V1" not in rendered_xml
 
     invalid_upload_response = api_client.post(
@@ -780,7 +780,7 @@ def test_generated_document_api_supports_pdf_generation_for_text_template(
         json={
             "code": "summary-pdf",
             "name": "PDF summary",
-            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.title }}",
+            "template_body": "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.fio }}",
         },
     )
     assert template_response.status_code == 201, template_response.text
@@ -796,7 +796,7 @@ def test_generated_document_api_supports_pdf_generation_for_text_template(
     assert pdf_payload["card_id"] == str(context["card"].id)
     assert pdf_payload["template_id"] == template_payload["id"]
     assert pdf_payload["content_type"] == "application/pdf"
-    assert pdf_payload["output_filename"] == f"{context['card'].display_name}.pdf"
+    assert pdf_payload["output_filename"] == "Значение поля.pdf"
     assert pdf_payload["archived_at"] is None
 
     download_response = api_client.get(
@@ -813,8 +813,8 @@ def test_generated_document_api_supports_pdf_generation_for_text_template(
         actor_user_id=context["card_admin"].id,
         card_id=context["card"].id,
     )
-    field_value = card_read.fields["main.title"].value
-    assert f"Карточка: {context['card'].display_name}" in extracted_text
+    field_value = card_read.fields["main.fio"].value
+    assert "Карточка: Значение поля" in extracted_text
     assert f"Поле: {field_value}" in extracted_text
 
     audit_event = db_session.scalar(

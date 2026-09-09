@@ -276,13 +276,11 @@ def _report_api_context(db_session: Session) -> dict[str, Any]:
         actor_user_id=card_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="Visible report card",
     )
     sibling_card = card_service.create_card_for_actor(
         actor_user_id=sibling_admin.id,
         registry_id=registry.id,
         organization_id=sibling.id,
-        display_name="Hidden sibling report card",
     )
     card_service.set_field_value_for_actor(
         actor_user_id=card_admin.id,

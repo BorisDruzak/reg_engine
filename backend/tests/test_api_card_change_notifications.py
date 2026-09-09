@@ -133,7 +133,6 @@ def notification_api_context(db_session: Session) -> dict[str, object]:
         actor_user_id=admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Карточка уведомлений API",
     )
 
     role = Role(code="notification-api-card-manager", name="Управление карточками")

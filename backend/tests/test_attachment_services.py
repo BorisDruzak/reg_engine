@@ -254,7 +254,6 @@ def _attachment_context(db_session: Session, *, suffix: str = "") -> dict[str, A
         actor_user_id=child_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="Attachment card",
     )
 
     return {
@@ -1000,7 +999,6 @@ def test_public_link_attachment_workflow_rejects_inactive_links_and_wrong_cards(
         actor_user_id=context["child_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Other public attachment card",
         public_edit_enabled=True,
     )
     other_attachment = attachment_service.create_attachment_for_actor(
@@ -1275,7 +1273,6 @@ def test_file_ref_rejects_wrong_card_and_archived_attachment(
         actor_user_id=context["child_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Other file ref card",
     )
     other_attachment = attachment_service.create_attachment_for_actor(
         actor_user_id=context["child_admin"].id,

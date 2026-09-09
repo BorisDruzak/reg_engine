@@ -38,7 +38,7 @@ Phase 2C introduces a backend-only generated document foundation:
 Supported placeholders in this slice:
 
 - `{{ card.id }}`
-- `{{ card.display_name }}`
+- `{{ card.display_value }}`
 - `{{ card.registry_id }}`
 - `{{ card.organization_id }}`
 - `{{ fields.<block_code>.<field_code> }}`

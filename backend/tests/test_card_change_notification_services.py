@@ -113,7 +113,6 @@ def notification_context(db_session: Session) -> dict[str, object]:
         actor_user_id=admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Карточка уведомлений",
     )
 
     role = Role(code="notification-card-manager", name="Управление карточками")
@@ -298,7 +297,6 @@ def test_inbox_counts_only_visible_cards_paginates_and_keeps_archived_cards(
         actor_user_id=admin.id,
         registry_id=registry.id,
         organization_id=invisible_organization.id,
-        display_name="Недоступная карточка",
     )
     archived_notification = CardChangeNotification(
         user_id=reader.id,

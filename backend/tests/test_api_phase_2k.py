@@ -355,7 +355,7 @@ def _create_org_unit_reference_api_setup(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": card_organization["id"], "display_name": "Organization unit card"},
+        {"organization_id": card_organization["id"]},
         actor_id=system_admin.id,
     )
     active_management = _post_json(
@@ -587,7 +587,7 @@ def test_organization_reference_options_and_public_allowlist_are_enforced(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": card_organization["id"], "display_name": "Organization card"},
+        {"organization_id": card_organization["id"]},
         actor_id=system_admin.id,
     )
     public_link = _post_json(
@@ -1076,7 +1076,7 @@ def test_repeatable_block_instance_archive_hides_normal_read_and_preserves_archi
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
     first_instance = _post_json(
@@ -1198,7 +1198,7 @@ def test_block_instance_archive_rejects_non_repeatable_and_system_blocks(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
     non_repeatable_instance = _post_json(
@@ -1269,7 +1269,7 @@ def test_bulk_card_values_update_saves_multiple_values(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
 
@@ -1342,7 +1342,7 @@ def test_bulk_card_values_update_rolls_back_on_partial_validation_failure(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
     _request_json(
@@ -1419,7 +1419,7 @@ def test_card_value_validation_returns_only_configured_message(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
 
@@ -1470,7 +1470,7 @@ def test_bulk_card_values_update_requires_card_permission(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": "Card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
 
@@ -1515,7 +1515,7 @@ def _create_file_ref_api_setup(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": organization["id"], "display_name": f"File Ref {suffix} Card"},
+        {"organization_id": organization["id"]},
         actor_id=actor_id,
     )
     return {
@@ -1635,7 +1635,7 @@ def test_file_ref_api_rejects_wrong_card_and_reads_archived_reference_metadata(
     other_card = _post_json(
         api_client,
         f"/api/v1/registries/{setup['registry']['id']}/cards",
-        {"organization_id": setup["organization"]["id"], "display_name": "Other File Ref Card"},
+        {"organization_id": setup["organization"]["id"]},
         actor_id=system_admin.id,
     )
     other_attachment = _upload_card_attachment(

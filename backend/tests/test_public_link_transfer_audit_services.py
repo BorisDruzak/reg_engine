@@ -258,7 +258,6 @@ def _phase_1e_context(db_session: Session) -> dict[str, Any]:
         actor_user_id=source_admin.id,
         registry_id=registry.id,
         organization_id=source_org.id,
-        display_name="Phase 1E Card",
         public_edit_enabled=True,
     )
     CardPublicAccessService(db_session).update_for_actor(
@@ -737,7 +736,7 @@ def test_audit_events_are_written_for_core_create_update_archive_actions(
     card = card_service.update_card_for_actor(
         actor_user_id=context["source_admin"].id,
         card_id=context["card"].id,
-        display_name="Phase 1E Card Updated",
+        public_view_enabled=True,
     )
     field_value = card_service.set_field_value_for_actor(
         actor_user_id=context["source_admin"].id,

@@ -609,7 +609,7 @@ test("A4 stage uses a print element list, keeps one linked card rectangle, and r
     "Добавить линию",
     "Добавить дату печати",
     "Добавить номер страницы",
-    "Добавить название карточки",
+    "Добавить ФИО",
   ]) {
     expect(screen.getByRole("button", { name: actionLabel })).toBeVisible();
   }

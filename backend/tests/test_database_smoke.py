@@ -392,7 +392,6 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             card_template_id=card_template_id,
             organization_id=organization_id,
             org_unit_id=org_unit_id,
-            display_name="Asset 1",
             created_by=user_id,
         )
         target_card_id = _insert_returning_id(
@@ -401,7 +400,6 @@ def test_core_model_insert_smoke(migrated_test_engine: Engine) -> None:
             registry_id=registry_id,
             card_template_id=card_template_id,
             organization_id=child_organization_id,
-            display_name="Asset 2",
             created_by=user_id,
         )
         block_instance_id = _insert_returning_id(

@@ -7,7 +7,7 @@ Registry
   └── Cards
         ├── organization_id
         ├── org_unit_id
-        ├── display_name
+        ├── display_value (проекция динамического поля fio)
         ├── lifecycle_status
         └── dynamic field values
 
@@ -222,14 +222,12 @@ registries
   description text nullable
   lifecycle_status text not null default 'active'   -- active / archived
   schema_version integer not null default 1
-  display_name_field_id uuid nullable               -- FK на form_fields, можно добавить после создания таблиц
-  display_name_template text nullable               -- future: "{last_name} {first_name}"
   created_by uuid nullable fk users.id
   created_at timestamptz
   updated_at timestamptz
   archived_at timestamptz nullable
 
-В v1 display_name можно задавать вручную при создании карточки. Позже можно синхронизировать его с выбранным полем.
+Отображение карточки определяется единственным активным текстовым полем `fio` в её шаблоне. Отдельное название и настройка выбора поля отображения не хранятся.
 
 2.8. Form Blocks
 
@@ -425,10 +423,8 @@ cards
   organization_id uuid not null fk organizations.id
   org_unit_id uuid nullable fk org_units.id
 
-  display_name text not null
-
   lifecycle_status text not null default 'draft'
-    -- draft / active / archived / superseded
+    -- draft / active / dismissed / archived / superseded
 
   public_view_enabled boolean not null default false
   public_edit_enabled boolean not null default false
@@ -448,7 +444,6 @@ registry_id
 organization_id
 org_unit_id
 lifecycle_status
-lower(display_name)
 registry_id, organization_id, lifecycle_status
 
 Правила:
@@ -852,7 +847,7 @@ audit.log(
 фильтр по organization subtree
 фильтр по lifecycle_status
 фильтр по org_unit_id
-поиск по display_name
+поиск по значению динамического поля fio
 
 Позже:
 

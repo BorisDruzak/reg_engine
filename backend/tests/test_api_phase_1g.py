@@ -664,7 +664,6 @@ def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
         field_schema_json={"field_ids": []},
     )
     payload = {
-        "display_name": "Draft public link card",
         "card_template_id": str(template.id),
         "public_access": {
             "public_view_enabled": True,
@@ -747,13 +746,12 @@ def test_card_reads_creator_display_name_for_internal_and_public_creation(
     internal = _post_json(
         api_client,
         f"/api/v1/registries/{registry.id}/cards",
-        {"organization_id": organization["id"], "display_name": "Internal creator card"},
+        {"organization_id": organization["id"]},
         actor_id=system_admin.id,
     )
     public_card = CardService(db_session).create_card(
         registry_id=registry.id,
         organization_id=UUID(organization["id"]),
-        display_name="Public creator card",
         created_by=None,
     )
     public_card.public_creator_name = "Иванов Иван Иванович"
@@ -812,8 +810,8 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
     field = RegistrySchemaService(db_session).create_field_for_actor(
         actor_user_id=system_admin.id,
         block_id=block.id,
-        code="explicit_draft_value",
-        label="Explicit draft value",
+        code="fio",
+        label="ФИО",
         field_type="text",
     )
     template = RegistrySchemaService(db_session).create_card_template_for_actor(
@@ -824,7 +822,6 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
         field_schema_json={"field_ids": [str(field.id)]},
     )
     payload = {
-        "display_name": "Explicit draft card",
         "card_template_id": str(template.id),
         "public_access": {
             "public_view_enabled": True,
@@ -848,7 +845,8 @@ def test_explicit_draft_endpoint_creates_draft_and_denies_unauthorized_actor(
 
     card_id = UUID(created["id"])
     assert created["lifecycle_status"] == "draft"
-    assert created["display_name"] == "Explicit draft card"
+    assert created["display_value"] == ""
+    assert "display_name" not in created
     public_links = db_session.scalars(
         select(CardPublicLink).where(CardPublicLink.card_id == card_id)
     ).all()
@@ -1082,7 +1080,6 @@ def test_phase_1g_rest_workflow_completion(
         f"/api/v1/registries/{registry['id']}/cards",
         {
             "organization_id": root["id"],
-            "display_name": "Phase 1G Card",
             "public_edit_enabled": True,
         },
         actor_id=system_admin.id,
@@ -1090,9 +1087,7 @@ def test_phase_1g_rest_workflow_completion(
     organization_card = _post_json(
         api_client,
         f"/api/v1/organizations/{root['id']}/cards",
-        {
-            "display_name": "Phase 1G Organization Card",
-        },
+        {},
         actor_id=system_admin.id,
     )
 
@@ -1262,9 +1257,9 @@ def test_phase_1g_rest_workflow_completion(
         "PATCH",
         f"/api/v1/cards/{card['id']}",
         actor_id=system_admin.id,
-        payload={"display_name": "Phase 1G Card Updated", "public_view_enabled": True},
+        payload={"public_view_enabled": True},
     )
-    assert updated_card["display_name"] == "Phase 1G Card Updated"
+    assert "display_name" not in updated_card
     assert updated_card["public_view_enabled"] is True
 
     public_link = _post_json(
@@ -1346,19 +1341,19 @@ def test_organization_card_list_supports_tagged_organization_filters(
     branch_card = _post_json(
         api_client,
         f"/api/v1/organizations/{branch['id']}/cards",
-        {"display_name": "Phase 7D Branch Card"},
+        {},
         actor_id=system_admin.id,
     )
     grandchild_card = _post_json(
         api_client,
         f"/api/v1/organizations/{grandchild['id']}/cards",
-        {"display_name": "Phase 7D Grandchild Card"},
+        {},
         actor_id=system_admin.id,
     )
     sibling_card = _post_json(
         api_client,
         f"/api/v1/organizations/{sibling['id']}/cards",
-        {"display_name": "Phase 7D Sibling Card"},
+        {},
         actor_id=system_admin.id,
     )
     card_role = _create_role_with_permissions(
@@ -1439,13 +1434,13 @@ def test_organization_card_list_supports_text_and_field_filter_tags(
     matching_card = _post_json(
         api_client,
         f"/api/v1/organizations/{root['id']}/cards",
-        {"display_name": "Phase 7E First Card"},
+        {},
         actor_id=system_admin.id,
     )
     other_card = _post_json(
         api_client,
         f"/api/v1/organizations/{root['id']}/cards",
-        {"display_name": "Phase 7E Second Card"},
+        {},
         actor_id=system_admin.id,
     )
     block = _post_json(
@@ -1653,7 +1648,6 @@ def test_public_link_api_hardening(
         f"/api/v1/registries/{registry['id']}/cards",
         {
             "organization_id": root["id"],
-            "display_name": "Public Card",
             "public_edit_enabled": True,
         },
         actor_id=system_admin.id,
@@ -1761,7 +1755,6 @@ def test_work_experience_field_persists_private_anchor_and_projects_api_reads(
         f"/api/v1/registries/{registry['id']}/cards",
         {
             "organization_id": root["id"],
-            "display_name": "Experience card",
             "public_edit_enabled": True,
         },
         actor_id=system_admin.id,
@@ -1902,7 +1895,7 @@ def test_reference_field_validation_returns_controlled_4xx(
     card = _post_json(
         api_client,
         f"/api/v1/registries/{registry['id']}/cards",
-        {"organization_id": root["id"], "display_name": "Ref Card"},
+        {"organization_id": root["id"]},
         actor_id=system_admin.id,
     )
 

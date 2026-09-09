@@ -94,7 +94,6 @@ beforeEach(() => {
         row_number: 2,
         status: "valid",
         organization_label: "Администрация (admin)",
-        display_name: "Карточка",
         errors: [],
       },
     ],
@@ -604,17 +603,13 @@ test("lists planned global reference values without internal identifiers and kee
         row_number: 2,
         status: "valid",
         organization_label: options.organizations[0].label,
-        display_name: "\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430",
         errors: [],
       },
       {
         row_number: 3,
         status: "invalid",
-        organization_label: options.organizations[0].label,
-        display_name: "",
-        errors: [
-          "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435.",
-        ],
+        organization_label: null,
+        errors: ["Не указана организация."],
       },
     ],
   });

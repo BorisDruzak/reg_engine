@@ -1433,12 +1433,7 @@ def test_xlsx_enrichment_rolls_back_real_postgresql_reference_and_card_writes(
         )
 
     db_session.expire_all()
-    assert (
-        db_session.scalars(
-            select(Card).where(Card.display_name.in_(["Rollback card one", "Rollback card two"]))
-        ).all()
-        == []
-    )
+    assert db_session.scalars(select(Card).where(Card.card_template_id == template.id)).all() == []
     assert (
         db_session.scalar(
             select(func.count())
@@ -1655,7 +1650,6 @@ def test_organization_centered_card_create_uses_root_default_registry(
     card = CardService(db_session).create_card_for_organization_for_actor(
         actor_user_id=org_admin.id,
         organization_id=child.id,
-        display_name="Organization-centered card",
     )
 
     assert card.registry_id == default_registry.id
@@ -1968,8 +1962,8 @@ def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
     field = schema_service.create_field_for_actor(
         actor_user_id=system_admin.id,
         block_id=block.id,
-        code="single_stage_name",
-        label="Single-stage name",
+        code="fio",
+        label="ФИО",
         field_type="text",
         required_mode="required",
     )
@@ -1997,7 +1991,6 @@ def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
         card_service.create_card_with_first_value_for_actor(
             actor_user_id=system_admin.id,
             organization_id=organization.id,
-            display_name=None,
             card_template_id=template.id,
             public_view_enabled=True,
             public_edit_enabled=True,
@@ -2010,7 +2003,6 @@ def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
     card = card_service.create_card_with_first_value_for_actor(
         actor_user_id=system_admin.id,
         organization_id=organization.id,
-        display_name=None,
         card_template_id=template.id,
         public_view_enabled=True,
         public_edit_enabled=True,
@@ -2022,7 +2014,7 @@ def test_first_card_value_creates_card_atomically_and_updates_lifecycle(
         select(FieldValue).where(FieldValue.card_id == card.id, FieldValue.field_id == field.id)
     )
     assert card.lifecycle_status == "active"
-    assert card.display_name == template.name
+    assert card_service.card_display_value(card) == "Created after first value"
     assert stored_value is not None
     assert stored_value.value_text == "Created after first value"
 
@@ -2160,7 +2152,6 @@ def test_first_card_value_rolls_back_when_public_access_update_fails(
         CardService(db_session).create_card_with_first_value_for_actor(
             actor_user_id=context["system_admin"].id,
             organization_id=context["child"].id,
-            display_name=None,
             card_template_id=template.id,
             public_view_enabled=True,
             public_edit_enabled=True,
@@ -2203,13 +2194,11 @@ def test_organization_centered_card_list_uses_default_registry_not_arbitrary_fir
         actor_user_id=system_admin.id,
         registry_id=default_registry.id,
         organization_id=root.id,
-        display_name="Default registry card",
     )
     arbitrary_card = CardService(db_session).create_card_for_actor(
         actor_user_id=system_admin.id,
         registry_id=arbitrary_registry.id,
         organization_id=root.id,
-        display_name="Arbitrary registry card",
     )
 
     cards = CardService(db_session).list_visible_cards_for_organization_for_actor(
@@ -2241,7 +2230,6 @@ def test_active_default_registry_with_cards_cannot_be_archived(
     CardService(db_session).create_card(
         registry_id=default_registry.id,
         organization_id=root.id,
-        display_name="Draft card blocks archive",
         created_by=system_admin.id,
     )
 
@@ -2487,7 +2475,6 @@ def test_bulk_field_values_api_creates_two_history_events_and_one_notification(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Карточка пакетного API",
     )
     subscriber = _create_user(
         db_session,
@@ -2609,12 +2596,10 @@ def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visi
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Child card",
     )
     sibling_card = card_service.create_card(
         registry_id=context["registry"].id,
         organization_id=context["sibling"].id,
-        display_name="Sibling card",
         created_by=context["system_admin"].id,
     )
 
@@ -2627,7 +2612,7 @@ def test_one_registry_contains_cards_from_multiple_organizations_with_scope_visi
     assert {card.id for card in visible_cards} == {child_card.id}
 
 
-def test_card_template_creates_card_name_and_default_values(
+def test_card_template_creates_fio_display_and_default_values(
     db_session: Session,
 ) -> None:
     context = _phase_1d_context(db_session)
@@ -2642,8 +2627,8 @@ def test_card_template_creates_card_name_and_default_values(
     text_field = schema_service.create_field_for_actor(
         actor_user_id=context["registry_admin"].id,
         block_id=block.id,
-        code="template_text",
-        label="Template text",
+        code="fio",
+        label="ФИО",
         field_type="text",
     )
     bool_field = schema_service.create_field_for_actor(
@@ -2673,7 +2658,7 @@ def test_card_template_creates_card_name_and_default_values(
     )
 
     assert db_session.get(CardTemplate, template.id) is not None
-    assert card.display_name == "Template card"
+    assert card_service.card_display_value(card) == "prefilled"
     assert card.card_template_id == template.id
     values = {
         value.field_id: value
@@ -2803,7 +2788,6 @@ def test_create_draft_card_and_public_link_saves_access_and_audits(
     created = CardService(db_session).create_card_draft_with_public_link_for_actor(
         actor_user_id=context["system_admin"].id,
         organization_id=context["child"].id,
-        display_name="Draft public link card",
         card_template_id=template.id,
         public_access=CardPublicAccessUpdate(
             public_view_enabled=True,
@@ -2919,7 +2903,6 @@ def test_create_draft_card_and_public_link_keeps_draft_for_required_template(
     created = CardService(db_session).create_card_draft_with_public_link_for_actor(
         actor_user_id=context["system_admin"].id,
         organization_id=context["child"].id,
-        display_name=None,
         card_template_id=template.id,
         public_access=CardPublicAccessUpdate(),
     )
@@ -2983,7 +2966,6 @@ def test_create_draft_card_and_public_link_rolls_back_after_public_link_failure(
         CardService(db_session).create_card_draft_with_public_link_for_actor(
             actor_user_id=context["system_admin"].id,
             organization_id=context["child"].id,
-            display_name=None,
             card_template_id=template.id,
             public_access=CardPublicAccessUpdate(
                 fields=[
@@ -3045,7 +3027,6 @@ def test_create_draft_card_and_public_link_denies_actor_without_card_management(
         CardService(db_session).create_card_draft_with_public_link_for_actor(
             actor_user_id=context["registry_admin"].id,
             organization_id=context["child"].id,
-            display_name=None,
             card_template_id=template.id,
             public_access=CardPublicAccessUpdate(),
         )
@@ -3071,7 +3052,6 @@ def test_explicit_draft_creation_saves_draft_without_public_link(
     created = CardService(db_session).create_card_draft_for_actor(
         actor_user_id=context["system_admin"].id,
         organization_id=context["child"].id,
-        display_name="Новая карточка",
         card_template_id=template.id,
         public_access=CardPublicAccessUpdate(
             public_view_enabled=True,
@@ -3080,7 +3060,7 @@ def test_explicit_draft_creation_saves_draft_without_public_link(
     )
 
     assert created.lifecycle_status == "draft"
-    assert created.display_name == "Новая карточка"
+    assert not hasattr(created, "display_name")
     assert PublicLinkService(db_session).list_for_card(created.id) == []
     assert CardPublicAccessService(db_session).read_for_actor(
         actor_user_id=context["system_admin"].id,
@@ -3245,7 +3225,6 @@ def test_explicit_draft_creation_denies_actor_without_card_management(
         CardService(db_session).create_card_draft_for_actor(
             actor_user_id=context["registry_admin"].id,
             organization_id=context["child"].id,
-            display_name=None,
             card_template_id=template.id,
             public_access=CardPublicAccessUpdate(),
         )
@@ -3297,7 +3276,6 @@ def test_draft_creation_rolls_back_after_public_access_failure(
         CardService(db_session).create_card_draft_for_actor(
             actor_user_id=context["system_admin"].id,
             organization_id=context["child"].id,
-            display_name="Rollback draft",
             card_template_id=template.id,
             public_access=CardPublicAccessUpdate(),
         )
@@ -3448,8 +3426,8 @@ def test_card_creation_without_explicit_template_uses_base_template(
     first_field = schema_service.create_field_for_actor(
         actor_user_id=context["registry_admin"].id,
         block_id=block.id,
-        code="base_template_first",
-        label="Base template first",
+        code="fio",
+        label="ФИО",
         field_type="text",
     )
     second_field = schema_service.create_field_for_actor(
@@ -3470,7 +3448,7 @@ def test_card_creation_without_explicit_template_uses_base_template(
     assert base_template is not None
     assert base_template.code == "base_template"
     assert base_template.name == "Базовый шаблон"
-    assert card.display_name == "Базовый шаблон"
+    assert CardService(db_session).card_display_value(card) == ""
     assert set(base_template.field_schema_json["field_ids"]) == {
         str(first_field.id),
         str(second_field.id),
@@ -3654,7 +3632,6 @@ def test_existing_card_org_unit_can_be_corrected_inside_same_organization(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Org unit correction card",
     )
 
     updated = card_service.update_card_for_actor(
@@ -3714,7 +3691,6 @@ def test_required_field_mode_is_saved_and_enforced_on_bulk_save(db_session: Sess
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Required card",
     )
 
     assert field.required_mode == "required"
@@ -3766,7 +3742,6 @@ def test_card_text_value_rejects_configured_russian_text_violation(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Validated card",
     )
 
     with pytest.raises(
@@ -3790,7 +3765,6 @@ def test_card_without_mandatory_fields_is_active_after_creation(db_session: Sess
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Complete by default",
     )
 
     assert card.lifecycle_status == "active"
@@ -3805,7 +3779,6 @@ def test_new_mandatory_schema_field_recalculates_existing_card_lifecycle(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Existing complete card",
     )
     block = schema_service.create_block_for_actor(
         actor_user_id=context["registry_admin"].id,
@@ -3852,7 +3825,6 @@ def test_publish_required_field_drives_automatic_draft_active_draft_lifecycle(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Automatic lifecycle card",
     )
 
     assert card.lifecycle_status == "draft"
@@ -3917,7 +3889,6 @@ def test_incomplete_required_card_can_save_other_draft_values(db_session: Sessio
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Incremental draft card",
     )
 
     saved = card_service.set_field_values_for_actor(
@@ -3954,7 +3925,6 @@ def test_manual_lifecycle_update_cannot_override_required_field_completeness(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Publish card",
     )
 
     incomplete = card_service.update_card_for_actor(
@@ -4040,7 +4010,6 @@ def test_dynamic_typed_values_are_saved_to_typed_columns(db_session: Session) ->
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Typed card",
     )
     value_datetime = datetime(2026, 6, 28, 10, 30, tzinfo=UTC)
 
@@ -4125,7 +4094,6 @@ def test_work_experience_field_is_required_reads_as_duration_and_copies_its_anch
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Experience card",
     )
 
     assert card.lifecycle_status == "draft"
@@ -4247,7 +4215,6 @@ def test_select_and_multi_select_use_reference_items_and_validate_list_scope(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Reference card",
     )
 
     select_value = card_service.set_field_value_for_actor(
@@ -4350,7 +4317,6 @@ def test_organization_effective_reference_list_replaces_inherited_values(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Local reference card",
     )
 
     effective_items = card_service.list_reference_items_for_card_field_for_actor(
@@ -4428,7 +4394,6 @@ def test_fixed_reference_list_ignores_local_override(db_session: Session) -> Non
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Fixed reference card",
     )
 
     effective_items = card_service.list_reference_items_for_card_field_for_actor(
@@ -4507,7 +4472,6 @@ def test_org_unit_field_values_are_scoped_to_card_organization_and_keep_saved_ar
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Scoped organization unit card",
     )
 
     card_service.set_field_value_for_actor(
@@ -4589,7 +4553,6 @@ def test_old_cards_show_new_fields_as_null_without_mass_value_rows(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Old card",
     )
     card_service.set_field_value_for_actor(
         actor_user_id=context["org_admin"].id,
@@ -4643,7 +4606,6 @@ def test_archived_schema_and_cards_remain_in_database(db_session: Session) -> No
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Archive card",
     )
 
     archived_block = schema_service.archive_block_for_actor(
@@ -4686,13 +4648,11 @@ def test_archiving_a_field_retains_filled_values_and_deletes_empty_rows(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Filled archive value",
     )
     empty_card = card_service.create_card_for_actor(
         actor_user_id=context["org_admin"].id,
         registry_id=context["registry"].id,
         organization_id=context["child"].id,
-        display_name="Empty archive value",
     )
     retained_value = card_service.set_field_value_for_actor(
         actor_user_id=context["org_admin"].id,

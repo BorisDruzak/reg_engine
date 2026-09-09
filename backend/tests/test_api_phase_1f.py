@@ -19,8 +19,10 @@ from app.models import (
     AccessGrant,
     AuditEvent,
     Card,
+    CardBlockInstance,
     CardPublicLink,
     CardTemplate,
+    FieldValue,
     FormBlock,
     FormField,
     Organization,
@@ -227,10 +229,17 @@ def _create_card_for_audit_history(
     )
     session.add(registry)
     session.flush()
+    block = FormBlock(registry_id=registry.id, code="identity", title="Личные данные")
+    session.add(block)
+    session.flush()
+    fio = FormField(block_id=block.id, code="fio", label="ФИО", field_type="text")
+    session.add(fio)
+    session.flush()
     template = CardTemplate(
         registry_id=registry.id,
         code=f"audit-history-template-{suffix}",
         name=f"Audit History Template {suffix}",
+        field_schema_json={"field_ids": [str(fio.id)]},
         created_by=created_by.id,
     )
     session.add(template)
@@ -239,10 +248,21 @@ def _create_card_for_audit_history(
         registry_id=registry.id,
         card_template_id=template.id,
         organization_id=organization.id,
-        display_name=f"Audit History Card {suffix}",
         created_by=created_by.id,
     )
     session.add(card)
+    session.flush()
+    instance = CardBlockInstance(card_id=card.id, block_id=block.id, ordinal=0)
+    session.add(instance)
+    session.flush()
+    session.add(
+        FieldValue(
+            card_id=card.id,
+            block_instance_id=instance.id,
+            field_id=fio.id,
+            value_text="Иванов Иван Иванович",
+        )
+    )
     session.flush()
     return card
 
@@ -440,7 +460,8 @@ def test_api_card_history_general_list_defaults_to_active_cards(
     assert response.status_code == 200, response.text
     items = response.json()["items"]
     assert [item["card_id"] for item in items] == [str(active_card.id)]
-    assert items[0]["card_display_name"] == active_card.display_name
+    assert items[0]["card_display_value"] == "Иванов Иван Иванович"
+    assert "card_display_name" not in items[0]
     assert items[0]["card_lifecycle_status"] == active_card.lifecycle_status
 
 
@@ -716,12 +737,10 @@ def test_api_card_history_returns_only_field_diffs_and_keeps_field_redaction(
         card_id=card.id,
         retention_class="card_history",
         old_data_json={
-            "display_name": "Прежнее название",
             "organization_id": str(card.organization_id),
             "public_edit_enabled": False,
         },
         new_data_json={
-            "display_name": "Новое название",
             "organization_id": str(card.organization_id),
             "public_edit_enabled": False,
         },
@@ -880,7 +899,7 @@ def test_api_card_history_redacts_non_field_snapshots_and_marks_lifecycle_events
         object_id=card.id,
         card_id=card.id,
         retention_class="card_history",
-        new_data_json={"id": str(card.id), "display_name": card.display_name},
+        new_data_json={"id": str(card.id)},
         source="api",
     )
     archive_event = AuditEvent(
@@ -1145,7 +1164,6 @@ def test_api_can_create_schema_cards_public_links_transfer_and_read_audit(
         f"/api/v1/registries/{registry['id']}/cards",
         {
             "organization_id": root["id"],
-            "display_name": "API Card",
             "public_edit_enabled": True,
         },
         actor_id=system_admin.id,
@@ -1271,7 +1289,6 @@ def test_api_card_visibility_uses_organization_scope(
         actor_user_id=system_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="Visible Card",
     )
     _grant_access(
         db_session,
@@ -1396,7 +1413,6 @@ def test_api_public_link_respects_card_public_edit_enabled(
         actor_user_id=system_admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Public Disabled Card",
         public_edit_enabled=False,
     )
 
@@ -1441,7 +1457,6 @@ def test_api_public_link_create_accepts_attachment_upload_limit(
         actor_user_id=system_admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Public Upload Limit Card",
         public_edit_enabled=True,
     )
 
@@ -1505,9 +1520,10 @@ def test_api_public_link_preview_returns_public_edit_schema(
     status_field = RegistrySchemaService(db_session).create_field_for_actor(
         actor_user_id=system_admin.id,
         block_id=public_block.id,
-        code="status",
-        label="Status",
+        code="fio",
+        label="ФИО",
         field_type="text",
+        required_mode="required",
         public_editable=True,
     )
     RegistrySchemaService(db_session).create_field_for_actor(
@@ -1522,7 +1538,6 @@ def test_api_public_link_preview_returns_public_edit_schema(
         actor_user_id=system_admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Public Preview Card",
         public_edit_enabled=True,
     )
     CardService(db_session).set_field_value_for_actor(
@@ -1546,7 +1561,8 @@ def test_api_public_link_preview_returns_public_edit_schema(
     assert preview.status_code == 200, preview.text
     payload = preview.json()
     assert payload["card_id"] == str(card.id)
-    assert payload["display_name"] == "Public Preview Card"
+    assert payload["display_value"] == "drafted"
+    assert "display_name" not in payload
     assert payload["organization_name"] == "API Public Preview Root"
     assert payload["card_template_name"] == "Базовый шаблон"
     assert payload["lifecycle_status"] == card.lifecycle_status
@@ -1564,7 +1580,6 @@ def test_api_public_link_preview_returns_public_edit_schema(
         actor_user_id=system_admin.id,
         registry_id=registry.id,
         organization_id=organization.id,
-        display_name="Public Preview Disabled",
         public_edit_enabled=False,
     )
     disabled_link = _post_json(

@@ -421,16 +421,16 @@ def _document_context(db_session: Session) -> dict[str, Any]:
     field = schema_service.create_field_for_actor(
         actor_user_id=schema_admin.id,
         block_id=block.id,
-        code="full_name",
-        label="Название",
+        code="fio",
+        label="ФИО",
         field_type="text",
+        required_mode="required",
     )
     card_service = CardService(db_session)
     card = card_service.create_card_for_actor(
         actor_user_id=card_admin.id,
         registry_id=registry.id,
         organization_id=child.id,
-        display_name="Тестовая карточка",
     )
     card_service.set_field_value_for_actor(
         actor_user_id=card_admin.id,
@@ -1532,9 +1532,7 @@ def test_generated_document_renders_schema_driven_card_data_to_storage(
         code="card-summary",
         name="Сводка карточки",
         template_body=(
-            "Карточка: {{ card.display_value }}\n"
-            "Поле: {{ fields.main.full_name }}\n"
-            "ID: {{ card.id }}"
+            "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.fio }}\nID: {{ card.id }}"
         ),
         output_filename_template="{{ card.display_value }}.docx",
     )
@@ -1717,9 +1715,7 @@ def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
         code="card-summary-pdf",
         name="PDF summary",
         template_body=(
-            "Карточка: {{ card.display_value }}\n"
-            "Поле: {{ fields.main.full_name }}\n"
-            "ID: {{ card.id }}"
+            "Карточка: {{ card.display_value }}\nПоле: {{ fields.main.fio }}\nID: {{ card.id }}"
         ),
         output_filename_template="{{ card.display_value }}.docx",
     )
@@ -1736,13 +1732,13 @@ def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
         actor_user_id=context["card_admin"].id,
         card_id=context["card"].id,
     )
-    field_value = card_read.fields["main.full_name"].value
+    field_value = card_read.fields["main.fio"].value
     assert stored_file is not None
     assert generated.card_id == context["card"].id
     assert generated.template_id == template.id
     assert generated.content_type == "application/pdf"
-    assert generated.output_filename == f"{context['card'].display_name}.pdf"
-    assert stored_file.original_filename == f"{context['card'].display_name}.pdf"
+    assert generated.output_filename == "Значение из карточки.pdf"
+    assert stored_file.original_filename == "Значение из карточки.pdf"
     assert stored_file.content_type == "application/pdf"
 
     content = document_service.read_generated_document_content_for_actor(
@@ -1751,7 +1747,7 @@ def test_generated_pdf_renders_docx_text_v1_card_data_to_storage(
     )
     assert content.startswith(b"%PDF")
     extracted_text = _extract_pdf_text(content)
-    assert f"Карточка: {context['card'].display_name}" in extracted_text
+    assert "Карточка: Значение из карточки" in extracted_text
     assert f"Поле: {field_value}" in extracted_text
     assert str(context["card"].id) in extracted_text
 

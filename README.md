@@ -542,7 +542,7 @@ Supported placeholders:
 
 ```text
 {{ card.id }}
-{{ card.display_name }}
+{{ card.display_value }}
 {{ card.registry_id }}
 {{ card.organization_id }}
 {{ fields.<block_code>.<field_code> }}
@@ -963,8 +963,9 @@ Phase 5G adds three card lifecycle write tools:
 - `reg_engine_archive_card`
 
 These tools call only the existing REST API endpoints for card create, metadata
-update, and archive. Create sends required `organization_id` and `display_name`
-plus provided optional fields. Update sends only provided metadata fields and
+update, and archive. Create sends required `organization_id`
+plus provided optional fields; ФИО is derived from the template's `fio` field.
+Update sends only provided metadata fields and
 rejects empty update payloads. Archive requires `confirm_archive=true` before
 sending `DELETE`.
 
