@@ -235,6 +235,20 @@ def test_export_template_persists_multiple_organizations(export_context):
     assert template["configuration_json"]["organization_ids"] == [str(ctx.org.id), str(ctx.child.id)]
 
 
+def test_export_template_rejects_duplicate_organizations(export_context):
+    ctx = export_context
+    payload = template_payload(ctx)
+    payload["configuration_json"]["organization_ids"] = [str(ctx.org.id), str(ctx.org.id)]
+
+    response = ctx.client.post(
+        f"/api/v1/registries/{ctx.registry.id}/card-export-templates", json=payload
+    )
+
+    assert response.status_code in {400, 422}, response.text
+    assert ctx.session.scalars(select(CardExportTemplate)).all() == []
+    assert ctx.session.scalars(select(AuditEvent)).all() == []
+
+
 def test_card_list_export_combines_saved_organizations_without_organization_column(export_context):
     ctx = export_context
     add_card(ctx, 11, "Бета", date(2026, 9, 1), organization=ctx.child)
