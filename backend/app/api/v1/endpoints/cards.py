@@ -210,6 +210,7 @@ def create_card(
             actor_user_id=actor_user_id,
             registry_id=registry_id,
             organization_id=payload.organization_id,
+            card_template_id=payload.card_template_id,
             org_unit_id=payload.org_unit_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
@@ -235,6 +236,7 @@ def create_organization_card(
         card = card_service.create_card_for_organization_for_actor(
             actor_user_id=actor_user_id,
             organization_id=organization_id,
+            card_template_id=payload.card_template_id,
             public_view_enabled=payload.public_view_enabled,
             public_edit_enabled=payload.public_edit_enabled,
         )

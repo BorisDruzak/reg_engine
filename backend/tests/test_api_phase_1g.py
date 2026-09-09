@@ -399,6 +399,76 @@ def test_draft_endpoint_accepts_no_template_and_returns_display_value_without_da
     assert "display_name" not in response.json()
 
 
+def test_ordinary_create_keeps_template_choice_while_draft_delegates_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_allow_dev_actor = os.environ.get("ALLOW_DEV_ACTOR_HEADER")
+    os.environ["ALLOW_DEV_ACTOR_HEADER"] = "true"
+    get_settings.cache_clear()
+    app = create_app()
+    actor_id = uuid4()
+    organization_id = uuid4()
+    template_id = uuid4()
+    card = SimpleNamespace(
+        id=uuid4(),
+        registry_id=uuid4(),
+        card_template_id=template_id,
+        organization_id=organization_id,
+        org_unit_id=None,
+        lifecycle_status="draft",
+        public_view_enabled=True,
+        public_edit_enabled=False,
+        created_by=None,
+        public_creator_name=None,
+    )
+    ordinary_template_ids: list[UUID | None] = []
+    draft_call_keys: list[set[str]] = []
+
+    def override_session() -> Iterator[None]:
+        yield None
+
+    def create_ordinary(_self: CardService, **kwargs: Any) -> object:
+        ordinary_template_ids.append(kwargs["card_template_id"])
+        return card
+
+    def create_draft(_self: CardService, **kwargs: Any) -> object:
+        draft_call_keys.append(set(kwargs))
+        return card
+
+    app.dependency_overrides[get_db_session] = override_session
+    monkeypatch.setattr(CardService, "create_card_for_actor", create_ordinary)
+    monkeypatch.setattr(CardService, "create_card_draft_for_actor", create_draft)
+    monkeypatch.setattr(CardService, "card_display_value", lambda _self, _card: "")
+    monkeypatch.setattr(CardService, "_card_template_name", lambda _self, _card: "Шаблон")
+    monkeypatch.setattr(CardService, "list_display_fields_for_card", lambda _self, _card: [])
+    try:
+        with TestClient(app) as client:
+            ordinary = client.post(
+                f"/api/v1/registries/{card.registry_id}/cards",
+                json={
+                    "organization_id": str(organization_id),
+                    "card_template_id": str(template_id),
+                },
+                headers=_actor_headers(actor_id),
+            )
+            draft = client.post(
+                f"/api/v1/organizations/{organization_id}/cards/draft",
+                json={"public_access": {}},
+                headers=_actor_headers(actor_id),
+            )
+    finally:
+        if previous_allow_dev_actor is None:
+            os.environ.pop("ALLOW_DEV_ACTOR_HEADER", None)
+        else:
+            os.environ["ALLOW_DEV_ACTOR_HEADER"] = previous_allow_dev_actor
+        get_settings.cache_clear()
+
+    assert ordinary.status_code == 201, ordinary.text
+    assert draft.status_code == 201, draft.text
+    assert ordinary_template_ids == [template_id]
+    assert draft_call_keys == [{"actor_user_id", "organization_id", "public_access"}]
+
+
 def test_draft_public_link_endpoint_creates_draft_and_denies_unauthorized_actor(
     api_client: TestClient,
     db_session: Session,

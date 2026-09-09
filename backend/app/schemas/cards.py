@@ -6,12 +6,14 @@ from pydantic import BaseModel, Field
 
 class CardCreate(BaseModel):
     organization_id: UUID
+    card_template_id: UUID | None = None
     org_unit_id: UUID | None = None
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
 
 
 class OrganizationCardCreate(BaseModel):
+    card_template_id: UUID | None = None
     public_view_enabled: bool = True
     public_edit_enabled: bool = True
 
