@@ -81,6 +81,7 @@ export const uiText = {
   cardCreated: "Карточка создана",
   cardUpdated: "Карточка обновлена",
   cardArchived: "Карточка архивирована",
+  cardDismissed: "Увольнение сохранено",
   cardSearch: "Поиск карточек",
   cardSearchPlaceholder: "Текст карточки или поля",
   cardTagSearch: "Поисковая строка карточек",
@@ -639,6 +640,7 @@ export function lifecycleStatusLabel(value: string) {
     archived: "Архив",
     disabled: "Отключён",
     draft: "Черновик",
+    dismissed: "Уволен",
     inactive: "Неактивно",
     superseded: "Заменено",
   };
@@ -758,6 +760,9 @@ export function auditSourceLabel(value: string | null | undefined) {
 
 export function apiErrorMessageLabel(message: string) {
   const labels: Record<string, string> = {
+    "Основание изменения обязательно.": "Основание изменения обязательно.",
+    "Уволенная карточка доступна только для чтения.":
+      "Уволенная карточка доступна только для чтения.",
     "Bearer token has expired.": uiText.bearerTokenExpired,
     "Bearer token is required.": uiText.bearerTokenRequired,
     "Bearer token user is not active.": uiText.bearerTokenUserInactive,

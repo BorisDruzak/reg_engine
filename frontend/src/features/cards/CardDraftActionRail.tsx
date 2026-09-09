@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export type CardDraftActionRailProps = {
-  state: "setup" | "draft" | "active";
+  state: "setup" | "draft" | "active" | "dismissed";
   setupComplete?: boolean;
   attention?: boolean;
   setupMessage?: string;
@@ -25,7 +25,7 @@ export function CardDraftActionRail({
     return (
       <div className="card-draft-action-rail">
         <p role="status" aria-label={ariaLabel}>
-          {state === "draft" ? "Черновик" : "Активна"}
+          {state === "draft" ? "Черновик" : state === "dismissed" ? "Уволен" : "Активна"}
         </p>
       </div>
     );
@@ -37,7 +37,7 @@ export function CardDraftActionRail({
         {setupMessage ??
           (setupComplete
             ? "Базовый блок заполнен. Сохраните черновик, чтобы перейти к полям шаблона."
-            : "Выберите организацию и шаблон, затем сохраните черновик.")}
+            : "Выберите организацию, затем сохраните черновик.")}
       </p>
       <button
         type="button"

@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   commitTabularXlsxImport,
   createOrganizationCardDraft,
+  listOrganizationCards,
   downloadTabularXlsxImportTemplate,
   previewTabularXlsxImport,
 } from "./client";
@@ -10,6 +11,20 @@ import type { TabularCardWorkbookPayload } from "./types";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test("sends dismissed list filtering to the backend with existing organization scope", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  await listOrganizationCards("token", "organization-1", {
+    lifecycleStatus: "dismissed",
+    organizationIds: ["organization-1"],
+    includeDescendantOrganizations: false,
+  });
+  const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+  expect(url.searchParams.get("lifecycle_status")).toBe("dismissed");
+  expect(url.searchParams.getAll("organization_ids")).toEqual(["organization-1"]);
+  expect(url.searchParams.get("include_descendant_organizations")).toBe("false");
 });
 
 test("creates an explicit organization card draft through the draft endpoint", async () => {
@@ -23,7 +38,6 @@ test("creates an explicit organization card draft through the draft endpoint", a
   vi.stubGlobal("fetch", fetchMock);
 
   await createOrganizationCardDraft("test-token", "organization-1", {
-    card_template_id: "template-1",
     public_access: { public_edit_enabled: true },
   });
 
@@ -34,7 +48,6 @@ test("creates an explicit organization card draft through the draft endpoint", a
   expect(String(url).endsWith("/organizations/organization-1/cards/draft")).toBe(true);
   expect(init).toMatchObject({ method: "POST" });
   expect(JSON.parse(String(init?.body))).toMatchObject({
-    card_template_id: "template-1",
     public_access: { public_edit_enabled: true },
   });
 });

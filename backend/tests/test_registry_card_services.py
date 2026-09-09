@@ -70,6 +70,65 @@ class _FlushOnlySession:
         pass
 
 
+@pytest.mark.parametrize("prefix", ["registries", "organizations"])
+def test_card_list_http_validates_and_forwards_lifecycle_filter(prefix, monkeypatch):
+    from app.api.dependencies import get_actor_user_id
+
+    actor_id = uuid4()
+    captured = []
+
+    def record_query(_self, **kwargs):
+        captured.append(kwargs)
+        return []
+
+    monkeypatch.setattr(CardService, "list_visible_cards", record_query)
+    monkeypatch.setattr(CardService, "list_visible_cards_for_organization_for_actor", record_query)
+    app = create_app()
+    app.dependency_overrides[get_db_session] = lambda: None
+    app.dependency_overrides[get_actor_user_id] = lambda: actor_id
+    with TestClient(app) as client:
+        path = f"/api/v1/{prefix}/{uuid4()}/cards"
+        response = client.get(path, params={"lifecycle_status": "dismissed"})
+        assert response.status_code == 200
+        assert captured[-1]["lifecycle_status"] == "dismissed"
+        assert captured[-1]["actor_user_id"] == actor_id
+        assert client.get(path, params={"lifecycle_status": "unknown"}).status_code == 422
+        assert len(captured) == 1
+
+
+def test_lifecycle_filter_preserves_visible_organization_scope(card_event_context, monkeypatch):
+    from app.services.permissions import PermissionService
+
+    ctx = card_event_context
+    dismissed = Card(
+        id=uuid4(),
+        registry_id=ctx.card.registry_id,
+        organization_id=ctx.card.organization_id,
+        card_template_id=ctx.card.card_template_id,
+        lifecycle_status="dismissed",
+    )
+    hidden = Card(
+        id=uuid4(),
+        registry_id=ctx.card.registry_id,
+        organization_id=uuid4(),
+        card_template_id=ctx.card.card_template_id,
+        lifecycle_status="dismissed",
+    )
+    ctx.session.add_all([dismissed, hidden])
+    ctx.session.commit()
+    monkeypatch.setattr(
+        PermissionService, "get_organization_scope_ids", lambda *a, **k: {ctx.card.organization_id}
+    )
+    cards = ctx.service.list_visible_cards(
+        actor_user_id=ctx.actor_id, registry_id=ctx.card.registry_id, lifecycle_status="dismissed"
+    )
+    assert [card.id for card in cards] == [dismissed.id]
+    with pytest.raises(CardServiceError):
+        ctx.service.list_visible_cards(
+            actor_user_id=ctx.actor_id, registry_id=ctx.card.registry_id, lifecycle_status="unknown"
+        )
+
+
 @pytest.fixture()
 def card_event_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamespace]:
     """Real local transactions; schema/permissions are isolated from PostgreSQL setup."""

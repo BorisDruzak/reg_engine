@@ -275,6 +275,9 @@ def list_cards(
     q: Annotated[str | None, Query()] = None,
     filters: Annotated[str | None, Query()] = None,
     card_template_ids: Annotated[list[UUID] | None, Query()] = None,
+    lifecycle_status: Annotated[
+        str | None, Query(pattern="^(draft|active|dismissed|archived|superseded)$")
+    ] = None,
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -289,6 +292,7 @@ def list_cards(
             query=q,
             field_filters=field_filters,
             card_template_ids=card_template_ids,
+            lifecycle_status=lifecycle_status,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -307,6 +311,9 @@ def list_organization_cards(
     q: Annotated[str | None, Query()] = None,
     filters: Annotated[str | None, Query()] = None,
     card_template_ids: Annotated[list[UUID] | None, Query()] = None,
+    lifecycle_status: Annotated[
+        str | None, Query(pattern="^(draft|active|dismissed|archived|superseded)$")
+    ] = None,
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -321,6 +328,7 @@ def list_organization_cards(
             query=q,
             field_filters=field_filters,
             card_template_ids=card_template_ids,
+            lifecycle_status=lifecycle_status,
         )
     except Exception as exc:
         raise_service_http_error(exc)

@@ -3,12 +3,7 @@ import { useState } from "react";
 
 import { listCardHistoryEvents } from "@/api/client";
 import type { AuditEventRead, CardHistoryFilters, CardSummaryRead, UserRead } from "@/api/types";
-import {
-  auditActionLabel,
-  auditObjectTypeLabel,
-  auditSourceLabel,
-  uiText,
-} from "@/app/uiText";
+import { auditActionLabel, auditObjectTypeLabel, auditSourceLabel, uiText } from "@/app/uiText";
 import { DataAlert, Panel, WorkspaceTabs } from "@/components/common/DataSurfaces";
 import { formatDate } from "@/components/common/dataUtils";
 
@@ -81,7 +76,7 @@ export function AuditPanel({
                   <option value="">{uiText.selectCardForHistory}</option>
                   {cards.map((card) => (
                     <option key={card.id} value={card.id}>
-                      {card.display_name}
+                      {card.display_value}
                     </option>
                   ))}
                 </select>
@@ -92,7 +87,10 @@ export function AuditPanel({
                   aria-label={uiText.auditActor}
                   value={filters.actorUserId ?? ""}
                   onChange={(event) =>
-                    setFilters((value) => ({ ...value, actorUserId: event.target.value || undefined }))
+                    setFilters((value) => ({
+                      ...value,
+                      actorUserId: event.target.value || undefined,
+                    }))
                   }
                 >
                   <option value="">{uiText.allActors}</option>
@@ -165,11 +163,7 @@ function CardHistoryTable({
         </thead>
         <tbody>
           {events.map((event) => (
-            <HistoryEventRow
-              event={event}
-              key={event.id}
-              onSelectCard={onSelectCard}
-            />
+            <HistoryEventRow event={event} key={event.id} onSelectCard={onSelectCard} />
           ))}
         </tbody>
       </table>
@@ -209,9 +203,7 @@ function HistoryEventRow({
           : undefined
       }
     >
-      <td>
-        {cardDisplayName}
-      </td>
+      <td>{cardDisplayName}</td>
       <td>{auditActionLabel(event.action)}</td>
       <td>
         {field ? (
@@ -269,7 +261,12 @@ function fieldSnapshot(value: unknown): FieldSnapshot | null {
 type CompositeChange = { label: string; old: unknown; new: unknown };
 
 function compositeChanges(value: unknown): CompositeChange[] | null {
-  if (!value || typeof value !== "object" || !("changes" in value) || !Array.isArray(value.changes)) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("changes" in value) ||
+    !Array.isArray(value.changes)
+  ) {
     return null;
   }
   return value.changes.filter(
@@ -287,7 +284,9 @@ function formatHistoryValue(value: unknown, side: "old" | "new"): string {
   const changes = compositeChanges(value);
   if (changes) {
     return changes.length > 0
-      ? changes.map((change) => `${change.label}: ${formatHistoryValue(change[side], side)}`).join("; ")
+      ? changes
+          .map((change) => `${change.label}: ${formatHistoryValue(change[side], side)}`)
+          .join("; ")
       : uiText.noValue;
   }
   const snapshot = fieldSnapshot(value);
@@ -316,7 +315,5 @@ function formatHistoryValue(value: unknown, side: "old" | "new"): string {
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

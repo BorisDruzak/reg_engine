@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { CardTemplateRead, FormBlockRead, FormFieldRead, OrganizationRead } from "@/api/types";
 
@@ -59,6 +59,69 @@ const template: CardTemplateRead = {
 };
 
 describe("SingleStageCardCreation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("requires organization and uses the first active template without sending a title or template", async () => {
+    const requests: { url: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({
+          url: String(input),
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+        return Response.json(
+          String(input).includes("creation-preview")
+            ? {
+                organization_id: organization.id,
+                card_template_id: template.id,
+                display_value: "Не заполнено",
+                blocks: [],
+              }
+            : { id: "new-card" },
+        );
+      }),
+    );
+    const onCardCreated = vi.fn();
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <SingleStageCardCreation
+          token="token"
+          organizations={[organization]}
+          templates={[
+            { ...template, id: "inactive", is_active: false },
+            { ...template, id: "z-template", name: "Альтернативная карточка" },
+            template,
+          ]}
+          schemaBlocks={[block]}
+          schemaFields={[experienceField]}
+          onCancel={() => undefined}
+          onCardCreated={onCardCreated}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByLabelText("Наименование карточки")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Шаблон карточки" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Организация карточки")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
+    expect(requests).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("Организация карточки"), {
+      target: { value: organization.id },
+    });
+    await waitFor(() =>
+      expect(
+        requests.some(({ url }) => url.includes("card-templates/template-1/creation-preview")),
+      ).toBe(true),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    await waitFor(() => expect(onCardCreated).toHaveBeenCalledWith("new-card"));
+    expect(requests.find(({ url }) => url.endsWith("cards/draft"))?.body).toEqual({
+      public_access: { public_view_enabled: true, public_edit_enabled: true, fields: [] },
+    });
+  });
+
   test("keeps an absent required work experience incomplete while its locked editor shows zero defaults", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

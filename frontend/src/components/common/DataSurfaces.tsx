@@ -23,7 +23,7 @@ export function SelectableList({
   onSelect,
   onOpen,
 }: {
-  items: { id: string; title: string; detail: string }[];
+  items: { id: string; title: string; detail: string; className?: string }[];
   selectedId: string;
   onSelect: (id: string) => void;
   onOpen?: (id: string) => void;
@@ -38,7 +38,7 @@ export function SelectableList({
         <button
           type="button"
           key={item.id}
-          className={item.id === selectedId ? "selectable-row is-selected" : "selectable-row"}
+          className={`selectable-row${item.id === selectedId ? " is-selected" : ""}${item.className ? ` ${item.className}` : ""}`}
           onClick={() => onSelect(item.id)}
           onDoubleClick={() => onOpen?.(item.id)}
         >

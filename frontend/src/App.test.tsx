@@ -317,7 +317,7 @@ const apiPayloads = {
         card_template_name: "Муниципальная карточка",
         organization_id: "22222222-2222-4222-8222-222222222222",
         org_unit_id: null,
-        display_name: "Карточка актива",
+        display_value: "Карточка актива",
         lifecycle_status: "draft",
         public_view_enabled: false,
         public_edit_enabled: true,
@@ -331,7 +331,7 @@ const apiPayloads = {
     card_template_id: "71717171-7171-4171-8171-717171717171",
     card_template_name: "Муниципальная карточка",
     organization_id: "22222222-2222-4222-8222-222222222222",
-    display_name: "Карточка актива",
+    display_value: "Карточка актива",
     blocks: {
       main: {
         block_id: "88888888-8888-4888-8888-888888888888",
@@ -851,7 +851,7 @@ beforeEach(() => {
             card_template_name: template.name,
             organization_id: organizationCardMatch[1],
             org_unit_id: null,
-            display_name: payload.display_name ?? template?.name ?? "Новая карточка",
+            display_value: template?.name ?? "Не заполнено",
             lifecycle_status: "draft",
             public_view_enabled: payload.public_access?.public_view_enabled ?? false,
             public_edit_enabled: payload.public_access?.public_edit_enabled ?? false,
@@ -1815,7 +1815,7 @@ beforeEach(() => {
             card_template_name: template.name,
             organization_id: payload.organization_id,
             org_unit_id: payload.org_unit_id ?? null,
-            display_name: payload.display_name ?? template?.name ?? "Новая карточка",
+            display_value: template?.name ?? "Не заполнено",
             lifecycle_status: "draft",
             public_view_enabled: payload.public_view_enabled ?? false,
             public_edit_enabled: payload.public_edit_enabled ?? false,
@@ -2178,7 +2178,7 @@ beforeEach(() => {
           };
           const updated: CardSummaryRead = {
             ...current,
-            display_name: payload.display_name ?? current.display_name,
+            display_value: current.display_value,
             org_unit_id: Object.prototype.hasOwnProperty.call(payload, "org_unit_id")
               ? (payload.org_unit_id ?? null)
               : current.org_unit_id,
@@ -2415,7 +2415,7 @@ function currentCardRead(cardId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"): CardR
     id: cardSummary.id,
     registry_id: cardSummary.registry_id,
     organization_id: cardSummary.organization_id,
-    display_name: cardSummary.display_name,
+    display_value: cardSummary.display_value,
     blocks: {
       ...blocks,
     },
@@ -2562,7 +2562,7 @@ function addSecondCardFixture() {
     {
       ...apiPayloads.cards.items[0],
       id: "bbbb2222-2222-4222-8222-222222222222",
-      display_name: "Вторая карточка",
+      display_value: "Вторая карточка",
       list_fields: [],
     },
   ];
@@ -2714,7 +2714,7 @@ function cardMatchesListFilters(item: CardSummaryRead, requestUrl: URL) {
 function cardMatchesFreeText(item: CardSummaryRead, query: string) {
   const state = cardValueStateById[item.id];
   return (
-    item.display_name.toLowerCase().includes(query) ||
+    item.display_value.toLowerCase().includes(query) ||
     state?.status.toLowerCase().includes(query) === true
   );
 }
@@ -3018,6 +3018,26 @@ test("opens the empty card workspace when a stored card was removed", async () =
   });
 });
 
+test("filters dismissed cards through the list API", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await user.type(screen.getByLabelText(/электронная почта/i), "admin@example.test");
+  await user.type(screen.getByLabelText(/пароль/i), "secret-pass");
+  await user.click(screen.getByRole("button", { name: "Войти" }));
+  await user.click(await screen.findByRole("button", { name: "Карточки" }));
+  await user.selectOptions(await screen.findByLabelText("Статус карточек"), "dismissed");
+  await waitFor(() =>
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([url]) =>
+            String(url).includes("/cards?") && String(url).includes("lifecycle_status=dismissed"),
+        ),
+    ).toBe(true),
+  );
+});
+
 test("loads card templates before an authorized administrator creates the first card", async () => {
   cardItems = [];
   const user = userEvent.setup();
@@ -3029,16 +3049,15 @@ test("loads card templates before an authorized administrator creates the first 
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
   await user.click(await screen.findByRole("tab", { name: "Создать карточку" }));
 
-  expect(await screen.findByLabelText("Шаблон карточки")).toHaveValue(
-    "71717171-7171-4171-8171-717171717171",
-  );
+  expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Заполнить поле Статус" })).toBeInTheDocument();
 });
 
 test("restores persisted card filters without opening a hidden card", async () => {
   addSecondCardFixture();
   cardItems = cardItems.map((item) =>
     item.id === "bbbb2222-2222-4222-8222-222222222222"
-      ? { ...item, display_name: "Созданная карточка" }
+      ? { ...item, display_value: "Созданная карточка" }
       : item,
   );
   cardValueStateById["bbbb2222-2222-4222-8222-222222222222"] = {
@@ -3627,7 +3646,7 @@ test("shows card actions in dedicated download and archive panels", async () => 
 
 test("shows the active card lifecycle state in the navigator", async () => {
   cardItems = cardItems.map((item) =>
-    item.display_name === "Карточка актива" ? { ...item, lifecycle_status: "active" } : item,
+    item.display_value === "Карточка актива" ? { ...item, lifecycle_status: "active" } : item,
   );
   const user = userEvent.setup();
   render(<App />);
@@ -5013,7 +5032,7 @@ test("filters cards by search organization and archive visibility", async () => 
       card_template_name: "Муниципальная карточка",
       organization_id: "22222222-2222-4222-8222-222222222222",
       org_unit_id: null,
-      display_name: "Архивная карточка",
+      display_value: "Архивная карточка",
       lifecycle_status: "archived",
       public_view_enabled: false,
       public_edit_enabled: false,
@@ -5125,7 +5144,7 @@ test("adds dynamic field filters from the unified card search bar", async () => 
       card_template_name: "Муниципальная карточка",
       organization_id: "22222222-2222-4222-8222-222222222222",
       org_unit_id: null,
-      display_name: "Карточка без статуса",
+      display_value: "Карточка без статуса",
       lifecycle_status: "draft",
       public_view_enabled: false,
       public_edit_enabled: false,
@@ -5387,7 +5406,7 @@ test("adds template bool and date filters from inline search tag choices", async
   });
 });
 
-test("shows a card name and enables public access by default when creating a card", async () => {
+test("omits card title and enables public access by default when creating a card", async () => {
   const user = userEvent.setup();
   render(<App />);
 
@@ -5397,7 +5416,7 @@ test("shows a card name and enables public access by default when creating a car
   await user.click(await screen.findByRole("button", { name: "Карточки" }));
   await user.click(await screen.findByRole("tab", { name: "Создать карточку" }));
 
-  expect(screen.getByLabelText("Наименование карточки")).toHaveValue("");
+  expect(screen.queryByLabelText("Наименование карточки")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Публичный просмотр карточки")).toBeChecked();
   expect(screen.getByLabelText("Публичное редактирование карточки")).toBeChecked();
 });
@@ -5426,9 +5445,7 @@ test("creates archives cards and manages repeatable blocks with inline saves", a
   expect(screen.queryByText("Подразделение карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Реестр карточки")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Название карточки")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Шаблон карточки")).toHaveValue(
-    "71717171-7171-4171-8171-717171717171",
-  );
+  expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("Организация карточки"), [
     "22222222-2222-4222-8222-222222222222",
   ]);
@@ -5493,7 +5510,6 @@ test("creates archives cards and manages repeatable blocks with inline saves", a
     expect(createCall).toBeTruthy();
     const createBody = JSON.parse(String(createCall?.[1]?.body ?? "{}")) as Record<string, unknown>;
     expect(createBody).toEqual({
-      card_template_id: "71717171-7171-4171-8171-717171717171",
       public_access: {
         public_view_enabled: true,
         public_edit_enabled: true,

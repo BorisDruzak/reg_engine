@@ -51,6 +51,7 @@ type WorkspaceUiState = {
   cardTemplateIds: string[];
   cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
+  cardLifecycleStatus: string;
 };
 
 const workspaceUiStateKey = "reg_engine.admin_workspace_state.v1";
@@ -73,6 +74,7 @@ export function HomePage() {
     cardTemplateIds,
     cardFieldFilters,
     includeArchivedCards,
+    cardLifecycleStatus,
   } = workspaceUiState;
 
   const token = session?.token ?? "";
@@ -115,6 +117,7 @@ export function HomePage() {
       cardOrganizationIds.join("|"),
       cardIncludeDescendantOrganizations,
       includeArchivedCards,
+      cardLifecycleStatus,
       cardSearch,
       cardTemplateIds.join("|"),
       JSON.stringify(cardFieldFilters),
@@ -124,6 +127,7 @@ export function HomePage() {
         organizationIds: cardOrganizationIds,
         includeDescendantOrganizations: cardIncludeDescendantOrganizations,
         includeArchive: includeArchivedCards,
+        lifecycleStatus: cardLifecycleStatus || undefined,
         q: cardSearch || undefined,
         cardTemplateIds,
         fieldFilters: cardFieldFilters,
@@ -358,6 +362,7 @@ export function HomePage() {
       cardTemplateIds: [],
       cardFieldFilters: [],
       includeArchivedCards: false,
+      cardLifecycleStatus: "",
     }));
 
     if (!token || !broadOrganizationId) {
@@ -371,6 +376,7 @@ export function HomePage() {
       "",
       includeDescendantOrganizations,
       false,
+      "",
       "",
       "",
       "[]",
@@ -410,6 +416,7 @@ export function HomePage() {
       cardTemplateIds: [],
       cardFieldFilters: [],
       includeArchivedCards: true,
+      cardLifecycleStatus: "",
     }));
 
     if (!token || !broadOrganizationId) {
@@ -423,6 +430,7 @@ export function HomePage() {
       "",
       includeDescendantOrganizations,
       true,
+      "",
       "",
       "",
       "[]",
@@ -556,6 +564,11 @@ export function HomePage() {
         )}
         {activeSection === "cards" && (
           <CardsWorkspace
+            cardLifecycleStatus={cardLifecycleStatus}
+            onCardLifecycleStatusChange={(value) =>
+              setWorkspaceUiState((current) => ({ ...current, cardLifecycleStatus: value }))
+            }
+            isSuperuser={Boolean(currentUser?.is_superuser)}
             cards={cardsQuery.data?.items ?? []}
             card={cardReadQuery.data ?? null}
             schema={registrySchemaQuery.data ?? null}
@@ -632,6 +645,7 @@ function defaultWorkspaceUiState(): WorkspaceUiState {
     cardTemplateIds: [],
     cardFieldFilters: [],
     includeArchivedCards: false,
+    cardLifecycleStatus: "",
   };
 }
 
@@ -663,6 +677,11 @@ function loadWorkspaceUiState(): WorkspaceUiState {
       cardFieldFilters: normalizeCardFieldFilters(parsed.cardFieldFilters),
       includeArchivedCards:
         typeof parsed.includeArchivedCards === "boolean" ? parsed.includeArchivedCards : false,
+      cardLifecycleStatus:
+        typeof parsed.cardLifecycleStatus === "string" &&
+        ["draft", "active", "dismissed"].includes(parsed.cardLifecycleStatus)
+          ? parsed.cardLifecycleStatus
+          : "",
     };
   } catch {
     return defaultWorkspaceUiState();

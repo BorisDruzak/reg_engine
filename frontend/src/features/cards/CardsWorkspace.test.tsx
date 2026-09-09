@@ -112,6 +112,125 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("CardsWorkspace", () => {
+  test("forwards the dismissed filter and keeps the list controlled by server data", () => {
+    const onCardLifecycleStatusChange = vi.fn();
+    renderWorkspace({ cards: [organizationUnitCardSummary], onCardLifecycleStatusChange });
+    fireEvent.change(screen.getByLabelText("Статус карточек"), { target: { value: "dismissed" } });
+    expect(onCardLifecycleStatusChange).toHaveBeenCalledWith("dismissed");
+    expect(screen.getByRole("button", { name: /Карточка подразделения/ })).toBeInTheDocument();
+  });
+
+  test("superuser can archive while dismissed cards cannot be dismissed again", async () => {
+    renderWorkspace({
+      cards: [{ ...organizationUnitCardSummary, lifecycle_status: "dismissed" }],
+      card: organizationUnitCard,
+      isSuperuser: true,
+    });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    expect(
+      await screen.findByRole("button", { name: /Архивировать карточку/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Уволить" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Статус карточки" })).toHaveTextContent("Уволен");
+    fireEvent.click(screen.getByTestId("filled-field-item-org-unit"));
+    expect(
+      screen.queryByRole("group", { name: "Подразделение организации" }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("uses FIO for list and tabs and exposes dismissed state explicitly", async () => {
+    renderWorkspace({
+      cards: [
+        {
+          ...organizationUnitCardSummary,
+          display_value: "Иванов Иван Иванович",
+          lifecycle_status: "dismissed",
+        },
+      ],
+    });
+    const row = screen.getByRole("button", { name: /Иванов Иван Иванович/ });
+    expect(row).toHaveClass("is-dismissed");
+    expect(row).toHaveTextContent("Уволен");
+    fireEvent.doubleClick(row);
+    expect(screen.getByRole("tab", { name: "Иванов Иван Иванович" })).toBeInTheDocument();
+  });
+
+  test("dismissal requires date and nonblank basis and refreshes the card list", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input) => {
+      if (String(input).includes("/public-access"))
+        return Response.json({
+          card_id: organizationUnitCard.id,
+          public_view_enabled: true,
+          public_edit_enabled: true,
+          fields: [],
+        });
+      if (String(input).endsWith("/dismissal"))
+        return Response.json({ ...organizationUnitCardSummary, lifecycle_status: "dismissed" });
+      if (String(input).includes("/presentation"))
+        return Response.json(organizationUnitPresentation());
+      return Response.json({ items: [] });
+    });
+    const { queryClient } = renderWorkspace({
+      cards: [organizationUnitCardSummary],
+      card: organizationUnitCard,
+    });
+    const invalidation = vi.spyOn(queryClient, "invalidateQueries");
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Уволить" }));
+    const dialog = screen.getByRole("dialog", { name: "Увольнение" });
+    const submit = within(dialog).getByRole("button", { name: "Уволить" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Дата увольнения"), {
+      target: { value: "2026-09-09" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Основание"), { target: { value: "   " } });
+    expect(submit).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Основание"), {
+      target: { value: " Приказ № 7 " },
+    });
+    fireEvent.click(submit);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const request = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/dismissal"));
+    expect(request?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      occurred_on: "2026-09-09",
+      basis_text: "Приказ № 7",
+    });
+    expect(invalidation).toHaveBeenCalledWith({ queryKey: ["organization-cards", "test-token"] });
+    expect(screen.getByText("Увольнение сохранено")).toBeVisible();
+  });
+
+  test("non-superuser has no archive action even when card management is allowed", async () => {
+    renderWorkspace({ cards: [organizationUnitCardSummary], card: organizationUnitCard });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    await screen.findByTestId("filled-field-item-org-unit");
+    expect(screen.queryByRole("button", { name: /Архивировать карточку/ })).not.toBeInTheDocument();
+  });
+
+  test("keeps dismissal form values and reports a rejected request without false success", async () => {
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input).endsWith("/dismissal")
+        ? Response.json({ detail: "Основание изменения обязательно." }, { status: 400 })
+        : originalFetch(input, init),
+    );
+    renderWorkspace({ cards: [organizationUnitCardSummary], card: organizationUnitCard });
+    fireEvent.doubleClick(screen.getByRole("button", { name: /Карточка подразделения/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Уволить" }));
+    const dialog = screen.getByRole("dialog", { name: "Увольнение" });
+    fireEvent.change(within(dialog).getByLabelText("Дата увольнения"), {
+      target: { value: "2026-09-09" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Основание"), { target: { value: "Приказ" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Уволить" }));
+    expect(await within(dialog).findByText("Основание изменения обязательно.")).toBeVisible();
+    expect(within(dialog).getByLabelText("Основание")).toHaveValue("Приказ");
+    expect(screen.queryByText("Увольнение сохранено")).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   test("keeps dynamic multi-line creation fields compact before the user enters long text", () => {
     expect(globalStyles).toContain(".single-stage-card-creation .field-editor-autosize-text {");
     expect(globalStyles).toContain(
@@ -149,7 +268,7 @@ describe("CardsWorkspace", () => {
           return Response.json({
             organization_id: organization.id,
             card_template_id: "template-1",
-            display_name: "Шаблон",
+            display_value: "Шаблон",
             blocks: [
               {
                 block_id: "block-person",
@@ -273,7 +392,7 @@ describe("CardsWorkspace", () => {
     renderWorkspace({ schema: schemaWithTemplateField });
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
 
-    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
+    expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Фамилия")).toBeDisabled();
     const saveDraftButtons = screen.getAllByRole("button", { name: "Сохранить черновик" });
     expect(saveDraftButtons).toHaveLength(1);
@@ -419,7 +538,7 @@ describe("CardsWorkspace", () => {
     const referenceCard: CardSummaryRead = {
       ...organizationUnitCardSummary,
       id: "card-reference-list",
-      display_name: "Карточка со справочником",
+      display_value: "Карточка со справочником",
       list_fields: [
         {
           field_id: "field-position-group",
@@ -458,7 +577,7 @@ describe("CardsWorkspace", () => {
     const organizationControl = screen.getByLabelText("Организация карточки");
     expect(organizationControl).toBeInTheDocument();
     expect(organizationControl.closest(".admin-mutation-body")).not.toBeNull();
-    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
+    expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Текст карточки или поля")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Создать карточку" })).not.toBeInTheDocument();
 
@@ -481,7 +600,7 @@ describe("CardsWorkspace", () => {
         return Response.json({
           organization_id: organization.id,
           card_template_id: "template-1",
-          display_name: "Шаблон",
+          display_value: "Шаблон",
           blocks: [
             {
               block_id: "block-1",
@@ -511,7 +630,7 @@ describe("CardsWorkspace", () => {
           card_template_id: "template-1",
           organization_id: organization.id,
           org_unit_id: null,
-          display_name: "Шаблон",
+          display_value: "Шаблон",
           lifecycle_status: "draft",
           public_view_enabled: true,
           public_edit_enabled: true,
@@ -526,7 +645,7 @@ describe("CardsWorkspace", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Создать карточку" }));
     expect(screen.getByLabelText("Организация карточки")).toHaveValue("");
-    expect(screen.getByLabelText("Шаблон карточки")).toHaveValue("template-1");
+    expect(screen.queryByLabelText("Шаблон карточки")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Организация карточки"), {
@@ -564,11 +683,11 @@ describe("CardsWorkspace", () => {
       fetchMock.mock.calls.some(([url]) => String(url).endsWith("/cards/draft-public-link")),
     ).toBe(false);
     const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/cards/draft"))!;
-    expect(JSON.parse(String(init?.body))).toMatchObject({
-      card_template_id: "template-1",
+    expect(JSON.parse(String(init?.body))).toEqual({
       public_access: {
         public_view_enabled: true,
         public_edit_enabled: true,
+        fields: [],
       },
     });
   });
@@ -650,7 +769,7 @@ describe("CardsWorkspace", () => {
 
     const baseBlock = await screen.findByLabelText("Базовый блок");
     expect(within(baseBlock).getByText("Шаблон", { selector: "output" })).toBeInTheDocument();
-    expect(within(baseBlock).getByText(organizationUnitCard.display_name)).toBeInTheDocument();
+    expect(within(baseBlock).getByText(organizationUnitCard.display_value)).toBeInTheDocument();
     expect(within(baseBlock).getByText("Не указан")).toBeInTheDocument();
     expect(
       within(baseBlock).queryByRole("combobox", { name: "Организация карточки" }),
@@ -777,6 +896,8 @@ describe("CardsWorkspace", () => {
 });
 
 function renderWorkspace({
+  isSuperuser = false,
+  onCardLifecycleStatusChange = vi.fn(),
   onOpenCreatedCard = vi.fn().mockResolvedValue(undefined),
   onSelectCard = vi.fn(),
   cards = [],
@@ -784,6 +905,8 @@ function renderWorkspace({
   selectedCardId = "",
   schema: workspaceSchema = schema,
 }: {
+  isSuperuser?: boolean;
+  onCardLifecycleStatusChange?: (value: string) => void;
   onOpenCreatedCard?: (cardId: string) => Promise<void>;
   onSelectCard?: (cardId: string) => void;
   cards?: CardSummaryRead[];
@@ -794,9 +917,12 @@ function renderWorkspace({
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <CardsWorkspace
+        isSuperuser={isSuperuser}
+        cardLifecycleStatus=""
+        onCardLifecycleStatusChange={onCardLifecycleStatusChange}
         cards={cards}
         card={card}
         schema={workspaceSchema}
@@ -820,6 +946,7 @@ function renderWorkspace({
       />
     </QueryClientProvider>,
   );
+  return { ...rendered, queryClient };
 }
 
 const organizationUnitCard: CardRead = {
@@ -827,7 +954,7 @@ const organizationUnitCard: CardRead = {
   registry_id: "registry-1",
   card_template_id: "template-1",
   organization_id: organization.id,
-  display_name: "Карточка подразделения",
+  display_value: "Карточка подразделения",
   can_manage: true,
   fields: {},
   blocks: {
@@ -859,7 +986,7 @@ const organizationUnitCardSummary: CardSummaryRead = {
   card_template_name: "Шаблон",
   organization_id: organization.id,
   org_unit_id: null,
-  display_name: organizationUnitCard.display_name,
+  display_value: organizationUnitCard.display_value,
   lifecycle_status: "active",
   public_view_enabled: true,
   public_edit_enabled: true,

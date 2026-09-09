@@ -12,8 +12,8 @@ export type CardBaseBlockSurfaceProps = {
   id: string;
   mode: "creation" | "admin" | "public";
   organization: CardBaseValue;
-  template: CardBaseValue;
-  displayName: CardBaseValue;
+  template?: CardBaseValue;
+  displayName?: CardBaseValue;
   creator?: CardBaseValue;
   headerAction?: ReactNode;
   publicAccessContent?: ReactNode;
@@ -52,8 +52,12 @@ export function CardBaseBlockSurface({
       </header>
       <div className="admin-mutation-body">
         <CardBaseBlockRow value={organization} editable={isCreation} disabled={disabled} />
-        <CardBaseBlockRow value={template} editable={isCreation} disabled={disabled} />
-        <CardBaseBlockRow value={displayName} editable={isCreation} disabled={disabled} />
+        {template ? (
+          <CardBaseBlockRow value={template} editable={isCreation} disabled={disabled} />
+        ) : null}
+        {displayName ? (
+          <CardBaseBlockRow value={displayName} editable={isCreation} disabled={disabled} />
+        ) : null}
         {creator ? <CardBaseBlockRow value={creator} editable={false} disabled={disabled} /> : null}
       </div>
       {publicAccessContent ? (

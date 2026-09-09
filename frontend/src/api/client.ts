@@ -21,6 +21,7 @@ import type {
   CardCreationPreviewRead,
   CardDraftCreatePayload,
   CardDraftPublicLinkRead,
+  CardDismissalPayload,
   CardFirstSavePayload,
   CardPrintTemplateCreatePayload,
   CardPrintTemplateBlankDownloadPayload,
@@ -373,6 +374,7 @@ export async function archiveFormField(token: string, fieldId: string) {
 }
 
 export type CardListOptions = {
+  lifecycleStatus?: string;
   organizationId?: string;
   organizationIds?: string[];
   cardTemplateIds?: string[];
@@ -406,6 +408,7 @@ export async function listOrganizationCards(
 
 function cardListSearchParams(options: CardListOptions) {
   const params = new URLSearchParams();
+  if (options.lifecycleStatus) params.set("lifecycle_status", options.lifecycleStatus);
   if (options.organizationId) {
     params.set("organization_id", options.organizationId);
   }
@@ -594,6 +597,14 @@ export async function archiveCard(token: string, cardId: string) {
   return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}`, {
     method: "DELETE",
     token,
+  });
+}
+
+export async function dismissCard(token: string, cardId: string, payload: CardDismissalPayload) {
+  return apiRequest<CardSummaryRead>(`/api/v1/cards/${cardId}/dismissal`, {
+    method: "POST",
+    token,
+    body: payload,
   });
 }
 

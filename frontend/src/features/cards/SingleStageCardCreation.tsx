@@ -26,8 +26,6 @@ import { type FieldEditorState, coerceEditorValue, initialEditorValue } from "./
 
 type CreationState = {
   organizationId: string;
-  templateId: string;
-  displayName: string;
   values: Record<string, FieldEditorState>;
   publicAccess: CardPublicAccessPayload;
 };
@@ -51,8 +49,6 @@ export function SingleStageCardCreation({
 }) {
   const [state, setState] = useState<CreationState>({
     organizationId: "",
-    templateId: templates[0]?.id ?? "",
-    displayName: "",
     values: {},
     publicAccess: {
       public_view_enabled: true,
@@ -64,7 +60,14 @@ export function SingleStageCardCreation({
   const [error, setError] = useState<unknown>(null);
   const [lockedFieldId, setLockedFieldId] = useState<string | null>(null);
 
-  const templateId = state.templateId || templates[0]?.id || "";
+  const templateId = useMemo(
+    () =>
+      [...templates]
+        .filter((template) => template.is_active)
+        .sort((left, right) => left.position - right.position || left.id.localeCompare(right.id))[0]
+        ?.id ?? "",
+    [templates],
+  );
   const canLoadPreview = Boolean(state.organizationId && templateId);
   const previewQuery = useQuery({
     queryKey: ["card-creation-preview", token, state.organizationId, templateId],
@@ -137,10 +140,10 @@ export function SingleStageCardCreation({
     [completions.blocks, preview?.blocks],
   );
 
-  function resetTemplateValues(next: Pick<CreationState, "organizationId" | "templateId">) {
+  function resetTemplateValues(next: Pick<CreationState, "organizationId">) {
     if (Object.keys(state.values).length > 0) {
       const confirmed = window.confirm(
-        "При смене организации или шаблона введённые значения будут очищены. Продолжить?",
+        "При смене организации введённые значения будут очищены. Продолжить?",
       );
       if (!confirmed) return;
     }
@@ -181,8 +184,6 @@ export function SingleStageCardCreation({
     setIsSaving(true);
     try {
       const card = await createOrganizationCardDraft(token, state.organizationId, {
-        display_name: state.displayName.trim() || undefined,
-        card_template_id: templateId,
         public_access: publicAccessPayload(),
       });
       await onCardCreated(card.id);
@@ -205,22 +206,8 @@ export function SingleStageCardCreation({
           id: organization.id,
           label: organization.name,
         })),
-        placeholder: "Нет данных",
-        onChange: (organizationId) => resetTemplateValues({ organizationId, templateId }),
-      }}
-      template={{
-        label: "Шаблон карточки",
-        value: templateId,
-        options: templates.map((template) => ({ id: template.id, label: template.name })),
-        placeholder: templates.length === 1 ? undefined : "Выберите шаблон карточки",
-        onChange: (nextTemplateId) =>
-          resetTemplateValues({ organizationId: state.organizationId, templateId: nextTemplateId }),
-      }}
-      displayName={{
-        label: "Наименование карточки",
-        value: state.displayName,
-        placeholder: preview?.display_name || "Необязательно",
-        onChange: (displayName) => setState((current) => ({ ...current, displayName })),
+        placeholder: "Выберите организацию",
+        onChange: (organizationId) => resetTemplateValues({ organizationId }),
       }}
       publicAccessContent={
         <div className="card-base-block-public-settings">
@@ -434,7 +421,7 @@ function templatePreviewFromSchema(
   return {
     organization_id: "",
     card_template_id: template.id,
-    display_name: template.name,
+    display_value: "Не заполнено",
     blocks: [...fieldsByBlock].flatMap(([blockId, blockFields]) => {
       const block = blockById.get(blockId);
       if (!block?.is_active) return [];

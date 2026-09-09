@@ -14,7 +14,7 @@ const card: CardSummaryRead = {
   card_template_name: "Основная карточка",
   organization_id: "organization-1",
   org_unit_id: null,
-  display_name: "Карточка для аудита",
+  display_value: "Карточка для аудита",
   lifecycle_status: "active",
   public_view_enabled: false,
   public_edit_enabled: true,
@@ -45,7 +45,7 @@ const historyEvent: AuditEventRead = {
   actor_display_name: "Публичная ссылка",
   attributed_user_display_name: "Системный администратор",
   card_id: card.id,
-  card_display_name: card.display_name,
+  card_display_name: card.display_value,
   card_lifecycle_status: card.lifecycle_status,
   action: "update",
   object_type: "field_value",
@@ -90,7 +90,10 @@ test("groups the default active history and applies card, actor, status, and res
 
   renderAuditPanel();
 
-  expect(screen.getByRole("tab", { name: "История карточек" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tab", { name: "История карточек" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await waitFor(() => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("scope=card_history&card_status=active&limit=50"),
@@ -144,7 +147,10 @@ test("renders create and archive as standalone history events without a fabricat
     action: "archive",
     history_description: "Карточка архивирована",
   };
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ items: [createEvent, archiveEvent] })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [createEvent, archiveEvent] })),
+  );
 
   renderAuditPanel();
 
@@ -164,9 +170,7 @@ test("labels a public audit event with its snapshot executor", async () => {
 
   renderAuditPanel();
 
-  expect(
-    await screen.findByText(`Публичный пользователь: ${actorDisplayName}`),
-  ).toBeVisible();
+  expect(await screen.findByText(`Публичный пользователь: ${actorDisplayName}`)).toBeVisible();
   expect(screen.getByText("Ссылку создал: Системный администратор")).toBeVisible();
 });
 

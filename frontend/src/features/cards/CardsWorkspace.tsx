@@ -19,6 +19,7 @@ import {
   archiveCard,
   archiveCardBlockInstance,
   createCardBlockInstance,
+  dismissCard,
   downloadGeneratedDocumentContent,
   generateCardTemplateLayoutDocx,
   generateCardTemplateLayoutPdf,
@@ -35,6 +36,7 @@ import {
 } from "@/api/client";
 import type {
   CardFieldFilterPayload,
+  CardDismissalPayload,
   CardPublicAccessRead,
   CardRead,
   CardSummaryRead,
@@ -104,6 +106,9 @@ export function CardsWorkspace({
   cardTemplateIds,
   cardFieldFilters,
   includeArchivedCards,
+  isSuperuser = false,
+  cardLifecycleStatus = "",
+  onCardLifecycleStatusChange,
   onSelectCard,
   onCardSearchChange,
   onCardOrganizationIdsChange,
@@ -125,6 +130,9 @@ export function CardsWorkspace({
   cardTemplateIds: string[];
   cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
+  isSuperuser?: boolean;
+  cardLifecycleStatus?: string;
+  onCardLifecycleStatusChange?: (value: string) => void;
   onSelectCard: (cardId: string) => void;
   onCardSearchChange: (value: string) => void;
   onCardOrganizationIdsChange: (value: string[]) => void;
@@ -136,6 +144,7 @@ export function CardsWorkspace({
 }) {
   const queryClient = useQueryClient();
   const selectedCard = cards.find((item) => item.id === card?.id) ?? null;
+  const canEditCard = Boolean(card?.can_manage && selectedCard?.lifecycle_status !== "dismissed");
   const [openCardIds, setOpenCardIds] = useState<string[]>(() => loadCardTabs().openCardIds);
   const [activeShellTab, setActiveShellTab] = useState<CardShellTab>(
     () => loadCardTabs().activeTab,
@@ -148,6 +157,7 @@ export function CardsWorkspace({
     activeCardIdRef.current = activeShellCardId;
   }, [activeShellCardId]);
   const [archiveTarget, setArchiveTarget] = useState<CardSummaryRead | null>(null);
+  const [dismissalTarget, setDismissalTarget] = useState<CardSummaryRead | null>(null);
   const [pendingCardTabClose, setPendingCardTabClose] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const organizationsById = useMemo(
@@ -196,10 +206,8 @@ export function CardsWorkspace({
   );
   const editableFieldIds = useMemo(
     () =>
-      card?.can_manage
-        ? new Set(fieldRows.map((field) => field.field.field_id))
-        : new Set<string>(),
-    [card?.can_manage, fieldRows],
+      canEditCard ? new Set(fieldRows.map((field) => field.field.field_id)) : new Set<string>(),
+    [canEditCard, fieldRows],
   );
   const saveBlockValues = useCallback(
     async (payload: FieldValuesBulkUpdatePayload) => {
@@ -331,7 +339,7 @@ export function CardsWorkspace({
       })),
       ...visibleOpenCardIds.map((cardId) => {
         const item = cards.find((cardItem) => cardItem.id === cardId);
-        const title = item?.display_name ?? shortId(cardId);
+        const title = item?.display_value ?? shortId(cardId);
         const isDirty = card?.id === cardId && blockEditor.dirty;
         return {
           id: `card:${cardId}` as CardShellTab,
@@ -369,6 +377,15 @@ export function CardsWorkspace({
       setActiveShellTab("list");
       activeCardIdRef.current = null;
       onSelectCard(nextCardId);
+    },
+  });
+  const dismissalMutation = useMutation({
+    mutationFn: ({ target, payload }: { target: CardSummaryRead; payload: CardDismissalPayload }) =>
+      dismissCard(token, target.id, payload),
+    onSuccess: async (dismissed) => {
+      await invalidateCardQueries(queryClient, token, dismissed.registry_id, dismissed.id);
+      setDismissalTarget(null);
+      setSuccessMessage(uiText.cardDismissed);
     },
   });
   const updatePublicAccessMutation = useMutation({
@@ -551,9 +568,11 @@ export function CardsWorkspace({
           field.display_value === undefined ? field.value : field.display_value,
         )}`,
     );
-    return [baseDetail, `Создатель: ${item.creator_display_name || "Не указан"}`, ...selectedFieldDetails].join(
-      " / ",
-    );
+    return [
+      baseDetail,
+      `Создатель: ${item.creator_display_name || "Не указан"}`,
+      ...selectedFieldDetails,
+    ].join(" / ");
   }
 
   const selectedCardBaseBlock =
@@ -570,7 +589,7 @@ export function CardsWorkspace({
           shortId(card.card_template_id)
         }
         fields={presentationFields}
-        canManage={card.can_manage}
+        canManage={canEditCard}
         publicAccess={publicAccess}
         publicAccessError={publicAccessQuery.error}
         isUpdatingPublicAccess={updatePublicAccessMutation.isPending}
@@ -578,7 +597,7 @@ export function CardsWorkspace({
         isCreatingBlockInstance={createBlockInstanceMutation.isPending}
         isArchivingBlockInstance={archiveBlockInstanceMutation.isPending}
         publicLinkControl={
-          card.can_manage && presentationLayout ? (
+          canEditCard && presentationLayout ? (
             <PublicLinkQuickControl
               blocks={presentationBlocks}
               cardId={card.id}
@@ -609,6 +628,8 @@ export function CardsWorkspace({
       {activeShellTab === "list" ? (
         <Panel title={uiText.cards}>
           <CardListFilters
+            lifecycleStatus={cardLifecycleStatus}
+            onLifecycleStatusChange={onCardLifecycleStatusChange}
             cardSearch={cardSearch}
             organizationIds={cardOrganizationIds}
             includeDescendantOrganizations={cardIncludeDescendantOrganizations}
@@ -629,8 +650,9 @@ export function CardsWorkspace({
           <SelectableList
             items={cards.map((item) => ({
               id: item.id,
-              title: item.display_name,
+              title: item.display_value,
               detail: cardListDetail(item),
+              className: item.lifecycle_status === "dismissed" ? "is-dismissed" : undefined,
             }))}
             selectedId={selectedCardId}
             onSelect={onSelectCard}
@@ -698,7 +720,13 @@ export function CardsWorkspace({
                   navigatorAction={
                     selectedCard ? (
                       <CardDraftActionRail
-                        state={selectedCard.lifecycle_status === "active" ? "active" : "draft"}
+                        state={
+                          selectedCard.lifecycle_status === "dismissed"
+                            ? "dismissed"
+                            : selectedCard.lifecycle_status === "active"
+                              ? "active"
+                              : "draft"
+                        }
                         aria-label="Статус карточки"
                       />
                     ) : null
@@ -708,6 +736,13 @@ export function CardsWorkspace({
                       {card.can_manage ? (
                         <CardWorkspaceFooter
                           card={card}
+                          canArchive={isSuperuser}
+                          canDismiss={selectedCard?.lifecycle_status === "active"}
+                          onDismiss={() => {
+                            dismissalMutation.reset();
+                            setSuccessMessage(null);
+                            setDismissalTarget(selectedCard);
+                          }}
                           canDownloadPrint={Boolean(selectedCardPrintView)}
                           isDownloading={
                             downloadCardPrintDocxMutation.isPending ||
@@ -730,7 +765,7 @@ export function CardsWorkspace({
                     </>
                   }
                   renderFileRefControl={
-                    card.can_manage
+                    canEditCard
                       ? ({ field, blockInstanceId, readValue }) => {
                           const fileRefField = fileRefFieldRows.find(
                             (item) =>
@@ -762,11 +797,23 @@ export function CardsWorkspace({
           )}
         </div>
       )}
-      {archiveTarget && card?.can_manage && (
+      <MutationFeedback successMessage={activeShellTab !== "list" ? successMessage : null} />
+      {dismissalTarget ? (
+        <CardDismissalDialog
+          cardLabel={dismissalTarget.display_value}
+          isPending={dismissalMutation.isPending}
+          error={dismissalMutation.error}
+          onCancel={() => {
+            if (!dismissalMutation.isPending) setDismissalTarget(null);
+          }}
+          onSubmit={(payload) => dismissalMutation.mutate({ target: dismissalTarget, payload })}
+        />
+      ) : null}
+      {archiveTarget && card?.can_manage && isSuperuser && (
         <AdminMutationDialog title={uiText.archiveCard}>
           <ArchiveConfirmation
             entityLabel={uiText.archiveCard}
-            itemLabel={archiveTarget.display_name}
+            itemLabel={archiveTarget.display_value}
             isPending={archiveCardMutation.isPending}
             onCancel={() => setArchiveTarget(null)}
             onConfirm={() => archiveCardMutation.mutate(archiveTarget)}
@@ -850,7 +897,7 @@ function CardBaseBlock({
       mode="admin"
       organization={{ label: uiText.organization, value: organizationName }}
       template={{ label: "Шаблон", value: templateName }}
-      displayName={{ label: uiText.card, value: card.display_name }}
+      displayName={{ label: "ФИО", value: card.display_value }}
       creator={{ label: "Создатель", value: card.creator_display_name || "Не указан" }}
       headerAction={<CardChangeNotificationToggle cardId={card.id} token={token} />}
       publicAccessContent={
@@ -936,6 +983,9 @@ function CardCreationLinkContinuation({
 
 function CardWorkspaceFooter({
   card,
+  canArchive,
+  canDismiss,
+  onDismiss,
   canDownloadPrint,
   isDownloading,
   error,
@@ -944,6 +994,9 @@ function CardWorkspaceFooter({
   onArchive,
 }: {
   card: CardRead;
+  canArchive: boolean;
+  canDismiss: boolean;
+  onDismiss: () => void;
   canDownloadPrint: boolean;
   isDownloading: boolean;
   error: unknown;
@@ -982,23 +1035,96 @@ function CardWorkspaceFooter({
         </div>
         <MutationFeedback error={error} />
       </section>
-      <section className="card-workspace-archive-panel" aria-label="Архивирование карточки">
-        <strong>Архивирование карточки</strong>
-        <p>Архивная карточка остаётся доступной в архиве.</p>
-        <button
-          type="button"
-          className="danger-button"
-          aria-label={`${uiText.archiveCard} ${card.display_name}`}
-          onClick={onArchive}
-        >
-          {uiText.archive}
-        </button>
-      </section>
+      {canDismiss ? (
+        <section className="card-workspace-archive-panel" aria-label="Увольнение">
+          <strong>Увольнение</strong>
+          <button type="button" className="danger-button" onClick={onDismiss}>
+            Уволить
+          </button>
+        </section>
+      ) : null}
+      {canArchive ? (
+        <section className="card-workspace-archive-panel" aria-label="Архивирование карточки">
+          <strong>Архивирование карточки</strong>
+          <p>Архивная карточка остаётся доступной в архиве.</p>
+          <button
+            type="button"
+            className="danger-button"
+            aria-label={`${uiText.archiveCard} ${card.display_value}`}
+            onClick={onArchive}
+          >
+            {uiText.archive}
+          </button>
+        </section>
+      ) : null}
     </>
   );
 }
 
+function CardDismissalDialog({
+  cardLabel,
+  isPending,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  cardLabel: string;
+  isPending: boolean;
+  error: unknown;
+  onCancel: () => void;
+  onSubmit: (payload: CardDismissalPayload) => void;
+}) {
+  const [occurredOn, setOccurredOn] = useState("");
+  const [basisText, setBasisText] = useState("");
+  const canSubmit = Boolean(occurredOn && basisText.trim()) && !isPending;
+  return (
+    <AdminMutationDialog title="Увольнение" onCancel={isPending ? undefined : onCancel}>
+      <form
+        className="admin-mutation-form card-dismissal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit) onSubmit({ occurred_on: occurredOn, basis_text: basisText.trim() });
+        }}
+      >
+        <div className="admin-mutation-body">
+          <p>{cardLabel}</p>
+          <label>
+            Дата увольнения
+            <input
+              type="date"
+              required
+              value={occurredOn}
+              disabled={isPending}
+              onChange={(event) => setOccurredOn(event.currentTarget.value)}
+            />
+          </label>
+          <label>
+            Основание
+            <textarea
+              required
+              value={basisText}
+              disabled={isPending}
+              onChange={(event) => setBasisText(event.currentTarget.value)}
+            />
+          </label>
+          <MutationFeedback error={error} />
+        </div>
+        <footer className="admin-mutation-actions">
+          <button type="button" className="ghost-button" disabled={isPending} onClick={onCancel}>
+            Отмена
+          </button>
+          <button type="submit" className="danger-button" disabled={!canSubmit}>
+            {isPending ? "Сохранение…" : "Уволить"}
+          </button>
+        </footer>
+      </form>
+    </AdminMutationDialog>
+  );
+}
+
 function CardListFilters({
+  lifecycleStatus,
+  onLifecycleStatusChange,
   cardSearch,
   organizationIds,
   includeDescendantOrganizations,
@@ -1016,6 +1142,8 @@ function CardListFilters({
   onFieldFiltersChange,
   onIncludeArchiveChange,
 }: {
+  lifecycleStatus: string;
+  onLifecycleStatusChange?: (value: string) => void;
   cardSearch: string;
   organizationIds: string[];
   includeDescendantOrganizations: boolean;
@@ -1035,6 +1163,18 @@ function CardListFilters({
 }) {
   return (
     <div className="filter-grid">
+      <label className="card-lifecycle-filter">
+        <span>Статус карточек</span>
+        <select
+          value={lifecycleStatus}
+          onChange={(event) => onLifecycleStatusChange?.(event.currentTarget.value)}
+        >
+          <option value="">Все статусы</option>
+          <option value="draft">Черновики</option>
+          <option value="active">Активные</option>
+          <option value="dismissed">Уволенные</option>
+        </select>
+      </label>
       <CardTagSearchBar
         token={token}
         textQuery={cardSearch}

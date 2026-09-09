@@ -4844,6 +4844,52 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   display: none;
 }
 
+.selectable-row.is-dismissed,
+.selectable-row.is-dismissed.is-selected {
+  color: #991b1b;
+  border-color: #efaaaa;
+  background: #fff1f2;
+}
+
+.selectable-row.is-dismissed strong,
+.selectable-row.is-dismissed span {
+  color: #991b1b;
+}
+
+.card-dismissal-form {
+  width: min(100%, 28rem);
+}
+
+.card-dismissal-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.card-dismissal-form textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.card-lifecycle-filter {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 16rem);
+  padding-top: 12px;
+  color: #344054;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.card-lifecycle-filter select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #17324d;
+  font: inherit;
+}
+
 .selectable-list {
   display: grid;
   margin: 0;

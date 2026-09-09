@@ -408,7 +408,7 @@ export type CardSummaryRead = {
   card_template_name?: string | null;
   organization_id: string;
   org_unit_id: string | null;
-  display_name: string;
+  display_value: string;
   creator_display_name?: string | null;
   lifecycle_status: string;
   public_view_enabled: boolean;
@@ -472,7 +472,7 @@ export type CardCreationPreviewBlockRead = {
 export type CardCreationPreviewRead = {
   organization_id: string;
   card_template_id: string;
-  display_name: string;
+  display_value: string;
   blocks: CardCreationPreviewBlockRead[];
 };
 
@@ -488,9 +488,12 @@ export type CardFirstSavePayload = {
 };
 
 export type CardDraftCreatePayload = {
-  display_name?: string | null;
-  card_template_id: string;
   public_access: CardPublicAccessPayload;
+};
+
+export type CardDismissalPayload = {
+  occurred_on: string;
+  basis_text: string;
 };
 
 export type CardDraftPublicLinkRead = {
@@ -632,7 +635,7 @@ export type CardRead = {
   card_template_id: string;
   card_template_name?: string | null;
   organization_id: string;
-  display_name: string;
+  display_value: string;
   creator_display_name?: string | null;
   can_manage: boolean;
   blocks: Record<string, CardBlockRead>;

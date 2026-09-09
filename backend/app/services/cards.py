@@ -674,7 +674,16 @@ class CardService:
         query: str | None = None,
         field_filters: Sequence[CardFieldFilterInput] | None = None,
         card_template_ids: Sequence[UUID] | None = None,
+        lifecycle_status: str | None = None,
     ) -> list[Card]:
+        if lifecycle_status is not None and lifecycle_status not in {
+            "draft",
+            "active",
+            "dismissed",
+            "archived",
+            "superseded",
+        }:
+            raise CardServiceError("Недопустимый статус карточки")
         scope_ids = PermissionService(self.session).get_organization_scope_ids(
             actor_user_id,
             registry_id=registry_id,
@@ -700,6 +709,8 @@ class CardService:
             criteria.append(Card.archived_at.is_(None))
         if query:
             criteria.append(self._card_text_search_criterion(query))
+        if lifecycle_status is not None:
+            criteria.append(Card.lifecycle_status == lifecycle_status)
         if card_template_ids:
             criteria.append(Card.card_template_id.in_(set(card_template_ids)))
         for field_filter in field_filters or ():
@@ -719,6 +730,7 @@ class CardService:
         query: str | None = None,
         field_filters: Sequence[CardFieldFilterInput] | None = None,
         card_template_ids: Sequence[UUID] | None = None,
+        lifecycle_status: str | None = None,
     ) -> list[Card]:
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             resolver_organization_id
@@ -740,6 +752,7 @@ class CardService:
             query=query,
             field_filters=field_filters,
             card_template_ids=card_template_ids,
+            lifecycle_status=lifecycle_status,
         )
 
     def list_display_fields_for_card(self, card: Card) -> list[CardListFieldRead]:
