@@ -5295,6 +5295,34 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   border-top-right-radius: 0;
 }
 
+.xlsx-operation .field-editor-control:has(.searchable-choice-picker) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.xlsx-operation .searchable-choice-picker-chips {
+  min-width: 0;
+  max-height: 112px;
+  overflow-y: auto;
+}
+
+.xlsx-operation .searchable-choice-picker-chip,
+.xlsx-operation .searchable-choice-picker-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.xlsx-operation .searchable-choice-picker-popup {
+  position: static;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.xlsx-operation .searchable-choice-picker-options {
+  grid-auto-rows: max-content;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+}
+
 .template-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(150px, 1fr));
