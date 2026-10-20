@@ -7,6 +7,34 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-10-20 import/export choice-list clipping fix is pushed and deployed
+  in `c7f30471fb78bd03ab29cec93ee66d679fb0bdc0`.
+  The XLSX operation pickers now use the full form width and keep their open
+  lists in normal document flow, so the enclosing panel does not clip them.
+  Selected chips have a scrollable height limit; long labels wrap and option
+  rows keep their content height on narrow screens. Card-editor pickers retain
+  their existing overlay behavior. No API or database changes are required.
+  - Browser reproduction with 16 synthetic organizations confirmed that the
+    old absolute popup was clipped and the selection grew to 773 px. The new
+    trigger stays at 134 px; list scrolling, the final checkbox, search,
+    empty results, Escape, and preserved selections pass at 1097x555,
+    390x844, and 390x555 without horizontal overflow or console errors.
+  - Browser plugin is unavailable. Playwright MCP initially opened the live
+    login screen, then disconnected with `Transport closed`; installed
+    Playwright validated both the local frontend and deployed HTTPS frontend
+    with mocked API data. No real authenticated export or XLSX download is
+    claimed by this check.
+  - `pnpm -C frontend test:run src/features/cards/FieldEditorControl.test.tsx src/features/registry/ImportExportPanel.test.tsx`:
+    46 passed. `pnpm -C frontend lint`, `pnpm -C frontend typecheck`,
+    `pnpm -C frontend exec prettier --check src/styles/globals.css`,
+    `pnpm -C frontend build`, and `git diff --check` pass, with the existing
+    FilledCardLayout hook warning and Vite chunk-size advisory.
+  - `scripts/deploy.ps1` and `scripts/deploy-frontend.ps1 -SkipBuild` passed:
+    synchronized server checkout, PostgreSQL/storage checks, active API
+    service, healthcheck, and same-origin frontend/API smoke. Published
+    assets: `index-zAgemRpV.js` and `index-BAin4hCS.css`. The deployed browser
+    pass repeated all three viewport checks with no console/page errors.
+
 - 2026-09-10 request-scoped XLSX export organization selection is implemented,
   pushed, and deployed at `13f37bc0`. The active plan is
   `docs/superpowers/plans/2026-09-10-export-run-organization-selection.md`.
