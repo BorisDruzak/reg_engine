@@ -7,7 +7,8 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-10-26 card-list sorting is implemented. Plan:
+- 2026-10-26 card-list sorting is pushed and deployed in
+  `ea4d8f947bde89ea097841188635b70009aa91b3`. Plan:
   `docs/superpowers/plans/2026-10-26-card-list-sorting.md`.
   - Both existing list GET APIs accept optional `sort_by=display_value|field`,
     `sort_field_id`, and `sort_direction=asc|desc`. The service sorts only the
@@ -41,6 +42,15 @@ not a hardcoded employee registry.
     Playwright MCP disconnected with `Transport closed`, so the installed
     Playwright ran the scenario against synthetic API fixtures. No production
     card writes are part of this QA.
+  - `scripts/deploy.ps1` and `scripts/deploy-frontend.ps1 -SkipBuild` passed:
+    server checkout synchronized, PostgreSQL/storage checks passed, API
+    restarted and active, healthcheck and same-origin frontend smoke passed.
+    Published assets: `index-C3GfqEYo.js`, `index-VaK6irIb.css`.
+    The same Chromium scenario passed on the published HTTPS frontend with
+    mocked API fixtures. A separate runtime PostgreSQL transaction enforced
+    `READ ONLY` and checked FIO ordering in both directions, both date-field
+    queries in both directions, result membership for 211 cards, and
+    organization scope for all 16 active actors. All checks passed.
 
 - 2026-10-20 import/export choice-list clipping fix is pushed and deployed
   in `c7f30471fb78bd03ab29cec93ee66d679fb0bdc0`.
