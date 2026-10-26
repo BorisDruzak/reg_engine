@@ -48,6 +48,7 @@ export type InlineFieldEditorProps = {
   field: FormFieldRead;
   referenceLists?: ReferenceListRead[];
   organizations?: OrganizationRead[];
+  municipalServiceDateFields?: FormFieldRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   onCommit: (field: FormFieldRead) => void;
   onClose: () => void;
@@ -58,6 +59,7 @@ export function InlineFieldEditor({
   field,
   referenceLists = [],
   organizations = [],
+  municipalServiceDateFields = [],
   inlineReferenceEditorContext,
   onCommit,
   onClose,
@@ -142,6 +144,12 @@ export function InlineFieldEditor({
       )
     : [];
   const textValidationConditions = validationConditions(draft.validation_json);
+  const municipalServiceCalculator =
+    draft.options_config_json?.municipal_service_calculator === true;
+  const municipalServiceStartDateFieldId =
+    typeof draft.options_config_json?.municipal_service_start_date_field_id === "string"
+      ? draft.options_config_json.municipal_service_start_date_field_id
+      : "";
 
   if (editorScreen !== "field" && inlineReferenceEditorContext) {
     return (
@@ -363,6 +371,61 @@ export function InlineFieldEditor({
             Создать условие
           </button>
         </details>
+      ) : null}
+      {draft.field_type === "work_experience" ? (
+        <fieldset>
+          <legend>Расчёт стажа</legend>
+          <label className="checkbox-inline">
+            <input
+              type="checkbox"
+              checked={municipalServiceCalculator}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  options_config_json: {
+                    ...draft.options_config_json,
+                    municipal_service_calculator: event.currentTarget.checked,
+                  },
+                })
+              }
+            />
+            <span>Калькулятор муниципального стажа</span>
+          </label>
+          <label>
+            <span>Дата поступления для расчёта стажа</span>
+            <select
+              value={municipalServiceStartDateFieldId}
+              onChange={(event) => {
+                const options = { ...draft.options_config_json };
+                if (event.currentTarget.value) {
+                  options.municipal_service_start_date_field_id = event.currentTarget.value;
+                } else {
+                  delete options.municipal_service_start_date_field_id;
+                }
+                setDraft({ ...draft, options_config_json: options });
+              }}
+            >
+              <option value="">Не выбрана</option>
+              {municipalServiceStartDateFieldId &&
+              !municipalServiceDateFields.some(
+                (dateField) => dateField.id === municipalServiceStartDateFieldId,
+              ) ? (
+                <option value={municipalServiceStartDateFieldId} disabled>
+                  Выбранное поле даты недоступно
+                </option>
+              ) : null}
+              {municipalServiceDateFields.map((dateField) => (
+                <option key={dateField.id} value={dateField.id}>
+                  {dateField.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="data-empty">
+            Дата поступления используется для пересчёта на текущую дату независимо от калькулятора.
+            Ручной ввод стажа остаётся доступным.
+          </p>
+        </fieldset>
       ) : null}
       {usesReferenceList ? (
         <div className="inline-reference-field-settings">

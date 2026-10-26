@@ -153,6 +153,8 @@ def card_event_context(monkeypatch: pytest.MonkeyPatch) -> Iterator[SimpleNamesp
             model.__table__
             for model in (
                 Card,
+                FormBlock,
+                FormField,
                 CardBlockInstance,
                 FieldValue,
                 FieldValueItem,

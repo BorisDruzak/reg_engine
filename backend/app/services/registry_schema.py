@@ -674,6 +674,7 @@ class RegistrySchemaService:
         options_config_json = self._normalize_options_config_for_field(
             field_type,
             options_config_json,
+            registry_id=block.registry_id,
         )
         display_config_json = self._normalize_field_display_config(display_config_json)
         if field_type == "static_text":
@@ -855,6 +856,7 @@ class RegistrySchemaService:
             effective_options_config = self._normalize_options_config_for_field(
                 effective_field_type,
                 candidate_options_config,
+                registry_id=block.registry_id,
             )
         effective_display_config = field.display_config_json
         if display_config_json is not UNSET_FIELD_UPDATE:
@@ -1610,7 +1612,44 @@ class RegistrySchemaService:
         self,
         field_type: str,
         options_config_json: dict[str, object] | None,
+        *,
+        registry_id: UUID | None = None,
     ) -> dict[str, object] | None:
+        if field_type == "work_experience":
+            if options_config_json is None:
+                return None
+            normalized_experience: dict[str, object] = {}
+            enabled = options_config_json.get("municipal_service_calculator")
+            if enabled is not None:
+                if not isinstance(enabled, bool):
+                    raise RegistrySchemaError(
+                        "Настройка калькулятора стажа должна быть логической."
+                    )
+                normalized_experience["municipal_service_calculator"] = enabled
+            source_id = options_config_json.get("municipal_service_start_date_field_id")
+            if source_id is not None:
+                try:
+                    source_uuid = UUID(str(source_id))
+                except ValueError as exc:
+                    raise RegistrySchemaError("Выберите поле даты для пересчёта стажа.") from exc
+                source = self.session.get(FormField, source_uuid)
+                if (
+                    source is None
+                    or source.field_type != "date"
+                    or not source.is_active
+                    or source.archived_at is not None
+                ):
+                    raise RegistrySchemaError("Для пересчёта нужно действующее поле даты.")
+                source_block = self.session.get(FormBlock, source.block_id)
+                if (
+                    source_block is None
+                    or not source_block.is_active
+                    or source_block.archived_at is not None
+                    or (registry_id is not None and source_block.registry_id != registry_id)
+                ):
+                    raise RegistrySchemaError("Поле даты должно принадлежать этому реестру.")
+                normalized_experience["municipal_service_start_date_field_id"] = str(source_uuid)
+            return normalized_experience or None
         if field_type not in {"select", "multi_select", "organization_ref", "static_text"}:
             return None
 

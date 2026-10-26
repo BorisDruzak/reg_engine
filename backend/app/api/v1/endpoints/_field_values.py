@@ -8,9 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.work_experience import (
-    experience_for_anchor,
     parse_work_experience,
-    serialize_experience,
 )
 from app.models import CardAttachment, FieldValue, FieldValueItem, FormField, StoredFile
 from app.schemas.cards import FieldValueRead
@@ -144,24 +142,12 @@ def _read_field_value(session: Session, field: FormField, field_value: FieldValu
     if field.field_type == "json":
         return field_value.value_json
     if field.field_type == "work_experience":
+        from app.services.cards import CardService
+
         try:
-            value_json = field_value.value_json
-            if (
-                not isinstance(value_json, dict)
-                or set(value_json) != {"anchor_date"}
-                or not isinstance(value_json["anchor_date"], str)
-            ):
-                raise ValueError("Work experience anchor is invalid.")
-            raw_anchor_date = value_json["anchor_date"]
-            anchor_date = date.fromisoformat(raw_anchor_date)
-            if anchor_date.isoformat() != raw_anchor_date:
-                raise ValueError("Work experience anchor is invalid.")
-            return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+            return CardService(session)._read_field_value(field, field_value, {})
         except (TypeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=422,
-                detail="Work experience value is invalid.",
-            ) from exc
+            raise HTTPException(status_code=422, detail="Некорректное значение стажа.") from exc
     if field.field_type == "select":
         return field_value.value_reference_item_id
     if field.field_type == "multi_select":

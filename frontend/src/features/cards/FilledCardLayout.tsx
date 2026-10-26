@@ -66,6 +66,7 @@ export type FilledCardLayoutProps = {
   blockEditor?: BlockEditorState;
   referenceOptions?: Readonly<Record<string, readonly FilledCardReferenceOption[]>>;
   renderFileRefControl?: (context: FilledCardFileRefControlContext) => ReactNode;
+  renderWorkExperienceActions?: (context: FilledCardFileRefControlContext) => ReactNode;
   navigationBefore?: readonly CardBlockNavigationItem[];
   navigationAfter?: readonly CardBlockNavigationItem[];
   navigatorAction?: ReactNode;
@@ -92,6 +93,7 @@ export function FilledCardLayout({
   blockEditor,
   referenceOptions = {},
   renderFileRefControl,
+  renderWorkExperienceActions,
   navigationBefore = [],
   navigationAfter = [],
   navigatorAction,
@@ -274,6 +276,10 @@ export function FilledCardLayout({
                     Boolean(
                       blockEditor &&
                       editableFieldIds.has(field.id) &&
+                      !(
+                        field.field_type === "work_experience" &&
+                        isCalculatedExperience(surfaceFieldValue(surface, field, valuesByInstance))
+                      ) &&
                       !["file_ref", "static_text"].includes(field.field_type),
                     )
                   }
@@ -308,6 +314,15 @@ export function FilledCardLayout({
                       ) : (
                         readValue
                       );
+                    const experienceActions =
+                      field.field_type === "work_experience"
+                        ? renderWorkExperienceActions?.({
+                            field,
+                            blockInstanceId,
+                            value,
+                            readValue: displayReadValue,
+                          })
+                        : null;
                     if (field.field_type === "file_ref" && editableFieldIds.has(field.id)) {
                       return (
                         renderFileRefControl?.({
@@ -323,13 +338,20 @@ export function FilledCardLayout({
                       !blockEditor ||
                       editorTarget?.blockId !== field.block_id
                     ) {
-                      return displayReadValue;
+                      return experienceActions ? (
+                        <div className="work-experience-field-tools">
+                          {displayReadValue}
+                          {experienceActions}
+                        </div>
+                      ) : (
+                        displayReadValue
+                      );
                     }
                     const editable = Object.prototype.hasOwnProperty.call(
                       blockEditor.values,
                       field.id,
                     );
-                    return (
+                    const control = (
                       <BlockFieldControl
                         field={field}
                         value={editable ? blockEditor.values[field.id] : undefined}
@@ -359,6 +381,14 @@ export function FilledCardLayout({
                         }
                         onBlur={blockEditor.flushPendingSave}
                       />
+                    );
+                    return experienceActions ? (
+                      <div className="work-experience-field-tools">
+                        {control}
+                        {experienceActions}
+                      </div>
+                    ) : (
+                      control
                     );
                   }}
                   renderBlockActions={({ block }) =>
@@ -404,6 +434,12 @@ export function FilledCardLayout({
         </div>
       </CardPresentationShell>
     </>
+  );
+}
+
+function isCalculatedExperience(value: unknown): boolean {
+  return (
+    typeof value === "object" && value !== null && "mode" in value && value.mode === "calculated"
   );
 }
 

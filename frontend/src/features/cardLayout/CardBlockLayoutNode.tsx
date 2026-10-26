@@ -41,6 +41,7 @@ export type CardBlockLayoutNodeProps = {
   fileRefOptions?: Readonly<Record<string, FieldEditorFileRefOption[]>>;
   referenceLists?: ReferenceListRead[];
   organizations?: OrganizationRead[];
+  municipalServiceDateFields?: FormFieldRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   compactBlockHeight?: boolean;
   showGeometryDiagnostics?: boolean;
@@ -80,6 +81,7 @@ export function CardBlockLayoutNode({
   fileRefOptions,
   referenceLists,
   organizations,
+  municipalServiceDateFields,
   inlineReferenceEditorContext,
   compactBlockHeight = true,
   showGeometryDiagnostics = false,
@@ -265,6 +267,7 @@ export function CardBlockLayoutNode({
                   fileRefOptions={fileRefOptions?.[valueKey]}
                   referenceLists={referenceLists}
                   organizations={organizations}
+                  municipalServiceDateFields={municipalServiceDateFields}
                   inlineReferenceEditorContext={inlineReferenceEditorContext}
                   showGeometryDiagnostics={showGeometryDiagnostics}
                   testIdPrefix={testIdPrefix}

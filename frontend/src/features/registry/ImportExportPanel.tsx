@@ -250,6 +250,10 @@ export function ImportExportPanel({
       <section className="template-manager" aria-labelledby="tabular-xlsx-heading">
         <h3 id="tabular-xlsx-heading">{uiText.tabularXlsxTitle}</h3>
         <p className="muted-text">{uiText.tabularXlsxDescription}</p>
+        <p className="muted-text">
+          XLSX содержит итоговый стаж на дату выгрузки. Периоды калькулятора в файл не входят;
+          импорт создаёт новые карточки с ручным стажем и не переносит историю расчёта.
+        </p>
         {optionsQuery.isLoading && <p className="muted-text">{uiText.loadingCard}</p>}
         {optionsError && <p className="inline-alert attachment-status">{optionsError}</p>}
         {activeOperation === "import" &&

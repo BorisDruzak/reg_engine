@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.domain.municipal_service_experience import calculate_experience, parse_calculation
 from app.domain.text_validation import TextValidationError, validate_text_value
 from app.domain.work_experience import (
     anchor_for_experience,
@@ -23,6 +24,7 @@ from app.models import (
     Card,
     CardAttachment,
     CardBlockInstance,
+    CardEvent,
     CardRelation,
     CardTemplate,
     FieldValue,
@@ -1251,6 +1253,7 @@ class CardService:
         notification_batch: list[AuditEvent] | None = None,
         work_experience_as_of_date: date | None = None,
         change_context: CardChangeContext | None = None,
+        allow_work_experience_mode_change: bool = False,
     ) -> FieldValue:
         card = self._get_editable_card(card_id)
         field_model = self._get_active_field(field_id)
@@ -1271,6 +1274,7 @@ class CardService:
             organization_id=card.organization_id,
             actor_user_id=actor_user_id,
             work_experience_as_of_date=work_experience_as_of_date,
+            allow_work_experience_mode_change=allow_work_experience_mode_change,
         )
         self._ensure_required_assignment_is_not_empty(field_model, assignment)
         block_instance = self._resolve_block_instance_for_value(
@@ -1286,6 +1290,9 @@ class CardService:
             actor_user_id=actor_user_id,
         )
         before = self._field_storage_snapshot(field_value)
+        self._protect_calculated_experience(
+            field_model, field_value, allow_work_experience_mode_change
+        )
         old_data = self._field_value_audit_snapshot(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=actor_user_id)
         self.session.flush()
@@ -1428,6 +1435,7 @@ class CardService:
         )
         before = self._field_storage_snapshot(field_value)
         old_data = self._field_value_audit_snapshot(field_model, field_value)
+        self._protect_calculated_experience(field_model, field_value)
         self._apply_assignment(field_value, assignment, actor_user_id=None)
         self.session.flush()
         self._collect_field_change(field_model, field_value, before, old_data)
@@ -1707,6 +1715,28 @@ class CardService:
             context = self._require_change_context(CardChangeContext(basis_text, occurred_on))
             if occurred_on is None:
                 raise CardDismissalError("Дата увольнения обязательна.")
+            for storage in self.session.scalars(
+                select(FieldValue.value_json)
+                .join(FormField, FormField.id == FieldValue.field_id)
+                .where(
+                    FieldValue.card_id == card.id,
+                    FormField.field_type == "work_experience",
+                    FormField.is_active.is_(True),
+                    FormField.archived_at.is_(None),
+                )
+            ):
+                if not isinstance(storage, dict) or storage.get("mode") != "calculated":
+                    continue
+                baseline = storage.get("baseline")
+                if (
+                    isinstance(baseline, dict)
+                    and baseline.get("confirmed") is True
+                    and date.fromisoformat(baseline["as_of_date"]) > occurred_on
+                ):
+                    raise CardDismissalError(
+                        "Дата увольнения раньше даты исходного стажа. "
+                        "Сначала уточните расчёт стажа."
+                    )
             card.lifecycle_status = "dismissed"
             card.public_edit_enabled = False
             card.updated_by = actor_user_id
@@ -2612,6 +2642,7 @@ class CardService:
         actor_user_id: UUID | None = None,
         public_context: bool = False,
         work_experience_as_of_date: date | None = None,
+        allow_work_experience_mode_change: bool = False,
     ) -> _FieldAssignment:
         if field_model.field_type == "text":
             if not isinstance(value, str):
@@ -2650,6 +2681,18 @@ class CardService:
 
         if field_model.field_type == "work_experience":
             try:
+                if isinstance(value, dict) and value.get("mode") == "calculated":
+                    if not allow_work_experience_mode_change or public_context:
+                        raise ValueError("Расчёт стажа изменяется только через калькулятор.")
+                    if not (field_model.options_config_json or {}).get(
+                        "municipal_service_calculator"
+                    ):
+                        raise ValueError("Калькулятор для этого поля не включён.")
+                    canonical = parse_calculation(value)
+                    result = self._calculated_experience_result(canonical, card_id=card_id)
+                    if not result["can_save"]:
+                        raise ValueError("Устраните пересечения и подтвердите основания расчёта.")
+                    return _FieldAssignment(value_json=canonical)
                 experience = parse_work_experience(value)
                 anchor_date = anchor_for_experience(
                     experience,
@@ -2657,7 +2700,17 @@ class CardService:
                 )
             except ValueError as exc:
                 raise InvalidFieldValueError(str(exc)) from exc
-            return _FieldAssignment(value_json={"anchor_date": anchor_date.isoformat()})
+            storage: dict[str, Any] = {"anchor_date": anchor_date.isoformat()}
+            if allow_work_experience_mode_change:
+                storage["manual_as_of_date"] = (
+                    work_experience_as_of_date or date.today()
+                ).isoformat()
+                storage["manual_value"] = {
+                    "days": experience.days,
+                    "months": experience.months,
+                    "years": experience.years,
+                }
+            return _FieldAssignment(value_json=storage)
 
         if field_model.field_type == "select":
             if value is None:
@@ -3316,9 +3369,15 @@ class CardService:
                 return None
             try:
                 value_json = field_value.value_json
+                if isinstance(value_json, dict) and value_json.get("mode") == "calculated":
+                    result = self._calculated_experience_result(
+                        value_json, card_id=field_value.card_id
+                    )
+                    return {**result["value"], "mode": "calculated"}
                 if (
                     not isinstance(value_json, dict)
-                    or set(value_json) != {"anchor_date"}
+                    or set(value_json)
+                    not in ({"anchor_date"}, {"anchor_date", "manual_as_of_date", "manual_value"})
                     or not isinstance(value_json["anchor_date"], str)
                 ):
                     raise ValueError("Work experience anchor is invalid.")
@@ -3326,7 +3385,12 @@ class CardService:
                 anchor_date = date.fromisoformat(raw_anchor_date)
                 if anchor_date.isoformat() != raw_anchor_date:
                     raise ValueError("Work experience anchor is invalid.")
-                return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+                return serialize_experience(
+                    experience_for_anchor(
+                        anchor_date,
+                        self._experience_effective_date(field_value.card_id, date.today()),
+                    )
+                )
             except (TypeError, ValueError) as exc:
                 raise InvalidFieldValueError("Work experience value is invalid.") from exc
         if field_model.field_type == "select":
@@ -3353,10 +3417,68 @@ class CardService:
         field_value: FieldValue,
     ) -> dict[str, Any]:
         item_ids_by_value_id = self._multi_select_item_ids([field_value])
-        return safe_field_value_audit_snapshot(
+        snapshot = safe_field_value_audit_snapshot(
             field=field_model,
             value=self._read_field_value(field_model, field_value, item_ids_by_value_id),
         )
+        if (
+            field_model.field_type == "work_experience"
+            and field_model.sensitivity_level == "normal"
+            and isinstance(field_value.value_json, dict)
+            and field_value.value_json.get("mode") == "calculated"
+        ):
+            snapshot["calculation"] = deepcopy(field_value.value_json)
+        return snapshot
+
+    def _protect_calculated_experience(
+        self,
+        field_model: FormField,
+        field_value: FieldValue,
+        allow_mode_change: bool = False,
+    ) -> None:
+        if (
+            field_model.field_type == "work_experience"
+            and isinstance(field_value.value_json, dict)
+            and field_value.value_json.get("mode") == "calculated"
+            and not allow_mode_change
+        ):
+            raise InvalidFieldValueError(
+                "Сохранён расчёт по периодам. Измените его в калькуляторе "
+                "или явно перейдите к ручному вводу."
+            )
+
+    def _experience_effective_date(self, card_id: UUID | None, target: date) -> date:
+        card = self.session.get(Card, card_id) if card_id is not None else None
+        if card is not None and card.lifecycle_status == "dismissed":
+            dismissed_on = self.session.scalar(
+                select(CardEvent.occurred_on)
+                .where(CardEvent.card_id == card.id, CardEvent.event_type == "dismissal")
+                .order_by(CardEvent.created_at.desc(), CardEvent.id.desc())
+                .limit(1)
+            )
+            if dismissed_on is not None:
+                return min(target, dismissed_on)
+        return target
+
+    def _calculated_experience_result(
+        self,
+        payload: object,
+        *,
+        card_id: UUID | None,
+        as_of_date: date | None = None,
+    ) -> dict[str, Any]:
+        today = date.today()
+        target = as_of_date or today
+        canonical = parse_calculation(payload)
+        cutoff = self._experience_effective_date(card_id, target)
+        if cutoff < target:
+            canonical = deepcopy(canonical)
+            for period in canonical["periods"]:
+                if date.fromisoformat(period["start_date"]) > cutoff:
+                    period["included"] = False
+                elif period["end_date"] is None or date.fromisoformat(period["end_date"]) > cutoff:
+                    period["end_date"] = cutoff.isoformat()
+        return calculate_experience(canonical, target, server_date=today)
 
     def _read_file_ref_value(self, attachment_id: UUID | None) -> FileRefValueRead | None:
         if attachment_id is None:

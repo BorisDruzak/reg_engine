@@ -16,6 +16,55 @@ import { CardWebLayoutCanvas, type CardWebLayoutCanvasProps } from "./CardWebLay
 
 const globalStyles = readFileSync("src/styles/globals.css", "utf8");
 
+test("municipal service date selection includes only active date fields from the current registry", async () => {
+  const user = userEvent.setup();
+  const serviceField: FormFieldRead = { ...fields[0], field_type: "work_experience" };
+  const dateField: FormFieldRead = {
+    ...fields[1],
+    id: "11111111-1111-4111-8111-111111111111",
+    label: "Дата поступления",
+    field_type: "date",
+  };
+  const foreignBlock = { ...block, id: "foreign-block", registry_id: "other-registry" };
+  const archivedBlock = { ...block, id: "archived-block", is_active: false };
+  const onCommitField = vi.fn();
+  render(
+    <CardLayoutRenderer
+      layout={layout}
+      blocks={[block, foreignBlock, archivedBlock]}
+      fields={[
+        serviceField,
+        dateField,
+        { ...dateField, id: "archived-date", label: "Архивная дата", is_active: false },
+        { ...dateField, id: "datetime", label: "Дата и время события", field_type: "datetime" },
+        { ...dateField, id: "foreign-date", label: "Чужая дата", block_id: foreignBlock.id },
+        {
+          ...dateField,
+          id: "archived-block-date",
+          label: "Дата из архива",
+          block_id: archivedBlock.id,
+        },
+      ]}
+      mode="design"
+      selection={{ kind: "field", id: serviceField.id }}
+      onCommitField={onCommitField}
+    />,
+  );
+  const dateSelect = screen.getByLabelText("Дата поступления для расчёта стажа");
+  expect(
+    within(dateSelect)
+      .getAllByRole("option")
+      .map((option) => option.textContent),
+  ).toEqual(["Не выбрана", "Дата поступления"]);
+  await user.selectOptions(dateSelect, dateField.id);
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  expect(onCommitField).toHaveBeenCalledWith(
+    expect.objectContaining({
+      options_config_json: { municipal_service_start_date_field_id: dateField.id },
+    }),
+  );
+});
+
 const block: FormBlockRead = {
   id: "block-fio",
   registry_id: "registry-1",

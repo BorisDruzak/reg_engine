@@ -285,6 +285,11 @@ function createSession(
     const field = fieldsById.get(fieldId);
     if (
       !field ||
+      (field.field_type === "work_experience" &&
+        typeof value === "object" &&
+        value !== null &&
+        "mode" in value &&
+        value.mode === "calculated") ||
       field.block_id !== target.blockId ||
       !isOrdinaryEditableField(field, editableFieldIds)
     ) {

@@ -85,6 +85,8 @@ import { useBlockEditor } from "./useBlockEditor";
 import { ChangeBasisFields } from "./ChangeBasisFields";
 import { CardChangeDialog } from "./CardChangeDialog";
 import { CardListSortControls } from "./CardListSortControls";
+import { MunicipalServiceCalculator } from "./MunicipalServiceCalculator";
+import { ManualExperienceRecalculation } from "./ManualExperienceRecalculation";
 
 type CardUtilityTab = "create-card" | "creation-links";
 type CardShellTab = "list" | CardUtilityTab | `card:${string}`;
@@ -194,6 +196,12 @@ export function CardsWorkspace({
   const [pendingCardTabClose, setPendingCardTabClose] = useState<string | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [experienceTarget, setExperienceTarget] = useState<{
+    cardId: string;
+    fieldId: string;
+    instanceId: string | null;
+    action: "calculator" | "today";
+  } | null>(null);
   const organizationsById = useMemo(
     () => new Map(organizations.map((organization) => [organization.id, organization])),
     [organizations],
@@ -685,6 +693,29 @@ export function CardsWorkspace({
 
   return (
     <div className="stack">
+      {experienceTarget &&
+        card &&
+        experienceTarget.cardId === card.id &&
+        (() => {
+          const ExperienceDialog =
+            experienceTarget.action === "calculator"
+              ? MunicipalServiceCalculator
+              : ManualExperienceRecalculation;
+          return (
+            <ExperienceDialog
+              token={token}
+              cardId={card.id}
+              fieldId={experienceTarget.fieldId}
+              blockInstanceId={experienceTarget.instanceId}
+              requiresBasis={requiresBasis}
+              onClose={() => setExperienceTarget(null)}
+              onSaved={async () => {
+                await invalidateCardQueries(queryClient, token, card.registry_id, card.id);
+                setSuccessMessage("Стаж сохранён");
+              }}
+            />
+          );
+        })()}
       <WorkspaceTabs
         tabs={cardShellTabs}
         activeTab={activeShellTab}
@@ -784,6 +815,82 @@ export function CardsWorkspace({
                   blockEditor={blockEditor}
                   referenceOptions={referenceOptions}
                   onEditBlock={() => setSuccessMessage(null)}
+                  renderWorkExperienceActions={({ field, blockInstanceId, value }) => {
+                    if (!card.can_manage) return null;
+                    const calculated =
+                      typeof value === "object" &&
+                      value !== null &&
+                      "mode" in value &&
+                      value.mode === "calculated";
+                    const calculator =
+                      field.options_config_json?.municipal_service_calculator === true ||
+                      calculated;
+                    const today =
+                      Boolean(field.options_config_json?.municipal_service_start_date_field_id) &&
+                      !calculated;
+                    if (!calculator && !today) return null;
+                    const pendingEdit = blockEditor.dirty || blockEditor.pending;
+                    const openExperience = (action: "calculator" | "today") => {
+                      if (pendingEdit) return;
+                      blockEditor.cancel();
+                      setExperienceTarget({
+                        cardId: card.id,
+                        fieldId: field.id,
+                        instanceId: blockInstanceId,
+                        action,
+                      });
+                    };
+                    return (
+                      <span
+                        className="work-experience-actions"
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        {today && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={pendingEdit || !canEditCard}
+                            title={
+                              pendingEdit
+                                ? "Сначала сохраните или отмените изменения блока"
+                                : "Пересчитать вручную введённый стаж от указанной даты до текущей даты сервера. Периоды калькулятора не создаются."
+                            }
+                            onClick={() => openExperience("today")}
+                          >
+                            Стаж на текущую дату
+                          </button>
+                        )}
+                        {calculator && (
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            disabled={pendingEdit}
+                            aria-label={`Калькулятор: ${field.label}`}
+                            title={
+                              pendingEdit
+                                ? "Сначала сохраните или отмените изменения блока"
+                                : "Рассчитать стаж по подтверждённым периодам службы"
+                            }
+                            onClick={() => openExperience("calculator")}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              width="16"
+                              height="18"
+                              viewBox="0 0 16 18"
+                              fill="none"
+                              stroke="currentColor"
+                            >
+                              <rect x="1" y="1" width="14" height="16" rx="2" />
+                              <path d="M4 4h8v3H4zM4 10h2m2 0h2m2 0h1M4 13h2m2 0h2m2 0h1" />
+                            </svg>
+                            <span>Калькулятор</span>
+                          </button>
+                        )}
+                      </span>
+                    );
+                  }}
                   navigationBefore={[
                     {
                       anchorId: "card-base-block",

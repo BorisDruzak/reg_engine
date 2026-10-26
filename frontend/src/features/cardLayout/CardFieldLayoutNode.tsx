@@ -58,6 +58,7 @@ export type CardFieldLayoutNodeProps = {
   fileRefOptions?: FieldEditorFileRefOption[];
   referenceLists?: ReferenceListRead[];
   organizations?: OrganizationRead[];
+  municipalServiceDateFields?: FormFieldRead[];
   inlineReferenceEditorContext?: InlineReferenceEditorContext;
   showGeometryDiagnostics?: boolean;
   testIdPrefix?: string;
@@ -85,6 +86,7 @@ export function CardFieldLayoutNode({
   fileRefOptions = [],
   referenceLists = [],
   organizations = [],
+  municipalServiceDateFields,
   inlineReferenceEditorContext,
   showGeometryDiagnostics = false,
   testIdPrefix = "layout",
@@ -436,6 +438,7 @@ export function CardFieldLayoutNode({
           field={retryDraft ?? field}
           referenceLists={referenceLists}
           organizations={organizations}
+          municipalServiceDateFields={municipalServiceDateFields}
           inlineReferenceEditorContext={inlineReferenceEditorContext}
           onCommit={(draft) => {
             setRetryDraft(draft);

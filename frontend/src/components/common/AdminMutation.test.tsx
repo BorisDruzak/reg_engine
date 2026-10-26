@@ -13,6 +13,24 @@ import {
 } from "./AdminMutation";
 import { archiveConfirmationMessage } from "./AdminMutationUtils";
 
+test("keeps calculator header actions separate and restores background scrolling", () => {
+  const previousOverflow = document.body.style.overflow;
+  const rendered = render(
+    <AdminMutationDialog
+      title="Расчёт стажа"
+      headerActions={<button type="button">Закрыть</button>}
+    >
+      <p>Периоды</p>
+    </AdminMutationDialog>,
+  );
+  expect(document.body.style.overflow).toBe("hidden");
+  expect(
+    screen.getByRole("heading", { name: "Расчёт стажа" }).closest(".admin-mutation-dialog-header"),
+  ).toContainElement(screen.getByRole("button", { name: "Закрыть" }));
+  rendered.unmount();
+  expect(document.body.style.overflow).toBe(previousOverflow);
+});
+
 test("renders reusable Russian-first admin mutation form with actions and feedback", async () => {
   const user = userEvent.setup();
   const onCancel = vi.fn();

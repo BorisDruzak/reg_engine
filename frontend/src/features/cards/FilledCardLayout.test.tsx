@@ -131,6 +131,41 @@ function defaultProps(overrides: Partial<FilledCardLayoutProps> = {}): FilledCar
 }
 
 describe("FilledCardLayout", () => {
+  test("keeps calculated experience outside ordinary block saves", async () => {
+    const saveValues = vi.fn().mockResolvedValue(undefined);
+    const experience = field({
+      id: "service",
+      code: "service",
+      label: "Стаж",
+      field_type: "work_experience",
+    });
+    const editor = renderHook(() =>
+      useBlockEditor({
+        requiresBasis: true,
+        fields: [...fields, experience],
+        editableFieldIds: new Set(["first-name", "service"]),
+        saveValues,
+      }),
+    );
+    act(() =>
+      editor.result.current.openField(block.id, null, "first-name", {
+        "first-name": "Иван",
+        service: { days: 0, months: 0, years: 1, mode: "calculated" },
+      }),
+    );
+    expect(editor.result.current.values).not.toHaveProperty("service");
+    act(() => {
+      editor.result.current.updateAndSave("first-name", "Пётр", null);
+      editor.result.current.setBasisText("Приказ");
+    });
+    await act(async () => {
+      await editor.result.current.save();
+    });
+    expect(saveValues).toHaveBeenCalledWith({
+      basis_text: "Приказ",
+      values: [{ field_id: "first-name", block_instance_id: null, value: "Пётр" }],
+    });
+  });
   test("saves a changed field with basis when a different required field was already empty", async () => {
     const saveValues = vi.fn().mockResolvedValue(undefined);
     const editor = renderHook(() =>

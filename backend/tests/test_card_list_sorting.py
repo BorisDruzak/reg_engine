@@ -22,7 +22,7 @@ def sorting_context(card_event_context, monkeypatch):
     for column, default in [("field_schema_json", "'{}'"), ("default_values_json", "'[]'")]:
         monkeypatch.setattr(CardTemplate.__table__.c[column].server_default, "arg", text(default))
     for model in (FormBlock, FormField, CardTemplate):
-        model.__table__.create(ctx.session.get_bind())
+        model.__table__.create(ctx.session.get_bind(), checkfirst=True)
     ctx.session.add(
         FormBlock(
             id=ctx.block.id,

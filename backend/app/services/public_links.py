@@ -11,7 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.constants import PUBLIC_LINK_STATUSES
-from app.domain.work_experience import experience_for_anchor, serialize_experience
 from app.models import (
     AuditEvent,
     Card,
@@ -1343,7 +1342,13 @@ class PublicLinkService:
             options_source_id=field_model.options_source_id,
             options_config_json=field_model.options_config_json,
             display_config_json=field_model.display_config_json,
-            public_editable=public_editable,
+            public_editable=public_editable
+            and not (
+                field_model.field_type == "work_experience"
+                and field_value is not None
+                and isinstance(field_value.value_json, dict)
+                and field_value.value_json.get("mode") == "calculated"
+            ),
             options=self._reference_options(
                 field_model,
                 card=card,
@@ -1433,21 +1438,12 @@ class PublicLinkService:
         if field_model.field_type == "json":
             return field_value.value_json
         if field_model.field_type == "work_experience":
+            from app.services.cards import CardService
+
             try:
-                value_json = field_value.value_json
-                if (
-                    not isinstance(value_json, dict)
-                    or set(value_json) != {"anchor_date"}
-                    or not isinstance(value_json["anchor_date"], str)
-                ):
-                    raise ValueError("Work experience anchor is invalid.")
-                raw_anchor_date = value_json["anchor_date"]
-                anchor_date = date.fromisoformat(raw_anchor_date)
-                if anchor_date.isoformat() != raw_anchor_date:
-                    raise ValueError("Work experience anchor is invalid.")
-                return serialize_experience(experience_for_anchor(anchor_date, date.today()))
+                return CardService(self.session)._read_field_value(field_model, field_value, {})
             except (TypeError, ValueError) as exc:
-                raise PublicLinkError("Work experience value is invalid.") from exc
+                raise PublicLinkError("Некорректное значение стажа.") from exc
         if field_model.field_type == "select":
             return field_value.value_reference_item_id
         if field_model.field_type == "multi_select":

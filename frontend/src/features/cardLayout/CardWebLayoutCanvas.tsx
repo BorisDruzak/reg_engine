@@ -121,6 +121,19 @@ function CardWebLayoutCanvasSession({
   const [uncontrolledSelection, setUncontrolledSelection] = useState<CardLayoutSelection>(null);
   const blocksById = useMemo(() => new Map(blocks.map((block) => [block.id, block])), [blocks]);
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
+  const municipalServiceDateFields = useMemo(
+    () =>
+      fields.filter((field) => {
+        const block = blocksById.get(field.block_id);
+        return (
+          field.is_active &&
+          field.field_type === "date" &&
+          block?.is_active &&
+          block.registry_id === layout.registry_id
+        );
+      }),
+    [fields, blocksById, layout.registry_id],
+  );
   const designMode = mode === "design";
   const selectionMode = designMode || mode === "block-edit";
   const activeSelection: CardLayoutSelection = selectionMode
@@ -218,6 +231,7 @@ function CardWebLayoutCanvasSession({
               fileRefOptions={fileRefOptions}
               referenceLists={referenceLists}
               organizations={organizations}
+              municipalServiceDateFields={municipalServiceDateFields}
               inlineReferenceEditorContext={inlineReferenceEditorContext}
               compactBlockHeight={compactBlockHeight}
               showGeometryDiagnostics={showGeometryDiagnostics}

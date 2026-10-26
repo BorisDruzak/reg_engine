@@ -1,6 +1,6 @@
 # Project Tree
 
-- Generated: 2026-10-26 13:36:22 +05:00
+- Generated: 2026-10-26 19:22:02 +05:00
 - Branch: main
 
 ## Entrypoints
@@ -51,6 +51,7 @@
 - `backend/app/api/v1/endpoints/documents.py`
 - `backend/app/api/v1/endpoints/health.py`
 - `backend/app/api/v1/endpoints/import_export.py`
+- `backend/app/api/v1/endpoints/municipal_service_experience.py`
 - `backend/app/api/v1/endpoints/organizations.py`
 - `backend/app/api/v1/endpoints/public_links.py`
 - `backend/app/api/v1/endpoints/reference_edit_links.py`
@@ -67,6 +68,7 @@
 - `backend/app/core/logging.py`
 - `backend/app/domain/__init__.py`
 - `backend/app/domain/constants.py`
+- `backend/app/domain/municipal_service_experience.py`
 - `backend/app/domain/text_validation.py`
 - `backend/app/domain/work_experience.py`
 - `backend/app/frontend.py`
@@ -126,6 +128,7 @@
 - `backend/app/services/cards.py`
 - `backend/app/services/documents.py`
 - `backend/app/services/import_export.py`
+- `backend/app/services/municipal_service_experience.py`
 - `backend/app/services/organizations.py`
 - `backend/app/services/permissions.py`
 - `backend/app/services/public_links.py`
@@ -213,6 +216,8 @@
 - `backend/tests/test_mcp_phase_5.py`
 - `backend/tests/test_migrations.py`
 - `backend/tests/test_models_smoke.py`
+- `backend/tests/test_municipal_service_experience.py`
+- `backend/tests/test_municipal_service_persistence.py`
 - `backend/tests/test_organization_permission_services.py`
 - `backend/tests/test_phase_2a_document_architecture.py`
 - `backend/tests/test_phase_2c_generated_documents_architecture.py`
@@ -319,6 +324,7 @@
 - `docs/superpowers/plans/2026-09-10-export-run-organization-selection.md`
 - `docs/superpowers/plans/2026-09-10-saved-xlsx-export-organizations.md`
 - `docs/superpowers/plans/2026-10-26-card-list-sorting.md`
+- `docs/superpowers/plans/2026-10-26-municipal-service-calculator.md`
 - `docs/superpowers/specs/2026-06-26-dev-deploy-scripts-design.md`
 - `docs/superpowers/specs/2026-07-02-schema-layout-static-text-design.md`
 - `docs/superpowers/specs/2026-07-10-card-layout-status-ux-polish-design.md`
@@ -377,6 +383,7 @@
 - `docs/superpowers/specs/2026-09-09-card-events-xlsx-design.md`
 - `docs/superpowers/specs/2026-09-10-export-run-organization-selection-design.md`
 - `docs/superpowers/specs/2026-09-10-saved-xlsx-export-organizations-design.md`
+- `docs/superpowers/specs/2026-10-26-municipal-service-calculator.md`
 - `frontend/.prettierignore`
 - `frontend/.prettierrc`
 - `frontend/eslint.config.mjs`
@@ -468,6 +475,13 @@
 - `frontend/src/features/cards/FilledCardLayout.test.tsx`
 - `frontend/src/features/cards/FilledCardLayout.tsx`
 - `frontend/src/features/cards/GeneratedDocumentsPanel.tsx`
+- `frontend/src/features/cards/manualExperienceRecalculation.css`
+- `frontend/src/features/cards/ManualExperienceRecalculation.test.tsx`
+- `frontend/src/features/cards/ManualExperienceRecalculation.tsx`
+- `frontend/src/features/cards/municipalServiceCalculator.css`
+- `frontend/src/features/cards/MunicipalServiceCalculator.test.tsx`
+- `frontend/src/features/cards/MunicipalServiceCalculator.tsx`
+- `frontend/src/features/cards/municipalServiceExperience.ts`
 - `frontend/src/features/cards/PublicAccessFieldPicker.test.tsx`
 - `frontend/src/features/cards/PublicAccessFieldPicker.tsx`
 - `frontend/src/features/cards/PublicLinkQuickControl.test.tsx`
@@ -539,6 +553,7 @@
 - `frontend/tests/e2e/card-dismissal.spec.ts`
 - `frontend/tests/e2e/card-list-sorting.spec.ts`
 - `frontend/tests/e2e/export-templates.spec.ts`
+- `frontend/tests/e2e/municipal-service-calculator.spec.ts`
 - `frontend/tests/e2e/public-change-basis.spec.ts`
 - `frontend/tests/e2e/smoke.spec.ts`
 - `frontend/tsconfig.app.json`

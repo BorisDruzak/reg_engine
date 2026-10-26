@@ -1,0 +1,176 @@
+.admin-mutation-dialog-surface:has(.municipal-service-calculator) {
+  position: relative;
+  width: min(1040px, calc(100vw - 32px));
+  max-width: 1040px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.admin-mutation-dialog-surface:has(.municipal-service-calculator) > h3 {
+  padding-right: 44px;
+}
+.municipal-service-calculator {
+  min-width: 0;
+}
+.municipal-service-close {
+  position: static;
+  font-size: 24px;
+}
+.admin-mutation-dialog:has(.municipal-service-calculator),
+.admin-mutation-dialog:has(.manual-experience-recalculation) {
+  z-index: 1000;
+}
+.admin-mutation-dialog-header {
+  position: sticky;
+  top: -18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -18px -18px 0;
+  padding: 12px 18px;
+  background: #fff;
+  border-bottom: 1px solid #edf0f4;
+}
+.admin-mutation-dialog-header h3 {
+  min-width: 0;
+  margin: 0;
+}
+.admin-mutation-dialog-header button {
+  flex: 0 0 40px;
+  min-height: 40px;
+}
+.municipal-service-method,
+.municipal-service-preview-date p {
+  color: var(--text-secondary, #526174);
+  line-height: 1.5;
+}
+.municipal-service-periods {
+  display: grid;
+  gap: 16px;
+  margin-block: 16px;
+}
+.municipal-service-period,
+.municipal-service-baseline,
+.municipal-service-audit {
+  min-width: 0;
+  border: 1px solid var(--border-color, #ccd5df);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.municipal-service-period {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.municipal-service-kind,
+.municipal-service-period-basis,
+.municipal-service-flags {
+  grid-column: 1 / -1;
+}
+.municipal-service-calculator label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.municipal-service-calculator label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.municipal-service-calculator input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.municipal-service-calculator textarea,
+.municipal-service-calculator select,
+.municipal-service-date input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #17324d;
+  font: inherit;
+}
+.municipal-service-calculator textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+.municipal-service-calculator select {
+  text-overflow: ellipsis;
+}
+.municipal-service-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 0.7fr);
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+}
+.municipal-service-date small {
+  grid-column: 1 / -1;
+}
+.municipal-service-date input[aria-invalid="true"] {
+  border-color: #b42318;
+}
+.municipal-service-flags,
+.municipal-service-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.municipal-service-tools {
+  margin-block: 16px;
+}
+.municipal-service-result {
+  margin-block: 16px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--surface-secondary, #f0f5fa);
+  overflow-wrap: anywhere;
+}
+.municipal-service-result h4 {
+  margin-top: 0;
+}
+.municipal-service-warning {
+  color: #8a3d0a;
+}
+.municipal-service-manual {
+  display: grid;
+  gap: 16px;
+  margin-block: 16px;
+}
+.municipal-service-calculator .admin-mutation-actions {
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.municipal-service-calculator button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .admin-mutation-dialog-surface:has(.municipal-service-calculator) {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 16px;
+  }
+  .municipal-service-period,
+  .municipal-service-date {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .municipal-service-period,
+  .municipal-service-baseline,
+  .municipal-service-audit {
+    padding: 12px;
+  }
+  .municipal-service-tools > button,
+  .municipal-service-calculator .admin-mutation-actions > button {
+    width: 100%;
+  }
+}

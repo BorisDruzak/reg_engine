@@ -14,6 +14,7 @@ from app.api.v1.endpoints.cards import router as cards_router
 from app.api.v1.endpoints.documents import router as documents_router
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.import_export import router as import_export_router
+from app.api.v1.endpoints.municipal_service_experience import router as municipal_experience_router
 from app.api.v1.endpoints.organizations import router as organizations_router
 from app.api.v1.endpoints.public_links import router as public_links_router
 from app.api.v1.endpoints.reference_edit_links import router as reference_edit_links_router
@@ -32,6 +33,7 @@ api_v1_router.include_router(card_export_templates_router)
 api_v1_router.include_router(organizations_router)
 api_v1_router.include_router(registries_router)
 api_v1_router.include_router(cards_router)
+api_v1_router.include_router(municipal_experience_router)
 api_v1_router.include_router(card_change_notifications_router)
 api_v1_router.include_router(card_creation_links_router)
 api_v1_router.include_router(public_links_router)

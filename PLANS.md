@@ -7,6 +7,49 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-10-26 municipal-service experience calculator is implemented under
+  `docs/superpowers/plans/2026-10-26-municipal-service-calculator.md` and its
+  approved spec. Three separate actions are retained: ordinary manual input,
+  manual current-date recalculation, and a period calculator overlay.
+  - Opt-in work_experience settings enable the calculator and optionally link
+    a same-registry date field. No business-label matching, new table or
+    migration. Old manual anchors remain compatible. Dated manual writes retain
+    original numbers/date; calculated JSON retains source periods and versioned
+    methodology. Other block saves and public writes cannot overwrite periods.
+  - Inclusive calendar components and explicit residual 30/12 normalization,
+    conscription 1:2, overlap deduplication/conflict detection, eligibility and
+    pension-only flags, confirmed baseline and historical/future preview are
+    handled on the server. Closed periods freeze; dismissal caps open periods.
+    A dismissal before a confirmed baseline must be resolved before proceeding.
+  - GET/preview/save/manual routes enforce card/field/template/instance scope,
+    existing edit permission, active change basis/audit, and optimistic revision.
+    Authenticated calculation history is separate from ordinary/public summary
+    reads. XLSX still transfers summaries only, with an explicit UI warning.
+  - Dialogs support Escape, focus return, background scroll locking, independent
+    scroll and a sticky heading/close button. New-card creation remains manual;
+    the advanced actions become available after the card has been created.
+  - Creator check for the selected legacy card found only its shared admin
+    account and no separately recorded human name. Existing personal profile
+    attribution already displays entered names; no guessed replacement was made.
+  - GitNexus reports `reg_engine` unavailable. Context7 reports a monthly quota
+    limit; official SQLAlchemy 2.0, React and Pydantic documentation was used as
+    fallback.
+  - Targeted backend compatibility command (municipal experience/domain,
+    persistence, work experience, registry/card services, public links, API,
+    export/import, documents and card sorting): 248 passed, 99 skipped.
+    Focused frontend command covering both dialogs, card workspace/layout,
+    work-experience editor, schema settings, import/export and shared dialog:
+    190 passed. Ruff/format, mypy (104 files), frontend lint/typecheck/build,
+    scoped Prettier and project-map checks pass. Existing hook-dependency,
+    Starlette/httpx deprecation and Vite chunk-size warnings remain.
+  - `pnpm -C frontend e2e municipal-service-calculator.spec.ts --project=chromium --workers=1`
+    passes manual edit, independent dated recalculation, period save/reopen,
+    conscription category persistence, desktop/mobile overflow and visible
+    sticky close at 1280x800/390x844, with no page errors. Browser plugin is
+    unavailable; after MCP transport failure, installed Playwright used
+    synthetic API fixtures. No production card writes are part of browser QA.
+    Deployment and scoped field activation are pending synchronization.
+
 - 2026-10-26 card-list sorting is pushed and deployed in
   `ea4d8f947bde89ea097841188635b70009aa91b3`. Plan:
   `docs/superpowers/plans/2026-10-26-card-list-sorting.md`.

@@ -64,6 +64,48 @@ Target system:
 
 ## Card Identity, Events and Saved XLSX Exports
 
+### Optional service-experience calculator
+
+For a `work_experience` field the schema editor exposes two independent settings:
+`municipal_service_calculator: true` enables period calculation, and optional
+`municipal_service_start_date_field_id` selects an active date field in the same
+registry for the manual current-date helper. Both live in `options_config_json`.
+Existing manual input stays available. The three user actions are independent:
+
+1. Ordinary manual entry keeps the existing anchor-based behavior.
+2. `Стаж на текущую дату` opens a short manual recalculation dialog. The operator
+   confirms original numbers and their date. The backend preserves that input
+   and date with the anchor, so reopening does not add elapsed time twice.
+3. `Калькулятор` opens `Расчёт стажа муниципальной службы`, a closable overlay
+   containing categorized periods, documentary grounds, inclusion/confirmation
+   and pension-only flags, historical/future preview, overlap warnings and an
+   explicit audited save. Periods are never fabricated from a legacy manual value.
+
+Calculated JSON uses `mode=calculated`, `version=1`, method
+`calendar_remainder_30_v1`. Inclusive calendar intervals with equal coefficients
+are unioned before calculation; conflicting coefficients block saving. Contract
+military service counts 1:1; conscription counts 1:2. Calendar components are
+summed, with the user-approved technical normalization of 30 residual days per
+month and 12 months per year. This normalization is a software convention, not
+an assertion that regional law specifies it. Additional eligibility is confirmed
+by the operator. An optional documented baseline covers all history through its
+date, so counted periods must start later. Pre-baseline historical preview cannot
+be reconstructed. A dismissal date before a confirmed baseline is rejected until
+the operator corrects that baseline.
+
+Authenticated GET/PUT `/api/v1/cards/{card_id}/fields/{field_id}/municipal-service-experience`
+read/save history; POST suffixes `/preview`, `/manual-preview`, `/manual` perform
+preview and explicit manual replacement. Writes use existing card RBAC,
+active-card change basis/audit and an `expected_revision` from GET. Repeated
+block instances are scoped explicitly. Generic and public writes cannot erase
+calculated periods. Public reads, documents, reports and XLSX expose computed
+summaries; creation-only XLSX import does not transfer calculation history.
+
+The calculation uses the current server calendar date (not the browser timezone).
+Preview dates do not change the saved source periods. Open periods accrue without
+daily database writes; closed periods do not, and accrual stops at dismissal.
+No database migration or additional dependency is required.
+
 Card-list sorting is optional on both
 `GET /api/v1/registries/{registry_id}/cards` and
 `GET /api/v1/organizations/{organization_id}/cards`:

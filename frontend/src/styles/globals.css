@@ -4880,6 +4880,29 @@ button.searchable-choice-picker-option:hover:not(:disabled),
   font-weight: 600;
 }
 
+.work-experience-field-tools,
+.work-experience-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.work-experience-field-tools > .card-inline-field-read-value,
+.work-experience-field-tools > .filled-card-block-field-control {
+  flex: 1 1 190px;
+  min-width: 0;
+}
+
+.work-experience-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: normal;
+}
+
 .card-lifecycle-filter select {
   min-width: 0;
   width: 100%;

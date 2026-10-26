@@ -64,14 +64,17 @@ export function AdminMutationDialog({
   title,
   onCancel,
   restoreFocusRef,
+  headerActions,
   children,
 }: {
   title: string;
   onCancel?: () => void;
   restoreFocusRef?: RefObject<HTMLElement | null>;
+  headerActions?: ReactNode;
   children: ReactNode;
 }) {
   const titleId = useId();
+  const locksBackground = Boolean(headerActions);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [portalRoot] = useState<HTMLDivElement | null>(() => {
     if (typeof document === "undefined") return null;
@@ -85,6 +88,8 @@ export function AdminMutationDialog({
     const restoreFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const requestedRestoreFocus = restoreFocusRef?.current ?? null;
+    const previousOverflow = document.body.style.overflow;
+    if (locksBackground) document.body.style.overflow = "hidden";
     document.body.append(portalRoot);
     const background = Array.from(document.body.children)
       .filter(
@@ -107,6 +112,7 @@ export function AdminMutationDialog({
     initialFocus?.focus();
 
     return () => {
+      if (locksBackground) document.body.style.overflow = previousOverflow;
       for (const { element, hadInert, ariaHidden } of background) {
         if (!hadInert) element.removeAttribute("inert");
         if (ariaHidden === null) {
@@ -119,7 +125,7 @@ export function AdminMutationDialog({
       const focusTarget = requestedRestoreFocus?.isConnected ? requestedRestoreFocus : restoreFocus;
       focusTarget?.focus();
     };
-  }, [portalRoot, restoreFocusRef]);
+  }, [portalRoot, restoreFocusRef, locksBackground]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape" && onCancel) {
@@ -162,7 +168,14 @@ export function AdminMutationDialog({
       onKeyDown={handleKeyDown}
     >
       <div className="admin-mutation-dialog-surface">
-        <h3 id={titleId}>{title}</h3>
+        {headerActions ? (
+          <div className="admin-mutation-dialog-header">
+            <h3 id={titleId}>{title}</h3>
+            {headerActions}
+          </div>
+        ) : (
+          <h3 id={titleId}>{title}</h3>
+        )}
         {children}
       </div>
     </div>,

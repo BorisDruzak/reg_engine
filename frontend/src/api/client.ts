@@ -1776,7 +1776,7 @@ export async function startPublicLinkReviewCycle(token: string, publicLinkId: st
   });
 }
 
-async function apiRequest<T>(path: string, options: RequestOptions = {}) {
+export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
