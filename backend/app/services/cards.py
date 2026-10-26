@@ -675,7 +675,16 @@ class CardService:
         field_filters: Sequence[CardFieldFilterInput] | None = None,
         card_template_ids: Sequence[UUID] | None = None,
         lifecycle_status: str | None = None,
+        sort_by: str | None = None,
+        sort_field_id: UUID | None = None,
+        sort_direction: str = "asc",
     ) -> list[Card]:
+        sort_field = self._validate_card_sort(
+            registry_id,
+            sort_by=sort_by,
+            sort_field_id=sort_field_id,
+            sort_direction=sort_direction,
+        )
         if lifecycle_status is not None and lifecycle_status not in {
             "draft",
             "active",
@@ -716,7 +725,10 @@ class CardService:
         for field_filter in field_filters or ():
             criteria.append(self._field_filter_criterion(field_filter, registry_id=registry_id))
 
-        return list(self.session.scalars(select(Card).where(*criteria).order_by(Card.id)).all())
+        cards = list(self.session.scalars(select(Card).where(*criteria).order_by(Card.id)).all())
+        return self._sort_visible_cards(
+            cards, sort_by=sort_by, sort_field=sort_field, sort_direction=sort_direction
+        )
 
     def list_visible_cards_for_organization_for_actor(
         self,
@@ -731,6 +743,9 @@ class CardService:
         field_filters: Sequence[CardFieldFilterInput] | None = None,
         card_template_ids: Sequence[UUID] | None = None,
         lifecycle_status: str | None = None,
+        sort_by: str | None = None,
+        sort_field_id: UUID | None = None,
+        sort_direction: str = "asc",
     ) -> list[Card]:
         registry = RegistrySchemaService(self.session).resolve_default_registry_for_organization(
             resolver_organization_id
@@ -753,6 +768,107 @@ class CardService:
             field_filters=field_filters,
             card_template_ids=card_template_ids,
             lifecycle_status=lifecycle_status,
+            sort_by=sort_by,
+            sort_field_id=sort_field_id,
+            sort_direction=sort_direction,
+        )
+
+    def _validate_card_sort(
+        self,
+        registry_id: UUID,
+        *,
+        sort_by: str | None,
+        sort_field_id: UUID | None,
+        sort_direction: str,
+    ) -> FormField | None:
+        if sort_by not in {None, "display_value", "field"} or sort_direction not in {"asc", "desc"}:
+            raise CardServiceError("Недопустимая сортировка карточек.")
+        if sort_by != "field":
+            if sort_field_id is not None:
+                raise CardServiceError("Поле даты допускается только для сортировки по полю.")
+            return None
+        if sort_field_id is None:
+            raise CardServiceError("Выберите поле даты для сортировки.")
+        field_model = self._get_active_field(sort_field_id)
+        block = self._get_active_block(field_model.block_id)
+        if field_model.field_type not in {"date", "datetime"} or block.registry_id != registry_id:
+            raise CardServiceError("Сортировка требует действующее поле даты этого реестра.")
+        return field_model
+
+    def _sort_visible_cards(
+        self,
+        cards: list[Card],
+        *,
+        sort_by: str | None,
+        sort_field: FormField | None,
+        sort_direction: str,
+    ) -> list[Card]:
+        if sort_by is None or not cards:
+            return cards
+        templates = self.session.scalars(
+            select(CardTemplate).where(
+                CardTemplate.id.in_({card.card_template_id for card in cards})
+            )
+        ).all()
+        field_by_template: dict[UUID, UUID] = {}
+        for template in templates:
+            if sort_by == "display_value":
+                field_by_template[template.id] = self._require_single_fio_field(template).id
+            elif sort_field is not None and sort_field.id in self._template_field_ids(template):
+                field_by_template[template.id] = sort_field.id
+        cards_by_id = {card.id: card for card in cards}
+        value_criteria = [
+            FieldValue.card_id.in_(cards_by_id),
+            FieldValue.field_id.in_(set(field_by_template.values())),
+            CardBlockInstance.archived_at.is_(None),
+        ]
+        if sort_field is not None:
+            first_instances: dict[UUID, UUID] = {}
+            for instance in self.session.scalars(
+                select(CardBlockInstance)
+                .where(
+                    CardBlockInstance.card_id.in_(cards_by_id),
+                    CardBlockInstance.block_id == sort_field.block_id,
+                    CardBlockInstance.archived_at.is_(None),
+                )
+                .order_by(CardBlockInstance.ordinal, CardBlockInstance.id)
+            ):
+                first_instances.setdefault(instance.card_id, instance.id)
+            value_criteria.append(FieldValue.block_instance_id.in_(set(first_instances.values())))
+        # Batch only accessible cards and chosen fields. Match first-instance FIO
+        # presentation; stale values removed from a template cannot affect order.
+        values: dict[UUID, Any] = {}
+        for value in self.session.scalars(
+            select(FieldValue)
+            .join(CardBlockInstance, CardBlockInstance.id == FieldValue.block_instance_id)
+            .where(*value_criteria)
+            .order_by(CardBlockInstance.ordinal, FieldValue.id)
+        ):
+            card = cards_by_id[value.card_id]
+            if (
+                value.card_id in values
+                or field_by_template.get(card.card_template_id) != value.field_id
+            ):
+                continue
+            if sort_by == "display_value":
+                values[card.id] = (value.value_text or "").strip().casefold().replace(
+                    "ё", "е"
+                ) or None
+            elif sort_field is not None and sort_field.field_type == "datetime":
+                instant = value.value_datetime
+                values[card.id] = (
+                    instant.replace(tzinfo=UTC)
+                    if instant is not None and instant.tzinfo is None
+                    else instant
+                )
+            else:
+                values[card.id] = value.value_date
+        filled = [card for card in cards if values.get(card.id) is not None]
+        empty = [card for card in cards if values.get(card.id) is None]
+        # Python's stable ordering retains the original id tie-breaker in both directions.
+        return (
+            sorted(filled, key=lambda card: values[card.id], reverse=sort_direction == "desc")
+            + empty
         )
 
     def list_display_fields_for_card(self, card: Card) -> list[CardListFieldRead]:

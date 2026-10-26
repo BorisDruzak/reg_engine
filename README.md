@@ -64,6 +64,26 @@ Target system:
 
 ## Card Identity, Events and Saved XLSX Exports
 
+Card-list sorting is optional on both
+`GET /api/v1/registries/{registry_id}/cards` and
+`GET /api/v1/organizations/{organization_id}/cards`:
+
+- `sort_by=display_value` orders by the template's derived FIO, ignoring case
+  and treating Russian е/ё equally.
+- `sort_by=field&sort_field_id=<uuid>` orders by an active `date` or `datetime`
+  field from the same registry. Dates use the first active block instance;
+  a missing value there stays empty even when later instances have values.
+- `sort_direction=asc|desc` defaults to `asc`. Empty values are last in either
+  direction, ties retain card-id order, and omitting `sort_by` keeps the
+  original card-id ordering. Organization, archive, status, and search filters
+  are applied before sorting. No pagination is currently applied.
+
+The Russian card-list UI persists sorting with workspace settings. If a saved
+date sort becomes invalid, it resets and reloads the list. Read-only card
+users obtain date choices from the permitted card presentation, without
+loading administrator schema queries. Broad navigation from creation or a
+notification clears field-specific sorting together with the list filters.
+
 The 2026-09-09 implementation checkpoint is local only; see `PLANS.md` for
 verification and the outstanding PostgreSQL migration/release gate.
 

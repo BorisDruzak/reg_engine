@@ -7,6 +7,41 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-10-26 card-list sorting is implemented. Plan:
+  `docs/superpowers/plans/2026-10-26-card-list-sorting.md`.
+  - Both existing list GET APIs accept optional `sort_by=display_value|field`,
+    `sort_field_id`, and `sort_direction=asc|desc`. The service sorts only the
+    authorized, filtered result using batched schema/value reads. FIO is
+    case-insensitive with е/ё equivalence; typed dates use the first active
+    instance, including when its value is absent. Empty values remain last,
+    ties retain identifier order, and no selection keeps the existing order.
+  - Russian sorting/direction selectors sit beside card status and persist
+    with workspace settings. Invalid saved date sorts reset and reload.
+    Read-only users can use dates from the permitted card presentation.
+    Creation/notification navigation clears field-specific sort when it
+    broadens the organization scope. No migration or new dependency.
+  - The list API remains unpaginated. Any future pagination must apply sorting
+    before limit/offset. Read-only date choices follow the selected card's
+    presentation; administrator choices use the full accessible schema.
+  - GitNexus query and API impact both report `reg_engine` unavailable; service,
+    API, frontend and consumer tests were inspected directly. Context7 checked
+    SQLAlchemy 2.0 and controlled React select behavior.
+  - Verification: `backend/.venv/Scripts/python.exe -m pytest -o addopts='' backend/tests -q --tb=short`:
+    625 passed, 286 skipped; focused sorting coverage has 18 passing cases.
+    `pnpm -C frontend test:run`: 474 passed, 32 skipped. The final changed
+    card/client/app surfaces were additionally rechecked with the focused
+    four-file Vitest command. Ruff, mypy, frontend lint/typecheck/build and
+    scoped formatting pass; the existing FilledCardLayout hook warning,
+    Starlette/httpx deprecation and Vite chunk-size advisory remain.
+  - `pnpm -C frontend e2e card-list-sorting.spec.ts --project=chromium --workers=1`:
+    passes FIO/date directions, retained status filters, reload persistence,
+    invalid-date recovery, unrelated-error preservation and read-only dates.
+    Desktop 1280x800/mobile 390x844 screenshots were visually checked, with
+    no horizontal overflow or page errors. Browser plugin is unavailable;
+    Playwright MCP disconnected with `Transport closed`, so the installed
+    Playwright ran the scenario against synthetic API fixtures. No production
+    card writes are part of this QA.
+
 - 2026-10-20 import/export choice-list clipping fix is pushed and deployed
   in `c7f30471fb78bd03ab29cec93ee66d679fb0bdc0`.
   The XLSX operation pickers now use the full form width and keep their open

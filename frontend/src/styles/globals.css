@@ -4881,6 +4881,8 @@ button.searchable-choice-picker-option:hover:not(:disabled),
 }
 
 .card-lifecycle-filter select {
+  min-width: 0;
+  width: 100%;
   min-height: 40px;
   padding: 8px 10px;
   border: 1px solid #cfd8e3;

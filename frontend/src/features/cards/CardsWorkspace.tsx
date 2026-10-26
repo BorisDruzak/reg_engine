@@ -84,6 +84,7 @@ import {
 import { useBlockEditor } from "./useBlockEditor";
 import { ChangeBasisFields } from "./ChangeBasisFields";
 import { CardChangeDialog } from "./CardChangeDialog";
+import { CardListSortControls } from "./CardListSortControls";
 
 type CardUtilityTab = "create-card" | "creation-links";
 type CardShellTab = "list" | CardUtilityTab | `card:${string}`;
@@ -111,6 +112,9 @@ export function CardsWorkspace({
   includeArchivedCards,
   isSuperuser = false,
   cardLifecycleStatus = "",
+  cardSortField = "",
+  cardSortDirection = "asc",
+  onCardSortChange,
   onCardLifecycleStatusChange,
   onSelectCard,
   onCardSearchChange,
@@ -135,6 +139,9 @@ export function CardsWorkspace({
   includeArchivedCards: boolean;
   isSuperuser?: boolean;
   cardLifecycleStatus?: string;
+  cardSortField?: string;
+  cardSortDirection?: "asc" | "desc";
+  onCardSortChange?: (field: string, direction: "asc" | "desc") => void;
   onCardLifecycleStatusChange?: (value: string) => void;
   onSelectCard: (cardId: string) => void;
   onCardSearchChange: (value: string) => void;
@@ -690,6 +697,17 @@ export function CardsWorkspace({
           <CardListFilters
             lifecycleStatus={cardLifecycleStatus}
             onLifecycleStatusChange={onCardLifecycleStatusChange}
+            sortingControls={
+              onCardSortChange ? (
+                <CardListSortControls
+                  fields={schema?.fields ?? presentationFields}
+                  blocks={schema?.blocks ?? presentationBlocks}
+                  field={cardSortField}
+                  direction={cardSortDirection}
+                  onChange={onCardSortChange}
+                />
+              ) : null
+            }
             cardSearch={cardSearch}
             organizationIds={cardOrganizationIds}
             includeDescendantOrganizations={cardIncludeDescendantOrganizations}
@@ -1272,6 +1290,7 @@ function CardDismissalDialog({
 }
 
 function CardListFilters({
+  sortingControls,
   lifecycleStatus,
   onLifecycleStatusChange,
   cardSearch,
@@ -1291,6 +1310,7 @@ function CardListFilters({
   onFieldFiltersChange,
   onIncludeArchiveChange,
 }: {
+  sortingControls?: ReactNode;
   lifecycleStatus: string;
   onLifecycleStatusChange?: (value: string) => void;
   cardSearch: string;
@@ -1324,6 +1344,7 @@ function CardListFilters({
           <option value="dismissed">Уволенные</option>
         </select>
       </label>
+      {sortingControls}
       <CardTagSearchBar
         token={token}
         textQuery={cardSearch}

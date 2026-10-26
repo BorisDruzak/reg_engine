@@ -378,6 +378,9 @@ export async function archiveFormField(token: string, fieldId: string) {
 }
 
 export type CardListOptions = {
+  sortBy?: "display_value" | "field";
+  sortFieldId?: string;
+  sortDirection?: "asc" | "desc";
   lifecycleStatus?: string;
   organizationId?: string;
   organizationIds?: string[];
@@ -412,6 +415,13 @@ export async function listOrganizationCards(
 
 function cardListSearchParams(options: CardListOptions) {
   const params = new URLSearchParams();
+  if (options.sortBy) {
+    params.set("sort_by", options.sortBy);
+    params.set("sort_direction", options.sortDirection ?? "asc");
+    if (options.sortBy === "field" && options.sortFieldId) {
+      params.set("sort_field_id", options.sortFieldId);
+    }
+  }
   if (options.lifecycleStatus) params.set("lifecycle_status", options.lifecycleStatus);
   if (options.organizationId) {
     params.set("organization_id", options.organizationId);

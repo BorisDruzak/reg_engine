@@ -18,6 +18,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("sends date sorting to the backend together with list filters", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  await listOrganizationCards("token", "organization-1", {
+    sortBy: "field",
+    sortFieldId: "date-1",
+    sortDirection: "desc",
+    lifecycleStatus: "active",
+    q: "Иванов",
+    organizationIds: ["organization-2"],
+  });
+  const url = new URL(String(fetchMock.mock.calls[0][0]), "http://test.local");
+  expect(url.searchParams.get("sort_by")).toBe("field");
+  expect(url.searchParams.get("sort_field_id")).toBe("date-1");
+  expect(url.searchParams.get("sort_direction")).toBe("desc");
+  expect(url.searchParams.get("q")).toBe("Иванов");
+  expect(url.searchParams.getAll("organization_ids")).toEqual(["organization-2"]);
+});
+
 test("uses authenticated persisted export CRUD routes and downloads server-named XLSX bytes", async () => {
   const requests: { path: string; method: string; body: unknown; auth: string | null }[] = [];
   vi.stubGlobal(

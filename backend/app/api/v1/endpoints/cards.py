@@ -278,6 +278,9 @@ def list_cards(
     lifecycle_status: Annotated[
         str | None, Query(pattern="^(draft|active|dismissed|archived|superseded)$")
     ] = None,
+    sort_by: Annotated[str | None, Query(pattern="^(display_value|field)$")] = None,
+    sort_field_id: Annotated[UUID | None, Query()] = None,
+    sort_direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -293,6 +296,9 @@ def list_cards(
             field_filters=field_filters,
             card_template_ids=card_template_ids,
             lifecycle_status=lifecycle_status,
+            sort_by=sort_by,
+            sort_field_id=sort_field_id,
+            sort_direction=sort_direction,
         )
     except Exception as exc:
         raise_service_http_error(exc)
@@ -314,6 +320,9 @@ def list_organization_cards(
     lifecycle_status: Annotated[
         str | None, Query(pattern="^(draft|active|dismissed|archived|superseded)$")
     ] = None,
+    sort_by: Annotated[str | None, Query(pattern="^(display_value|field)$")] = None,
+    sort_field_id: Annotated[UUID | None, Query()] = None,
+    sort_direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
 ) -> CardListRead:
     try:
         field_filters = _parse_card_field_filters(filters)
@@ -329,6 +338,9 @@ def list_organization_cards(
             field_filters=field_filters,
             card_template_ids=card_template_ids,
             lifecycle_status=lifecycle_status,
+            sort_by=sort_by,
+            sort_field_id=sort_field_id,
+            sort_direction=sort_direction,
         )
     except Exception as exc:
         raise_service_http_error(exc)

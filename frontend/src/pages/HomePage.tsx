@@ -13,6 +13,7 @@ import {
   listRegistries,
   listUsers,
   readCard,
+  type CardListOptions,
 } from "@/api/client";
 import {
   sectionLabel,
@@ -52,6 +53,8 @@ type WorkspaceUiState = {
   cardFieldFilters: CardFieldFilterPayload[];
   includeArchivedCards: boolean;
   cardLifecycleStatus: string;
+  cardSortField: string;
+  cardSortDirection: "asc" | "desc";
 };
 
 const workspaceUiStateKey = "reg_engine.admin_workspace_state.v1";
@@ -75,6 +78,8 @@ export function HomePage() {
     cardFieldFilters,
     includeArchivedCards,
     cardLifecycleStatus,
+    cardSortField,
+    cardSortDirection,
   } = workspaceUiState;
 
   const token = session?.token ?? "";
@@ -118,21 +123,49 @@ export function HomePage() {
       cardIncludeDescendantOrganizations,
       includeArchivedCards,
       cardLifecycleStatus,
+      cardSortField,
+      cardSortDirection,
       cardSearch,
       cardTemplateIds.join("|"),
       JSON.stringify(cardFieldFilters),
     ],
-    queryFn: () =>
-      listOrganizationCards(token, cardListOrganizationId, {
+    queryFn: async () => {
+      const options: CardListOptions = {
         organizationIds: cardOrganizationIds,
         includeDescendantOrganizations: cardIncludeDescendantOrganizations,
         includeArchive: includeArchivedCards,
         lifecycleStatus: cardLifecycleStatus || undefined,
+        sortBy: cardSortField
+          ? cardSortField === "display_value"
+            ? "display_value"
+            : "field"
+          : undefined,
+        sortFieldId: cardSortField && cardSortField !== "display_value" ? cardSortField : undefined,
+        sortDirection: cardSortDirection,
         q: cardSearch || undefined,
         cardTemplateIds,
         fieldFilters: cardFieldFilters,
-      }),
+      };
+      try {
+        return await listOrganizationCards(token, cardListOrganizationId, options);
+      } catch (error) {
+        if (options.sortBy !== "field" || !(error instanceof ApiError) || error.status !== 400) {
+          throw error;
+        }
+        // Only reset the saved date if removing sorting makes this same query valid.
+        const result = await listOrganizationCards(token, cardListOrganizationId, {
+          ...options,
+          sortBy: undefined,
+          sortFieldId: undefined,
+        });
+        setWorkspaceUiState((current) =>
+          current.cardSortField === cardSortField ? { ...current, cardSortField: "" } : current,
+        );
+        return result;
+      }
+    },
     enabled: Boolean(token && cardListOrganizationId && needsCards),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 400) && count < 3,
   });
   const auditCardListOrganizationId =
     organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
@@ -347,6 +380,7 @@ export function HomePage() {
   }
 
   async function handleOpenCreatedCard(cardId: string) {
+    const navigationSortField = cardSortField === "display_value" ? cardSortField : "";
     const broadOrganizationId =
       organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
       organizationsQuery.data?.items[0]?.id ??
@@ -356,6 +390,7 @@ export function HomePage() {
     setWorkspaceUiState((current) => ({
       ...current,
       selectedCardId: cardId,
+      cardSortField: navigationSortField,
       cardSearch: "",
       cardOrganizationIds: [],
       cardIncludeDescendantOrganizations: includeDescendantOrganizations,
@@ -377,6 +412,8 @@ export function HomePage() {
       includeDescendantOrganizations,
       false,
       "",
+      navigationSortField,
+      cardSortDirection,
       "",
       "",
       "[]",
@@ -393,6 +430,8 @@ export function HomePage() {
           organizationIds: [],
           includeDescendantOrganizations,
           includeArchive: false,
+          sortBy: navigationSortField || undefined,
+          sortDirection: cardSortDirection,
           cardTemplateIds: [],
           fieldFilters: [],
         }),
@@ -400,6 +439,7 @@ export function HomePage() {
   }
 
   async function handleOpenNotificationCard(cardId: string) {
+    const navigationSortField = cardSortField === "display_value" ? cardSortField : "";
     const broadOrganizationId =
       organizationsQuery.data?.items.find((organization) => organization.parent_id === null)?.id ??
       organizationsQuery.data?.items[0]?.id ??
@@ -410,6 +450,7 @@ export function HomePage() {
       ...current,
       activeSection: "cards",
       selectedCardId: cardId,
+      cardSortField: navigationSortField,
       cardSearch: "",
       cardOrganizationIds: [],
       cardIncludeDescendantOrganizations: includeDescendantOrganizations,
@@ -431,6 +472,8 @@ export function HomePage() {
       includeDescendantOrganizations,
       true,
       "",
+      navigationSortField,
+      cardSortDirection,
       "",
       "",
       "[]",
@@ -447,6 +490,8 @@ export function HomePage() {
           organizationIds: [],
           includeDescendantOrganizations,
           includeArchive: true,
+          sortBy: navigationSortField || undefined,
+          sortDirection: cardSortDirection,
           cardTemplateIds: [],
           fieldFilters: [],
         }),
@@ -565,6 +610,15 @@ export function HomePage() {
         {activeSection === "cards" && (
           <CardsWorkspace
             cardLifecycleStatus={cardLifecycleStatus}
+            cardSortField={cardSortField}
+            cardSortDirection={cardSortDirection}
+            onCardSortChange={(field, direction) =>
+              setWorkspaceUiState((current) => ({
+                ...current,
+                cardSortField: field,
+                cardSortDirection: direction,
+              }))
+            }
             onCardLifecycleStatusChange={(value) =>
               setWorkspaceUiState((current) => ({ ...current, cardLifecycleStatus: value }))
             }
@@ -646,6 +700,8 @@ function defaultWorkspaceUiState(): WorkspaceUiState {
     cardFieldFilters: [],
     includeArchivedCards: false,
     cardLifecycleStatus: "",
+    cardSortField: "",
+    cardSortDirection: "asc",
   };
 }
 
@@ -675,6 +731,13 @@ function loadWorkspaceUiState(): WorkspaceUiState {
           : true,
       cardTemplateIds: normalizeStringList(parsed.cardTemplateIds),
       cardFieldFilters: normalizeCardFieldFilters(parsed.cardFieldFilters),
+      cardSortField:
+        typeof parsed.cardSortField === "string" &&
+        (parsed.cardSortField === "display_value" ||
+          /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(parsed.cardSortField))
+          ? parsed.cardSortField
+          : "",
+      cardSortDirection: parsed.cardSortDirection === "desc" ? "desc" : "asc",
       includeArchivedCards:
         typeof parsed.includeArchivedCards === "boolean" ? parsed.includeArchivedCards : false,
       cardLifecycleStatus:
