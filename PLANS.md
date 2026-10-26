@@ -7,7 +7,9 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-10-26 follow-up review and real test-card acceptance are in progress.
+- 2026-10-26 follow-up review and real test-card acceptance are complete.
+  Lifecycle fix: `e134c74c83f0679b825cda1a93dd207fcde5e812`;
+  basis guidance: `3be48dbf5bd65b16da2450d8acd4d6b3fdd1d1a4`.
   - Shared change-basis fields now explain the requirement. A dirty block's save
     button remains actionable with an empty basis; clicking it shows a Russian
     error, marks/focuses the basis input, preserves edited values, and sends no
@@ -29,8 +31,22 @@ not a hardcoded employee registry.
     the result; conflicting weight disabled saving; closing discarded that
     unsaved third period. Runtime read-only inspection verified two stored
     periods and audit events. Existing people's cards were not edited.
-  - New-code deployment and live validation of the basis hint are pending.
-    SQLite coverage does not establish PostgreSQL concurrent-write behavior.
+  - Both project deployment scripts passed, with active API, database/storage
+    checks, health and same-origin frontend smoke. Final assets:
+    `index-BBZQHANG.js`, `index-CRUNUC48.css`. Expanded Chromium scenario passed
+    again against deployed HTTPS assets with mocked API fixtures.
+  - Real UI validation changed only the synthetic card: an empty-basis click
+    showed the Russian error and focused the basis, with entered values intact.
+    A read-only database check proved the original date, period hash and audit
+    count (17) unchanged. A valid-basis save persisted the changed date across
+    reload, preserved the calculation hash, and added field/event audit (19).
+  - Two authenticated tabs opened the same calculation. A new period-basis
+    revision saved from the first; the second received the explicit stale-version
+    message and could not overwrite it. Read-only PostgreSQL verification found
+    exactly two original periods, retained the new basis, and no event for the
+    rejected attempt. Simultaneous transaction stress was not performed.
+    The synthetic card remains active for user inspection in a separate tab;
+    the user's original card/editor tab was preserved.
 
 - 2026-10-26 municipal-service experience calculator is pushed and deployed in
   `d78ff36007f37065543b598d925f51520d92f111`, with dialog sizing correction in
