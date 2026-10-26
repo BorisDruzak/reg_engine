@@ -7,7 +7,9 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
-- 2026-10-26 municipal-service experience calculator is implemented under
+- 2026-10-26 municipal-service experience calculator is pushed and deployed in
+  `d78ff36007f37065543b598d925f51520d92f111`, with dialog sizing correction in
+  `5ad1616d7d586d51be8d0810f135dd1329f534bd`, under
   `docs/superpowers/plans/2026-10-26-municipal-service-calculator.md` and its
   approved spec. Three separate actions are retained: ordinary manual input,
   manual current-date recalculation, and a period calculator overlay.
@@ -44,11 +46,29 @@ not a hardcoded employee registry.
     Starlette/httpx deprecation and Vite chunk-size warnings remain.
   - `pnpm -C frontend e2e municipal-service-calculator.spec.ts --project=chromium --workers=1`
     passes manual edit, independent dated recalculation, period save/reopen,
-    conscription category persistence, desktop/mobile overflow and visible
-    sticky close at 1280x800/390x844, with no page errors. Browser plugin is
+    conscription category persistence, internal manual-dialog bounds at
+    1280x800/1072x884/390x844, calculator overflow and visible sticky close,
+    with no page errors. Browser plugin is
     unavailable; after MCP transport failure, installed Playwright used
-    synthetic API fixtures. No production card writes are part of browser QA.
-    Deployment and scoped field activation are pending synchronization.
+    synthetic API fixtures. No production card writes are part of automated
+    browser QA. The expanded scenario failed before the numeric-control sizing
+    fix and passed afterward locally and on published HTTPS assets with mocks.
+  - `scripts/deploy.ps1` and `scripts/deploy-frontend.ps1 -SkipBuild` passed:
+    synchronized main checkout, PostgreSQL/storage checks, restarted active API,
+    healthcheck and same-origin smoke. Final published assets are
+    `index-BWK8bwfl.js` and `index-CRUNUC48.css`.
+  - Enabled only the requested service-experience field and linked admission
+    date via the existing audited schema service. Before/after storage hashes
+    confirmed all 219 field rows unchanged; all 227 card lifecycle snapshots
+    were unchanged. No migration, new permission or generated period was added.
+  - Runtime PostgreSQL transaction enforced `READ ONLY`: all 217 nonempty manual
+    values and 2 empty values read successfully; calculation read scope matched
+    permissions for all 16 active actors (4 allowed, 12 denied on the sample
+    organization). Pure preview ran without saving; unauthenticated HTTP GET
+    returned 401. In the user's existing authenticated in-app tab, both buttons,
+    manual preview, separate empty calculator and close/focus restoration were
+    verified. Both overlays were closed without saving real card values.
+    The final manual overlay was visually checked after correcting the clipping.
 
 - 2026-10-26 card-list sorting is pushed and deployed in
   `ea4d8f947bde89ea097841188635b70009aa91b3`. Plan:
