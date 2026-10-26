@@ -7,6 +7,31 @@ not a hardcoded employee registry.
 
 ## Current Stop Point
 
+- 2026-10-26 follow-up review and real test-card acceptance are in progress.
+  - Shared change-basis fields now explain the requirement. A dirty block's save
+    button remains actionable with an empty basis; clicking it shows a Russian
+    error, marks/focuses the basis input, preserves edited values, and sends no
+    write. A nonblank basis clears the error; ordinary valid saves are unchanged.
+  - Bounded backend/frontend review found two lifecycle defects, both corrected:
+    archiving a dismissed card retains its dismissal cutoff; a dismissal earlier
+    than a manual experience anchor is rejected before altering the card.
+    Legacy and dated manual formats are covered. No guessed/clamped history.
+  - TDD: four lifecycle regressions failed before the fixes; eight new lifecycle
+    scenarios pass. Updated basis UI regression failed before the UX fix.
+    Targeted compatibility: 256 backend passed, 99 skipped; 190 frontend passed;
+    expanded Chromium scenario, Ruff/format, mypy, frontend lint/typecheck/build,
+    scoped Prettier passed. Existing hook/deprecation/chunk advisories remain.
+  - A dedicated synthetic card was created through the authenticated runtime UI.
+    Ordinary 1-year input saved, dated 1-year input on 2026-01-01 produced
+    1y9m25d on 2026-10-26, repeat rebase retained the same result. Closed 2024
+    municipal plus 2025 conscription periods produced exactly 3y and reopened
+    with both original categories/dates. A same-weight overlap did not inflate
+    the result; conflicting weight disabled saving; closing discarded that
+    unsaved third period. Runtime read-only inspection verified two stored
+    periods and audit events. Existing people's cards were not edited.
+  - New-code deployment and live validation of the basis hint are pending.
+    SQLite coverage does not establish PostgreSQL concurrent-write behavior.
+
 - 2026-10-26 municipal-service experience calculator is pushed and deployed in
   `d78ff36007f37065543b598d925f51520d92f111`, with dialog sizing correction in
   `5ad1616d7d586d51be8d0810f135dd1329f534bd`, under

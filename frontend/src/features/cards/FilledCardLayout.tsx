@@ -398,6 +398,7 @@ export function FilledCardLayout({
                           basisText={blockEditor.basisText}
                           occurredOn={blockEditor.occurredOn}
                           disabled={blockEditor.pending}
+                          error={blockEditor.errors._basis}
                           onBasisTextChange={blockEditor.setBasisText}
                           onOccurredOnChange={blockEditor.setOccurredOn}
                         />
@@ -405,11 +406,7 @@ export function FilledCardLayout({
                           <button
                             type="button"
                             className="primary-button"
-                            disabled={
-                              !blockEditor.dirty ||
-                              !blockEditor.basisText.trim() ||
-                              blockEditor.pending
-                            }
+                            disabled={!blockEditor.dirty || blockEditor.pending}
                             onClick={blockEditor.commitAndClose}
                           >
                             Сохранить блок

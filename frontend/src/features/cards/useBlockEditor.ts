@@ -66,6 +66,7 @@ type BlockEditorSession = {
 
 const emptyValues: Record<string, FieldEditorState> = {};
 const emptyErrors: Record<string, string> = {};
+const requiredBasisMessage = "Укажите основание изменения перед сохранением.";
 
 export function useBlockEditor({
   requiresBasis = false,
@@ -132,9 +133,12 @@ export function useBlockEditor({
   }, [requiresBasis]);
 
   const setBasisText = useCallback((value: string) => {
-    setSession((current) =>
-      current && !current.pending ? { ...current, basisText: value } : current,
-    );
+    setSession((current) => {
+      if (!current || current.pending) return current;
+      const errors = { ...current.errors };
+      if (value.trim()) delete errors._basis;
+      return { ...current, basisText: value, errors };
+    });
   }, []);
   const setOccurredOn = useCallback((value: string) => {
     setSession((current) =>
@@ -144,7 +148,14 @@ export function useBlockEditor({
 
   const save = useCallback(async () => {
     if (!session || session.pending) return false;
-    if (requiresBasis && !session.basisText.trim()) return false;
+    if (requiresBasis && !session.basisText.trim()) {
+      setSession((current) =>
+        current?.id === session.id
+          ? { ...current, errors: { ...current.errors, _basis: requiredBasisMessage } }
+          : current,
+      );
+      return false;
+    }
 
     const validationErrors: Record<string, string> = {};
     const changedValues: FieldValueBulkItemUpdatePayload[] = [];
@@ -241,7 +252,9 @@ export function useBlockEditor({
   const commitAndClose = useCallback(() => {
     setSession((current) => {
       if (!current) return current;
-      if (requiresBasis && !current.basisText.trim()) return current;
+      if (requiresBasis && !current.basisText.trim()) {
+        return { ...current, errors: { ...current.errors, _basis: requiredBasisMessage } };
+      }
       if (current.pending) return { ...current, closeAfterSave: true };
       if (!current.dirty) return null;
       return { ...current, closeAfterSave: true, pendingOpen: null, autoSaveDelayMs: 0 };

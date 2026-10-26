@@ -260,6 +260,22 @@ test("keeps manual input, dated manual recalculation and period calculator indep
   await expect(
     page.getByRole("textbox", { name: "Стаж муниципальной службы, дни", exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Стаж муниципальной службы, дни", exact: true })
+    .fill("1");
+  const changeBasis = page.getByRole("textbox", { name: "Основание изменения", exact: true });
+  await expect(changeBasis).toHaveAttribute("placeholder", /Обязательно/);
+  await page.getByRole("button", { name: "Сохранить блок", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Укажите основание изменения перед сохранением.",
+  );
+  await expect(changeBasis).toBeFocused();
+  await expect(
+    page.getByRole("textbox", { name: "Стаж муниципальной службы, дни", exact: true }),
+  ).toHaveValue("1");
+  await page.screenshot({ path: "C:/Temp/reg-engine-change-basis-validation.png" });
+  await changeBasis.fill("Проверка подсказки");
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "Отмена", exact: true }).click();
   await page.getByRole("button", { name: "Стаж на текущую дату", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "Пересчёт стажа на текущую дату" });

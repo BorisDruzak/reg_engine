@@ -247,15 +247,33 @@ describe("FilledCardLayout", () => {
         .compareDocumentPosition(screen.getByLabelText("Основание изменения")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+    const saveButton = screen.getByRole("button", { name: "Сохранить блок" });
+    const basis = screen.getByLabelText("Основание изменения");
+    expect(basis).toHaveAttribute(
+      "placeholder",
+      "Обязательно: укажите причину или документ-основание",
+    );
+    expect(basis).toHaveAccessibleDescription(/Основание обязательно/);
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Укажите основание изменения перед сохранением.",
+    );
+    expect(basis).toHaveAttribute("aria-invalid", "true");
+    expect(basis).toHaveFocus();
+    expect(saveValues).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Фамилия"), { target: { value: "Петров" } });
     fireEvent.change(screen.getByLabelText("Основание изменения"), { target: { value: "   " } });
-    expect(screen.getByRole("button", { name: "Сохранить блок" })).toBeDisabled();
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+    expect(saveValues).not.toHaveBeenCalled();
     await user.click(document.body);
     expect(saveValues).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Основание изменения"), {
       target: { value: "  Приказ 42  " },
     });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(basis).not.toHaveAttribute("aria-invalid", "true");
     fireEvent.change(screen.getByLabelText("Дата события (необязательно)"), {
       target: { value: "2026-09-08" },
     });
