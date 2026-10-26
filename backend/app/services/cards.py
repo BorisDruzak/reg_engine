@@ -1725,7 +1725,15 @@ class CardService:
                     FormField.archived_at.is_(None),
                 )
             ):
-                if not isinstance(storage, dict) or storage.get("mode") != "calculated":
+                if not isinstance(storage, dict):
+                    continue
+                if storage.get("mode") != "calculated":
+                    anchor = storage.get("anchor_date")
+                    if isinstance(anchor, str) and date.fromisoformat(anchor) > occurred_on:
+                        raise CardDismissalError(
+                            "Дата увольнения раньше даты исходного стажа. "
+                            "Сначала уточните расчёт стажа."
+                        )
                     continue
                 baseline = storage.get("baseline")
                 if (
@@ -3449,7 +3457,7 @@ class CardService:
 
     def _experience_effective_date(self, card_id: UUID | None, target: date) -> date:
         card = self.session.get(Card, card_id) if card_id is not None else None
-        if card is not None and card.lifecycle_status == "dismissed":
+        if card is not None and card.lifecycle_status in {"dismissed", "archived"}:
             dismissed_on = self.session.scalar(
                 select(CardEvent.occurred_on)
                 .where(CardEvent.card_id == card.id, CardEvent.event_type == "dismissal")

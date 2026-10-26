@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -336,3 +336,132 @@ def test_dismissal_cannot_silently_rewind_a_confirmed_baseline(municipal_context
             basis_text="Увольнение",
         )
     assert ctx.card.lifecycle_status == "active"
+
+
+@pytest.mark.parametrize("mode", ["manual", "calculated"])
+def test_archiving_a_dismissed_card_preserves_experience_cutoff(municipal_context, mode):
+    ctx = municipal_context
+    revision = ctx.calc.read(**ctx.params)["revision"]
+    if mode == "calculated":
+        data = calculation()
+        data["periods"][0]["end_date"] = None
+        ctx.calc.save(**ctx.params, calculation=data, expected_revision=revision)
+    else:
+        ctx.calc.manual(
+            **ctx.params,
+            value={"days": 0, "months": 0, "years": 0},
+            as_of_date=date(2024, 1, 1),
+            expected_revision=revision,
+        )
+    ctx.card.lifecycle_status = "active"
+    ctx.session.commit()
+    ctx.service.dismiss_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        occurred_on=date(2024, 12, 31),
+        basis_text="Приказ об увольнении",
+    )
+    before = ctx.calc.read(**ctx.params)
+
+    ctx.service.archive_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        change_context=CardChangeContext("Приказ об архивировании", date.today()),
+    )
+
+    after = ctx.calc.read(**ctx.params)
+    assert ctx.card.lifecycle_status == "archived"
+    assert after["result"] == before["result"]
+    assert after["manual_value"] == before["manual_value"]
+    assert after["revision"] == before["revision"]
+
+
+@pytest.mark.parametrize("mode", ["manual", "calculated"])
+def test_archiving_without_dismissal_preserves_current_experience(municipal_context, mode):
+    ctx = municipal_context
+    revision = ctx.calc.read(**ctx.params)["revision"]
+    if mode == "calculated":
+        data = calculation()
+        data["periods"][0]["end_date"] = None
+        ctx.calc.save(**ctx.params, calculation=data, expected_revision=revision)
+    else:
+        ctx.service.set_field_value_for_actor(
+            **ctx.params, value={"days": 0, "months": 0, "years": 1}
+        )
+    ctx.card.lifecycle_status = "active"
+    ctx.session.commit()
+    before = ctx.calc.read(**ctx.params)
+
+    ctx.service.archive_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        change_context=CardChangeContext("Приказ об архивировании", date.today()),
+    )
+
+    after = ctx.calc.read(**ctx.params)
+    assert after["result"] == before["result"]
+    assert after["manual_value"] == before["manual_value"]
+    assert (
+        ctx.session.scalars(select(CardEvent).where(CardEvent.event_type == "dismissal")).all()
+        == []
+    )
+
+
+@pytest.mark.parametrize("dated", [False, True])
+def test_dismissal_cannot_precede_a_manual_experience_anchor(municipal_context, dated):
+    ctx = municipal_context
+    value = {"days": 0, "months": 0, "years": 0}
+    if dated:
+        ctx.calc.manual(
+            **ctx.params,
+            value=value,
+            as_of_date=date.today(),
+            expected_revision=ctx.calc.read(**ctx.params)["revision"],
+        )
+    else:
+        ctx.service.set_field_value_for_actor(**ctx.params, value=value)
+    ctx.card.lifecycle_status = "active"
+    ctx.session.commit()
+    before = ctx.calc.read(**ctx.params)
+
+    with pytest.raises(CardServiceError, match="исходного стажа"):
+        ctx.service.dismiss_card_for_actor(
+            actor_user_id=ctx.actor_id,
+            card_id=ctx.card.id,
+            occurred_on=date.today() - timedelta(days=1),
+            basis_text="Приказ об увольнении",
+        )
+
+    assert ctx.card.lifecycle_status == "active"
+    assert ctx.calc.read(**ctx.params) == before
+    assert (
+        ctx.session.scalars(select(CardEvent).where(CardEvent.event_type == "dismissal")).all()
+        == []
+    )
+
+
+@pytest.mark.parametrize("dated", [False, True])
+def test_dismissal_on_a_manual_experience_anchor_remains_allowed(municipal_context, dated):
+    ctx = municipal_context
+    value = {"days": 0, "months": 0, "years": 0}
+    if dated:
+        ctx.calc.manual(
+            **ctx.params,
+            value=value,
+            as_of_date=date.today(),
+            expected_revision=ctx.calc.read(**ctx.params)["revision"],
+        )
+    else:
+        ctx.service.set_field_value_for_actor(**ctx.params, value=value)
+    ctx.card.lifecycle_status = "active"
+    ctx.session.commit()
+
+    ctx.service.dismiss_card_for_actor(
+        actor_user_id=ctx.actor_id,
+        card_id=ctx.card.id,
+        occurred_on=date.today(),
+        basis_text="Приказ об увольнении",
+    )
+
+    assert ctx.card.lifecycle_status == "dismissed"
+    assert ctx.calc.read(**ctx.params)["manual_value"]["years"] == 0
