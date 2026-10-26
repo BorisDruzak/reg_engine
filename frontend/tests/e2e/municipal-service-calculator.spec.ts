@@ -263,6 +263,32 @@ test("keeps manual input, dated manual recalculation and period calculator indep
   await page.getByRole("button", { name: "Отмена", exact: true }).click();
   await page.getByRole("button", { name: "Стаж на текущую дату", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "Пересчёт стажа на текущую дату" });
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1072, height: 884 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect
+      .poll(() =>
+        dialog.locator(".admin-mutation-dialog-surface").evaluate((surface) => {
+          const bounds = surface.getBoundingClientRect();
+          return (
+            surface.scrollWidth <= surface.clientWidth &&
+            Array.from(surface.querySelectorAll("input, textarea, button")).every(
+              (control) => control.getBoundingClientRect().right <= bounds.right,
+            )
+          );
+        }),
+      )
+      .toBe(true);
+    await expect(dialog.getByRole("button", { name: "Закрыть", exact: true })).toBeInViewport();
+    if (viewport.width !== 1072)
+      await page.screenshot({
+        path: `C:/Temp/reg-engine-manual-${viewport.width === 390 ? "mobile" : "desktop"}.png`,
+      });
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
   await dialog
     .getByRole("checkbox", { name: "Подтверждаю, что указанный стаж был на выбранную дату" })
     .check();

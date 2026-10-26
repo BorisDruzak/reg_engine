@@ -2961,7 +2961,9 @@ tr:last-child td {
 }
 
 .filled-card-block-field-control .work-experience-editor input:not([type="checkbox"]),
-.public-inline-field-control .work-experience-editor input:not([type="checkbox"]) {
+.public-inline-field-control .work-experience-editor input:not([type="checkbox"]),
+.manual-experience-recalculation .work-experience-editor input:not([type="checkbox"]),
+.municipal-service-calculator .work-experience-editor input:not([type="checkbox"]) {
   width: 2.5ch;
   min-width: 2.5ch;
   min-height: 0;
@@ -2976,7 +2978,9 @@ tr:last-child td {
 }
 
 .filled-card-block-field-control .work-experience-editor input[data-work-experience-part="years"],
-.public-inline-field-control .work-experience-editor input[data-work-experience-part="years"] {
+.public-inline-field-control .work-experience-editor input[data-work-experience-part="years"],
+.manual-experience-recalculation .work-experience-editor input[data-work-experience-part="years"],
+.municipal-service-calculator .work-experience-editor input[data-work-experience-part="years"] {
   width: 4.5ch;
   min-width: 4.5ch;
 }
